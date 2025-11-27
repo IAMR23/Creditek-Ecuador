@@ -1,14 +1,20 @@
-FROM node:22
-
+# 1. Build de Vite
+FROM node:22 AS build
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
 
 COPY . .
-
 RUN npm run build
 
-EXPOSE 5173
+# 2. Servir con NGINX (producción)
+FROM nginx:alpine
 
-CMD ["npm", "start"]
+# Copia la build generada por Vite a Nginx
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Nginx sirve en el puerto 80
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
