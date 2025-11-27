@@ -11,10 +11,13 @@ RUN npm run build
 # 2. Servir con NGINX (producción)
 FROM nginx:alpine
 
-# Copia la build generada por Vite a Nginx
+# Copiar la build generada por Vite a Nginx
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Nginx sirve en el puerto 80
+# Copiar configuración personalizada de Nginx para Vite/React SPA
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Exponer puerto
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
