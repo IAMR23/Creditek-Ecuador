@@ -16,10 +16,11 @@ const dashbaord  = require("./routes/dashboardRoutes")
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5020;
-
+const WEB_CORS = process.env.WEB_CORS 
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
+  WEB_CORS
 ];
 
 app.use(
