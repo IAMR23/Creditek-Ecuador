@@ -19,9 +19,6 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5020;
 
-// --- CORS ---
-const WEB_CORS = process.env.WEB_CORS;
-
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
   /^https?:\/\/localhost:\d+$/,          // cualquier puerto en localhost
