@@ -20,7 +20,7 @@ const FormaPago = require("./routes/formaPagoRoutes");
 const OrigenRoutes = require("./routes/origenRoutes");
 const VentaRoutes = require("./routes/ventasroutes");
 const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
-const precioDispositivoRoutes = require("./routes/precioDispositivoRoutes");
+const precioDispositivoRoutes = require("./routes/preciodispositivoroutes");
 const path = require("path");
 
 const app = express();
