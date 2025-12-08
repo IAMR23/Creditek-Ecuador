@@ -6,18 +6,26 @@ const jwt = require("jsonwebtoken");
 const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Agencia = require("../models/Agencia");
+const Rol = require("../models/Rol");
 
 const JWT_SECRET = process.env.JWT_SECRET || "tu_clave_secreta";
 
-// ===========================
-// 🔹 LOGIN
-// ===========================
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Buscar usuario
-    const usuario = await Usuario.findOne({ where: { email } });
+    // Buscar usuario + rol
+    const usuario = await Usuario.findOne({
+      where: { email },
+      include: [
+        {
+          model: Rol,
+          as: "rol",
+          attributes: ["id", "nombre", "descripcion"],
+        },
+      ],
+    });
+
     if (!usuario) {
       return res.status(400).json({ message: "Usuario o contraseña incorrectos" });
     }
@@ -32,7 +40,7 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Usuario o contraseña incorrectos" });
     }
 
-    // Relaciones usuario-agencia
+    // Agencias relacionadas
     const relaciones = await UsuarioAgencia.findAll({
       where: { usuarioId: usuario.id, activo: true },
       include: [
@@ -48,9 +56,9 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "El usuario no tiene agencias activas" });
     }
 
-    // Mapear agencias + guardar ID de la tabla UsuarioAgencia
+    // Convertir relaciones en objeto
     const agencias = relaciones.map((rel) => ({
-      usuarioAgenciaId: rel.id,      // ← IMPORTANTE
+      usuarioAgenciaId: rel.id,
       agenciaId: rel.agencia.id,
       nombre: rel.agencia.nombre,
       direccion: rel.agencia.direccion,
@@ -59,27 +67,32 @@ router.post("/login", async (req, res) => {
       rolAgencia: rel.rolAgencia,
     }));
 
-    // Tomar la primera agencia por defecto
+    // Agencia principal (la primera)
     const agenciaPrincipal = agencias[0];
 
-    // Crear token con más info
+    // CREAR TOKEN COMPLETO (todo dentro)
     const token = jwt.sign(
       {
-        id: usuario.id,
-        nombre: usuario.nombre,
-        email: usuario.email,
-        rol: usuario.rol,
-        usuarioAgenciaId: agenciaPrincipal.usuarioAgenciaId,
-        
-
+        usuario: {
+          id: usuario.id,
+          nombre: usuario.nombre,
+          email: usuario.email,
+          rol: {
+            id: usuario.rol.id,
+            nombre: usuario.rol.nombre,
+            descripcion: usuario.rol.descripcion,
+          },
+          agencias,
+          agenciaPrincipal,
+        },
       },
       JWT_SECRET,
       { expiresIn: "8h" }
     );
 
-    res.json({
+    return res.json({
       message: "Login exitoso",
-      token
+      token,
     });
 
   } catch (error) {
@@ -87,6 +100,5 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: "Error en el login", error });
   }
 });
-
 
 module.exports = router;

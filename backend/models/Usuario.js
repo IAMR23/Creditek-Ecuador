@@ -1,7 +1,8 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
+const Rol = require("./Rol");
 
-const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
 
 const Usuario = sequelize.define(
   "Usuario",
@@ -11,6 +12,7 @@ const Usuario = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+
     cedula: {
       type: DataTypes.STRING,
     },
@@ -35,16 +37,20 @@ const Usuario = sequelize.define(
         isValidPassword(value) {
           if (!passwordRegex.test(value)) {
             throw new Error(
-              "La contraseña debe tener mínimo 8 caracteres, incluyendo mayúsculas, minúsculas, números y un carácter especial."
+              "La contraseña debe tener mínimo 6 caracteres e incluir letras y números."
             );
           }
         },
       },
     },
 
-    rol: {
-      type: DataTypes.ENUM("admin", "vendedor", "repartidor" , "logistica" ),
-      defaultValue: "vendedor",
+    rolId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "roles",
+        key: "id",
+      },
     },
 
     activo: {

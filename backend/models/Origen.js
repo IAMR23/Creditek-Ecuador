@@ -1,21 +1,22 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
 
-const Producto = sequelize.define(
-  "Producto",
+const Origen = sequelize.define(
+  "Origen",
   {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
     },
-    contifico_id: {
-      type: DataTypes.STRING, // porque Contífico usa letras!
-      unique: true,
-    },
     nombre: {
       type: DataTypes.STRING,
       allowNull: false,
+      comment: "Nombre del origen, por ejemplo tienda, proveedor, online, etc.",
+    },
+    descripcion: {
+      type: DataTypes.TEXT, 
+      allowNull: true,
     },
     activo: {
       type: DataTypes.BOOLEAN,
@@ -23,9 +24,9 @@ const Producto = sequelize.define(
     },
   },
   {
-    timestamps: true,
-    tableName: "productos",
+    tableName: "origenes",
+    timestamps: true, // createdAt y updatedAt
   }
 );
 
-module.exports = Producto;
+module.exports = Origen;

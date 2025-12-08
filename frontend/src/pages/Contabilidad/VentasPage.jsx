@@ -5,8 +5,7 @@ import { Calendar, Search, RotateCcw, Building2 } from "lucide-react";
 import VentasTable from "./VentasTable";
 
 export default function VentasPage() {
-  const today = new Date().toISOString().split("T")[0];
-
+const hoyLocal =new Date().toLocaleDateString("en-CA"); 
   const [ventas, setVentas] = useState([]);
   const [agencias, setAgencias] = useState([]);
   const [usuariosAgencia, setUsuariosAgencia] = useState([]);
@@ -24,7 +23,7 @@ export default function VentasPage() {
         const [ag, ua, pr] = await Promise.all([
           axios.get(`${API_URL}/agencias`),
           axios.get(`${API_URL}/usuario-agencia`),
-          axios.get(`${API_URL}/productos`),
+          axios.get(`${API_URL}/dispositivos`),
         ]);
 
         setAgencias(ag.data);

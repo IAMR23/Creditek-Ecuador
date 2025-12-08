@@ -5,7 +5,7 @@ const Dispositivo = require("./Dispositivo");
 const Marca = sequelize.define(
   "Marca",
   {
-        id: {
+    id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
@@ -24,9 +24,5 @@ const Marca = sequelize.define(
     tableName: "marcas",
   }
 );
-
-// Relación: Una marca pertenece a un dispositivo
-Marca.belongsTo(Dispositivo, { foreignKey: "dispositivoId" });
-Dispositivo.hasMany(Marca, { foreignKey: "dispositivoId" });
 
 module.exports = Marca;

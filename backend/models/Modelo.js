@@ -1,22 +1,39 @@
+// models/Modelo.js
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
-const Marca = require("./Marca");
+const DispositivoMarca = require("./DispositivoMarca"); // Relación correcta
 
 const Modelo = sequelize.define(
   "Modelo",
   {
-        id: {
-          type: DataTypes.INTEGER,
-          primaryKey: true,
-          autoIncrement: true,
-        },
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
     nombre: {
       type: DataTypes.STRING,
       allowNull: false,
     },
+    descripcion: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
+    },
+
+    // 🔥 La relación correcta (UN modelo pertenece a UNA combinación dispositivo-marca)
+    dispositivoMarcaId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: DispositivoMarca, 
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
     },
   },
   {
@@ -24,9 +41,5 @@ const Modelo = sequelize.define(
     tableName: "modelos",
   }
 );
-
-// Relación: un modelo pertenece a una marca
-Modelo.belongsTo(Marca, { foreignKey: "marcaId" });
-Marca.hasMany(Modelo, { foreignKey: "marcaId" });
 
 module.exports = Modelo;

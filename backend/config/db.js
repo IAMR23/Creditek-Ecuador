@@ -1,7 +1,7 @@
-// db.js
+// db.js 
 const { Sequelize } = require("sequelize");
 
-// Configuración de conexión
+// Configuración de conexión 
 const DB_NAME = process.env.DB_NAME || "CREDITEK";
 const DB_USER = process.env.DB_USER || "postgres";
 const DB_PASS = process.env.DB_PASS || "Creditk2025@.";
@@ -20,14 +20,14 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    console.log("✅ Conectado a PostgreSQL exitosamente");
+    console.log("✅ Conectado a PostgreSQL exitosamente"); 
 
     // Sincronizar todos los modelos y crear tablas faltantes
-    await sequelize.sync({ alter: true }); // alter: true actualiza tablas sin borrarlas
+    await sequelize.sync({ /* alter : true  *//*  force: false  */ }); // alter: true actualiza tablas sin borrarlas
     console.log("✅ Tablas sincronizadas correctamente");
   } catch (error) {
     console.error("❌ Error de conexión o sincronización:", error);
-    process.exit(1);
+    process.exit(1); 
   }
 };
 

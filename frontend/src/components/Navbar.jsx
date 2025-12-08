@@ -34,10 +34,10 @@ function Navbar({ auth, setAuth }) {
         
         {/* Logo */}
         <Link 
-          to="/" 
+         
           className="text-3xl font-extrabold text-green-500 hover:text-green-400 transition duration-300"
         >
-          <span className="animate-pulse">CrediTEK</span>
+          <span className="animate-pulse">RVE</span>
         </Link>
 
         {/* Links y botones */}

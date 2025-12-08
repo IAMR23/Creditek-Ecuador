@@ -1,72 +1,38 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
-
+import { motion } from "framer-motion";
 import {
-  LineChart,
-  Line,
+  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   Tooltip,
-  CartesianGrid,
 } from "recharts";
+import { API_URL } from "../../../config";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
-// =======================================
-// CARD
-// =======================================
-function Card({ title, value, color }) {
-  return (
-    <div className={`bg-white shadow-md p-5 rounded-xl border-l-4 border-${color}-500`}>
-      <p className="text-gray-500 text-sm">{title}</p>
-      <h3 className="text-2xl font-bold mt-1">{value}</h3>
-    </div>
-  );
-}
-
-// =======================================
-// CHART WRAPPER
-// =======================================
-function ChartBox({ title, children }) {
-  return (
-    <div className="bg-white rounded-xl shadow-md p-5">
-      <h3 className="text-lg font-semibold mb-4">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-// =======================================
-// DASHBOARD
-// =======================================
 export default function Dashboard() {
-  const [loading, setLoading] = useState(true);
+    const hoy = new Date().toLocaleDateString("en-CA");
 
-  const [rango, setRango] = useState("7dias");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [fechaInicio, setFechaInicio] = useState(hoy);
+  const [fechaFin, setFechaFin] = useState(hoy);
+  const [loading, setLoading] = useState(false);
 
-  const [datos, setDatos] = useState({
-    ventas: { hoy: 0, mes: 0, rango: [] },
-    entregas: { hoy: 0, mes: 0, rango: [] },
+  const [data, setData] = useState({
+    ventasDesdeEntregas: 0,
+    ventasDesdeVentas: 0,
+    totalVentas: 0,
   });
 
-  // =============================
-  // Cargar datos según rango
-  // =============================
-  const cargarDashboard = async () => {
-    setLoading(true);
+  const fetchData = async () => {
     try {
-      let url = `${API_URL}/dashboard/resumen?rango=${rango}`;
+      setLoading(true);
 
-      if (rango === "custom" && desde && hasta) {
-        url += `&desde=${desde}&hasta=${hasta}`;
-      }
+      const res = await axios.get(
+        `${API_URL}/dashboard/total-ventas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`
+      );
 
-      const res = await axios.get(url);
-      setDatos(res.data);
+      setData(res.data);
     } catch (error) {
       console.error("Error cargando dashboard:", error);
     } finally {
@@ -75,91 +41,133 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    cargarDashboard();
-  }, [rango, desde, hasta]);
+    fetchData();
+  }, []);
 
-  if (loading) return <p className="p-5 text-lg">Cargando Dashboard...</p>;
+  // Datos para grafico
+  const chartData = [
+    {
+      name: "Entregas",
+      value: data.ventasDesdeEntregas,
+    },
+    {
+      name: "Ventas",
+      value: data.ventasDesdeVentas,
+    },
+    {
+      name: "Total",
+      value: data.totalVentas,
+    },
+  ];
 
   return (
-    <div className="p-6">
-      {/* Titulo */}
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Dashboard General</h1>
+    <div className="w-full px-6 py-8">
+      <h1 className="text-3xl font-bold mb-4 text-gray-900">
+        📊 Dashboard de Ventas
+      </h1>
 
-      {/* Filtros */}
-      <div className="bg-white p-4 shadow rounded-xl mb-6 flex flex-col md:flex-row gap-4">
-
+      {/* FILTRO */}
+      <div className="bg-white shadow-md rounded-xl p-5 mb-6 flex items-center gap-4">
         <div>
-          <label className="text-sm font-semibold">Rango:</label>
-          <select
-            className="ml-2 border p-2 rounded"
-            value={rango}
-            onChange={(e) => setRango(e.target.value)}
-          >
-            <option value="hoy">Hoy</option>
-            <option value="7dias">Últimos 7 días</option>
-            <option value="mes">Este mes</option>
-            <option value="custom">Rango personalizado</option>
-          </select>
+          <label className="text-gray-600 font-medium">Fecha Inicio</label>
+          <input
+            type="date"
+            className="border rounded-lg w-full p-2 mt-1"
+            value={fechaInicio}
+            onChange={(e) => setFechaInicio(e.target.value)}
+          />
         </div>
 
-        {rango === "custom" && (
-          <div className="flex gap-3">
-            <div>
-              <label className="text-sm">Desde:</label>
-              <input
-                type="date"
-                className="border p-2 rounded"
-                value={desde}
-                onChange={(e) => setDesde(e.target.value)}
-              />
-            </div>
+        <div>
+          <label className="text-gray-600 font-medium">Fecha Fin</label>
+          <input
+            type="date"
+            className="border rounded-lg w-full p-2 mt-1"
+            value={fechaFin}
+            onChange={(e) => setFechaFin(e.target.value)}
+          />
+        </div>
 
-            <div>
-              <label className="text-sm">Hasta:</label>
-              <input
-                type="date"
-                className="border p-2 rounded"
-                value={hasta}
-                onChange={(e) => setHasta(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
-
+        <button
+          onClick={fetchData}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
+        >
+          Filtrar
+        </button>
       </div>
 
-      {/* Métricas rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card title="Ventas Hoy" value={datos.ventas.hoy} color="blue" />
-        <Card title="Entregas Hoy" value={datos.entregas.hoy} color="green" />
-        <Card title="Ventas del Mes" value={datos.ventas.mes} color="purple" />
-        <Card title="Entregas del Mes" value={datos.entregas.mes} color="yellow" />
+      {/* CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <motion.div
+          className="rounded-xl p-5 shadow-lg bg-gradient-to-r from-green-500 to-green-600 text-white"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-lg font-semibold">Ventas desde Entregas</p>
+          <p className="text-4xl font-bold mt-2">
+            {loading ? "..." : data.ventasDesdeEntregas}
+          </p>
+        </motion.div>
+
+        <motion.div
+          className="rounded-xl p-5 shadow-lg bg-gradient-to-r from-indigo-500 to-indigo-600 text-white"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-lg font-semibold">Ventas Validadas</p>
+          <p className="text-4xl font-bold mt-2">
+            {loading ? "..." : data.ventasDesdeVentas}
+          </p>
+        </motion.div>
+
+        <motion.div
+          className="rounded-xl p-5 shadow-lg bg-gradient-to-r from-yellow-500 to-yellow-600 text-white"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <p className="text-lg font-semibold">Total Ventas</p>
+          <p className="text-4xl font-bold mt-2">
+            {loading ? "..." : data.totalVentas}
+          </p>
+        </motion.div>
       </div>
 
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
 
-        <ChartBox title="Ventas (Rango)">
-          <LineChart width={500} height={250} data={datos.ventas.rango}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="fecha" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} />
-          </LineChart>
-        </ChartBox>
+<div className="bg-white shadow-xl rounded-2xl p-6 h-96 border border-gray-100">
+  <h2 className="text-2xl font-bold mb-5 text-gray-800">
+    📈 Gráfico de Ventas
+  </h2>
 
-        <ChartBox title="Entregas (Rango)">
-          <BarChart width={500} height={250} data={datos.entregas.rango}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="fecha" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="total" fill="#10b981" />
-          </BarChart>
-        </ChartBox>
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={chartData} barSize={40}>
+      <XAxis dataKey="name" tick={{ fill: "#555" }} />
+      <YAxis tick={{ fill: "#555" }} />
+      <Tooltip
+        contentStyle={{
+          backgroundColor: "white",
+          borderRadius: "12px",
+          border: "1px solid #e5e7eb",
+          color: "#111",
+        }}
+      />
 
-      </div>
+      <Bar
+        dataKey="value"
+        radius={[12, 12, 0, 0]}
+        fill="url(#colorBar)"
+      />
+
+      {/* Definir gradientes de color PRO */}
+      <defs>
+        <linearGradient id="colorBar" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#4f46e5" />
+          <stop offset="100%" stopColor="#3b82f6" />
+        </linearGradient>
+      </defs>
+    </BarChart>
+  </ResponsiveContainer>
+</div>
+
     </div>
   );
 }

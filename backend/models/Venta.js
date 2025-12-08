@@ -1,7 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
 const UsuarioAgencia = require("./UsuarioAgencia");
-const Producto = require("./Producto");
 
 const Venta = sequelize.define(
   "Venta",
@@ -15,17 +14,35 @@ const Venta = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-    productoId: {
+    clienteId: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-    entrada: DataTypes.STRING,
-    alcance: DataTypes.STRING,
-    origen: DataTypes.STRING,
-    obsequios: DataTypes.STRING,
+
+    origenId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
+    },
+    observacion: {
+      type: DataTypes.STRING,
+    },
+    fecha: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+    },
+    validada: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+
+    fotoValidacion: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
   },
   {
@@ -34,17 +51,9 @@ const Venta = sequelize.define(
   }
 );
 
-// =========================
-// 🚀 AQUI FALTABA ESTO
-// =========================
 Venta.belongsTo(UsuarioAgencia, {
   foreignKey: "usuarioAgenciaId",
   as: "usuarioAgencia",
-});
-
-Venta.belongsTo(Producto, {
-  foreignKey: "productoId",
-  as: "producto",
 });
 
 module.exports = Venta;

@@ -11,7 +11,7 @@ const Agencia = require("../models/Agencia");
 // Crear relación usuario-agencia
 router.post("/", async (req, res) => {
   try {
-    const { usuarioId, agenciaId, rolAgencia, activo } = req.body;
+    const { usuarioId, agenciaId, activo } = req.body;
 
     // Verificar si usuario y agencia existen
     const usuario = await Usuario.findByPk(usuarioId);
@@ -27,7 +27,6 @@ router.post("/", async (req, res) => {
     const relacion = await UsuarioAgencia.create({
       usuarioId,
       agenciaId,
-      rolAgencia: rolAgencia ?? "vendedor",
       activo: activo ?? true,
     });
 
@@ -74,12 +73,11 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { rolAgencia, activo } = req.body;
+    const {  activo } = req.body;
 
     const relacion = await UsuarioAgencia.findByPk(id);
     if (!relacion) return res.status(404).json({ message: "Relación no encontrada" });
 
-    relacion.rolAgencia = rolAgencia ?? relacion.rolAgencia;
     relacion.activo = activo ?? relacion.activo;
 
     await relacion.save();

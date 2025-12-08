@@ -1,46 +1,53 @@
 const express = require("express");
-const router = express.Router(); 
+const router = express.Router();
+
 const Modelo = require("../models/Modelo");
+const DispositivoMarca = require("../models/DispositivoMarca");
 const Marca = require("../models/Marca");
+const Dispositivo = require("../models/Dispositivo");
 
-// ===========================
-// 🔹 CONTROLADORES
-// ===========================
-
-// Crear modelo
 router.post("/", async (req, res) => {
   try {
-    const { nombre, marcaId, activo } = req.body;
+    const { nombre, descripcion, activo, dispositivoMarcaId } = req.body;
 
-    // Verificar si la marca existe
-    const marca = await Marca.findByPk(marcaId);
-    if (!marca) {
-      return res.status(400).json({ message: "Marca no encontrada." });
+    const existeDM = await DispositivoMarca.findByPk(dispositivoMarcaId);
+    if (!existeDM) {
+      return res.status(400).json({ message: "dispositivoMarcaId no válido" });
     }
 
-    // Verificar si el modelo ya existe para la misma marca
-    const existing = await Modelo.findOne({ where: { nombre, marcaId } });
-    if (existing) {
-      return res.status(400).json({ message: "El modelo ya existe para esta marca." });
-    }
-
-    const nuevoModelo = await Modelo.create({
+    const nuevo = await Modelo.create({
       nombre,
-      marcaId,
-      activo: activo ?? true,
+      descripcion,
+      activo,
+      dispositivoMarcaId,
     });
 
-    res.status(201).json(nuevoModelo);
+    res.status(201).json(nuevo);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al crear modelo", error });
+    res.status(500).json({ message: "Error al crear el modelo", error });
   }
 });
 
-// Obtener todos los modelos
+// =========================
+// 📌 Obtener todos los modelos
+// =========================
 router.get("/", async (req, res) => {
   try {
-    const modelos = await Modelo.findAll({ include: Marca });
+    const modelos = await Modelo.findAll({
+      include: [
+        {
+          model: DispositivoMarca,
+          as: "dispositivoMarca",
+          include: [
+            { model: Marca, as: "marca", attributes: ["id", "nombre"] },
+            { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+          ],
+        },
+      ],
+      order: [["id", "DESC"]],
+    });
+
     res.json(modelos);
   } catch (error) {
     console.error(error);
@@ -48,11 +55,23 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Obtener modelo por ID
+// =========================
+// 📌 Obtener modelo por ID
+// =========================
 router.get("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const modelo = await Modelo.findByPk(id, { include: Marca });
+    const modelo = await Modelo.findByPk(req.params.id, {
+      include: [
+        {
+          model: DispositivoMarca,
+          as: "dispositivoMarca",
+          include: [
+            { model: Marca, as: "marca", attributes: ["id", "nombre"] },
+            { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+          ],
+        },
+      ],
+    });
 
     if (!modelo) {
       return res.status(404).json({ message: "Modelo no encontrado" });
@@ -61,70 +80,59 @@ router.get("/:id", async (req, res) => {
     res.json(modelo);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al obtener modelo", error });
+    res.status(500).json({ message: "Error al obtener el modelo", error });
   }
 });
 
-// Actualizar modelo
+// =========================
+// 📌 Actualizar modelo
+// =========================
 router.put("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const { nombre, marcaId, activo } = req.body;
+    const { nombre, descripcion, activo, dispositivoMarcaId } = req.body;
 
-    const modelo = await Modelo.findByPk(id);
+    const modelo = await Modelo.findByPk(req.params.id);
     if (!modelo) {
       return res.status(404).json({ message: "Modelo no encontrado" });
     }
 
-    // Verificar si se cambia de marca
-    if (marcaId) {
-      const marca = await Marca.findByPk(marcaId);
-      if (!marca) {
-        return res.status(400).json({ message: "Marca no encontrada." });
+    if (dispositivoMarcaId) {
+      const existe = await DispositivoMarca.findByPk(dispositivoMarcaId);
+      if (!existe) {
+        return res.status(400).json({ message: "dispositivoMarcaId no válido" });
       }
-      modelo.marcaId = marcaId;
     }
 
-    modelo.nombre = nombre ?? modelo.nombre;
-    modelo.activo = activo ?? modelo.activo;
+    await modelo.update({
+      nombre,
+      descripcion,
+      activo,
+      dispositivoMarcaId,
+    });
 
-    await modelo.save();
     res.json(modelo);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al actualizar modelo", error });
+    res.status(500).json({ message: "Error al actualizar el modelo", error });
   }
 });
 
-// Eliminar modelo
+// =========================
+// 📌 Eliminar modelo
+// =========================
 router.delete("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const modelo = await Modelo.findByPk(id);
-
+    const modelo = await Modelo.findByPk(req.params.id);
     if (!modelo) {
       return res.status(404).json({ message: "Modelo no encontrado" });
     }
 
     await modelo.destroy();
+
     res.json({ message: "Modelo eliminado correctamente" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al eliminar modelo", error });
-  }
-});
-
-router.get("/marca/:marcaId", async (req, res) => {
-  try {
-    const { marcaId } = req.params;
-    const modelos = await Modelo.findAll({
-      where: { marcaId },
-      attributes: ["id", "nombre"],
-    });
-    res.json(modelos);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener modelos" });
+    res.status(500).json({ message: "Error al eliminar el modelo", error });
   }
 });
 

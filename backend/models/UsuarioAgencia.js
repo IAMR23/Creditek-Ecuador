@@ -30,10 +30,7 @@ const UsuarioAgencia = sequelize.define(
       },
       onDelete: "CASCADE",
     },
-    rolAgencia: {
-      type: DataTypes.ENUM("encargado", "vendedor", "repartidor"),
-      defaultValue: "vendedor",
-    },
+    
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
@@ -51,21 +48,5 @@ const UsuarioAgencia = sequelize.define(
   }
 );
 
-// Relaciones Many-to-Many con alias explícito
-Usuario.belongsToMany(Agencia, {
-  through: UsuarioAgencia,
-  foreignKey: "usuarioId",
-  as: "agencias"
-});
-
-Agencia.belongsToMany(Usuario, {
-  through: UsuarioAgencia,
-  foreignKey: "agenciaId",
-  as: "usuarios"
-});
-
-// Relaciones directas para poder hacer include desde UsuarioAgencia con alias
-UsuarioAgencia.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
-UsuarioAgencia.belongsTo(Agencia, { foreignKey: "agenciaId", as: "agencia" });
 
 module.exports = UsuarioAgencia;

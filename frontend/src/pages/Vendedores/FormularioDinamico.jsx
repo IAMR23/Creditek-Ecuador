@@ -133,7 +133,7 @@ export default function FormularioDinamico() {
   return (
     <div className="w-full max-w-lg mx-auto mt-8 p-6 bg-white rounded-xl shadow-lg border">
       <h2 className="text-2xl font-bold text-center mb-6">
-        Gestiona tu Venta 🛒
+        Gestiona tu Venta
       </h2>
 
       <form onSubmit={handleSubmit}>

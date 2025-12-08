@@ -1,0 +1,69 @@
+// models/DetalleEntrega.js
+const { DataTypes } = require("sequelize");
+const { sequelize } = require("../config/db");
+
+const DispositivoMarca = require("./DispositivoMarca"); // Cambiado a DispositivoMarca
+const Modelo = require("./Modelo");
+
+const DetalleEntrega = sequelize.define(
+  "DetalleEntrega",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    cantidad: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: { min: 1 },
+    },
+    precioUnitario: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+    },
+    dispositivoMarcaId: {
+      // Cambio importante
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: { model: DispositivoMarca, key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
+
+    modeloId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: { model: Modelo, key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
+    contrato: {
+      type: DataTypes.STRING,
+    },
+    formaPagoId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    }, 
+    entrada: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+    },
+    alcance: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+    },
+    ubicacion: {
+      type: DataTypes.STRING,
+    },
+    ubicacionDispositivo: {
+      type: DataTypes.STRING,
+    },
+  },
+  {
+    tableName: "detalle_entregas",
+    timestamps: true,
+  }
+);
+
+module.exports = DetalleEntrega;

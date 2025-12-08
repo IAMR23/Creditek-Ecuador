@@ -6,7 +6,7 @@ import { Calendar, Filter, RefreshCw, Eye } from "lucide-react";
 
 
 export default function EntregasPage() {
-  const today = new Date().toISOString().split("T")[0];
+  const today =  new Date().toLocaleDateString("en-CA");
   const navigate = useNavigate();
 
   const [entregas, setEntregas] = useState([]);

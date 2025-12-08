@@ -1,7 +1,5 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
-const Cliente = require("./Cliente");
-const Producto = require("./Producto");
 const UsuarioAgencia = require("./UsuarioAgencia");
 
 const Entrega = sequelize.define(
@@ -12,73 +10,59 @@ const Entrega = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
-
-    contrato: {
-      type: DataTypes.STRING,
-      allowNull: true,
+    usuarioAgenciaId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    clienteId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
     },
 
-    origen: {
-      type: DataTypes.STRING,
-      allowNull: true,
+    origenId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
     },
 
-    valor_entrada: {
-      type: DataTypes.DECIMAL(10, 2),
-      defaultValue: 0,
+    activo: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
     },
-
-    valor_alcance: {
-      type: DataTypes.DECIMAL(10, 2),
-      defaultValue: 0,
-    },
-
-    ubicacion: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-
-    ubicacion_dispositivo: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-
-    obsequios: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-
     observacion: {
-      type: DataTypes.TEXT,
-      allowNull: true,
+      type: DataTypes.STRING,
+    },
+    fecha: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+    },
+    validada: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
 
+    fotoValidacion: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+  
     estado: {
-      type: DataTypes.ENUM("realizado", "pendiente" , "aprobado" ,  "rechazado"),
-      defaultValue: "pendiente",
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    observacionLogistica: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
   },
   {
-    timestamps: true,
     tableName: "entregas",
+    timestamps: true,
   }
 );
 
-// 🔗 Relaciones
-Entrega.belongsTo(Cliente, { foreignKey: "clienteId", as: "cliente" });
-Cliente.hasMany(Entrega, { foreignKey: "clienteId", as: "entregas" });
-
-Entrega.belongsTo(Producto, { foreignKey: "productoId", as: "producto" });
-Producto.hasMany(Entrega, { foreignKey: "productoId", as: "entregas" });
-
-// 🔗 Relación con UsuarioAgencia (quien gestionó la entrega)
 Entrega.belongsTo(UsuarioAgencia, {
   foreignKey: "usuarioAgenciaId",
-  as: "usuario_agencia",
-});
-UsuarioAgencia.hasMany(Entrega, {
-  foreignKey: "usuarioAgenciaId",
-  as: "entregas",
+  as: "usuarioAgencia",
 });
 
 module.exports = Entrega;

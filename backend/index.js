@@ -3,17 +3,25 @@ const http = require("http");
 const cors = require("cors");
 require("dotenv").config();
 const { connectDB } = require("./config/db");
-
+require("./models/associations");
 // Rutas
 const authRoutes = require("./routes/authRoutes");
 const agencia = require("./routes/AgenciaRoutes");
 const usuario_agencia = require("./routes/UsuarioAgenciaRoutes");
 const usuario = require("./routes/UsuarioRoutes");
-const venta = require("./routes/VentaRoutes");
 const cliente = require("./routes/clienteRoutes");
-const producto = require("./routes/productoRoutes");
-const entrega = require("./routes/entregaRoutes");
-const dashboard = require("./routes/dashboardRoutes");
+const rol = require("./routes/rolRoutes");
+const dispositivos = require("./routes/DispositivoRoutes");
+const marcas = require("./routes/MarcaRoutes");
+const modelos = require("./routes/ModeloRoutes");
+const dispositivoMarca = require("./routes/dispositivoMarcaRoutes");
+const CostoHistoricoRoutes = require("./routes/costoHistoricoRoutes");
+const FormaPago = require("./routes/formaPagoRoutes");
+const OrigenRoutes = require("./routes/origenRoutes");
+const VentaRoutes = require("./routes/ventaRoutes");
+const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
+const precioDispositivoRoutes = require("./routes/precioDispositivoRoutes");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
@@ -21,15 +29,16 @@ const PORT = process.env.PORT || 5020;
 
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
-  /^https?:\/\/localhost:\d+$/,          // cualquier puerto en localhost
-  /^https?:\/\/(www\.)?creditek-ecuador\.com$/ // producción
+  "http://192.168.0.7:5173",
+  /^https?:\/\/localhost:\d+$/, // cualquier puerto en localhost
+  /^https?:\/\/(www\.)?creditek-ecuador\.com$/, // producción
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
       if (!origin) return callback(null, true); // Postman, curl, etc.
-      const allowed = allowedOrigins.some(o =>
+      const allowed = allowedOrigins.some((o) =>
         typeof o === "string" ? o === origin : o.test(origin)
       );
       if (allowed) return callback(null, true);
@@ -37,7 +46,7 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
@@ -53,20 +62,44 @@ connectDB()
     console.log("Base de datos conectada");
 
     app.use("/agencias", agencia);
+    app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));
     app.use("/auth", authRoutes);
     app.use("/usuario-agencia", usuario_agencia);
     app.use("/usuarios", usuario);
-    app.use("/venta", venta);
     app.use("/clientes", cliente);
-    app.use("/productos", producto);
-    app.use("/entregas", entrega);
-    app.use("/dashboard", dashboard);
+    app.use("/rol", rol);
+    app.use("/dispositivos", dispositivos);
+    app.use("/marcas", marcas);
+    app.use("/modelos", modelos);
+    app.use("/dispositivoMarca", dispositivoMarca);
+    app.use("/costos", CostoHistoricoRoutes);
+    app.use("/formaPago", FormaPago);
+    app.use("/origen", OrigenRoutes);
+    app.use("/ventas", VentaRoutes);
+    app.use("/detalle-venta", DetalleVentaRoutes);
+    app.use("/precio", precioDispositivoRoutes);
+    app.use("/obsequios", require("./routes/obsequioRoutes"));
+    app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));
+    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+    app.use("/admin/metas-comerciales", require("./routes/Admin/adminRoutes"));
+    app.use("/vendedor", require("./routes/Vendedor/VendedorRoute"));
+    app.use("/entregas", require("./routes/entregaRoutes"));
+    app.use("/detalle-entrega", require("./routes/detalleEntregaRoutes"));
+    app.use("/entrega-obsequios", require("./routes/entregaObsequioRoutes"));
+    app.use("/estado-entrega", require("./routes/estadoEntregaRoutes"));
+
+    console.log(
+      "Carpeta uploads que Express está usando:",
+      path.join(__dirname, "uploads")
+    );
+
+    // Iniciar servidor
 
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`Servidor corriendo en el puerto ${PORT}`);
     });
   })
-  .catch(err => {
+  .catch((err) => {
     console.error("Error al conectar a la base de datos:", err);
     process.exit(1);
   });

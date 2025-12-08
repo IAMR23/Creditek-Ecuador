@@ -1,264 +1,299 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
-import { API_URL } from "../../../config";
 import { useNavigate, useParams } from "react-router-dom";
-import Swal from "sweetalert2";
 
-export default function EntregaDetalle() {
-  const [entrega, setEntrega] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default function DetalleEntrega() {
   const { id } = useParams();
+  const [form, setForm] = useState(null);
+  const [observacionesLogistica, setObservacionesLogistica] = useState("");
 
   const navigate = useNavigate();
+
   useEffect(() => {
     const fetchEntrega = async () => {
       try {
-        const res = await axios.get(`${API_URL}/entregas/${id}`);
-        setEntrega(res.data);
+        const { data } = await axios.get(
+          `http://localhost:5020/vendedor/entrega-logistica/${id}`
+        );
+
+        if (data.ok) setForm(data.entrega);
       } catch (error) {
-        console.error("Error cargando entrega:", error);
-      } finally {
-        setLoading(false);
+        console.error(error);
       }
     };
-
     fetchEntrega();
   }, [id]);
 
-  if (loading)
-    return (
-      <p className="text-center py-10 text-lg text-gray-500">Cargando...</p>
-    );
-  if (!entrega)
-    return (
-      <p className="text-center py-10 text-lg text-red-600">
-        No existe información
-      </p>
-    );
+  if (!form)
+    return <p className="text-green-600 font-semibold">Cargando entrega...</p>;
 
-  const actualizarEstado = async (estado) => {
-    const accion =
-      estado === "aprobado" ? "aprobar esta entrega" : "rechazar esta entrega";
-
-    const confirm = await Swal.fire({
-      title: "¿Estás seguro?",
-      text: `¿Deseas ${accion}?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: estado === "aprobado" ? "#16a34a" : "#000000",
-      cancelButtonColor: "#d33",
-      confirmButtonText: estado === "aprobado" ? "Sí, aprobar" : "Sí, rechazar",
-      cancelButtonText: "Cancelar",
-    });
-
-    if (!confirm.isConfirmed) return;
-
-    Swal.fire({
-      title: "Procesando...",
-      text: "Actualizando estado de la entrega.",
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      didOpen: () => Swal.showLoading(),
-    });
-
+  const actualizarEstado = async (nuevoEstado) => {
     try {
-      const response = await axios.patch(
-        `${API_URL}/entregas/${entrega.id}/estado`,
-        {
-          estado: estado,
-        }
-      );
-
-      Swal.fire({
-        title: "¡Listo!",
-        text:
-          estado === "aprobado"
-            ? "La entrega fue aprobada correctamente."
-            : "La entrega fue rechazada.",
-        icon: "success",
-        confirmButtonColor: estado === "aprobado" ? "#16a34a" : "#000000",
+      await axios.put(`http://localhost:5020/entregas/${id}`, {
+        estado: nuevoEstado,
+        observacionLogistica: observacionesLogistica,
       });
 
-      console.log("Estado actualizado:", response.data);
-      navigate("/entregas");
+      alert(`Estado actualizado a: ${nuevoEstado}`);
+      navigate("/entregas-logistica");
     } catch (error) {
-      Swal.fire({
-        title: "Error",
-        text: "No se pudo actualizar el estado. Intenta otra vez.",
-        icon: "error",
-        confirmButtonColor: "#000000",
-      });
-
-      console.error("Error al actualizar estado:", error);
-      navigate("/entregas");
+      console.error(error);
+      alert("Error al actualizar estado");
     }
   };
 
-  const handleAprobar = () => {
-    actualizarEstado("aprobado");
-  };
-
-  const handleRechazar = () => {
-    actualizarEstado("rechazado");
-  };
+  const inputStyle =
+    "w-full p-2 border border-green-300 rounded-lg bg-gray-100  cursor-not-allowed";
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-10">
-      <div className="max-w-5xl mx-auto bg-white shadow-2xl rounded-2xl p-6 md:p-10 border border-gray-200">
-        <h2 className="text-3xl font-bold text-black mb-6">
-          Detalle de la Entrega{" "}
-          <span className="text-green-600">#{entrega.id}</span>
+    <div className="max-w-4xl mx-auto p-6 bg-green-50 rounded-xl shadow-lg mt-6">
+      <div className="grid md:grid-cols-2 gap-4 ">
+        <div className="bg-green-100 p-4 rounded-lg shadow-inner space-y-2">
+          <label className="block font-semibold text-green-700">Vendedor</label>
+          <input
+            type="text"
+            className={inputStyle}
+            value={form.usuarioAgencia?.usuario?.nombre || ""}
+            readOnly
+          />
+        </div>
+
+        <div className="bg-green-100 p-4 rounded-lg shadow-inner space-y-2">
+          <label className="block font-semibold text-green-700">Agencia</label>
+          <input
+            type="text"
+            className={inputStyle}
+            value={form.usuarioAgencia?.agencia?.nombre || ""}
+            readOnly
+          />
+        </div>
+      </div>
+
+      <form className="space-y-6">
+        <h2 className="text-3xl font-bold text-green-600 border-b-2 border-green-500 pb-2">
+          Detalle de Entrega
         </h2>
 
-        <div className="md:col-span-2 pt-4">
-          <h3 className="text-xl font-semibold text-green-600 mb-2">
-            Datos del Vendedor
+        {/* Cliente */}
+        <div className="bg-green-100 p-4 rounded-lg shadow-inner space-y-2">
+          <h3 className="text-xl font-semibold text-green-700">Cliente</h3>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            <input
+              type="text"
+              className={inputStyle}
+              value={form.cliente?.nombre || ""}
+              readOnly
+            />
+            <input
+              type="text"
+              className={inputStyle}
+              value={form.cliente?.cedula || ""}
+              readOnly
+            />
+            <input
+              type="text"
+              className={inputStyle}
+              value={form.cliente?.telefono || ""}
+              readOnly
+            />
+          </div>
+        </div>
+
+        {/* Origen */}
+        <div className="bg-green-100 p-4 rounded-lg shadow-inner space-y-2">
+          <label className="block font-semibold text-green-700">Origen</label>
+          <input
+            type="text"
+            className={inputStyle}
+            value={form.origen?.nombre || ""}
+            readOnly
+          />
+        </div>
+
+        {/* Detalle de productos */}
+        <div>
+          <h3 className="text-2xl font-semibold text-green-600 mb-2">
+            Detalle de Productos
           </h3>
+
+          {form.detalleEntrega?.length === 0 && (
+            <p className="text-gray-500 italic">
+              No hay artículos registrados.
+            </p>
+          )}
+
+          {form.detalleEntrega?.map((detalle) => (
+            <div
+              key={detalle.id}
+              className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4 space-y-2"
+            >
+              <div className="grid md:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Modelo: ${detalle.modelo?.nombre || "-"}`}
+                  readOnly
+                />
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Marca: ${
+                    detalle.dispositivoMarca?.marca?.nombre || "-"
+                  }`}
+                  readOnly
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Dispositivo: ${
+                    detalle.dispositivoMarca?.dispositivo?.nombre || "-"
+                  }`}
+                  readOnly
+                />
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Forma de Pago: ${detalle.formaPago?.nombre || "-"}`}
+                  readOnly
+                />
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Contrato: ${detalle.contrato || "-"}`}
+                  readOnly
+                />
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Entrada: $${detalle.entrada}`}
+                  readOnly
+                />
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Alcance: $${detalle.alcance}`}
+                  readOnly
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Ubicación: ${detalle.ubicacion || "-"}`}
+                  readOnly
+                />
+
+                <input
+                  type="text"
+                  className={inputStyle}
+                  value={`Ubicación dispositivo: ${
+                    detalle.ubicacionDispositivo || "-"
+                  }`}
+                  readOnly
+                />
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* VENDEDOR Y AGENCIA - MISMA FILA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4  my-4">
-          {/* VENDEDOR */}
-          <div>
-            <label className="text-sm font-medium text-black">Vendedor</label>
-            <input
-              type="text"
-              readOnly
-              value={entrega.usuario_agencia.usuario.nombre}
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 cursor-not-allowed"
-            />
-          </div>
+        {/* Obsequios */}
+        <div>
+          <h3 className="text-2xl font-semibold text-green-600 mb-2">
+            Obsequios
+          </h3>
 
-          {/* AGENCIA */}
-          <div>
-            <label className="text-sm font-medium text-black">Agencia</label>
-            <input
-              type="text"
-              readOnly
-              value={entrega.usuario_agencia.agencia.nombre}
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 cursor-not-allowed"
-            />
-          </div>
-        </div>
+          {form.obsequiosEntrega?.length === 0 && (
+            <p className="text-gray-500 italic">
+              No hay obsequios registrados.
+            </p>
+          )}
 
-        <form className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-          {/* CLIENTE */}
-          <div className="md:col-span-2">
-            <h3 className="text-xl font-semibold text-green-600">Cliente</h3>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-black">Nombre</label>
-            <input
-              type="text"
-              readOnly
-              value={entrega.cliente.cliente}
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-black">Cédula</label>
-            <input
-              type="text"
-              readOnly
-              value={entrega.cliente.cedula}
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-black">Teléfono</label>
-            <input
-              type="text"
-              readOnly
-              value={entrega.cliente.telefono}
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 cursor-not-allowed"
-            />
-          </div>
-
-          {/* PRODUCTO */}
-          <div className="md:col-span-2 pt-4">
-            <h3 className="text-xl font-semibold text-green-600 mb-2">
-              Producto
-            </h3>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-black">Nombre</label>
-            <input
-              type="text"
-              readOnly
-              value={entrega.producto.nombre}
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 cursor-not-allowed"
-            />
-          </div>
-
-          {/* INFO GENERAL */}
-          {[
-            { label: "Contrato", value: entrega.contrato || "—" },
-            { label: "Origen", value: entrega.origen },
-            { label: "Entrada", value: entrega.valor_entrada },
-            { label: "Alcance", value: entrega.valor_alcance },
-            { label: "Ubicación", value: entrega.ubicacion },
-            {
-              label: "Ubicación del dispositivo",
-              value: entrega.ubicacion_dispositivo,
-            },
-          ].map((item, idx) => (
-            <div key={idx}>
-              <label className="text-sm font-medium text-black">
-                {item.label}
-              </label>
+          {form.obsequiosEntrega?.map((ob) => (
+            <div
+              key={ob.id}
+              className="bg-green-50 p-4 rounded-lg border border-green-200 mb-4 grid md:grid-cols-2 gap-4"
+            >
               <input
                 type="text"
-                value={item.value}
+                className={inputStyle}
+                value={ob.obsequio?.nombre || "-"}
                 readOnly
-                className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 text-gray-700 cursor-not-allowed"
+              />
+              <input
+                type="number"
+                className={inputStyle}
+                value={ob.cantidad}
+                readOnly
               />
             </div>
           ))}
+        </div>
 
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-black">Obsequios</label>
-            <input
-              type="text"
-              value={entrega.obsequios}
-              readOnly
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 text-gray-700 cursor-not-allowed"
+        {/* Observaciones logística */}
+        <div className="bg-green-200 p-4 rounded-lg shadow-inner space-y-2">
+          <label className="block font-semibold text-green-800">
+            Observaciones de Logística
+          </label>
+
+          <textarea
+            className="w-full p-3 border border-green-400 rounded-lg bg-white"
+            rows={4}
+            placeholder="Escribe una observación..."
+            value={observacionesLogistica}
+            onChange={(e) => setObservacionesLogistica(e.target.value)}
+          ></textarea>
+        </div>
+
+        {form.fotoValidacion && (
+          <div className="bg-green-100 p-4 rounded-lg shadow-inner space-y-2 mt-4">
+            <h3 className="text-xl font-semibold text-green-700">
+              Foto de Validación
+            </h3>
+
+            <img
+              src={`http://localhost:5020${form.fotoValidacion}`}
+              alt="Foto de validación"
+              className="w-full max-w-sm rounded-lg border-2 border-green-400 shadow-md"
             />
-          </div>
 
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium text-black">
-              Observación
-            </label>
-            <textarea
-              rows="3"
-              value={entrega.observacion}
-              readOnly
-              className="w-full mt-1 p-2.5 rounded-lg border border-gray-300 bg-gray-200 text-gray-700 cursor-not-allowed"
-            />
+            <a
+              href={`http://localhost:5020${form.fotoValidacion}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline block mt-2"
+            >
+              Ver foto en tamaño completo
+            </a>
           </div>
-        </form>
+        )}
 
-        {/* BOTONES */}
-        <div className="md:col-span-2 flex flex-col md:flex-row gap-4 mt-10 justify-end">
+        {/* Botones */}
+        <div className="grid md:grid-cols-3 gap-3 mt-6">
           <button
-            onClick={handleRechazar}
-            className="w-full md:w-auto px-6 py-3 rounded-xl font-semibold bg-black text-white hover:bg-gray-900 transition-all shadow-lg"
+            type="button"
+            onClick={() => actualizarEstado("Transito")}
+            className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-lg"
           >
-            Rechazar
+            En tránsito
           </button>
 
           <button
-            onClick={handleAprobar}
-            className="w-full md:w-auto px-6 py-3 rounded-xl font-semibold bg-green-600 text-white hover:bg-green-700 transition-all shadow-lg"
+            type="button"
+            onClick={() => actualizarEstado("Revisar")}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg"
           >
-            Aprobar
+            Regresar al Vendedor
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

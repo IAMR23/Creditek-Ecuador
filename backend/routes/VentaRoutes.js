@@ -1,225 +1,97 @@
 const express = require("express");
 const router = express.Router();
-
 const Venta = require("../models/Venta");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
-const Producto = require("../models/Producto");
-const { Op  , Sequelize} = require("sequelize");
-const Agencia = require("../models/Agencia");
-const Usuario = require("../models/Usuario");
+const Cliente = require("../models/Cliente");
+const Origen = require("../models/Origen");
+const DetalleVenta = require("../models/DetalleVenta");
+const { validarVenta, getVentasPorUsuarioAgencia } = require("../controllers/ventaController");
+const { default: upload } = require("../middleware/multer");
 
+// --------------------- CONTROLADORES ---------------------
+router.put("/venta/:id/validar", upload.single("foto"), validarVenta);
+ 
+router.get("/vendedor/:usuarioAgenciaId", getVentasPorUsuarioAgencia);
 
-router.get("/por-dia", async (req, res) => {
-  const data = await Venta.findAll({
-    attributes: [
-      [Sequelize.fn("DATE", Sequelize.col("createdAt")), "fecha"],
-      [Sequelize.fn("COUNT", "*"), "total"]
-    ],
-    group: ["fecha"],
-    order: [["fecha", "ASC"]]
-  });
-  res.json(data);
-}); 
-
-
-router.get("/filter", async (req, res) => {
-  try {
-    const {
-      fechaInicio,
-      fechaFin,
-      agenciaId,
-      usuarioAgenciaId,
-      productoId,
-      activo,
-    } = req.query;
-
-    const where = {};
-    const include = [
-      {
-        model: UsuarioAgencia,
-        as: "usuarioAgencia",
-        include: [
-          { model: Agencia, as: "agencia" },
-          { model: Usuario, as: "usuario" } // ← Añadido
-        ]
-      },
-      { model: Producto, as: "producto" },
-    ];
-
-    // ------ FILTROS DIRECTOS DE LA TABLA ------
-    if (fechaInicio && fechaFin) {
-      where.createdAt = {
-        [Op.between]: [
-          new Date(fechaInicio + " 00:00:00"),
-          new Date(fechaFin + " 23:59:59"),
-        ],
-      };
-    }
-
-    if (usuarioAgenciaId) where.usuarioAgenciaId = usuarioAgenciaId;
-    if (productoId) where.productoId = productoId;
-
-    if (activo !== undefined) {
-      where.activo = activo === "true";
-    }
-
-    // ------ FILTRO POR AGENCIA ------
-    if (agenciaId) {
-      include[0].where = { agenciaId };
-      include[0].required = true; // INNER JOIN
-    }
-
-    const ventas = await Venta.findAll({
-      where,
-      include,
-      order: [["createdAt", "DESC"]],
-    });
-
-    res.json(ventas);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Error al filtrar ventas",
-      error: error.message,
-    });
-  }
-});
-
-router.post("/", async (req, res) => {
-  try {
-    const { 
-      usuarioAgenciaId,
-      productoId,
-      entrada,
-      alcance,
-      origen,
-      obsequios,
-      activo
-    } = req.body;
-
-    // Validar relaciones
-    const ua = await UsuarioAgencia.findByPk(usuarioAgenciaId);
-    if (!ua) return res.status(400).json({ message: "Usuario-Agencia no encontrado" });
-
-    const producto = await Producto.findByPk(productoId);
-    if (!producto) return res.status(400).json({ message: "Producto no encontrado" });
-
-    const venta = await Venta.create({
-      usuarioAgenciaId,
-      productoId,
-      entrada,
-      alcance,
-      origen,
-      obsequios,
-      activo: activo ?? true,
-    });
-
-    res.status(201).json(venta);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al crear venta", error });
-  }
-});
-
+// Listar todas las ventas 
 router.get("/", async (req, res) => {
   try {
     const ventas = await Venta.findAll({
-   include: [
-  { model: UsuarioAgencia, as: "usuarioAgencia" },
-  { model: Producto, as: "producto" },
-]
-
+      include: [
+        { model: UsuarioAgencia, as: "usuarioAgencia" },
+        { model: Cliente, as: "cliente" },
+        { model: Origen, as: "origen" },
+        { model: DetalleVenta, as: "detalleVenta", include: ["dispositivoMarca"] },
+      ],
     });
     res.json(ventas);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al obtener ventas", error });
-  }  
+    res.status(500).json({ mensaje: "Error al obtener las ventas." });
+  }
 });
 
+// Obtener una venta por ID
 router.get("/:id", async (req, res) => {
+  const { id } = req.params;
   try {
-    const venta = await Venta.findByPk(req.params.id, {
+    const venta = await Venta.findByPk(id, {
       include: [
-        { model: UsuarioAgencia , as: "usuarioAgencia" },
-        { model: Producto ,  as: "producto"},
+        { model: UsuarioAgencia, as: "usuarioAgencia" },
+        { model: Cliente, as: "cliente" },
+        { model: Origen, as: "origen" },
+        { model: DetalleVenta, as: "detalleVenta", include: ["dispositivoMarca"] },
       ],
     });
-
-    if (!venta) return res.status(404).json({ message: "Venta no encontrada" });
-
+    if (!venta) return res.status(404).json({ mensaje: "Venta no encontrada." });
     res.json(venta);
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al obtener venta", error });
+    res.status(500).json({ mensaje: "Error al obtener la venta." });
   }
 });
 
+// Crear una nueva venta
+router.post("/", async (req, res) => {
+  const { usuarioAgenciaId, clienteId, origenId,  activo, observacion  , fecha} = req.body;
+  try {
+    const nuevaVenta = await Venta.create({ usuarioAgenciaId, clienteId, origenId,  activo, observacion, fecha });
+    res.status(201).json(nuevaVenta);
+  } catch (error) {
+    console.error(error); 
+    res.status(500).json({ mensaje: "Error al crear la venta." });
+  }
+});
+
+// Actualizar una venta
 router.put("/:id", async (req, res) => {
+  const { id } = req.params;
+  const { usuarioAgenciaId, clienteId, origenId,  activo, observacion , fecha} = req.body;
   try {
-    const { 
-      usuarioAgenciaId,
-      productoId,
-      entrada,
-      alcance,
-      origen,
-      obsequios,
-      activo
-    } = req.body;
+    const venta = await Venta.findByPk(id);
+    if (!venta) return res.status(404).json({ mensaje: "Venta no encontrada." });
 
-    const venta = await Venta.findByPk(req.params.id);
-    if (!venta) return res.status(404).json({ message: "Venta no encontrada" });
-
-    // Validar usuario-agencia
-    if (usuarioAgenciaId) {
-      const ua = await UsuarioAgencia.findByPk(usuarioAgenciaId);
-      if (!ua) return res.status(400).json({ message: "Usuario-Agencia no encontrado" });
-      venta.usuarioAgenciaId = usuarioAgenciaId;
-    }
-
-    // Validar producto
-    if (productoId) {
-      const producto = await Producto.findByPk(productoId);
-      if (!producto) return res.status(400).json({ message: "Producto no encontrado" });
-      venta.productoId = productoId;
-    }
-
-    venta.entrada = entrada ?? venta.entrada;
-    venta.alcance = alcance ?? venta.alcance;
-    venta.origen = origen ?? venta.origen;
-    venta.obsequios = obsequios ?? venta.obsequios;
-    venta.activo = activo ?? venta.activo;
-
-    await venta.save();
-
+    await venta.update({ usuarioAgenciaId, clienteId, origenId,  activo, observacion , fecha});
     res.json(venta);
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al actualizar venta", error });
+    res.status(500).json({ mensaje: "Error al actualizar la venta." });
   }
 });
 
+// Eliminar una venta
 router.delete("/:id", async (req, res) => {
+  const { id } = req.params;
   try {
-    const venta = await Venta.findByPk(req.params.id);
-
-    if (!venta) return res.status(404).json({ message: "Venta no encontrada" });
+    const venta = await Venta.findByPk(id);
+    if (!venta) return res.status(404).json({ mensaje: "Venta no encontrada." });
 
     await venta.destroy();
-
-    res.json({ message: "Venta eliminada correctamente" });
-
+    res.json({ mensaje: "Venta eliminada correctamente." });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al eliminar venta", error });
+    res.status(500).json({ mensaje: "Error al eliminar la venta." });
   }
 });
 
-
-
 module.exports = router;
- 

@@ -18,7 +18,6 @@ const FormularioEntrega = () => {
     return null;
   }
 
-  console.log(cliente);
 
   // Ahora puedes usar "cliente" como antes
   const [formData, setFormData] = useState({

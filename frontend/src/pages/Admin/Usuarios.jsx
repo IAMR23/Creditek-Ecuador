@@ -5,20 +5,17 @@ import { API_URL } from "../../../config";
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // FORMULARIO CREAR
   const [form, setForm] = useState({
     nombre: "",
     cedula: "",
     email: "",
     password: "",
-    rol: "",
+    rolId: "",
   });
 
-  // ===========================
-  // ESTADO PARA EL MODAL EDITAR
-  // ===========================
   const [editModal, setEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     id: null,
@@ -26,7 +23,7 @@ export default function Usuarios() {
     cedula: "",
     email: "",
     password: "",
-    rol: "",
+    rolId: "",
     activo: true,
   });
 
@@ -37,7 +34,7 @@ export default function Usuarios() {
       cedula: usuario.cedula,
       email: usuario.email,
       password: "",
-      rol: usuario.rol,
+      rolId: usuario.rol?.id || "",
       activo: usuario.activo,
     });
     setEditModal(true);
@@ -51,38 +48,44 @@ export default function Usuarios() {
       cedula: "",
       email: "",
       password: "",
-      rol: "",
+      rolId: "",
       activo: true,
     });
   };
 
-  // ===========================
-  // CARGAR USUARIOS
-  // ===========================
   const cargarUsuarios = async () => {
     const res = await axios.get(`${API_URL}/usuarios`);
     setUsuarios(res.data);
   };
 
+  const cargarRoles = async () => {
+    const res = await axios.get(`${API_URL}/rol`);
+    setRoles(res.data);
+  };
+
   useEffect(() => {
     cargarUsuarios();
+    cargarRoles();
   }, []);
 
-  // ===========================
-  // CREAR USUARIO
-  // ===========================
   const crearUsuario = async (e) => {
     e.preventDefault();
     try {
       setLoading(true);
-      await axios.post(`${API_URL}/usuarios`, form);
+      await axios.post(`${API_URL}/usuarios`, {
+        nombre: form.nombre,
+        cedula: form.cedula,
+        email: form.email,
+        password: form.password,
+        rolId: form.rolId,
+      });
 
       setForm({
         nombre: "",
         cedula: "",
         email: "",
         password: "",
-        rol: "",
+        rolId: "",
       });
 
       cargarUsuarios();
@@ -90,7 +93,6 @@ export default function Usuarios() {
       Swal.fire({
         icon: "success",
         title: "Usuario creado",
-        text: "El usuario fue registrado correctamente",
         timer: 2000,
         showConfirmButton: false,
       });
@@ -105,13 +107,9 @@ export default function Usuarios() {
     }
   };
 
-  // ===========================
-  // ELIMINAR USUARIO
-  // ===========================
   const eliminarUsuario = async (id) => {
     const confirm = await Swal.fire({
       title: "¿Eliminar usuario?",
-      text: "Esta acción no se puede deshacer.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#16a34a",
@@ -129,11 +127,10 @@ export default function Usuarios() {
       Swal.fire({
         icon: "success",
         title: "Eliminado",
-        text: "Usuario eliminado correctamente",
         timer: 1500,
         showConfirmButton: false,
       });
-    } catch (error) {
+    } catch {
       Swal.fire({
         icon: "error",
         title: "Error",
@@ -142,9 +139,6 @@ export default function Usuarios() {
     }
   };
 
-  // ===========================
-  // EDITAR USUARIO (PATCH)
-  // ===========================
   const actualizarUsuario = async (e) => {
     e.preventDefault();
     try {
@@ -153,7 +147,7 @@ export default function Usuarios() {
         cedula: editForm.cedula,
         email: editForm.email,
         password: editForm.password || undefined,
-        rol: editForm.rol,
+        rolId: editForm.rolId,
         activo: editForm.activo,
       });
 
@@ -163,7 +157,6 @@ export default function Usuarios() {
       Swal.fire({
         icon: "success",
         title: "Actualizado",
-        text: "El usuario fue actualizado correctamente",
         timer: 1500,
         showConfirmButton: false,
       });
@@ -180,9 +173,6 @@ export default function Usuarios() {
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold text-green-600 mb-6">Gestión de Usuarios</h1>
 
-      {/* =========================== */}
-      {/* FORMULARIO CREAR USUARIO */}
-      {/* =========================== */}
       <div className="bg-white shadow-md rounded-xl p-6 mb-8 border border-green-200">
         <h2 className="text-xl font-semibold text-green-600 mb-4">Crear Usuario</h2>
 
@@ -218,14 +208,15 @@ export default function Usuarios() {
 
           <select
             className="border p-3 rounded-lg"
-            value={form.rol}
-            onChange={(e) => setForm({ ...form, rol: e.target.value })}
+            value={form.rolId}
+            onChange={(e) => setForm({ ...form, rolId: e.target.value })}
           >
             <option value="">Rol</option>
-            <option value="admin">Admin</option>
-            <option value="vendedor">Vendedor</option>
-            <option value="repartidor">Repartidor</option>
-            <option value="logistica">Logística</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.nombre}
+              </option>
+            ))}
           </select>
 
           <button
@@ -238,9 +229,6 @@ export default function Usuarios() {
         </form>
       </div>
 
-      {/* =========================== */}
-      {/* TABLA DE USUARIOS */}
-      {/* =========================== */}
       <div className="bg-white shadow-md rounded-xl p-6 border border-green-200">
         <h2 className="text-xl font-semibold text-green-600 mb-4">Lista de Usuarios</h2>
 
@@ -259,14 +247,11 @@ export default function Usuarios() {
 
             <tbody>
               {usuarios.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-b hover:bg-green-100 transition-colors"
-                >
+                <tr key={u.id} className="border-b hover:bg-green-100 transition-colors">
                   <td className="p-3">{u.nombre}</td>
                   <td className="p-3">{u.cedula}</td>
                   <td className="p-3">{u.email}</td>
-                  <td className="p-3">{u.rol}</td>
+                  <td className="p-3">{u.rol?.nombre || "Sin rol"}</td>
                   <td className="p-3">{u.activo ? "Sí" : "No"}</td>
 
                   <td className="p-3 text-center flex gap-2 justify-center">
@@ -299,41 +284,32 @@ export default function Usuarios() {
         </div>
       </div>
 
-      {/* =========================== */}
-      {/* MODAL EDITAR USUARIO */}
-      {/* =========================== */}
       {editModal && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center">
           <div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4 text-green-600">
-              Editar Usuario
-            </h2>
+            <h2 className="text-2xl font-bold mb-4 text-green-600">Editar Usuario</h2>
 
             <form onSubmit={actualizarUsuario} className="grid grid-cols-1 gap-4">
               <input
                 type="text"
-                placeholder="Nombre"
                 className="border p-3 rounded-lg"
                 value={editForm.nombre}
                 onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
               />
               <input
                 type="text"
-                placeholder="Cédula"
                 className="border p-3 rounded-lg"
                 value={editForm.cedula}
                 onChange={(e) => setEditForm({ ...editForm, cedula: e.target.value })}
               />
               <input
                 type="email"
-                placeholder="Email"
                 className="border p-3 rounded-lg"
                 value={editForm.email}
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
               />
               <input
                 type="password"
-                placeholder="Nueva contraseña (opcional)"
                 className="border p-3 rounded-lg"
                 value={editForm.password}
                 onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
@@ -341,23 +317,21 @@ export default function Usuarios() {
 
               <select
                 className="border p-3 rounded-lg"
-                value={editForm.rol}
-                onChange={(e) => setEditForm({ ...editForm, rol: e.target.value })}
+                value={editForm.rolId}
+                onChange={(e) => setEditForm({ ...editForm, rolId: e.target.value })}
               >
-                <option value="admin">Admin</option>
-                <option value="vendedor">Vendedor</option>
-                <option value="repartidor">Repartidor</option>
-                <option value="logistica">Logística</option>
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.nombre}
+                  </option>
+                ))}
               </select>
 
               <select
                 className="border p-3 rounded-lg"
                 value={editForm.activo}
                 onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    activo: e.target.value === "true",
-                  })
+                  setEditForm({ ...editForm, activo: e.target.value === "true" })
                 }
               >
                 <option value="true">Activo</option>

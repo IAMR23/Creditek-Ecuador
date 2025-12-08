@@ -1,235 +1,88 @@
-const Entrega = require("../models/Entrega");
-const Cliente = require("../models/Cliente");
-const Producto = require("../models/Producto");
-const UsuarioAgencia = require("../models/UsuarioAgencia");
+const Entrega = require("../models/Entrega.js");
+const UsuarioAgencia = require("../models/UsuarioAgencia.js");
+const Usuario = require("../models/Usuario.js");
+const Agencia = require("../models/Agencia.js");
 const { Op } = require("sequelize");
-const Usuario = require("../models/Usuario");
-const Agencia = require("../models/Agencia");
 
-// Crear entrega
-exports.crearEntrega = async (req, res) => {
+exports.validarEntrega = async (req, res) => {
   try {
-    const {
-      contrato,
-      origen,
-      valor_entrada,
-      valor_alcance,
-      ubicacion,
-      ubicacion_dispositivo,
-      obsequios,
-      observacion,
-      estado,
-      clienteId,
-      productoId,
-      usuarioAgenciaId,
-    } = req.body;
-
-    const nuevaEntrega = await Entrega.create({
-      contrato,
-      origen,
-      valor_entrada,
-      valor_alcance,
-      ubicacion,
-      ubicacion_dispositivo,
-      obsequios,
-      observacion,
-      estado,
-      clienteId,
-      productoId,
-      usuarioAgenciaId,
-    });
-
-    const entregaConRelaciones = await Entrega.findByPk(nuevaEntrega.id, {
-      include: [
-        { model: Cliente, as: "cliente" },
-        { model: Producto, as: "producto" },
-        { model: UsuarioAgencia, as: "usuario_agencia" },
-      ],
-    });
-
-    res.status(201).json(entregaConRelaciones);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error al crear la entrega" });
-  }
-};
-
-// Listar todas las entregas
-exports.listarEntregas = async (req, res) => {
-  try {
-    const entregas = await Entrega.findAll({
-      include: [
-        { model: Cliente, as: "cliente" },
-        { model: Producto, as: "producto" },
-        { model: UsuarioAgencia, as: "usuario_agencia" },
-      ],
-    });
-    res.json(entregas);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error al obtener las entregas" });
-  }
-};
-
-// Obtener entrega por ID
-exports.obtenerEntrega = async (req, res) => {
-  try {
-    const entrega = await Entrega.findByPk(req.params.id, {
-      include: [
-        { model: Cliente, as: "cliente" },
-        { model: Producto, as: "producto" },
-        { 
-          model: UsuarioAgencia, 
-          as: "usuario_agencia",
-          include: [
-            { model: Usuario, as: "usuario" },   // vendedor
-            { model: Agencia, as: "agencia" }    // agencia
-          ]
-        },
-      ],
-    });
+    const { id } = req.params;
+    const entrega = await Entrega.findByPk(id);
 
     if (!entrega) {
-      return res.status(404).json({ mensaje: "Entrega no encontrada" });
+      return res.status(404).json({ message: "Entrega no encontrada" });
     }
 
-    res.json(entrega);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error al obtener la entrega" });
-  }
-};
+    // si viene foto
+    const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
 
-
-exports.cambiarEstadoEntrega = async (req, res) => {
-  const { id } = req.params;
-  const { estado } = req.body;
-
-  if (!["aprobado", "rechazado", "pendiente"].includes(estado)) {
-    return res.status(400).json({ message: "Estado inválido" });
-  }
-
-  const entrega = await Entrega.update(
-    { estado },
-    { where: { id } }
-  );
-
-  res.json({ message: "Estado actualizado", entrega });
-};
-
-
-// Actualizar entrega
-exports.actualizarEntrega = async (req, res) => {
-  try {
-    const entregaExistente = await Entrega.findByPk(req.params.id);
-    if (!entregaExistente) return res.status(404).json({ mensaje: "Entrega no encontrada" });
-
-    const {
-      contrato,
-      origen,
-      valor_entrada,
-      valor_alcance,
-      ubicacion,
-      ubicacion_dispositivo,
-      obsequios,
-      observacion,
-      estado,
-      clienteId,
-      productoId,
-      usuarioAgenciaId,
-    } = req.body;
-
-    await entregaExistente.update({
-      contrato,
-      origen,
-      valor_entrada,
-      valor_alcance,
-      ubicacion,
-      ubicacion_dispositivo,
-      obsequios,
-      observacion,
-      estado,
-      clienteId,
-      productoId,
-      usuarioAgenciaId,
+    await entrega.update({ 
+      validada: true,
+      fotoValidacion: fotoUrl,
     });
 
-    const entregaActualizada = await Entrega.findByPk(entregaExistente.id, {
-      include: [
-        { model: Cliente, as: "cliente" },
-        { model: Producto, as: "producto" },
-        { model: UsuarioAgencia, as: "usuario_agencia" },
-      ],
+    res.json({
+      message: "Entrega validada correctamente",
+      entrega,
     });
-
-    res.json(entregaActualizada);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error al actualizar la entrega" });
-  }
-};
-
-// Eliminar entrega
-exports.eliminarEntrega = async (req, res) => {
-  try {
-    const entregaExistente = await Entrega.findByPk(req.params.id);
-    if (!entregaExistente) return res.status(404).json({ mensaje: "Entrega no encontrada" });
-
-    await entregaExistente.destroy();
-    res.json({ mensaje: "Entrega eliminada correctamente" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error al eliminar la entrega" });
+    console.log("Error validando entrega:", error);
+    res.status(500).json({
+      message: "Error al validar la entrega",
+    });
   }
 };
 
 
-exports.filtrarEntregas = async (req, res) => {
+exports.getEntregasPorUsuarioAgencia = async (req, res) => {
   try {
-    const {
-      fechaInicio,
-      fechaFin,
-      clienteId,
-      usuarioAgenciaId,
-      estado,
-    } = req.query;
+    const { usuarioAgenciaId } = req.params;
 
-    let where = {};
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
 
-    // 📌 FILTRO POR FECHAS
-    if (fechaInicio || fechaFin) {
-      where.createdAt = {
-        ...(fechaInicio && { [Op.gte]: new Date(fechaInicio + " 00:00:00") }),
-        ...(fechaFin && { [Op.lte]: new Date(fechaFin + " 23:59:59") }),
-      };
-    } else {
-      // 📌 SI NO ENVÍAN FECHAS → FECHA DE HOY
-      const hoy = new Date().toISOString().slice(0, 10);
-      where.createdAt = {
-        [Op.gte]: new Date(hoy + " 00:00:00"),
-        [Op.lte]: new Date(hoy + " 23:59:59"),
-      };
-    }
-
-    // 📌 OPCIONALES
-    if (clienteId) where.clienteId = clienteId;
-    if (usuarioAgenciaId) where.usuarioAgenciaId = usuarioAgenciaId;
-    if (estado) where.estado = estado;
+    const manana = new Date(hoy);
+    manana.setDate(manana.getDate() + 1);
 
     const entregas = await Entrega.findAll({
-      where,
+      where: {
+        usuarioAgenciaId,
+        createdAt: {
+          [Op.gte]: hoy,
+          [Op.lt]: manana,
+        },
+      },
+      attributes: [
+        "id",
+        "origenId",
+        "createdAt",
+        "validada",
+        "fotoValidacion"   
+      ],
       include: [
-        { model: Cliente ,   as: "cliente"},
-        { model: Producto  , as: "producto"},
-        { model: UsuarioAgencia , as : "usuario_agencia"},
+        {
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          include: [
+            { model: Usuario, as: "usuario", attributes: ["nombre"] },
+            { model: Agencia, as: "agencia", attributes: ["nombre"] },
+          ],
+        },
       ],
       order: [["createdAt", "DESC"]],
     });
 
-    res.json(entregas);
+    res.json({
+      ok: true,
+      total: entregas.length,
+      entregas,
+    });
   } catch (error) {
-    console.error("Error en filtro:", error);
-    res.status(500).json({ error: "Error al filtrar entregas" });
+    console.error("Error:", error);
+    res.status(500).json({
+      ok: false,
+      msg: "Error al obtener las entregas del vendedor",
+    });
   }
 };
-
