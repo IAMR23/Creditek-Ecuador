@@ -89,9 +89,9 @@ export default function DashboardEntregas() {
             <label className="text-xs text-gray-500">Desde</label>
             <input
               type="date"
-              estados={fechaInicio}
+              value={fechaInicio}
               max={fechaFin}
-              onChange={(e) => setFechaInicio(e.target.estados)}
+              onChange={(e) => setFechaInicio(e.target.value)}
               className="px-3 py-2 border rounded-lg text-sm"
             />
           </div>
@@ -100,9 +100,9 @@ export default function DashboardEntregas() {
             <label className="text-xs text-gray-500">Hasta</label>
             <input
               type="date"
-              estados={fechaFin}
+              value={fechaFin}
               min={fechaInicio}
-              onChange={(e) => setFechaFin(e.target.estados)}
+              onChange={(e) => setFechaFin(e.target.value)}
               className="px-3 py-2 border rounded-lg text-sm"
             />
           </div>
@@ -136,35 +136,45 @@ export default function DashboardEntregas() {
             {/* Cards de estados */}
             <div className="grid grid-cols-2 lg:grid-cols-3 col-span-1 lg:col-span-3 gap-6">
               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-amber-500">
-                <p className="text-xs text-gray-500">Pendientes</p>
+                <p className="text-xs text-gray-500">
+                  Pendientes - El vendedor realizo el pedido
+                </p>
                 <p className="mt-3 text-2xl font-semibold text-amber-600">
                   {data.porEstado.pendientes}
                 </p>
               </div>
 
               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-blue-500">
-                <p className="text-xs text-gray-500">En Tránsito</p>
+                <p className="text-xs text-gray-500">
+                  En Tránsito - Logistica coordino el envio{" "}
+                </p>
                 <p className="mt-3 text-2xl font-semibold text-blue-600">
                   {data.porEstado.transito}
                 </p>
               </div>
 
               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-pink-500">
-                <p className="text-xs text-gray-500">Revisar</p>
+                <p className="text-xs text-gray-500">
+                  Revisar - Hubo inconsistencias en la informacion
+                </p>
                 <p className="mt-3 text-2xl font-semibold text-pink-600">
                   {data.porEstado.revisar}
                 </p>
               </div>
 
               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-green-500">
-                <p className="text-xs text-gray-500">Entregadas</p>
+                <p className="text-xs text-gray-500">
+                  Entregadas - Logistica completo la entrega
+                </p>
                 <p className="mt-3 text-2xl font-semibold text-green-600">
                   {data.porEstado.entregado}
                 </p>
               </div>
 
               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-red-500 col-span-2 lg:col-span-1">
-                <p className="text-xs text-gray-500">No Entregadas</p>
+                <p className="text-xs text-gray-500">
+                  No Entregadas - Paso algo que el envio no se completo.
+                </p>
                 <p className="mt-3 text-2xl font-semibold text-red-600">
                   {data.porEstado.noEntregado}
                 </p>

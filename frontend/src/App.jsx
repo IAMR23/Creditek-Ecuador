@@ -47,7 +47,6 @@ import DetalleEntregaVendedores from "./pages/Vendedores/Entregas/DetalleEntrega
 import VentasPorUsuario from "./pages/Vendedores/Ventas/VentasPorUsuario";
 import EstadoEntrega from "./pages/Admin/EstadoEntrega";
 import MisVentas from "./pages/Vendedores/Ventas/MisVentas";
-import VentaEditor from "./pages/Vendedores/Ventas/VentaEditor";
 import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
 import EntregasLogisticas from "./pages/Logistica/EntregasLogisticas";
 
@@ -171,7 +170,6 @@ function App() {
             <Route path="/entregas-repartidor" element={<EntregasRepartidor />} />
             <Route path="/entregas-repartidor/:id" element={<DetalleEntregaRepartidor />} />
 
-            {/* VENDEDORES */}
             <Route path="/vendedor-panel" element={<VendedorPanel />} />
             {/*   <Route path="/registrar-ventas" element={<FormularioDinamico />} />
             <Route path="/registrar-clientes" element={<FormularioCliente />} />

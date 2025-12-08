@@ -136,6 +136,7 @@ exports.formatearReporte = (ventas) => {
 
         observaciones: entrega.observacion || "",
         contrato: detalle.contrato || "",
+        validada : entrega.validada || "",
       });
     });
   });

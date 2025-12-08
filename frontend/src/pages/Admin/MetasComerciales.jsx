@@ -8,15 +8,36 @@ export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // 📅 Estados para las fechas seleccionadas
+  // 📅 Fechas
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
 
-  // ❗ Mensaje de error por validación
+  // 🏢 Agencia
+  const [agencias, setAgencias] = useState([]);
+  const [agenciaId, setAgenciaId] = useState("");
+
+  // ❗ Validación
   const [error, setError] = useState("");
 
+  const cargarAgencias = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/agencias`);
+      setAgencias(res.data || []);
+    } catch (error) {
+      console.error("Error cargando agencias:", error);
+
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar las agencias.",
+      });
+
+      setAgencias([]);
+    }
+  };
+
   const fetchData = async () => {
-    // Validación FECHA INICIO > FECHA FIN
+    // Validación fechas
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       return;
@@ -26,13 +47,14 @@ export default function MetasComerciales() {
     setLoading(true);
 
     try {
-      const url = `${API_URL}/admin/metas-comerciales/ventas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+      const url = `${API_URL}/admin/metas-comerciales/ventas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&agenciaId=${agenciaId}`;
+
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
 
       const ventas = data.ventas || [];
-
+      console.log(ventas);
       const resultado = ventas.map((venta) => ({
         Fecha: venta.fecha ?? "",
         Día: venta.dia ?? "",
@@ -47,6 +69,9 @@ export default function MetasComerciales() {
         Contrato: venta.contrato ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
+        Observaciones: venta.observaciones ?? "",
+        Estado: venta.validada ? "Validada" : "No validada",
+        
       }));
 
       setFilas(resultado);
@@ -57,13 +82,18 @@ export default function MetasComerciales() {
     }
   };
 
-  // 🟦 Se ejecuta cada vez que cambian las fechas
+  // ============================================
+  // Ejecutar cuando cambien filtros
+  // ============================================
   useEffect(() => {
     if (fechaInicio && fechaFin) {
       fetchData();
     }
-  }, [fechaInicio, fechaFin]);
+  }, [fechaInicio, fechaFin, agenciaId]);
 
+  // ============================================
+  // Descargar Excel
+  // ============================================
   const descargarExcel = () => {
     if (filas.length === 0) {
       return Swal.fire({
@@ -89,20 +119,23 @@ export default function MetasComerciales() {
     });
   };
 
+  // ============================================
+  // Establecer fecha actual y cargar agencias
+  // ============================================
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
-    // "en-CA" produce formato YYYY-MM-DD
-
     setFechaInicio(hoyLocal);
     setFechaFin(hoyLocal);
+    cargarAgencias();
   }, []);
 
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Metas Comerciales</h1>
 
-      {/* 📅 Inputs de Fecha */}
+      {/* 📅 Filtros */}
       <div className="flex gap-4 mb-4 items-end">
+        {/* FECHA INICIO */}
         <div>
           <label className="block text-sm font-medium">Fecha Inicio</label>
           <input
@@ -113,6 +146,7 @@ export default function MetasComerciales() {
           />
         </div>
 
+        {/* FECHA FIN */}
         <div>
           <label className="block text-sm font-medium">Fecha Fin</label>
           <input
@@ -123,7 +157,24 @@ export default function MetasComerciales() {
           />
         </div>
 
-        {/* 🔽 Botón de descarga */}
+        {/* AGENCIA */}
+        <div>
+          <label className="block text-sm font-medium">Agencia</label>
+          <select
+            className="border px-2 py-1 rounded"
+            value={agenciaId}
+            onChange={(e) => setAgenciaId(e.target.value)}
+          >
+            <option value="">Todas</option>
+            {agencias.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 🔽 Botón Excel */}
         <button
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           onClick={descargarExcel}
@@ -132,9 +183,10 @@ export default function MetasComerciales() {
         </button>
       </div>
 
-      {/* Mensaje de error */}
+      {/* Error */}
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
 
+      {/* TABLA */}
       {loading ? (
         <p>Cargando...</p>
       ) : (
@@ -147,6 +199,7 @@ export default function MetasComerciales() {
                 </th>
               ))}
             </tr>
+      
           </thead>
           <tbody>
             {filas.map((f, i) => (

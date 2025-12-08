@@ -12,10 +12,15 @@ router.get("/", dispositivoMarcaController.listarDispositivoMarca);
 router.get("/:dispositivoMarcaId", async (req, res) => {
   try {
     const id = parseInt(req.params.dispositivoMarcaId, 10);
-    if (isNaN(id)) return res.status(400).json({ message: "ID inválido" });
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "ID inválido" });
+    }
 
     const modelos = await Modelo.findAll({
-      where: { dispositivoMarcaId: id },
+      where: {
+        dispositivoMarcaId: id,
+        activo: true    // 👈 FILTRA SOLO LOS ACTIVOS
+      },
     });
 
     res.json(modelos);
@@ -24,6 +29,7 @@ router.get("/:dispositivoMarcaId", async (req, res) => {
     res.status(500).json({ message: "Error al obtener modelos" });
   }
 });
+
 
 // Obtener relación por ID
 /* router.get("/:id", dispositivoMarcaController.obtenerDispositivoMarca);

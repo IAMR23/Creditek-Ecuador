@@ -72,7 +72,6 @@ export default function DetalleVenta() {
     }
   };
 
-  // Actualiza precio unitario cuando cambian modelo o forma de pago
   useEffect(() => {
     const fetchPrecio = async () => {
       const { modeloId, formaPagoId } = form;

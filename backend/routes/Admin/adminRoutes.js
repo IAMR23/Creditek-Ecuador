@@ -3,7 +3,7 @@ const router = express.Router();
 const adminController = require("../../controllers/Admin/metasComercialesVentas");
 const adminControllerEntregas = require("../../controllers/Admin/metasComercialesEntregas");
 
-router.get("/ventas", async (req, res) => {
+/* router.get("/ventas", async (req, res) => {
   try {
     const { fechaInicio, fechaFin } = req.query;
     const ventas = await adminController.obtenerReporte({
@@ -17,7 +17,28 @@ router.get("/ventas", async (req, res) => {
     console.log(error);
     res.status(500).json({ ok: false, error: error.message });
   }
+}); */
+
+router.get("/ventas", async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, agenciaId } = req.query;
+
+    const ventas = await adminController.obtenerReporte({
+      fechaInicio,
+      fechaFin,
+      agenciaId,   // 👈 Nuevo parámetro
+    });
+
+    const reporte = adminController.formatearReporte(ventas);
+
+    res.json({ ok: true, ventas: reporte });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
+
+
 
 router.get("/entregas", async (req, res) => {
   try {

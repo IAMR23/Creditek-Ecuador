@@ -8,13 +8,16 @@ const FormaPago = require("../models/FormaPago");
 // Listar todas las formas de pago
 router.get("/", async (req, res) => {
   try {
-    const formasPago = await FormaPago.findAll();
+    const formasPago = await FormaPago.findAll({
+      where: { activo: true }  
+    });
     res.json(formasPago);
   } catch (error) {
     console.error(error);
     res.status(500).json({ mensaje: "Error al obtener las formas de pago." });
   }
 });
+
 
 // Obtener una forma de pago por ID
 router.get("/:id", async (req, res) => {

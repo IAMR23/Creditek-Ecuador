@@ -15,7 +15,7 @@ const VentaObsequio = require("../../models/VentaObsequio");
 
 const { Op } = require("sequelize");
 
-exports.obtenerReporte = async ({ fechaInicio, fechaFin }) => {
+/* exports.obtenerReporte = async ({ fechaInicio, fechaFin }) => {
   const where = {};
 
   if (fechaInicio && fechaFin) {
@@ -44,6 +44,74 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin }) => {
         include: [
           { model: Usuario, as: "usuario", attributes: ["nombre"] },
           { model: Agencia, as: "agencia", attributes: ["nombre"] },
+        ],
+      },
+      { model: Cliente, as: "cliente", attributes: ["cliente"] },
+      { model: Origen, as: "origen", attributes: ["nombre"] },
+      {
+        model: DetalleVenta,
+        as: "detalleVenta",
+        include: [
+          { model: Modelo, as: "modelo", attributes: ["nombre"] },
+          {
+            model: DispositivoMarca,
+            as: "dispositivoMarca",
+            include: [
+              { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
+              { model: Marca, as: "marca", attributes: ["nombre"] },
+            ],
+          },
+          { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
+        ],
+      },
+      {
+        model: VentaObsequio,
+        as: "obsequiosVenta",
+        include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
+      },
+    ],
+  });
+
+  return ventas;
+};
+ */
+
+exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId }) => {
+  const where = {};
+
+  // ----------- FILTRO POR FECHAS -----------
+  if (fechaInicio && fechaFin) {
+    where.createdAt = {
+      [Op.between]: [
+        new Date(`${fechaInicio}T00:00:00`),
+        new Date(`${fechaFin}T23:59:59`),
+      ],
+    };
+  } else if (fechaInicio) {
+    where.createdAt = {
+      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
+    };
+  } else if (fechaFin) {
+    where.createdAt = {
+      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
+    };
+  }
+
+  // ----------- FILTRO POR AGENCIA -----------
+  if (agenciaId) {
+    where["$usuarioAgencia.agencia.id$"] = agenciaId;
+  }
+
+  // ----------- CONSULTA PRINCIPAL -----------
+  const ventas = await Venta.findAll({
+    where,
+    include: [
+      {
+        model: UsuarioAgencia,
+        as: "usuarioAgencia",
+        include: [
+          { model: Usuario, as: "usuario", attributes: ["nombre"] },
+          { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
         ],
       },
       { model: Cliente, as: "cliente", attributes: ["cliente"] },
@@ -114,7 +182,7 @@ exports.formatearReporte = (ventas) => {
         tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
-        formaPago: detalle.formaPago?.nombre || "", 
+        formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         pvp: detalle.precioUnitario || "",
         margen: null,
@@ -126,11 +194,10 @@ exports.formatearReporte = (ventas) => {
 
         observaciones: venta.observacion || "",
         contrato: detalle.contrato || "",
+        validada: venta.validada || "",
       });
     });
   });
 
   return filas;
 };
-
-
