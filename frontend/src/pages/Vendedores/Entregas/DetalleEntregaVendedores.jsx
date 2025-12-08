@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../../config";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import Swal from "sweetalert2";
 
 export default function DetalleEntregaVendedores() {
   const { id } = useParams();
@@ -53,7 +54,9 @@ export default function DetalleEntregaVendedores() {
 
   const fetchDetalles = async () => {
     try {
-      const res = await axios.get(`${API_URL}/detalle-entrega/entrega/${entregaId}`);
+      const res = await axios.get(
+        `${API_URL}/detalle-entrega/entrega/${entregaId}`
+      );
       setDetalles(res.data);
     } catch (err) {
       console.error("Error al obtener detalles:", err);
@@ -80,7 +83,9 @@ export default function DetalleEntregaVendedores() {
       if (!modeloId || !formaPagoId) return;
 
       try {
-        const res = await axios.get(`${API_URL}/precio/${modeloId}/${formaPagoId}`);
+        const res = await axios.get(
+          `${API_URL}/precio/${modeloId}/${formaPagoId}`
+        );
         setForm((prev) => ({
           ...prev,
           precioUnitario: res.data.precio?.toString() || "0",
@@ -103,7 +108,9 @@ export default function DetalleEntregaVendedores() {
       return;
     }
     try {
-      const res = await axios.get(`${API_URL}/dispositivoMarca/${dispositivoMarcaId}`);
+      const res = await axios.get(
+        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`
+      );
       setModelos(res.data);
     } catch (err) {
       console.error(err);
@@ -119,12 +126,16 @@ export default function DetalleEntregaVendedores() {
       setForm((prev) => ({ ...prev, [name]: value }));
     }
   };
-
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.modeloId || !form.formaPagoId) {
-      alert("Selecciona modelo y forma de pago");
+      Swal.fire({
+        icon: "warning",
+        title: "Campos incompletos",
+        text: "Selecciona modelo y forma de pago",
+      });
       return;
     }
 
@@ -161,27 +172,51 @@ export default function DetalleEntregaVendedores() {
       setModelos([]);
     } catch (err) {
       console.error("Error al crear detalle:", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: err.response?.data?.message || err.message,
+      });
     }
   };
 
   const handleFinalizarEntrega = async () => {
     if (detalles.length === 0) {
-      alert("Debe agregar al menos un producto.");
+      Swal.fire({
+        icon: "warning",
+        title: "Sin productos",
+        text: "Debe agregar al menos un producto.",
+      });
       return;
     }
 
-    if (
-      window.confirm("¿Finalizar entrega? No podrás deshacer esto.")
-    ) {
+    const { isConfirmed } = await Swal.fire({
+      icon: "question",
+      title: "¿Finalizar entrega?",
+      text: "No podrás deshacer esto.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, finalizar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (isConfirmed) {
       try {
-        alert("Entrega finalizada correctamente.");
+        await Swal.fire({
+          icon: "success",
+          title: "Entrega finalizada",
+          text: "Entrega finalizada correctamente.",
+        });
+
         navigate(`/entregas/${entregaId}/obsequios`, {
           state: { cliente: cliente },
         });
       } catch (err) {
         console.error(err);
-        alert("Error al finalizar entrega");
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Error al finalizar entrega",
+        });
       }
     }
   };
@@ -191,9 +226,7 @@ export default function DetalleEntregaVendedores() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">
-            Cargando detalles de entrega...
-          </p>
+          <p className="mt-4 text-gray-600">Cargando detalles de entrega...</p>
         </div>
       </div>
     );
@@ -227,17 +260,17 @@ export default function DetalleEntregaVendedores() {
 
       {/* Formulario */}
       <div className="mb-8">
-        <h2 className="text-xl font-semibold text-orange-600 mb-4">Agregar Producto</h2>
+        <h2 className="text-xl font-semibold text-orange-600 mb-4">
+          Agregar Producto
+        </h2>
 
         <form
           onSubmit={handleSubmit}
           className="mb-6 p-6 border border-orange-500 rounded-lg bg-white shadow-sm"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
             {/* IZQUIERDA */}
             <div className="space-y-4">
-
               {/* Dispositivo */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -274,7 +307,9 @@ export default function DetalleEntregaVendedores() {
                 >
                   <option value="">Selecciona Modelo</option>
                   {modelos.map((m) => (
-                    <option key={m.id} value={m.id}>{m.nombre}</option>
+                    <option key={m.id} value={m.id}>
+                      {m.nombre}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -308,12 +343,10 @@ export default function DetalleEntregaVendedores() {
                   className="w-full p-2 border border-orange-500 rounded"
                 />
               </div>
-
             </div>
 
             {/* DERECHA */}
             <div className="space-y-4">
-
               {/* Forma de pago */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -410,7 +443,6 @@ export default function DetalleEntregaVendedores() {
                   className="w-full p-2 border border-orange-500 rounded"
                 />
               </div>
-
             </div>
           </div>
 
@@ -466,14 +498,16 @@ export default function DetalleEntregaVendedores() {
                       ${(d.cantidad * parseFloat(d.precioUnitario)).toFixed(2)}
                     </td>
                     <td className="p-3 border">
-                      {formasPago.find((fp) => fp.id === d.formaPagoId)?.nombre ||
-                        "-"}
+                      {formasPago.find((fp) => fp.id === d.formaPagoId)
+                        ?.nombre || "-"}
                     </td>
                     <td className="p-3 border">{d.contrato || "-"}</td>
 
                     {/* NUEVOS CAMPOS */}
                     <td className="p-3 border">{d.ubicacion || "-"}</td>
-                    <td className="p-3 border">{d.ubicacionDispositivo || "-"}</td>
+                    <td className="p-3 border">
+                      {d.ubicacionDispositivo || "-"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -483,7 +517,10 @@ export default function DetalleEntregaVendedores() {
                   <td colSpan="5" className="p-3 border text-right font-bold">
                     Total:
                   </td>
-                  <td colSpan="4" className="p-3 border font-bold text-orange-700">
+                  <td
+                    colSpan="4"
+                    className="p-3 border font-bold text-orange-700"
+                  >
                     $
                     {detalles
                       .reduce(

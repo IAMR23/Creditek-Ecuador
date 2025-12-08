@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import * as XLSX from "xlsx";
+import Swal from "sweetalert2";
 
 export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
@@ -63,18 +64,29 @@ export default function MetasComerciales() {
     }
   }, [fechaInicio, fechaFin]);
 
-  // 📥 Función para descargar Excel
   const descargarExcel = () => {
-    if (filas.length === 0) return alert("No hay datos para descargar");
+    if (filas.length === 0) {
+      return Swal.fire({
+        icon: "warning",
+        title: "Sin datos",
+        text: "No hay datos para descargar.",
+      });
+    }
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(filas);
-
     XLSX.utils.book_append_sheet(wb, ws, "Metas");
 
     const nombreArchivo = `MetasComerciales_${fechaInicio}_a_${fechaFin}.xlsx`;
-
     XLSX.writeFile(wb, nombreArchivo);
+
+    Swal.fire({
+      icon: "success",
+      title: "Excel generado",
+      text: "El archivo se descargó correctamente.",
+      timer: 1500,
+      showConfirmButton: false,
+    });
   };
 
   useEffect(() => {

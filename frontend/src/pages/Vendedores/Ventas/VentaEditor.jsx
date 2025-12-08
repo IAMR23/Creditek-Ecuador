@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
 import { API_URL } from "../../../../config";
+import Swal from "sweetalert2";
 
 export default function VentaEditor() {
   const { id } = useParams();
@@ -11,9 +12,7 @@ export default function VentaEditor() {
   useEffect(() => {
     const fetchVenta = async () => {
       try {
-        const { data } = await axios.get(
-          `${API_URL}/vendedor/venta/${id}`
-        );
+        const { data } = await axios.get(`${API_URL}/vendedor/venta/${id}`);
         if (data.ok) setForm(data.venta);
       } catch (error) {
         console.error(error);
@@ -49,12 +48,23 @@ export default function VentaEditor() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
       await axios.put(`${API_URL}/vendedor/venta/${form.id}`, form);
-      alert("Venta actualizada correctamente");
+
+      await Swal.fire({
+        icon: "success",
+        title: "Venta actualizada",
+        text: "Venta actualizada correctamente",
+      });
     } catch (error) {
       console.error(error);
-      alert("Error al actualizar la venta");
+
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Error al actualizar la venta",
+      });
     }
   };
 

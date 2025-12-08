@@ -4,9 +4,10 @@ import { API_URL } from "../../../config";
 import { useNavigate } from "react-router-dom";
 import { Calendar, Filter, RefreshCw, Eye } from "lucide-react";
 
+import Swal from "sweetalert2";
 
 export default function EntregasPage() {
-  const today =  new Date().toLocaleDateString("en-CA");
+  const today = new Date().toLocaleDateString("en-CA");
   const navigate = useNavigate();
 
   const [entregas, setEntregas] = useState([]);
@@ -23,7 +24,11 @@ export default function EntregasPage() {
   const fetchEntregas = async () => {
     // Validación fechas
     if (filtros.fechaInicio > filtros.fechaFin) {
-      alert("La fecha de inicio no puede ser mayor a la fecha de fin");
+      Swal.fire({
+        icon: "warning",
+        title: "Fechas inválidas",
+        text: "La fecha de inicio no puede ser mayor a la fecha de fin",
+      });
       return;
     }
 
@@ -40,6 +45,11 @@ export default function EntregasPage() {
       setEntregas(response.data);
     } catch (error) {
       console.error("Error cargando entregas:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar las entregas",
+      });
     }
   };
 
@@ -56,10 +66,8 @@ export default function EntregasPage() {
     setEntregas([]);
   };
 
-
-    return (
+  return (
     <div className="p-6 bg-gray-50 rounded-xl shadow-sm">
-
       {/* TÍTULO */}
       <h1 className="text-3xl font-bold mb-6 text-green-600 flex items-center gap-3">
         <Filter size={28} />
@@ -68,10 +76,8 @@ export default function EntregasPage() {
 
       {/* CARD DE FILTROS */}
       <div className="bg-white p-6 rounded-2xl shadow-md border border-gray-200 mb-8">
-
         {/* GRID FILTROS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
-
           {/* Fecha Inicio */}
           <div className="flex flex-col">
             <label className="font-semibold text-gray-700 mb-1">
@@ -110,9 +116,7 @@ export default function EntregasPage() {
 
           {/* Estado */}
           <div className="flex flex-col">
-            <label className="font-semibold text-gray-700 mb-1">
-              Estado
-            </label>
+            <label className="font-semibold text-gray-700 mb-1">Estado</label>
             <select
               name="estado"
               value={filtros.estado}
@@ -192,7 +196,6 @@ export default function EntregasPage() {
                       className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg shadow transition-all active:scale-95 mx-auto"
                     >
                       <Eye size={18} />
-                      
                     </button>
                   </td>
                 </tr>

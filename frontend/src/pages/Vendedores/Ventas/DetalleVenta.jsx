@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../../config";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import Swal from "sweetalert2";
 
 export default function DetalleVenta() {
   const { id } = useParams();
@@ -130,7 +131,11 @@ export default function DetalleVenta() {
     e.preventDefault();
 
     if (!form.modeloId || !form.formaPagoId) {
-      alert("Por favor, selecciona modelo y forma de pago");
+      Swal.fire({
+        icon: "warning",
+        title: "Campos incompletos",
+        text: "Por favor, selecciona modelo y forma de pago",
+      });
       return;
     }
 
@@ -147,8 +152,6 @@ export default function DetalleVenta() {
           (parseFloat(form.precioUnitario) || 0),
       };
 
-      console.log("Enviando detalle:", detalleData);
-
       await axios.post(`${API_URL}/detalle-venta`, detalleData);
 
       fetchDetalles();
@@ -164,35 +167,57 @@ export default function DetalleVenta() {
         entrada: "0",
         alcance: "0",
       });
+
       setModelos([]);
     } catch (err) {
       console.error("Error al crear detalle:", err);
-      alert(
-        "Error al crear el detalle: " +
-          (err.response?.data?.message || err.message)
-      );
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text:
+          "Error al crear el detalle: " +
+          (err.response?.data?.message || err.message),
+      });
     }
   };
 
   const handleFinalizarVenta = async () => {
     if (detalles.length === 0) {
-      alert("Debe agregar al menos un producto antes de finalizar la venta");
+      Swal.fire({
+        icon: "warning",
+        title: "Sin productos",
+        text: "Debe agregar al menos un producto antes de finalizar la venta",
+      });
       return;
     }
 
-    if (
-      window.confirm(
-        "¿Está seguro de finalizar esta venta? Esta acción no se puede deshacer."
-      )
-    ) {
+    const { isConfirmed } = await Swal.fire({
+      icon: "question",
+      title: "Finalizar venta",
+      text: "¿Está seguro de finalizar esta venta? Esta acción no se puede deshacer.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, finalizar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (isConfirmed) {
       try {
-        alert("Venta finalizada exitosamente!");
+        await Swal.fire({
+          icon: "success",
+          title: "Venta finalizada",
+          text: "Venta finalizada exitosamente!",
+        });
+
         navigate(`/ventas/${ventaId}/obsequios`, {
           state: { cliente: cliente },
         });
       } catch (err) {
         console.error(err);
-        alert("Error al finalizar la venta");
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Error al finalizar la venta",
+        });
       }
     }
   };
@@ -219,7 +244,8 @@ export default function DetalleVenta() {
             </h1>
             {cliente && (
               <p className="text-gray-700 mt-1">
-                Cliente: <span className="font-semibold">{cliente.cliente}</span>
+                Cliente:{" "}
+                <span className="font-semibold">{cliente.cliente}</span>
                 {cliente.cedula && ` | Cédula: ${cliente.cedula}`}
                 {cliente.telefono && ` | Teléfono: ${cliente.telefono}`}
               </p>
@@ -443,8 +469,8 @@ export default function DetalleVenta() {
                       ${(d.cantidad * parseFloat(d.precioUnitario)).toFixed(2)}
                     </td>
                     <td className="p-3 border">
-                      {formasPago.find((fp) => fp.id === d.formaPagoId)?.nombre ||
-                        "-"}
+                      {formasPago.find((fp) => fp.id === d.formaPagoId)
+                        ?.nombre || "-"}
                     </td>
                     <td className="p-3 border">{d.contrato || "-"}</td>
                   </tr>
@@ -456,7 +482,10 @@ export default function DetalleVenta() {
                   <td colSpan="5" className="p-3 border text-right font-bold">
                     Total de la venta:
                   </td>
-                  <td colSpan="3" className="p-3 border font-bold text-green-700">
+                  <td
+                    colSpan="3"
+                    className="p-3 border font-bold text-green-700"
+                  >
                     $
                     {detalles
                       .reduce(

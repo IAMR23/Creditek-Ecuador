@@ -3,9 +3,10 @@ import axios from "axios";
 import { API_URL } from "../../../config";
 import { Calendar, Search, RotateCcw, Building2 } from "lucide-react";
 import VentasTable from "./VentasTable";
+import Swal from "sweetalert2";
 
 export default function VentasPage() {
-const hoyLocal =new Date().toLocaleDateString("en-CA"); 
+  const hoyLocal = new Date().toLocaleDateString("en-CA");
   const [ventas, setVentas] = useState([]);
   const [agencias, setAgencias] = useState([]);
   const [usuariosAgencia, setUsuariosAgencia] = useState([]);
@@ -46,8 +47,11 @@ const hoyLocal =new Date().toLocaleDateString("en-CA");
 
   const buscarVentas = async () => {
     if (filtros.fechaInicio > filtros.fechaFin) {
-      alert("La fecha de inicio no puede ser mayor a la fecha de fin");
-      return;
+      return Swal.fire({
+        icon: "warning",
+        title: "Fechas inválidas",
+        text: "La fecha de inicio no puede ser mayor a la fecha de fin.",
+      });
     }
 
     try {
@@ -60,6 +64,11 @@ const hoyLocal =new Date().toLocaleDateString("en-CA");
       setVentas(res.data);
     } catch (error) {
       console.error("Error al filtrar ventas", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error al buscar ventas",
+        text: "Ocurrió un problema al obtener los datos.",
+      });
     }
   };
 
@@ -74,7 +83,6 @@ const hoyLocal =new Date().toLocaleDateString("en-CA");
 
   return (
     <div className="p-6">
-
       {/* Título */}
       <h1 className="text-3xl font-bold mb-6 flex items-center gap-3 text-green-500">
         <Search size={30} />
@@ -83,10 +91,8 @@ const hoyLocal =new Date().toLocaleDateString("en-CA");
 
       {/* Card de filtros */}
       <div className=" border  rounded-2xl p-6 shadow-xl mb-6">
-
         {/* GRID */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
           {/* Fecha Inicio */}
           <div className="flex flex-col">
             <label className="text-sm font-semibold  mb-1">Fecha Inicio</label>
@@ -138,7 +144,6 @@ const hoyLocal =new Date().toLocaleDateString("en-CA");
               </select>
             </div>
           </div>
-
         </div>
 
         {/* Botones */}
@@ -151,13 +156,13 @@ const hoyLocal =new Date().toLocaleDateString("en-CA");
             Buscar
           </button>
 
-            <button
-              onClick={limpiarFiltros}
-              className="flex items-center gap-2 bg-neutral-700 hover:bg-neutral-600 transition-all px-6 py-2 rounded-xl text-white shadow-md"
-            >
-              <RotateCcw size={18} />
-              Limpiar
-            </button>
+          <button
+            onClick={limpiarFiltros}
+            className="flex items-center gap-2 bg-neutral-700 hover:bg-neutral-600 transition-all px-6 py-2 rounded-xl text-white shadow-md"
+          >
+            <RotateCcw size={18} />
+            Limpiar
+          </button>
         </div>
       </div>
 

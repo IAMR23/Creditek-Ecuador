@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import Swal from "sweetalert2";
 
 export default function Agencias() {
   const [agencias, setAgencias] = useState([]);
@@ -55,48 +56,79 @@ export default function Agencias() {
     setShowModal(true);
   };
 
-  // ======================
-  // 📌 Guardar (POST / PUT)
-  // ======================
   const guardarAgencia = async (e) => {
     e.preventDefault();
 
     try {
       if (!editId) {
         await axios.post(`${API_URL}/agencias`, form);
+        Swal.fire({
+          icon: "success",
+          title: "Agencia registrada",
+          text: "La agencia se guardó correctamente.",
+          timer: 1500,
+          showConfirmButton: false,
+        });
       } else {
         await axios.put(`${API_URL}/agencias/${editId}`, form);
+        Swal.fire({
+          icon: "success",
+          title: "Agencia actualizada",
+          text: "Los cambios se guardaron correctamente.",
+          timer: 1500,
+          showConfirmButton: false,
+        });
       }
 
       setShowModal(false);
       fetchAgencias();
     } catch (error) {
       console.error(error);
-      alert("Error al guardar");
+      Swal.fire({
+        icon: "error",
+        title: "Error al guardar",
+        text: error?.response?.data?.message || "Ocurrió un error inesperado.",
+      });
     }
   };
 
-  // ======================
-  // 📌 Eliminar
-  // ======================
   const eliminarAgencia = async (id) => {
-    if (!confirm("¿Seguro que deseas eliminar esta agencia?")) return;
+    const result = await Swal.fire({
+      title: "¿Eliminar agencia?",
+      text: "Esta acción no se puede deshacer.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!result.isConfirmed) return;
 
     try {
       await axios.delete(`${API_URL}/agencias/${id}`);
+      Swal.fire({
+        icon: "success",
+        title: "Eliminado",
+        text: "La agencia fue eliminada correctamente.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
       fetchAgencias();
     } catch (error) {
       console.error(error);
-      alert("Error al eliminar");
+      Swal.fire({
+        icon: "error",
+        title: "Error al eliminar",
+        text: error?.response?.data?.message || "Ocurrió un error inesperado.",
+      });
     }
   };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Título */}
-      <h1 className="text-3xl font-bold text-green-600">
-        Gestión de Agencias
-      </h1>
+      <h1 className="text-3xl font-bold text-green-600">Gestión de Agencias</h1>
 
       {/* Botón crear */}
       <button

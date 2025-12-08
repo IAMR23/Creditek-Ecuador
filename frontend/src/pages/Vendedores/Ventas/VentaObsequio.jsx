@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../../config";
+import Swal from "sweetalert2";
 
 export default function VentaObsequioPage() {
   const { id: ventaId } = useParams();
@@ -46,7 +47,6 @@ export default function VentaObsequioPage() {
         ...form,
       });
 
-
       setForm({ obsequioId: "", cantidad: 1 });
       cargarDatos();
     } catch (error) {
@@ -69,25 +69,37 @@ export default function VentaObsequioPage() {
     cargarObsequios();
   }, []);
 
-    const handleFinalizarVenta = async () => {
+  const handleFinalizarVenta = async () => {
+    const { isConfirmed } = await Swal.fire({
+      icon: "question",
+      title: "Finalizar venta",
+      text: "¿Está seguro de finalizar esta venta? Esta acción no se puede deshacer.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, finalizar",
+      cancelButtonText: "Cancelar",
+    });
 
-    if (
-      window.confirm(
-        "¿Está seguro de finalizar esta venta? Esta acción no se puede deshacer."
-      )
-    ) {
+    if (isConfirmed) {
       try {
-        alert("Venta finalizada exitosamente!");
-        navigate(`/ventas/${ventaId}/validacion` , 
-          { state: { cliente :cliente } }
-        ); 
+        await Swal.fire({
+          icon: "success",
+          title: "Venta finalizada",
+          text: "¡Venta finalizada exitosamente!",
+        });
+
+        navigate(`/ventas/${ventaId}/validacion`, {
+          state: { cliente: cliente },
+        });
       } catch (err) {
         console.error(err);
-        alert("Error al finalizar la venta");
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Error al finalizar la venta",
+        });
       }
     }
   };
-
 
   return (
     <div className="p-6">
@@ -174,7 +186,7 @@ export default function VentaObsequioPage() {
           </thead>
 
           <tbody>
-            {lista.map((item , index) => {
+            {lista.map((item, index) => {
               const obsequio = item;
               return (
                 <tr key={item.id} className="text-center">
@@ -205,15 +217,14 @@ export default function VentaObsequioPage() {
           </tbody>
         </table>
 
-           <div className="flex justify-between items-center mb-4">
-        {/* Botón izquierda */}
-        <button
-          onClick={() => navigate(-1)}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded"
-        >
-          Volver
-        </button>
-
+        <div className="flex justify-between items-center mb-4">
+          {/* Botón izquierda */}
+          <button
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded"
+          >
+            Volver
+          </button>
 
           <button
             onClick={handleFinalizarVenta}
@@ -221,9 +232,7 @@ export default function VentaObsequioPage() {
           >
             Validar Venta
           </button>
-        
-      </div>
-
+        </div>
       </div>
     </div>
   );

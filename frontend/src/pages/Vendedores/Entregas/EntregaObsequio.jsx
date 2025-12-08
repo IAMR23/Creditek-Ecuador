@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../../config";
+import Swal from "sweetalert2";
 
 export default function EntregaObsequioPage() {
   const { id: entregaId } = useParams();
@@ -46,7 +47,6 @@ export default function EntregaObsequioPage() {
         ...form,
       });
 
-
       setForm({ obsequioId: "", cantidad: 1 });
       cargarDatos();
     } catch (error) {
@@ -69,24 +69,35 @@ export default function EntregaObsequioPage() {
     cargarObsequios();
   }, []);
 
-    const handleFinalizarEntrega = async () => {
+  const handleFinalizarEntrega = async () => {
+    const { isConfirmed } = await Swal.fire({
+      icon: "question",
+      title: "Finalizar entrega",
+      text: "¿Está seguro de finalizar esta entrega? Esta acción no se puede deshacer.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, finalizar",
+      cancelButtonText: "Cancelar",
+    });
 
-    if (
-      window.confirm(
-        "¿Está seguro de finalizar esta entrega? Esta acción no se puede deshacer."
-      )
-    ) {
+    if (isConfirmed) {
       try {
-        alert("Entrega finalizada exitosamente!");
+        await Swal.fire({
+          icon: "success",
+          title: "Entrega finalizada",
+          text: "Entrega finalizada exitosamente!",
+        });
+
         navigate(`/vendedor-panel`);
-        
       } catch (err) {
         console.error(err);
-        alert("Error al finalizar la entrega");
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Error al finalizar la entrega",
+        });
       }
     }
   };
-
 
   return (
     <div className="p-6">
@@ -173,7 +184,7 @@ export default function EntregaObsequioPage() {
           </thead>
 
           <tbody>
-            {lista.map((item , index) => {
+            {lista.map((item, index) => {
               const obsequio = item;
               return (
                 <tr key={item.id} className="text-center">
@@ -204,15 +215,14 @@ export default function EntregaObsequioPage() {
           </tbody>
         </table>
 
-           <div className="flex justify-between items-center mb-4">
-        {/* Botón izquierda */}
-        <button
-          onClick={() => navigate(-1)}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded"
-        >
-          Volver
-        </button>
-
+        <div className="flex justify-between items-center mb-4">
+          {/* Botón izquierda */}
+          <button
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded"
+          >
+            Volver
+          </button>
 
           <button
             onClick={handleFinalizarEntrega}
@@ -220,9 +230,7 @@ export default function EntregaObsequioPage() {
           >
             Finalizar
           </button>
-        
-      </div>
-
+        </div>
       </div>
     </div>
   );

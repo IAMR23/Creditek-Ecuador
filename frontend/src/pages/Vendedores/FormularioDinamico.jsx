@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { API_URL } from "../../../config";
 import axios from "axios";
+import Swal from "sweetalert2";
 
 export default function FormularioDinamico() {
   const [user, setUser] = useState([]);
@@ -49,7 +50,11 @@ export default function FormularioDinamico() {
 
   const buscarProductos = async () => {
     if (!busqueda.trim()) {
-      alert("Ingrese un texto para buscar");
+      Swal.fire({
+        icon: "warning",
+        title: "Búsqueda vacía",
+        text: "Ingrese un texto para buscar",
+      });
       return;
     }
 
@@ -60,6 +65,11 @@ export default function FormularioDinamico() {
       setProductos(res.data);
     } catch (error) {
       console.error(error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo realizar la búsqueda de productos",
+      });
     } finally {
       setLoadingProductos(false);
     }
@@ -132,9 +142,7 @@ export default function FormularioDinamico() {
 
   return (
     <div className="w-full max-w-lg mx-auto mt-8 p-6 bg-white rounded-xl shadow-lg border">
-      <h2 className="text-2xl font-bold text-center mb-6">
-        Gestiona tu Venta
-      </h2>
+      <h2 className="text-2xl font-bold text-center mb-6">Gestiona tu Venta</h2>
 
       <form onSubmit={handleSubmit}>
         <div className="col-span-2">

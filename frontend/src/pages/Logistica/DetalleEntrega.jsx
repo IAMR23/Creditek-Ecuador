@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../config";
+import Swal from "sweetalert2";
 
 export default function DetalleEntrega() {
   const { id } = useParams();
@@ -35,11 +36,22 @@ export default function DetalleEntrega() {
         observacionLogistica: observacionesLogistica,
       });
 
-      alert(`Estado actualizado a: ${nuevoEstado}`);
+      Swal.fire({
+        icon: "success",
+        title: "Estado actualizado",
+        text: `El estado cambió a: ${nuevoEstado}`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
       navigate("/entregas-logistica");
     } catch (error) {
       console.error(error);
-      alert("Error al actualizar estado");
+      Swal.fire({
+        icon: "error",
+        title: "Error al actualizar",
+        text: "Ocurrió un problema al guardar el estado.",
+      });
     }
   };
 

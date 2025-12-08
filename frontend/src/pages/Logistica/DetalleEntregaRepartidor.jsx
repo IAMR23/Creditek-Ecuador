@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../config";
+import Swal from "sweetalert2";
 
 export default function DetalleEntrega() {
   const { id } = useParams();
@@ -35,11 +36,22 @@ export default function DetalleEntrega() {
         observacionLogistica: observacionesLogistica,
       });
 
-      alert(`Estado actualizado a: ${nuevoEstado}`);
+      await Swal.fire({
+        icon: "success",
+        title: "Estado actualizado",
+        text: `El estado cambió a: ${nuevoEstado}`,
+        confirmButtonText: "Aceptar",
+      });
+
       navigate("/logistica-panel");
     } catch (error) {
       console.error(error);
-      alert("Error al actualizar estado");
+
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Error al actualizar el estado",
+      });
     }
   };
 
