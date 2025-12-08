@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
+import { API_URL } from "../../../config";
 
 export default function DetalleEntrega() {
   const { id } = useParams();
@@ -13,7 +14,7 @@ export default function DetalleEntrega() {
     const fetchEntrega = async () => {
       try {
         const { data } = await axios.get(
-          `http://localhost:5020/vendedor/entrega-logistica/${id}`
+          `${API_URL}/vendedor/entrega-logistica/${id}`
         );
 
         if (data.ok) setForm(data.entrega);
@@ -29,7 +30,7 @@ export default function DetalleEntrega() {
 
   const actualizarEstado = async (nuevoEstado) => {
     try {
-      await axios.put(`http://localhost:5020/entregas/${id}`, {
+      await axios.put(`${API_URL}/entregas/${id}`, {
         estado: nuevoEstado,
         observacionLogistica: observacionesLogistica,
       });
@@ -259,13 +260,13 @@ export default function DetalleEntrega() {
             </h3>
 
             <img
-              src={`http://localhost:5020${form.fotoValidacion}`}
+              src={`${API_URL}${form.fotoValidacion}`}
               alt="Foto de validación"
               className="w-full max-w-sm rounded-lg border-2 border-green-400 shadow-md"
             />
 
             <a
-              href={`http://localhost:5020${form.fotoValidacion}`}
+              href={`${API_URL}${form.fotoValidacion}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 underline block mt-2"

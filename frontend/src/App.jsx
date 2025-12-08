@@ -23,7 +23,7 @@ import AdminUsuariosRoles from "./pages/Admin/Rol";
 import Dispositivos from "./pages/Admin/Dispositivos";
 import MarcasAdmin from "./pages/Admin/MarcasAdmin";
 import ModelosAdmin from "./pages/Admin/ModelosAdmin";
-import AdminDispositivoMarca from "./pages/Admin/AdminDispositivoMarca.JSX";
+import AdminDispositivoMarca from "./pages/Admin/AdminDispositivoMarca";
 import AdminCostoHistorico from "./pages/Admin/AdminCostoHistorico";
 import FormasPago from "./pages/Admin/FormasPago";
 import OrigenAdmin from "./pages/Admin/OrigenAdmin";

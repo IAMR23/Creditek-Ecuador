@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
+import { API_URL } from "../../../../config";
 
 export default function VentaEditor() {
   const { id } = useParams();
@@ -11,7 +12,7 @@ export default function VentaEditor() {
     const fetchVenta = async () => {
       try {
         const { data } = await axios.get(
-          `http://localhost:5020/vendedor/venta/${id}`
+          `${API_URL}/vendedor/venta/${id}`
         );
         if (data.ok) setForm(data.venta);
       } catch (error) {
@@ -49,7 +50,7 @@ export default function VentaEditor() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.put(`http://localhost:5020/vendedor/venta/${form.id}`, form);
+      await axios.put(`${API_URL}/vendedor/venta/${form.id}`, form);
       alert("Venta actualizada correctamente");
     } catch (error) {
       console.error(error);
