@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../../config";
-import { useNavigate } from "react-router-dom"; // para navegar a otro componente
+import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
+import Swal from "sweetalert2";
 
 export default function MisEntregas() {
   const [filas, setFilas] = useState([]);
@@ -11,8 +12,15 @@ export default function MisEntregas() {
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
+
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [textoEntrega, setTextoEntrega] = useState("");
+
   const navigate = useNavigate();
 
+  // ==============================
+  // Lee token
+  // ==============================
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -25,6 +33,9 @@ export default function MisEntregas() {
     }
   }, []);
 
+  // ==============================
+  // Fetch principal
+  // ==============================
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
@@ -40,10 +51,9 @@ export default function MisEntregas() {
 
       if (!data.ok) return;
 
-      console.log(data.entrega)
       const ventas = data.entrega || [];
       const resultado = ventas.map((entrega) => ({
-        id: entrega.id, // guardamos el id para el botón
+        id: entrega.id,
         Fecha: entrega.fecha ?? "",
         Día: entrega.dia ?? "",
         Agencia: entrega.local ?? "",
@@ -57,12 +67,11 @@ export default function MisEntregas() {
         Contrato: entrega.contrato ?? "",
         Entrada: entrega.entrada ?? "",
         Alcance: entrega.alcance ?? "",
-        Estado : entrega.estado ?? "",
-        ObservacionLogistica : entrega.observacionLogistica ?? "",
+        Estado: entrega.estado ?? "",
+        ObservacionLogistica: entrega.observacionLogistica ?? "",
       }));
 
       setFilas(resultado);
-      console.log(resultado)
     } catch (error) {
       console.log(error);
     } finally {
@@ -70,16 +79,93 @@ export default function MisEntregas() {
     }
   };
 
+  // Auto fetch
   useEffect(() => {
-    if (fechaInicio && fechaFin && usuarioInfo?.id)  fetchData();
+    if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
   }, [fechaInicio, fechaFin]);
 
+  // Set today's date
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFechaInicio(hoyLocal);
     setFechaFin(hoyLocal);
   }, []);
 
+  // ===========================================
+  // GENERADOR DEL TEXTO — CORREGIDO
+  // ===========================================
+  const generarTextoEntrega = (entrega) => {
+    const {
+      id,
+      usuarioAgencia,
+      cliente,
+      origen,
+      detalleEntrega,
+      obsequiosEntrega,
+    } = entrega;
+
+    let texto = `📄 Detalle de la Entrega #${id}
+
+👤 Vendedor: ${usuarioAgencia.usuario.nombre}
+🏢 Agencia: ${usuarioAgencia.agencia.nombre}
+
+🧍 Cliente
+- Nombre: ${cliente.nombre}
+- Cédula: ${cliente.cedula}
+- Teléfono: ${cliente.telefono}
+
+📍 Origen
+- Origen: ${origen.nombre}
+
+📦 Detalle de la Venta
+`;
+
+    detalleEntrega.forEach((item, index) => {
+      texto += `
+📌 Producto ${index + 1}
+- Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}
+- Marca: ${item.dispositivoMarca.marca.nombre}
+- Modelo: ${item.modelo.nombre}
+- Precio: $${item.precioUnitario}
+- Forma de pago: ${item.formaPago.nombre}
+- Ubicación del Cliente: ${item.ubicacion || ""}
+- Ubicación del dispositivo: ${item.ubicacionDispositivo || ""}
+`;
+    });
+
+    texto += `
+
+🎁 Obsequios
+`;
+
+    if (obsequiosEntrega.length === 0) {
+      texto += "(No se registraron obsequios)\n";
+    } else {
+      obsequiosEntrega.forEach((item, index) => {
+        texto += `- ${item.obsequio.nombre} (Cantidad: ${item.cantidad})\n`;
+      });
+    }
+
+    return texto;
+  };
+
+  // ===========================================
+  // Abre modal + consulta API
+  // ===========================================
+  const handleCopiarDatos = async (idEntrega) => {
+    try {
+      const url = `${API_URL}/vendedor/entrega-logistica/${idEntrega}`;
+      const { data } = await axios.get(url);
+
+      if (data.ok) {
+        const texto = generarTextoEntrega(data.entrega);
+        setTextoEntrega(texto);
+        setModalAbierto(true);
+      }
+    } catch (error) {
+      console.log("Error al obtener detalle:", error);
+    }
+  };
 
   return (
     <div className="p-4">
@@ -120,9 +206,10 @@ export default function MisEntregas() {
                   {key}
                 </th>
               ))}
-              
+              <th className="p-2 border">Acciones</th>
             </tr>
           </thead>
+
           <tbody>
             {filas.map((f, i) => (
               <tr key={i}>
@@ -131,18 +218,61 @@ export default function MisEntregas() {
                     {val}
                   </td>
                 ))}
-             {/*    <td className="p-2 border">
+
+                <td className="p-2 border">
                   <button
-                    className="bg-blue-500 text-white px-2 py-1 rounded"
-                    onClick={() => handleVerVenta(f.id)}
+                    className="bg-orange-600 text-white px-2 py-1 rounded"
+                    onClick={() => handleCopiarDatos(f.id)}
                   >
-                    Ver entrega
+                    Ver
                   </button>
-                </td> */}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {/* ===================== MODAL ===================== */}
+      {modalAbierto && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+          <div className="bg-white p-4 rounded-lg w-10/12 max-w-2xl overflow-y-auto max-h-[80vh] text-sm">
+            <h2 className="text-xl font-bold mb-3">Detalle de la Entrega</h2>
+
+            <div className="bg-gray-100 p-2 rounded mb-3">
+              <p className="font-semibold">Información generada</p>
+
+              <textarea
+                className="w-full border p-2 h-48 mt-2 rounded"
+                value={textoEntrega}
+                readOnly
+              ></textarea>
+            </div>
+
+            <button
+              className="mt-3 w-full bg-blue-600 text-white py-2 rounded text-sm"
+              onClick={() => {
+                navigator.clipboard.writeText(textoEntrega);
+                Swal.fire({
+                  icon: "success",
+                  title: "¡Copiado!",
+                  text: "Información copiada al portapapeles",
+                  confirmButtonColor: "#3085d6",
+                });
+                setModalAbierto(false);
+              }}
+            >
+              Copiar al portapapeles
+            </button>
+
+            <button
+              className="mt-2 w-full bg-red-500 text-white py-2 rounded text-sm"
+              onClick={() => setModalAbierto(false)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

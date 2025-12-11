@@ -23,11 +23,11 @@ const connectDB = async () => {
     console.log("✅ Conectado a PostgreSQL exitosamente"); 
 
     // Sincronizar todos los modelos y crear tablas faltantes
-    await sequelize.sync({ /* alter : true  *//*  force: false  */ }); // alter: true actualiza tablas sin borrarlas
+    await sequelize.sync({ /* force : true */  /*  force: false  */ }); // alter: true actualiza tablas sin borrarlas
     console.log("✅ Tablas sincronizadas correctamente");
   } catch (error) {
     console.error("❌ Error de conexión o sincronización:", error);
-    process.exit(1); 
+    process.exit(1);   
   }
 };
 

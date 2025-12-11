@@ -28,6 +28,7 @@ export default function DetalleVenta() {
     formaPagoId: "",
     entrada: "0",
     alcance: "0",
+    observacionDetalle: "",
   });
 
   useEffect(() => {
@@ -139,21 +140,25 @@ export default function DetalleVenta() {
     }
 
     try {
+      const cantidadNum = parseFloat(form.cantidad) || 0;
+      const precioNum = parseFloat(form.precioUnitario) || 0;
+      const entradaNum = parseFloat(form.entrada) || 0;
+      const alcanceNum = parseFloat(form.alcance) || 0;
+
       const detalleData = {
         ...form,
         ventaId: ventaId,
-        cantidad: parseFloat(form.cantidad) || 0,
-        precioUnitario: parseFloat(form.precioUnitario) || 0,
-        entrada: parseFloat(form.entrada) || 0,
-        alcance: parseFloat(form.alcance) || 0,
-        subtotal:
-          (parseFloat(form.cantidad) || 0) *
-          (parseFloat(form.precioUnitario) || 0),
+        cantidad: cantidadNum,
+        precioUnitario: precioNum,
+        entrada: entradaNum,
+        alcance: alcanceNum,
+        subtotal: cantidadNum * precioNum,
+        observacionDetalle: form.observacionDetalle || null,
       };
 
       await axios.post(`${API_URL}/detalle-venta`, detalleData);
 
-      fetchDetalles();
+      await fetchDetalles();
 
       setForm({
         ventaId: ventaId,
@@ -165,6 +170,7 @@ export default function DetalleVenta() {
         formaPagoId: "",
         entrada: "0",
         alcance: "0",
+        observacionDetalle: "",
       });
 
       setModelos([]);
@@ -258,7 +264,6 @@ export default function DetalleVenta() {
         </div>
       </div>
 
-      {/* Formulario Agregar Producto */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-green-600 mb-4">
           Agregar Producto
@@ -322,6 +327,20 @@ export default function DetalleVenta() {
                   placeholder="Número de contrato"
                   value={form.contrato}
                   onChange={handleChange}
+                  className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observación
+                </label>
+                <textarea
+                  name="observacionDetalle"
+                  placeholder="El cliente va a cancelar la entrada en dos pagos bajo mi responsabilidad..."
+                  value={form.observacionDetalle}
+                  onChange={handleChange}
+                  rows={3}
                   className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
@@ -447,6 +466,7 @@ export default function DetalleVenta() {
                   <th className="p-3 border text-left">Precio</th>
                   <th className="p-3 border text-left">Forma de Pago</th>
                   <th className="p-3 border text-left">Contrato</th>
+                  <th className="p-3 border text-left">Observación</th>
                 </tr>
               </thead>
 
@@ -465,20 +485,24 @@ export default function DetalleVenta() {
                     </td>
                     <td className="p-3 border">{d.cantidad}</td>
                     <td className="p-3 border font-semibold">
-                      ${(d.cantidad * parseFloat(d.precioUnitario)).toFixed(2)}
+                      $
+                      {(d.cantidad * parseFloat(d.precioUnitario || 0)).toFixed(2)}
                     </td>
                     <td className="p-3 border">
                       {formasPago.find((fp) => fp.id === d.formaPagoId)
                         ?.nombre || "-"}
                     </td>
                     <td className="p-3 border">{d.contrato || "-"}</td>
+                    <td className="p-3 border">
+                      {d.observacionDetalle ? d.observacionDetalle : "-"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
 
               <tfoot className="bg-green-100">
                 <tr>
-                  <td colSpan="5" className="p-3 border text-right font-bold">
+                  <td colSpan="6" className="p-3 border text-right font-bold">
                     Total de la venta:
                   </td>
                   <td
@@ -489,7 +513,7 @@ export default function DetalleVenta() {
                     {detalles
                       .reduce(
                         (total, d) =>
-                          total + d.cantidad * parseFloat(d.precioUnitario),
+                          total + (d.cantidad || 0) * parseFloat(d.precioUnitario || 0),
                         0
                       )
                       .toFixed(2)}
@@ -511,14 +535,7 @@ export default function DetalleVenta() {
       </div>
 
       {/* Botones */}
-      <div className="flex justify-between items-center mb-4">
-        <button
-          onClick={() => navigate(-1)}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded"
-        >
-          Volver
-        </button>
-
+      <div className="flex justify-end items-center mb-4">
         {detalles.length > 0 && (
           <button
             onClick={handleFinalizarVenta}

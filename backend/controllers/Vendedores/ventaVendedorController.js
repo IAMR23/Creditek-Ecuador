@@ -202,7 +202,7 @@ exports.obtenerVentaPorId = async (req, res) => {
           ],
         },
         { model: Cliente, as: "cliente", attributes: ["id", "cliente", "cedula", "telefono"] },
-        { model: Origen, as: "origen", attributes: ["id", "nombre"] },
+        { model: Origen, as: "origen", attributes: ["id", "nombre" ] },
         {
           model: DetalleVenta,
           as: "detalleVenta",
@@ -242,6 +242,7 @@ exports.obtenerVentaPorId = async (req, res) => {
       entrada: venta.entrada,
       alcance: venta.alcance,
       pvp: venta.pvp,
+      observacion: venta.observacion,
       usuarioAgencia: {
         id: venta.usuarioAgencia?.id,
         usuario: {

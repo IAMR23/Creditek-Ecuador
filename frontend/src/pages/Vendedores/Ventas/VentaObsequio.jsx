@@ -160,13 +160,14 @@ export default function VentaObsequioPage() {
             onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
           />
         </div>
-
-        <button
-          type="submit"
-          className="mt-4 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
-        >
-          Agregar
-        </button>
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            className="mt-4 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
+          >
+            Agregar
+          </button>
+        </div>
       </form>
 
       {/* Lista */}

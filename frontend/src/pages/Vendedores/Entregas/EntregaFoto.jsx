@@ -57,7 +57,8 @@ export default function EntregaFoto() {
       );
 
       setMsg("Entrega validada correctamente ✔");
-      navigate(`/entregas-repartidor/${id}`);
+      navigate("/vendedor-panel");
+    //  navigate(`/entregas-repartidor/${id}`);
 
     //  setTimeout(() => navigate("/logistica-panel"), 1200);
     } catch (err) {

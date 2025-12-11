@@ -37,18 +37,15 @@ export default function Sidebar() {
       title: "Gerencia",
       items: [
         { label: "Metas Comerciales", icon: <BarChart3 size={20} />, path: "/metas-comerciales" },
+        { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "/metas-comerciales-graficas" },
         { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
-/*         { label: "Ventas", icon: <ShoppingCart size={20} />, path: "/ventas" },
- */        /* { label: "Resumen", icon: <ClipboardList size={20} />, path: "/resumen" }, */
       ],
     },
     logistica: {
       title: "Logística",
       items: [
-/*         { label: "Entregas", icon: <Package size={20} />, path: "/entregas" },
- */        { label: "Entregas Logística", icon: <PackageCheck size={20} />, path: "/entregas-logistica" },
-/*         { label: "Estado Entrega", icon: <ClipboardList size={20} />, path: "/estado-entrega" },
- */      ],
+        { label: "Entregas Logística", icon: <PackageCheck size={20} />, path: "/entregas-logistica" },
+      ],
     },
     admin: {
       title: "Administración",
@@ -96,8 +93,8 @@ export default function Sidebar() {
 
           {/* Contenido */}
           <div
-            className={`overflow-hidden transition-all ${
-              open[key] ? "max-h-96" : "max-h-0"
+            className={`overflow-hidden transition-all duration-300 ${
+              open[key] ? "max-h-[1000px]" : "max-h-0"
             }`}
           >
             <ul className="flex flex-col gap-1 mt-2">
@@ -108,8 +105,8 @@ export default function Sidebar() {
                     <Link
                       to={item.path}
                       className={`flex items-center gap-3 p-3 rounded-lg transition
-                      ${active ? "bg-green-600 text-black" : "hover:bg-neutral-800"}
-                    `}
+                        ${active ? "bg-green-600 text-black" : "hover:bg-neutral-800"}
+                      `}
                     >
                       {item.icon}
                       <span>{item.label}</span>

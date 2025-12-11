@@ -55,6 +55,7 @@ import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
 import EntregasRepartidor from "./pages/Logistica/EntregasRepartidor";
 import DetalleEntregaRepartidor from "./pages/Logistica/DetalleEntregaRepartidor";
+import MetasComercialesGraficas from "./pages/Admin/MetasComercialesGraficas";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -157,6 +158,7 @@ function App() {
               <Route path="origen" element={<OrigenAdmin />} />
               <Route path="obsequios" element={<AdminObsequios />} />
               <Route path="metas-comerciales" element={<MetasComerciales />} />
+              <Route path="metas-comerciales-graficas" element={<MetasComercialesGraficas />} />
               <Route path="entregas-logistica" element={<EntregasLogisticas />} />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />

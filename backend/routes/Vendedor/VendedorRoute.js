@@ -7,8 +7,7 @@ const entregaVendedorController = require("../../controllers/Vendedores/entregaV
 
 /* OBTENER UNA VENTA ESPECIFICA */
 router.get("/venta/:id", vendedorController.obtenerVentaPorId);
-/* router.put("/venta/:id", vendedorController.actualizarVentaCompleta);
- */
+
 
 /* OBTENER TODAS LAS ENTREGAS DEL VENDEDOR   */
 router.get("/entrega/:id", async (req, res) => {
@@ -27,12 +26,12 @@ router.get("/entrega/:id", async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 }); 
-
+  
 /* OBTENER UNA VENTA ESPECIFICA */
 router.get("/entrega-logistica/:id", entregaVendedorController.obtenerEntregaPorId);
 
 
-/* TODAS LAS VENTAS DEL VENDEDOR*/
+/* TODAS LAS VENTAS DEL VENDEDOR*/   
 router.get("/:id", async (req, res) => {
   try {
     const { fechaInicio, fechaFin } = req.query;

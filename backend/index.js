@@ -22,12 +22,12 @@ const VentaRoutes = require("./routes/ventasroutes");
 const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
 const path = require("path");
-
+  
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5020;
 
-// Permitir localhost y dominio de producción
+// Permitir localhost y dominio de producción 
 const allowedOrigins = [
   "http://192.168.0.7:5173",
   /^https?:\/\/localhost:\d+$/, // cualquier puerto en localhost
@@ -76,7 +76,7 @@ connectDB()
     app.use("/formaPago", FormaPago);
     app.use("/origen", OrigenRoutes);
     app.use("/ventas", VentaRoutes);
-    app.use("/detalle-venta", DetalleVentaRoutes);
+    app.use("/detalle-venta", DetalleVentaRoutes);  
     app.use("/precio", precioDispositivoRoutes);
     app.use("/obsequios", require("./routes/obsequioRoutes"));
     app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));

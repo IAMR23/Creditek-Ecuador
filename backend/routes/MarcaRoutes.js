@@ -3,11 +3,7 @@ const express = require("express");
 const router = express.Router();
 const marcaController = require("../controllers/marcaController");
 
-// ===========================
-// 🔹 RUTAS CRUD MARCA
-// ===========================
 
-// Crear marca
 router.post("/", marcaController.crearMarca);
 
 // Listar todas las marcas
@@ -23,3 +19,4 @@ router.put("/:id", marcaController.actualizarMarca);
 router.delete("/:id", marcaController.eliminarMarca);
 
 module.exports = router;
+  

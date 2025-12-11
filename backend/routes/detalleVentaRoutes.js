@@ -102,11 +102,10 @@ router.post("/", async (req, res) => {
     res.status(201).json(nuevoDetalle);
   } catch (error) {
     res.status(500).json({ error: error.message });
-    console.log(error)
+    console.log(error) 
   }
 });
 
-// Actualizar un detalle de venta
 router.put("/:id", async (req, res) => {
   try {
     const detalle = await DetalleVenta.findByPk(req.params.id);

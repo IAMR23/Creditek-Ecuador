@@ -234,7 +234,6 @@ export default function DetalleEntregaVendedores() {
 
   return (
     <div className="p-6">
-      {/* Información de la entrega */}
       <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
         <div className="flex justify-between items-center">
           <div>
@@ -332,12 +331,12 @@ export default function DetalleEntregaVendedores() {
               {/* UBICACIÓN */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ubicación
+                  Ubicación del Cliente
                 </label>
                 <input
                   type="text"
                   name="ubicacion"
-                  placeholder="Ej: Sala, Habitación, Oficina"
+                  placeholder="Pegar la url"
                   value={form.ubicacion}
                   onChange={handleChange}
                   className="w-full p-2 border border-orange-500 rounded"
@@ -437,7 +436,7 @@ export default function DetalleEntregaVendedores() {
                 <input
                   type="text"
                   name="ubicacionDispositivo"
-                  placeholder="Ej: Instalado en la parte superior del auto..."
+                  placeholder="Ej: Oficinas Creditek"
                   value={form.ubicacionDispositivo}
                   onChange={handleChange}
                   className="w-full p-2 border border-orange-500 rounded"

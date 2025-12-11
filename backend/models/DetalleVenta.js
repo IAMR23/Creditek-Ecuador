@@ -35,7 +35,7 @@ const DetalleVenta = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: { model: Modelo, key: "id" },
-      onUpdate: "CASCADE", 
+      onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     },
     contrato: {
@@ -52,6 +52,10 @@ const DetalleVenta = sequelize.define(
     alcance: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
+    },
+    observacionDetalle: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
   },
   {

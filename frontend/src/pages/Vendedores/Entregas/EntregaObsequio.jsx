@@ -87,7 +87,7 @@ export default function EntregaObsequioPage() {
           text: "Entrega finalizada exitosamente!",
         });
 
-        navigate(`/vendedor-panel`);
+        navigate(`/entregas/${entregaId}/validacion` );
       } catch (err) {
         console.error(err);
         Swal.fire({
@@ -158,13 +158,14 @@ export default function EntregaObsequioPage() {
             onChange={(e) => setForm({ ...form, cantidad: e.target.value })}
           />
         </div>
-
-        <button
-          type="submit"
-          className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded font-semibold"
-        >
-          Agregar
-        </button>
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded font-semibold"
+          >
+            Agregar
+          </button>
+        </div>
       </form>
 
       {/* Lista */}

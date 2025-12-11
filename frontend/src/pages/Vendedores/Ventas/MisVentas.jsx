@@ -48,7 +48,7 @@ export default function MisMetas() {
         Agencia: venta.local ?? "",
         Vendedor: venta.vendedor ?? "",
         Origen: venta.origen ?? "",
-        Observaciones: venta.observaciones ?? "",
+        "Observaciones de Origen": venta.observaciones ?? "",
         Dispositivo: venta.tipo ?? "",
         Marca: venta.marca ?? "",
         Modelo: venta.modelo ?? "",
@@ -85,7 +85,8 @@ export default function MisMetas() {
     try {
       const { data } = await axios.get(`${API_URL}/vendedor/venta/${id}`);
       if (data.ok) {
-        setVentaSeleccionada(data.venta); // guardamos la venta completa
+        setVentaSeleccionada(data.venta);
+        console.log(data.venta);
         setModalAbierto(true); // abrimos modal
       }
     } catch (error) {
@@ -104,19 +105,27 @@ export default function MisMetas() {
     texto += `- Nombre: ${ventaSeleccionada.cliente.nombre}\n`;
     texto += `- Cédula: ${ventaSeleccionada.cliente.cedula}\n`;
     texto += `- Teléfono: ${ventaSeleccionada.cliente.telefono}\n\n`;
+    texto += `🧍 *Origen*\n`;
+    texto += `- Origen: ${ventaSeleccionada.origen.nombre}\n`;
+    texto += `- Observacion del origen: ${ventaSeleccionada.observacion}\n`;
 
-    // Detalle venta
     texto += `📦 *Detalle de la Venta*\n`;
+
     ventaSeleccionada.detalleVenta.forEach((item, index) => {
-      texto += `\nProducto ${index + 1}:\n`;
+      texto += `\n📌 *Producto ${index + 1}*\n`;
       texto += `- Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}\n`;
       texto += `- Marca: ${item.dispositivoMarca.marca.nombre}\n`;
       texto += `- Modelo: ${item.modelo.nombre}\n`;
       texto += `- Precio: ${item.precioUnitario}\n`;
       texto += `- Forma de pago: ${item.formaPago.nombre}\n`;
+
+      // 🔥 AGREGADO: Observación del Detalle (si existe)
+      if (item.observacionDetalle && item.observacionDetalle.trim() !== "") {
+        texto += `- Observación: ${item.observacionDetalle}\n`;
+      }
     });
 
-    // Obsequios
+    // 🎁 Obsequios
     texto += `\n🎁 *Obsequios*\n`;
     if (ventaSeleccionada.obsequiosVenta.length === 0) {
       texto += `- No hay obsequios\n`;
@@ -133,7 +142,10 @@ export default function MisMetas() {
       text: "Información copiada al portapapeles",
       confirmButtonColor: "#3085d6",
     });
+      setModalAbierto(false);
   };
+
+
 
   return (
     <div className="p-4">
@@ -200,14 +212,14 @@ export default function MisMetas() {
       )}
 
       {modalAbierto && ventaSeleccionada && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white p-6 rounded-lg w-11/12 max-w-3xl overflow-y-auto max-h-[90vh]">
-            <h2 className="text-2xl font-bold mb-4">
-              Detalle de la Venta #{ventaSeleccionada.id}
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
+          <div className="bg-white p-4 rounded-lg w-10/12 max-w-2xl overflow-y-auto max-h-[80vh] text-sm">
+            <h2 className="text-xl font-bold mb-3">
+              Detalle Venta #{ventaSeleccionada.id}
             </h2>
 
             {/* Vendedor / Agencia */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <p className="font-semibold">Vendedor:</p>
                 <p>{ventaSeleccionada.usuarioAgencia.usuario.nombre}</p>
@@ -219,8 +231,8 @@ export default function MisMetas() {
             </div>
 
             {/* Cliente */}
-            <div className="bg-gray-100 p-3 rounded mb-4">
-              <p className="font-semibold text-lg">Cliente</p>
+            <div className="bg-gray-100 p-2 rounded mb-3">
+              <p className="font-semibold">Cliente</p>
               <p>
                 <b>Nombre:</b> {ventaSeleccionada.cliente.nombre}
               </p>
@@ -233,9 +245,9 @@ export default function MisMetas() {
             </div>
 
             {/* Detalle de Venta */}
-            <p className="font-semibold text-lg mb-2">Detalle de Venta</p>
+            <p className="font-semibold mb-1">Detalle</p>
             {ventaSeleccionada.detalleVenta.map((item) => (
-              <div key={item.id} className="border p-3 rounded mb-3">
+              <div key={item.id} className="border p-2 rounded mb-2">
                 <p>
                   <b>Dispositivo:</b> {item.dispositivoMarca.dispositivo.nombre}
                 </p>
@@ -251,16 +263,22 @@ export default function MisMetas() {
                 <p>
                   <b>Forma Pago:</b> {item.formaPago.nombre}
                 </p>
+
+                {item.observacionDetalle?.trim() !== "" && (
+                  <p>
+                    <b>Obs:</b> {item.observacionDetalle}
+                  </p>
+                )}
               </div>
             ))}
 
             {/* Obsequios */}
-            <p className="font-semibold text-lg mt-4 mb-2">Obsequios</p>
+            <p className="font-semibold mt-3 mb-1">Obsequios</p>
             {ventaSeleccionada.obsequiosVenta.length === 0 ? (
               <p>No hay obsequios</p>
             ) : (
               ventaSeleccionada.obsequiosVenta.map((ob) => (
-                <div key={ob.id} className="border p-3 rounded mb-3">
+                <div key={ob.id} className="border p-2 rounded mb-2">
                   <p>
                     <b>Obsequio:</b> {ob.obsequio.nombre}
                   </p>
@@ -272,14 +290,14 @@ export default function MisMetas() {
             )}
 
             <button
-              className="mt-4 w-full bg-green-600 text-white py-2 rounded"
+              className="mt-3 w-full bg-green-600 text-white py-2 rounded text-sm"
               onClick={copiarVenta}
             >
               Copiar información
             </button>
 
             <button
-              className="mt-4 w-full bg-red-500 text-white py-2 rounded"
+              className="mt-2 w-full bg-red-500 text-white py-2 rounded text-sm"
               onClick={() => setModalAbierto(false)}
             >
               Cerrar

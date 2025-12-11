@@ -20,6 +20,31 @@ function Navbar({ auth, setAuth }) {
     }
   }, [setAuth]);
 
+  const handleLogoClick = () => {
+    if (!auth.isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+
+    switch (auth.rol) {
+      case "admin":
+        navigate("/dashboard");
+        break;
+
+      case "vendedor":
+        navigate("/vendedor-panel");
+        break;
+
+      case "logistica":
+      case "repartidor":
+        navigate("/logistica-panel"); // Ajusta si tu ruta es distinta
+        break;
+
+      default:
+        navigate("/login");
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("rol");
@@ -29,22 +54,21 @@ function Navbar({ auth, setAuth }) {
   };
 
   return (
-   <nav className="bg-gray-900 text-white shadow-lg sticky top-0 z-50">
+    <nav className="bg-gray-900 text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center px-6 py-4">
-        
         {/* Logo */}
-        <Link 
-         
+        <button
+          onClick={handleLogoClick}
           className="text-3xl font-extrabold text-green-500 hover:text-green-400 transition duration-300"
         >
           <span className="animate-pulse">RVE</span>
-        </Link>
+        </button>
 
         {/* Links y botones */}
         <div className="flex items-center space-x-4">
           {auth.isAuthenticated && auth.role === "admin" && (
-            <Link 
-              to="/admin" 
+            <Link
+              to="/admin"
               className="text-green-200 hover:text-green-400 font-semibold transition duration-300"
             >
               Admin
@@ -53,8 +77,8 @@ function Navbar({ auth, setAuth }) {
 
           {!auth.isAuthenticated && (
             <>
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="text-green-200 hover:text-green-400 font-semibold transition duration-300"
               >
                 Login
