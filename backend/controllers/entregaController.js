@@ -4,7 +4,7 @@ const Usuario = require("../models/Usuario.js");
 const Agencia = require("../models/Agencia.js");
 const { Op } = require("sequelize");
 
-exports.validarEntrega = async (req, res) => {
+exports.fotoClienteRespaldo = async (req, res) => {
   try {
     const { id } = req.params;
     const entrega = await Entrega.findByPk(id);
@@ -13,7 +13,6 @@ exports.validarEntrega = async (req, res) => {
       return res.status(404).json({ message: "Entrega no encontrada" });
     }
 
-    // si viene foto
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
 
     await entrega.update({ 
@@ -33,6 +32,73 @@ exports.validarEntrega = async (req, res) => {
   }
 };
 
+
+exports.fotoFechaRespaldo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { FechaHoraLlamada } = req.body; // viene desde el frontend
+
+    // Validar que sí envíen fecha y hora
+    if (!FechaHoraLlamada) {
+      return res.status(400).json({
+        message: "La fecha y hora de la llamada es obligatoria.",
+      });
+    }
+
+    const entrega = await Entrega.findByPk(id);
+
+    if (!entrega) {
+      return res.status(404).json({ message: "Entrega no encontrada" });
+    }
+
+    const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
+
+    await entrega.update({
+      validada: true,
+      fotoFechaLlamada: fotoUrl,
+      FechaHoraLlamada, // guardamos fecha + hora
+    });
+
+    res.json({
+      message: "Entrega validada correctamente",
+      entrega,
+    });
+  } catch (error) {
+    console.log("Error validando entrega:", error);
+    res.status(500).json({
+      message: "Error al validar la entrega",
+    });
+  }  
+};
+
+exports.fotoLogisticaRespaldo = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const entrega = await Entrega.findByPk(id);
+
+    if (!entrega) {
+      return res.status(404).json({ message: "Entrega no encontrada" });
+    }
+
+    const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
+
+    await entrega.update({
+      validada: true,
+      fotoLogistica: fotoUrl,
+    });
+
+    res.json({
+      message: "Entrega validada correctamente",
+      entrega,
+    });
+  } catch (error) {
+    console.log("Error validando entrega:", error);
+    res.status(500).json({
+      message: "Error al validar la entrega",
+    });
+  }
+};
 
 exports.getEntregasPorUsuarioAgencia = async (req, res) => {
   try {

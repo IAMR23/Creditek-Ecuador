@@ -36,64 +36,59 @@ export default function MetasComerciales() {
     }
   };
 
+
   const fetchData = async () => {
-    // Validación fechas
-    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
-      setError("La fecha de inicio no puede ser mayor que la fecha de fin");
-      return;
-    }
+  if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+    setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+    return;
+  }
 
-    setError("");
-    setLoading(true);
+  setError("");
+  setLoading(true);
 
-    try {
-      const url = `${API_URL}/admin/metas-comerciales/ventas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&agenciaId=${agenciaId}`;
+  try {
+    const url = `${API_URL}/admin/metas-comerciales/general?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&agenciaId=${agenciaId}`;
+    const { data } = await axios.get(url);
 
-      const { data } = await axios.get(url);
+    if (!data.ok) return;
 
-      if (!data.ok) return;
+    const registros = data.data || [];
 
-      const ventas = data.ventas || [];
-      console.log(ventas);
-      const resultado = ventas.map((venta) => ({
-        Fecha: venta.fecha ?? "",
-        Día: venta.dia ?? "",
-        Agencia: venta.local ?? "",
-        Vendedor: venta.vendedor ?? "",
-        Origen: venta.origen ?? "",
-        Dispositivo: venta.tipo ?? "",
-        Marca: venta.marca ?? "",
-        Modelo: venta.modelo ?? "",
-        Precio: venta.pvp ?? venta.valorCorregido ?? "",
-        "Forma Pago": venta.formaPago ?? "",
-        Contrato: venta.contrato ?? "",
-        Entrada: venta.entrada ?? "",
-        Alcance: venta.alcance ?? "",
-        Observaciones: venta.observaciones ?? "",
-        Estado: venta.validada ? "Validada" : "No validada",
-        
-      }));
+    const resultado = registros.map((r , i= 1) => ({
+      N : i + 1 ,  
+      Tipo: r.tipoRegistro ?? "",               // VENTA / ENTREGA
+      Día: r.dia ?? "",
+      Fecha: r.fecha ?? "",
+      Local: r.local ?? "",
+      Origen: r.origen ?? "",
+            Observacion: r.observaciones ?? "",
+      Vendedor: r.vendedor ?? "",
+      Producto: r.tipoProducto ?? "",
+      Marca: r.marca ?? "",
+      Modelo: r.modelo ?? "",
+      "Forma Pago": r.formaPago ?? "",
+      Precio: r.pvp ?? r.valor ?? "",
+      Entrada: r.entrada ?? "",
+      Alcance: r.alcance ?? "",
+      Contrato: r.contrato ?? "",
+    }));
 
-      setFilas(resultado);
-    } catch (error) {
-      console.log(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setFilas(resultado);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // ============================================
-  // Ejecutar cuando cambien filtros
-  // ============================================
+
   useEffect(() => {
     if (fechaInicio && fechaFin) {
       fetchData();
     }
   }, [fechaInicio, fechaFin, agenciaId]);
 
-  // ============================================
-  // Descargar Excel
-  // ============================================
+
   const descargarExcel = () => {
     if (filas.length === 0) {
       return Swal.fire({
@@ -199,7 +194,6 @@ export default function MetasComerciales() {
                 </th>
               ))}
             </tr>
-      
           </thead>
           <tbody>
             {filas.map((f, i) => (

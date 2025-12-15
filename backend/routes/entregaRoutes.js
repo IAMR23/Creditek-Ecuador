@@ -6,15 +6,17 @@ const Cliente = require("../models/Cliente");
 const Origen = require("../models/Origen");
 const DetalleEntrega = require("../models/DetalleEntrega");
 const { default: upload } = require("../middleware/multer");
-const { validarEntrega, getEntregasPorUsuarioAgencia } = require("../controllers/entregaController");
+const { fotoClienteRespaldo, getEntregasPorUsuarioAgencia, fotoFechaRespaldo, fotoLogisticaRespaldo } = require("../controllers/entregaController");
 
 // --------------------- CONTROLADORES ---------------------
-router.put("/entrega/:id/validar", upload.single("foto"), validarEntrega);
- 
+router.put("/entrega/:id/validar", upload.single("foto"), fotoClienteRespaldo);
+router.put("/entrega/:id/fechaRespaldo", upload.single("foto"), fotoFechaRespaldo);
+router.put("/entrega/:id/fotoLogistica", upload.single("foto"), fotoLogisticaRespaldo);
+
 router.get("/vendedor/:usuarioAgenciaId", getEntregasPorUsuarioAgencia);
 
 router.get("/", async (req, res) => { 
-  try {
+  try {  
     const entregas = await Entrega.findAll({
       include: [
         { model: UsuarioAgencia, as: "usuarioAgencia" },

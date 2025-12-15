@@ -117,12 +117,11 @@ export default function MisMetas() {
       texto += `- Marca: ${item.dispositivoMarca.marca.nombre}\n`;
       texto += `- Modelo: ${item.modelo.nombre}\n`;
       texto += `- Precio: ${item.precioUnitario}\n`;
+      texto += `- Entrada: ${item.entrada}\n`;
+      texto += `- Alcance: ${item.alcance}\n`;
       texto += `- Forma de pago: ${item.formaPago.nombre}\n`;
+      texto += `- Obs: ${item.observacionDetalle}\n`;
 
-      // 🔥 AGREGADO: Observación del Detalle (si existe)
-      if (item.observacionDetalle && item.observacionDetalle.trim() !== "") {
-        texto += `- Observación: ${item.observacionDetalle}\n`;
-      }
     });
 
     // 🎁 Obsequios

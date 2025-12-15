@@ -5,10 +5,7 @@ import { jwtDecode } from "jwt-decode";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import LoginForm from "./components/LoginForm";
-import FormularioDinamico from "./pages/Vendedores/FormularioDinamico";
 import VendedorPanel from "./pages/Vendedores/VendedoresPanel";
-import FormularioEntrega from "./pages/Vendedores/FormularioEntrega";
-import FormularioCliente from "./pages/Vendedores/FormularioCliente";
 import Usuarios from "./pages/Admin/Usuarios";
 import SidebarLayout from "./components/SidebarLayout";
 import Agencias from "./pages/Admin/Agencias";
@@ -44,18 +41,18 @@ import CrearEntrega from "./pages/Vendedores/Entregas/CrearEntrega";
 import EntregaObsequioPage from "./pages/Vendedores/Entregas/EntregaObsequio";
 import EntregaFoto from "./pages/Vendedores/Entregas/EntregaFoto";
 import DetalleEntregaVendedores from "./pages/Vendedores/Entregas/DetalleEntregaVendedores";
-import VentasPorUsuario from "./pages/Vendedores/Ventas/VentasPorUsuario";
 import EstadoEntrega from "./pages/Admin/EstadoEntrega";
 import MisVentas from "./pages/Vendedores/Ventas/MisVentas";
 import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
-import EntregasLogisticas from "./pages/Logistica/EntregasLogisticas";
 
 
 import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
-import EntregasRepartidor from "./pages/Logistica/EntregasRepartidor";
-import DetalleEntregaRepartidor from "./pages/Logistica/DetalleEntregaRepartidor";
 import MetasComercialesGraficas from "./pages/Admin/MetasComercialesGraficas";
+import VentasCompletas from "./pages/Admin/VentasCompletas";
+import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
+import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
+import EntregasTransito from "./pages/Logistica/EntregasTransito";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -138,6 +135,7 @@ function App() {
                 </ProtectedRoute>
               }
             >
+              <Route path="ventas-completas" element={<VentasCompletas />} />
               <Route path="usuarios" element={<Usuarios />} />
               <Route path="agencias" element={<Agencias />} />
               <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
@@ -159,23 +157,20 @@ function App() {
               <Route path="obsequios" element={<AdminObsequios />} />
               <Route path="metas-comerciales" element={<MetasComerciales />} />
               <Route path="metas-comerciales-graficas" element={<MetasComercialesGraficas />} />
-              <Route path="entregas-logistica" element={<EntregasLogisticas />} />
+              <Route path="entregas-pendientes" element={<EntregasPendientes />} />
+              <Route path="entregas-transito" element={<EntregasTransito />} />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />
-            </Route>
+{/*               <Route path="copa-creditek" element={<MarketingVentasAgencia/>}/>
+ */}            </Route>
 
             {/* REPARTIDORES */}
             <Route
               path="/logistica-panel"
               element={<LogisticaPanel />}
             />
-            <Route path="/entregas-repartidor" element={<EntregasRepartidor />} />
-            <Route path="/entregas-repartidor/:id" element={<DetalleEntregaRepartidor />} />
-
             <Route path="/vendedor-panel" element={<VendedorPanel />} />
-            {/*   <Route path="/registrar-ventas" element={<FormularioDinamico />} />
-            <Route path="/registrar-clientes" element={<FormularioCliente />} />
-            <Route path="/registrar-entregas" element={<FormularioEntrega />} /> */}
+
             <Route path="/mis-ventas" element={<MisVentas />} />
             <Route
               path="/registrar-clientes-venta"
@@ -201,7 +196,8 @@ function App() {
               path="/entregas/:id/obsequios"
               element={<EntregaObsequioPage />}
             />
-            <Route path="/entregas/:id/validacion" element={<EntregaFoto />} />
+            <Route path="/entregas/:id/pre-aprobacion" element={<EntregaFoto />} />
+            <Route path="/entregas/:id/fecha-llamada" element={<FotoFechaHoraEntrega />} />
             <Route path="/mis-entregas" element={<MisEntregas />} />
           </Routes>
         </main>

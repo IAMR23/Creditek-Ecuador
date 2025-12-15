@@ -15,10 +15,28 @@ const FormularioClienteVenta = () => {
   const [clienteCreado, setClienteCreado] = useState(null); // ⬅️ nuevo estado
 
   const navigate = useNavigate();
-  const handleChange = (e) => {
+
+    const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "cliente") {
+      const soloTexto = value
+        .replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "")
+        .toUpperCase();
+
+      setFormData((prev) => ({ ...prev, [name]: soloTexto }));
+      return;
+    }
+
+    // SOLO NUMEROS Y MAX 10 DIGITOS PARA CEDULA Y TELEFONO
+    if (name === "cedula" || name === "telefono") {
+      const soloNumeros = value.replace(/\D/g, "").slice(0, 10);
+      setFormData((prev) => ({ ...prev, [name]: soloNumeros }));
+      return;
+    }
   };
+
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);

@@ -16,7 +16,9 @@ const { Op } = require("sequelize");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 
 exports.obtenerReporte = async ({ fechaInicio, fechaFin }) => {
-  const where = {};
+  const where = {
+    estado: "Entregado",
+  };
 
   if (fechaInicio && fechaFin) {
     where.createdAt = {
@@ -46,7 +48,7 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin }) => {
           { model: Agencia, as: "agencia", attributes: ["nombre"] },
         ],
       },
-      { model: Cliente, as: "cliente", attributes: ["cliente" , "cedula"] },
+      { model: Cliente, as: "cliente", attributes: ["cliente", "cedula"] },
       { model: Origen, as: "origen", attributes: ["nombre"] },
       {
         model: DetalleEntrega,
@@ -70,6 +72,7 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin }) => {
         include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
       },
     ],
+    order: [["createdAt", "ASC"]],
   });
 
   return entregas;
@@ -88,7 +91,6 @@ const obtenerDiaSemana = (fechaISO) => {
   return dias[new Date(fechaISO).getDay()];
 };
 
-
 exports.formatearReporte = (entregas) => {
   const filas = [];
 
@@ -99,20 +101,14 @@ exports.formatearReporte = (entregas) => {
         : "";
 
       filas.push({
-        id : entrega.id,
-        cliente : entrega.cliente?.cliente || "",
-        semana: null,
+        id: entrega.id,
         dia: obtenerDiaSemana(entrega.createdAt),
         valorAcumulado: null,
-  
         fecha: fechaISO,
-
         local: entrega.usuarioAgencia?.agencia?.nombre || "",
         origen: entrega.origen?.nombre || "",
         nombre: entrega.cliente?.cliente || "",
-
         vendedor: entrega.usuarioAgencia?.usuario?.nombre || "",
-
         tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
@@ -120,22 +116,15 @@ exports.formatearReporte = (entregas) => {
         valorCorregido: detalle.precioUnitario || "",
         pvp: detalle.precioUnitario || "",
         margen: null,
-
         cierreCaja: entrega.validada || "",
-
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",
-
         observaciones: entrega.observacion || "",
         contrato: detalle.contrato || "",
-        estado : entrega.estado || "",
-        observacionLogistica: entrega.observacionLogistica || "Sin observaciones",
+        estado: entrega.estado || "",
       });
     });
   });
 
   return filas;
 };
-
-
-

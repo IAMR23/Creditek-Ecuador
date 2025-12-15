@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { API_URL } from "../../../../config";
 import axios from "axios";
 import imageCompression from "browser-image-compression";
+import Swal from "sweetalert2";
 
 export default function VentaFoto() {
   const { id } = useParams(); // id de venta
@@ -50,15 +51,12 @@ export default function VentaFoto() {
 
       setMsg("Subiendo imagen...");
 
-      await axios.put(
-        `${API_URL}/ventas/venta/${id}/validar`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
+      await axios.put(`${API_URL}/ventas/venta/${id}/validar`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       setMsg("Venta validada correctamente ✔");
-
-      setTimeout(() => navigate("/ventas"), 1200);
+      navigate("/vendedor-panel");
     } catch (err) {
       console.error(err);
       setMsg("❌ Error al enviar la foto");
@@ -67,9 +65,80 @@ export default function VentaFoto() {
     }
   };
 
+  const generarTextoVenta = (venta) => {
+    const {
+      id,
+      usuarioAgencia,
+      cliente,
+      origen,
+      detalleVenta,
+      obsequiosVenta,
+    } = venta;
+
+    let texto = `📄 Detalle de la Venta #${id}
+
+👤 Vendedor: ${usuarioAgencia.usuario.nombre}
+🏢 Agencia: ${usuarioAgencia.agencia.nombre}
+
+🧍 Cliente
+- Nombre: ${cliente.nombre}
+- Cédula: ${cliente.cedula}
+- Teléfono: ${cliente.telefono}
+
+📍 Origen
+- Origen: ${origen.nombre}
+- Observacion de origen: ${venta.observacion}
+
+📦 Detalle de la Venta
+`;
+
+    detalleVenta.forEach((item, index) => {
+      texto += `
+📌 Producto ${index + 1}
+- Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}
+- Marca: ${item.dispositivoMarca.marca.nombre}
+- Modelo: ${item.modelo.nombre}
+- Precio: $${item.precioUnitario}
+- Entrada : $${item.entrada} 
+- Alcance : $${item.alcance}
+- Forma de pago: ${item.formaPago.nombre}
+- Observacion de la venta: ${item.observacionDetalle}
+`;
+    });
+
+    texto += `
+
+🎁 Obsequios
+`;
+
+    if (obsequiosVenta.length === 0) {
+      texto += "(No se registraron obsequios)\n";
+    } else {
+      obsequiosVenta.forEach((item, index) => {
+        texto += `- ${item.obsequio.nombre} (Cantidad: ${item.cantidad})\n`;
+      });
+    }
+
+    return texto;
+  };
+
+  const handleCopiarDatos = async () => {
+    try {
+      const url = `${API_URL}/vendedor/venta/${id}`;
+      const { data } = await axios.get(url);
+      if (data.ok) {
+        const texto = generarTextoVenta(data.venta);
+        return texto;
+      }
+    } catch (error) {
+      console.log("Error al obtener detalle:", error);
+    }
+
+    return ""; // seguridad
+  };
+
   return (
     <div className="p-6">
-      {/* HEADER */}
       <div className="p-4 mb-6 bg-green-50 border border-green-200 rounded-lg">
         <h1 className="text-2xl font-bold text-green-600">
           Validación de Venta
@@ -117,17 +186,29 @@ export default function VentaFoto() {
 
         {/* BOTÓN VALIDAR */}
         <button
-          onClick={handleEnviar}
-          disabled={loading}
+          onClick={async () => {
+            await handleEnviar(); // primero sube la foto
+
+            const texto = await handleCopiarDatos(); // ahora sí esperas el texto
+
+            if (texto) {
+              await navigator.clipboard.writeText(texto);
+
+              Swal.fire({
+                icon: "success",
+                title: "¡Copiado!",
+                text: "Información copiada al portapapeles",
+                confirmButtonColor: "#3085d6",
+              });
+            }
+          }}
           className="mt-6 w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg"
         >
           {loading ? "Procesando..." : "Validar Venta"}
         </button>
 
         {msg && (
-          <p className="text-center mt-3 text-green-700 font-medium">
-            {msg}
-          </p>
+          <p className="text-center mt-3 text-green-700 font-medium">{msg}</p>
         )}
 
         <button

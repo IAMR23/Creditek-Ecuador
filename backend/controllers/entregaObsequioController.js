@@ -69,7 +69,6 @@ exports.obtenerObsequiosEntrega = async (req, res) => {
 exports.createEntregaObsequio = async (req, res) => {
   try {
     const { entregaId, obsequioId, cantidad } = req.body;
-    console.log(entregaId)
     if (!entregaId || !obsequioId) {
       return res.status(400).json({ message: "entregaId y obsequioId son requeridos" });
     }

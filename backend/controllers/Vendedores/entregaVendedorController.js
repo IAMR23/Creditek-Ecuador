@@ -16,31 +16,17 @@ const { Op } = require("sequelize");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 const { sequelize } = require("../../config/db");
 
-exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
-  const where = {};
 
-  if (fechaInicio && fechaFin) {
-    where.createdAt = {
-      [Op.between]: [
-        new Date(`${fechaInicio}T00:00:00`),
-        new Date(`${fechaFin}T23:59:59`),
-      ],
-    };
-  } else if (fechaInicio) {
-    where.createdAt = {
-      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
-    };
-  } else if (fechaFin) {
-    where.createdAt = {
-      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
-    };
-  }
+exports.obtenerReporte = async ({ id, page = 1, limit = 10 }) => {
+  const offset = (page - 1) * limit;
 
-  // Filtrado por id del vendedor
+  // Filtro por vendedor
   const usuarioAgenciaWhere = id ? { usuarioId: id } : {};
 
-  const entregas = await Entrega.findAll({
-    where,
+  const entregas = await Entrega.findAndCountAll({
+    limit,
+    offset,
+    order: [["createdAt", "DESC"]], // 🔥 más recientes primero
     include: [
       {
         model: UsuarioAgencia,
@@ -76,6 +62,7 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
       },
     ],
   });
+
   return entregas;
 };
 
@@ -92,10 +79,12 @@ const obtenerDiaSemana = (fechaISO) => {
   return dias[new Date(fechaISO).getDay()];
 };
 
+
 exports.formatearReporte = (entregas) => {
   const filas = [];
 
-  entregas.forEach((entrega) => {
+  // Cambiar de 'entregas.forEach' a 'entregas.rows.forEach'
+  entregas.rows.forEach((entrega) => {
     // Crear un string con los obsequios
     const obsequios =
       entrega.obsequiosEntrega
@@ -137,72 +126,6 @@ exports.formatearReporte = (entregas) => {
   return filas;
 };
 
-exports.actualizarEntregaCompleta = async (req, res) => {
-  const { id } = req.params; //
-  const datosEntrega = req.body; // objeto completo con relaciones
-
-  try {
-    await sequelize.transaction(async (t) => {
-      // 1️⃣ Actualizar datos principales de la
-      const entrega = await Entrega.findByPk(id, { transaction: t });
-      if (!entrega)
-        return res
-          .status(404)
-          .json({ ok: false, msg: "Entrega no encontrada" });
-
-      await entrega.update(datosEntrega, { transaction: t });
-
-      // 2️⃣ Actualizar detalles de entrega
-      if (
-        datosEntrega.detalleEntregas &&
-        datosEntrega.detalleEntregas.length > 0
-      ) {
-        for (const detalle of datosEntrega.detalleEntregas) {
-          if (detalle.id) {
-            // actualizar si ya existe
-            await DetalleEntrega.update(detalle, {
-              where: { id: detalle.id },
-              transaction: t,
-            });
-          } else {
-            // crear si no existe
-            await DetalleEntrega.create(
-              { ...detalle, entregaId: id },
-              { transaction: t }
-            );
-          }
-        }
-      }
-
-      // 3️⃣ Actualizar obsequios de entrega
-      if (
-        datosEntrega.obsequiosEntrega &&
-        datosEntrega.obsequiosEntrega.length > 0
-      ) {
-        for (const obsequio of datosEntrega.obsequiosEntrega) {
-          if (obsequio.id) {
-            await EntregaObsequio.update(obsequio, {
-              where: { id: obsequio.id },
-              transaction: t,
-            });
-          } else {
-            await EntregaObsequio.create(
-              { ...obsequio, entregaId: id },
-              { transaction: t }
-            );
-          }
-        }
-      }
-    });
-
-    res.json({ ok: true, msg: "Entrega actualizada correctamente" });
-  } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ ok: false, msg: "Error al actualizar la entrega", error });
-  }
-};
 
 exports.obtenerEntregaPorId = async (req, res) => {
   const { id } = req.params;
@@ -228,7 +151,6 @@ exports.obtenerEntregaPorId = async (req, res) => {
           attributes: ["id", "nombre"],
         },
 
-        // ✔ AQUÍ: el alias real es "detalleEntregas"
         {
           model: DetalleEntrega,
           as: "detalleEntregas",
@@ -250,7 +172,6 @@ exports.obtenerEntregaPorId = async (req, res) => {
           ],
         },
 
-        // ✔ alias OK
         {
           model: EntregaObsequio,
           as: "obsequiosEntrega",
@@ -275,11 +196,18 @@ exports.obtenerEntregaPorId = async (req, res) => {
       entrada: entrega.entrada,
       alcance: entrega.alcance,
       pvp: entrega.pvp,
+      fotoFechaLlamada: entrega.fotoFechaLlamada,
+      FechaHoraLlamada: entrega.FechaHoraLlamada
+        ? entrega.FechaHoraLlamada.toLocaleString("sv-SE", {
+            timeZone: "America/Guayaquil",
+          }).replace("T", " ")
+        : null,
 
-      fotoValidacion: entrega.fotoValidacion, // ⬅️ AGREGADO
+      fotoValidacion: entrega.fotoValidacion,
       validada: entrega.validada,
       estado: entrega.estado,
       observacionLogistica: entrega.observacionLogistica,
+      observacion : entrega.observacion,
 
       usuarioAgencia: {
         id: entrega.usuarioAgencia?.id,

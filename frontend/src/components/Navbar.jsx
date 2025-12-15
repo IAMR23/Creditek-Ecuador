@@ -57,12 +57,15 @@ function Navbar({ auth, setAuth }) {
     <nav className="bg-gray-900 text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center px-6 py-4">
         {/* Logo */}
-        <button
-          onClick={handleLogoClick}
-          className="text-3xl font-extrabold text-green-500 hover:text-green-400 transition duration-300"
-        >
-          <span className="animate-pulse">RVE</span>
-        </button>
+        <div className="flex justify-center">
+          <button
+            onClick={handleLogoClick}
+            className="flex items-center space-x-2 text-3xl font-extrabold text-green-500 hover:text-green-400 transition duration-300"
+          >
+            <span className="animate-pulse">RVE</span>
+            <img src="./logo.png" alt="" width={112} />
+          </button>
+        </div>
 
         {/* Links y botones */}
         <div className="flex items-center space-x-4">

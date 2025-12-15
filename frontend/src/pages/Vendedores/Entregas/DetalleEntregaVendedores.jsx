@@ -192,22 +192,16 @@ export default function DetalleEntregaVendedores() {
 
     const { isConfirmed } = await Swal.fire({
       icon: "question",
-      title: "¿Finalizar entrega?",
-      text: "No podrás deshacer esto.",
+      title: "¿Ingresar a foto de la llamada?",
       showCancelButton: true,
-      confirmButtonText: "Sí, finalizar",
+      confirmButtonText: "Sí",
       cancelButtonText: "Cancelar",
     });
 
     if (isConfirmed) {
       try {
-        await Swal.fire({
-          icon: "success",
-          title: "Entrega finalizada",
-          text: "Entrega finalizada correctamente.",
-        });
 
-        navigate(`/entregas/${entregaId}/obsequios`, {
+        navigate(`/entregas/${entregaId}/fecha-llamada`, {
           state: { cliente: cliente },
         });
       } catch (err) {
@@ -554,7 +548,7 @@ export default function DetalleEntregaVendedores() {
             onClick={handleFinalizarEntrega}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded"
           >
-            Obsequios
+            Foto de la llamada
           </button>
         )}
       </div>

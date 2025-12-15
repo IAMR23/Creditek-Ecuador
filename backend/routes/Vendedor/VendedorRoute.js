@@ -12,20 +12,31 @@ router.get("/venta/:id", vendedorController.obtenerVentaPorId);
 /* OBTENER TODAS LAS ENTREGAS DEL VENDEDOR   */
 router.get("/entrega/:id", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin } = req.query;
+    const { page = 1, limit = 10 } = req.query;
     const { id } = req.params;
+
     const entrega = await entregaVendedorController.obtenerReporte({
       id,
-      fechaInicio,
-      fechaFin,
+      page: Number(page),
+      limit: Number(limit),
     });
+
     const reporte = await entregaVendedorController.formatearReporte(entrega);
-    res.json({ ok: true, entrega: reporte });
+
+    res.json({
+      ok: true,
+      page: Number(page),
+      limit: Number(limit),
+      total: entrega.count,
+      totalPages: Math.ceil(entrega.count / limit),
+      entrega: reporte,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({ ok: false, error: error.message });
   }
-}); 
+});
+
   
 /* OBTENER UNA VENTA ESPECIFICA */
 router.get("/entrega-logistica/:id", entregaVendedorController.obtenerEntregaPorId);

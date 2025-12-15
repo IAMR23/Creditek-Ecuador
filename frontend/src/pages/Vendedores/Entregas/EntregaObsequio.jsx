@@ -69,25 +69,18 @@ export default function EntregaObsequioPage() {
     cargarObsequios();
   }, []);
 
-  const handleFinalizarEntrega = async () => {
+  const handlePreAprobarEntrega = async () => {
     const { isConfirmed } = await Swal.fire({
       icon: "question",
-      title: "Finalizar entrega",
-      text: "¿Está seguro de finalizar esta entrega? Esta acción no se puede deshacer.",
+      title: "Pre aprobar entrega",
       showCancelButton: true,
-      confirmButtonText: "Sí, finalizar",
+      confirmButtonText: "Sí",
       cancelButtonText: "Cancelar",
     });
 
     if (isConfirmed) {
       try {
-        await Swal.fire({
-          icon: "success",
-          title: "Entrega finalizada",
-          text: "Entrega finalizada exitosamente!",
-        });
-
-        navigate(`/entregas/${entregaId}/validacion` );
+        navigate(`/entregas/${entregaId}/pre-aprobacion`);
       } catch (err) {
         console.error(err);
         Swal.fire({
@@ -171,7 +164,7 @@ export default function EntregaObsequioPage() {
       {/* Lista */}
       <div className="bg-white p-4 rounded shadow border border-orange-500">
         <h2 className="text-lg font-semibold text-orange-600 mb-4">
-          Obsequios entregados
+          Obsequios para entregar
         </h2>
 
         <table className="w-full border-collapse">
@@ -216,20 +209,12 @@ export default function EntregaObsequioPage() {
           </tbody>
         </table>
 
-        <div className="flex justify-between items-center mb-4">
-          {/* Botón izquierda */}
+        <div className="flex justify-end items-center mb-4">
           <button
-            onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded"
-          >
-            Volver
-          </button>
-
-          <button
-            onClick={handleFinalizarEntrega}
+            onClick={handlePreAprobarEntrega}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded"
           >
-            Finalizar
+            Pre Aprobar
           </button>
         </div>
       </div>

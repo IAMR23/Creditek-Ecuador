@@ -17,9 +17,6 @@ exports.getDashboardEntregas = async (req, res) => {
     // Ajustar fin del día
     fechaFin.setHours(23, 59, 59, 999);
 
-    // -----------------------------
-    // CONSULTAS POR ESTADO
-    // -----------------------------
     const estados = ["Pendiente", "Transito", "Revisar", "Entregado", "No entregado"];
     const counts = {};
 
@@ -34,18 +31,12 @@ exports.getDashboardEntregas = async (req, res) => {
       });
     }
 
-    // -----------------------------
-    // TOTAL GENERAL
-    // -----------------------------
     const total = await Entrega.count({
       where: {
         fecha: { [Op.between]: [fechaInicio, fechaFin] }
       }
     });
 
-    // -----------------------------
-    // RESPUESTA
-    // -----------------------------
     res.json({
       rango: { desde: fechaInicio, hasta: fechaFin },
       total,

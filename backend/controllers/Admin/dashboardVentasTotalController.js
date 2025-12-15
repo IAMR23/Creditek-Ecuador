@@ -20,9 +20,6 @@ exports.getTotalVentas = async (req, res) => {
     // Para incluir todo el día de fechaFin
     fechaFin.setHours(23, 59, 59, 999);
 
-    // -------------------------------
-    // VENTAS DESDE ENTREGAS
-    // -------------------------------
     const ventasDesdeEntregas = await Entrega.count({
       where: {
         estado: "Entregado",
@@ -32,9 +29,6 @@ exports.getTotalVentas = async (req, res) => {
       }
     });
 
-    // -------------------------------
-    // VENTAS DESDE TABLA VENTAS
-    // -------------------------------
     const ventasDesdeVentas = await Venta.count({
       where: {
         validada: true,
@@ -44,9 +38,6 @@ exports.getTotalVentas = async (req, res) => {
       }
     });
 
-    // -------------------------------
-    // TOTAL
-    // -------------------------------
     const totalVentas = ventasDesdeEntregas + ventasDesdeVentas;
 
     return res.json({

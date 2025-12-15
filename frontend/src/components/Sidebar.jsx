@@ -37,14 +37,23 @@ export default function Sidebar() {
       title: "Gerencia",
       items: [
         { label: "Metas Comerciales", icon: <BarChart3 size={20} />, path: "/metas-comerciales" },
-        { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "/metas-comerciales-graficas" },
-        { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
+/*         { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "/metas-comerciales-graficas" },
+ */        { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
+/*         { label: "Ventas Completas", icon: <BarChart3 size={20} />, path: "/ventas-completas" },
+ */      ],
+    },
+        Marketing: {
+      title: "Marketing",
+      items: [
+        { label: "Copa Creditek", icon: <BarChart3 size={20} />, path: "/copa-creditek" },
+       
       ],
     },
     logistica: {
       title: "Logística",
       items: [
-        { label: "Entregas Logística", icon: <PackageCheck size={20} />, path: "/entregas-logistica" },
+        { label: "Entregas Pendientes", icon: <PackageCheck size={20} />, path: "/entregas-pendientes" },
+        { label: "Entregas en Transito", icon: <PackageCheck size={20} />, path: "/entregas-transito" },
       ],
     },
     admin: {

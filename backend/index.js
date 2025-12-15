@@ -82,11 +82,13 @@ connectDB()
     app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));
     app.use("/uploads", express.static(path.join(__dirname, "uploads")));
     app.use("/admin/metas-comerciales", require("./routes/Admin/adminRoutes"));
+    app.use("/admin/ventastotales", require("./routes/Admin/ventastotales"));
     app.use("/vendedor", require("./routes/Vendedor/VendedorRoute"));
     app.use("/entregas", require("./routes/entregaRoutes"));
     app.use("/detalle-entrega", require("./routes/detalleEntregaRoutes"));
     app.use("/entrega-obsequios", require("./routes/entregaObsequioRoutes"));
     app.use("/estado-entrega", require("./routes/estadoEntregaRoutes"));
+    app.use("/alertas" , require("./routes/entregasAlertasRouter"))
 
     console.log(
       "Carpeta uploads que Express está usando:",
