@@ -204,7 +204,7 @@ function App() {
               path="/ventas/:id/obsequios"
               element={<VentaObsequioPage />}
             />
-            <Route path="/ventas/:id/validacion" element={<VentPrecio Unitario
+            <Route path="/ventas/:id/validacion" element={<VentaFoto Unitario
 aFoto />} />
 
             {/* ENTREGAS */}
