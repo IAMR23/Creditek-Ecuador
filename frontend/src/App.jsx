@@ -52,7 +52,7 @@ import VentasCompletas from "./pages/Admin/VentasCompletas";
 import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
 import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
 import EntregasTransito from "./pages/Logistica/EntregasTransito";
-import EntregasAuditoria from "./pages/Auditoria/EntregaSAuditoria";
+import EntregasAuditoria from "./pages/Auditoria/EntregasAuditoria";
 import EntregaAuditoria from "./pages/Auditoria/EntregaAuditoria";
 import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
 import VentaAuditoria from "./pages/Auditoria/VentaAuditoria";
@@ -204,7 +204,8 @@ function App() {
               path="/ventas/:id/obsequios"
               element={<VentaObsequioPage />}
             />
-            <Route path="/ventas/:id/validacion" element={<VentaFoto />} />
+            <Route path="/ventas/:id/validacion" element={<VentPrecio Unitario
+aFoto />} />
 
             {/* ENTREGAS */}
 
