@@ -8,22 +8,25 @@ const Modelo = require("./Modelo");
 const DetalleEntrega = sequelize.define(
   "DetalleEntrega",
   {
-    id: {
+    id: { 
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
     },
     cantidad: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: false,  
       validate: { min: 1 },
     },
     precioUnitario: {
       type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,  
+    },
+    precioVendedor: {
+      type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
     },
     dispositivoMarcaId: {
-      // Cambio importante
       type: DataTypes.INTEGER,
       allowNull: false,
       references: { model: DispositivoMarca, key: "id" },
@@ -44,7 +47,7 @@ const DetalleEntrega = sequelize.define(
     formaPagoId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-    }, 
+    },
     entrada: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
@@ -58,6 +61,10 @@ const DetalleEntrega = sequelize.define(
     },
     ubicacionDispositivo: {
       type: DataTypes.STRING,
+    },
+    observacionDetalle: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
   },
   {

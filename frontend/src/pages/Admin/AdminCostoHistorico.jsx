@@ -102,7 +102,7 @@ export default function CostosHistoricosCRUD() {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold text-green-600 mb-4">Costos Históricos CRUD</h1>
+      <h1 className="text-2xl font-bold text-green-600 mb-4">Costos Históricos</h1>
 
       {/* 🔍 INPUT DE FILTRO */}
       <div className="mb-4">

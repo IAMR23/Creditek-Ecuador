@@ -36,58 +36,56 @@ export default function MetasComerciales() {
     }
   };
 
-
   const fetchData = async () => {
-  if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
-    setError("La fecha de inicio no puede ser mayor que la fecha de fin");
-    return;
-  }
+    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+      setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+      return;
+    }
 
-  setError("");
-  setLoading(true);
+    setError("");
+    setLoading(true);
 
-  try {
-    const url = `${API_URL}/admin/metas-comerciales/general?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&agenciaId=${agenciaId}`;
-    const { data } = await axios.get(url);
+    try {
+      const url = `${API_URL}/admin/metas-comerciales/general?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&agenciaId=${agenciaId}`;
+      const { data } = await axios.get(url);
 
-    if (!data.ok) return;
+      if (!data.ok) return;
 
-    const registros = data.data || [];
+      const registros = data.data || [];
 
-    const resultado = registros.map((r , i= 1) => ({
-      N : i + 1 ,  
-      Tipo: r.tipoRegistro ?? "",               // VENTA / ENTREGA
-      Día: r.dia ?? "",
-      Fecha: r.fecha ?? "",
-      Local: r.local ?? "",
-      Origen: r.origen ?? "",
-            Observacion: r.observaciones ?? "",
-      Vendedor: r.vendedor ?? "",
-      Producto: r.tipoProducto ?? "",
-      Marca: r.marca ?? "",
-      Modelo: r.modelo ?? "",
-      "Forma Pago": r.formaPago ?? "",
-      Precio: r.pvp ?? r.valor ?? "",
-      Entrada: r.entrada ?? "",
-      Alcance: r.alcance ?? "",
-      Contrato: r.contrato ?? "",
-    }));
+      const resultado = registros.map((r, i = 1) => ({
+        N: i + 1,
+        Tipo: r.tipoRegistro ?? "", // VENTA / ENTREGA
+        Día: r.dia ?? "",
+        Fecha: r.fecha ?? "",
+        Local: r.local ?? "",
+        Origen: r.origen ?? "",
+        Observacion: r.observaciones ?? "",
+        Vendedor: r.vendedor ?? "",
+        Producto: r.tipoProducto ?? "",
+        Marca: r.marca ?? "",
+        Modelo: r.modelo ?? "",
+        "Forma Pago": r.formaPago ?? "",
+        Precio: r.pvp ?? r.valor ?? "",
+        "Precio Vendedor": r.precioVendedor ?? "",
+        Entrada: r.entrada ?? "",
+        Alcance: r.alcance ?? "",
+        Contrato: r.contrato ?? "",
+      }));
 
-    setFilas(resultado);
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
-
+      setFilas(resultado);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (fechaInicio && fechaFin) {
       fetchData();
     }
   }, [fechaInicio, fechaFin, agenciaId]);
-
 
   const descargarExcel = () => {
     if (filas.length === 0) {
@@ -114,9 +112,6 @@ export default function MetasComerciales() {
     });
   };
 
-  // ============================================
-  // Establecer fecha actual y cargar agencias
-  // ============================================
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFechaInicio(hoyLocal);
@@ -198,11 +193,29 @@ export default function MetasComerciales() {
           <tbody>
             {filas.map((f, i) => (
               <tr key={i}>
-                {Object.values(f).map((val, j) => (
-                  <td key={j} className="p-2 border">
-                    {val}
-                  </td>
-                ))}
+                {Object.entries(f).map(([key, val], j) => {
+                  let colorClass = "";
+
+                  const precio = parseFloat(f["Precio"]) || 0;
+                  const precioVendedor = parseFloat(f["Precio Vendedor"]) || 0;
+
+                  if (key === "Precio") {
+                    colorClass = "text-blue-600 font-semibold";
+                  }
+
+                  if (key === "Precio Vendedor") {
+                    colorClass =
+                      precioVendedor < precio
+                        ? "text-red-600 font-bold bg-red-50"
+                        : "text-green-600 font-bold bg-green-50";
+                  }
+
+                  return (
+                    <td key={j} className={`p-2 border ${colorClass}`}>
+                      {val}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>

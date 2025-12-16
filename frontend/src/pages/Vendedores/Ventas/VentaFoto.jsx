@@ -189,7 +189,13 @@ export default function VentaFoto() {
           onClick={async () => {
             await handleEnviar(); // primero sube la foto
 
-            const texto = await handleCopiarDatos(); // ahora sí esperas el texto
+            const texto = await handleCopiarDatos();
+            // ABRIR CON WHATSAPP DIRECTO ...
+            /* FUNCIONA PARCIALMENTE 
+SE COPIA EL MENSAJE PERO SE ABRE UNA NUEVA PESTAÑA, HACIENDO LA UX NO TAN AGRADABLE */
+            // await navigator.clipboard.writeText(texto);
+            //const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+            //window.location.href = url;
 
             if (texto) {
               await navigator.clipboard.writeText(texto);

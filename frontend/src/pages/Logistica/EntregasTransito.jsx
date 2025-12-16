@@ -106,7 +106,7 @@ export default function EntregasTransito() {
 
   return (
     <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Alertas de Entregas</h1>
+      <h1 className="text-xl font-bold mb-4">Entregas en Transito</h1>
 
       {error && <p className="text-red-500 mb-3">{error}</p>}
 

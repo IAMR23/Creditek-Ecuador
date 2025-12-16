@@ -22,6 +22,10 @@ const DetalleVenta = sequelize.define(
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
     },
+    precioVendedor: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
     dispositivoMarcaId: {
       // Cambio importante
       type: DataTypes.INTEGER,

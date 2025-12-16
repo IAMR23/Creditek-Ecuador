@@ -15,22 +15,44 @@ router.put("/entrega/:id/fotoLogistica", upload.single("foto"), fotoLogisticaRes
 
 router.get("/vendedor/:usuarioAgenciaId", getEntregasPorUsuarioAgencia);
 
-router.get("/", async (req, res) => { 
-  try {  
-    const entregas = await Entrega.findAll({
+/* OBTENER TODAS LAS ENTREGAS */
+router.get("/", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 15;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await Entrega.findAndCountAll({
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
       include: [
         { model: UsuarioAgencia, as: "usuarioAgencia" },
         { model: Cliente, as: "cliente" },
         { model: Origen, as: "origen" },
-        { model: DetalleEntrega, as: "detalleEntregas", include: ["dispositivoMarca"] },
+        {
+          model: DetalleEntrega,
+          as: "detalleEntregas",
+          include: ["dispositivoMarca"],
+        },
       ],
+      distinct: true, // 🔑 MUY IMPORTANTE con includes
     });
-    res.json(entregas);
+
+    res.json({
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        totalPages: Math.ceil(count / limit),
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ mensaje: "Error al obtener las entregas." });
   }
 });
+
 
 // Obtener una entrega por ID
 router.get("/:id", async (req, res) => {
@@ -64,7 +86,6 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Actualizar una entrega
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
   const data = req.body;

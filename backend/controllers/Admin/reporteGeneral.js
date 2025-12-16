@@ -15,10 +15,10 @@ const VentaObsequio = require("../../models/VentaObsequio");
 const Entrega = require("../../models/Entrega");
 const EntregaObsequio = require("../../models/EntregaObsequio");
 
-
 const { Op } = require("sequelize");
-const DetalleEntrega = require("../../models/DetalleEntrega");
+const { fn, col, where: whereFn } = require("sequelize");
 
+const DetalleEntrega = require("../../models/DetalleEntrega");
 
 const obtenerEntregas = async ({ fechaInicio, fechaFin }) => {
   const where = {
@@ -26,128 +26,101 @@ const obtenerEntregas = async ({ fechaInicio, fechaFin }) => {
   };
 
   if (fechaInicio && fechaFin) {
-    where.createdAt = {
-      [Op.between]: [
-        new Date(`${fechaInicio}T00:00:00`),
-        new Date(`${fechaFin}T23:59:59`),
-      ],
-    };
-  } else if (fechaInicio) {
-    where.createdAt = {
-      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
-    };
-  } else if (fechaFin) {
-    where.createdAt = {
-      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
-    };
+    where[Op.and] = [
+      whereFn(fn("DATE", col("fecha")), {
+        [Op.between]: [fechaInicio, fechaFin],
+      }),
+    ];
   }
 
-  const entregas = await Entrega.findAll({
-    where,
-    include: [
-      {
-        model: UsuarioAgencia,
-        as: "usuarioAgencia",
-        include: [
-          { model: Usuario, as: "usuario", attributes: ["nombre"] },
-          { model: Agencia, as: "agencia", attributes: ["nombre"] },
-        ],
-      },
-      { model: Cliente, as: "cliente", attributes: ["cliente", "cedula"] },
-      { model: Origen, as: "origen", attributes: ["nombre"] },
-      {
-        model: DetalleEntrega,
-        as: "detalleEntregas",
-        include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre"] },
-          {
-            model: DispositivoMarca,
-            as: "dispositivoMarca",
-            include: [
-              { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
-              { model: Marca, as: "marca", attributes: ["nombre"] },
-            ],
-          },
-          { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
-        ],
-      },
-      {
-        model: EntregaObsequio,
-        as: "obsequiosEntrega",
-        include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
-      },
-    ],
-    order: [["createdAt", "ASC"]],
-  });
+return Entrega.findAll({
+  where,
+  include: [
+    {
+      model: UsuarioAgencia,
+      as: "usuarioAgencia",
+      include: [
+        { model: Usuario, as: "usuario", attributes: ["nombre"] },
+        { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
+      ],
+    },
+    { model: Cliente, as: "cliente" },
+    {
+      model: DetalleEntrega,
+      as: "detalleEntregas",
+      include: [
+        {
+          model: DispositivoMarca,
+          as: "dispositivoMarca",
+          include: [
+            { model: Dispositivo, as: "dispositivo" },
+            { model: Marca, as: "marca" },
+          ],
+        },
+        { model: Modelo, as: "modelo" },
+        { model: FormaPago, as: "formaPago" },
+      ],
+    },
+  ],
+  order: [["fecha", "ASC"]],
+  subQuery: false,
+});
 
-  return entregas;
 };
+
 const obtenerVentas = async ({ fechaInicio, fechaFin, agenciaId }) => {
   const where = {
-    validada : true , 
+    validada: true,
   };
 
   if (fechaInicio && fechaFin) {
-    where.createdAt = {
-      [Op.between]: [
-        new Date(`${fechaInicio}T00:00:00`),
-        new Date(`${fechaFin}T23:59:59`),
-      ],
-    };
-  } else if (fechaInicio) {
-    where.createdAt = {
-      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
-    };
-  } else if (fechaFin) {
-    where.createdAt = {
-      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
-    };
+    where[Op.and] = [
+      whereFn(fn("DATE", col("fecha")), {
+        [Op.between]: [fechaInicio, fechaFin],
+      }),
+    ];
   }
 
-  // ----------- FILTRO POR AGENCIA -----------
   if (agenciaId) {
     where["$usuarioAgencia.agencia.id$"] = agenciaId;
   }
 
-  const ventas = await Venta.findAll({
-    where,
-    include: [
-      {
-        model: UsuarioAgencia,
-        as: "usuarioAgencia",
-        include: [
-          { model: Usuario, as: "usuario", attributes: ["nombre"] }, 
-          { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
-        ],
-      },
-      { model: Cliente, as: "cliente", attributes: ["cliente" , "telefono" , "cedula"] },
-      { model: Origen, as: "origen", attributes: ["nombre"] },
-      {
-        model: DetalleVenta,
-        as: "detalleVenta",
-        include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre"] },
-          {
-            model: DispositivoMarca,
-            as: "dispositivoMarca",
-            include: [
-              { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
-              { model: Marca, as: "marca", attributes: ["nombre"] },
-            ],
-          },
-          { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
-        ],
-      },
-      {
-        model: VentaObsequio,
-        as: "obsequiosVenta",
-        include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
-      },
-    ],
-    order: [["createdAt", "ASC"]], 
-  });
 
-  return ventas;
+  return Venta.findAll({
+  where,
+  include: [
+    {
+      model: UsuarioAgencia,
+      as: "usuarioAgencia",
+      include: [
+        { model: Usuario, as: "usuario", attributes: ["nombre"] },
+        { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
+      ],
+    },
+    { model: Cliente, as: "cliente" },
+    { model: Origen, as: "origen" },
+    {
+      model: DetalleVenta,
+      as: "detalleVenta",
+      include: [
+        {
+          model: DispositivoMarca,
+          as: "dispositivoMarca",
+          include: [
+            { model: Dispositivo, as: "dispositivo" },
+            { model: Marca, as: "marca" },
+          ],
+        },
+        { model: Modelo, as: "modelo" },
+        { model: FormaPago, as: "formaPago" },
+      ],
+    },
+  ],
+  order: [["fecha", "ASC"]],
+  subQuery: false,
+});
+
+
 };
 
 const normalizarFila = ({
@@ -155,14 +128,14 @@ const normalizarFila = ({
   detalle,
   tipo, // "VENTA" | "ENTREGA"
 }) => {
-  const fechaISO = item.createdAt
-    ? new Date(item.createdAt).toISOString().split("T")[0]
+  const fechaISO = item.fecha
+    ? new Date(item.fecha).toISOString().split("T")[0]
     : "";
 
   return {
     tipoRegistro: tipo, // 🔥 CLAVE
     id: item.id,
-    dia: obtenerDiaSemana(item.createdAt),
+    dia: obtenerDiaSemana(item.fecha),
     fecha: fechaISO,
 
     local: item.usuarioAgencia?.agencia?.nombre || "",
@@ -177,13 +150,14 @@ const normalizarFila = ({
 
     valor: detalle.precioUnitario || "",
     pvp: detalle.precioUnitario || "",
+    precioVendedor : detalle.precioVendedor || "",
     margen: null,
 
     cierreCaja: item.validada ?? item.estado ?? "",
     entrada: detalle.entrada || "0",
     alcance: detalle.alcance || "0",
 
-    observaciones: item.observacion || "",
+    observaciones: item.observacion || "SN",
     contrato: detalle.contrato || "",
     estado: item.estado || (item.validada ? "Validada" : ""),
   };
@@ -202,7 +176,6 @@ const obtenerDiaSemana = (fechaISO) => {
   return dias[new Date(fechaISO).getDay()];
 };
 
-
 exports.obtenerReporteGeneral = async ({
   fechaInicio,
   fechaFin,
@@ -210,13 +183,14 @@ exports.obtenerReporteGeneral = async ({
 }) => {
   const filtrosFecha = {};
 
+  const where = {};
+
   if (fechaInicio && fechaFin) {
-    filtrosFecha.createdAt = {
-      [Op.between]: [
-        new Date(`${fechaInicio}T00:00:00`),
-        new Date(`${fechaFin}T23:59:59`),
-      ],
-    };
+    where[Op.and] = [
+      whereFn(fn("DATE", col("fecha")), {
+        [Op.between]: [fechaInicio, fechaFin],
+      }),
+    ];
   }
 
   if (agenciaId) {
@@ -224,10 +198,9 @@ exports.obtenerReporteGeneral = async ({
   }
 
   const [ventas, entregas] = await Promise.all([
-    obtenerVentas(filtrosFecha),
-    obtenerEntregas(filtrosFecha),
+    obtenerVentas({ fechaInicio, fechaFin, agenciaId }),
+    obtenerEntregas({ fechaInicio, fechaFin }),
   ]);
-
   const filas = [];
 
   ventas.forEach((venta) => {
@@ -254,9 +227,7 @@ exports.obtenerReporteGeneral = async ({
     });
   });
 
-  filas.sort(
-    (a, b) => new Date(a.fecha) - new Date(b.fecha)
-  );
+  filas.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
   return filas;
 };

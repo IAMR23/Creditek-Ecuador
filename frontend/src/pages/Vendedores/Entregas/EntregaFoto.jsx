@@ -141,7 +141,7 @@ export default function EntregaFoto() {
       console.log("Error al obtener detalle:", error);
     }
 
-    return ""; // seguridad
+    return ""; 
   };
 
   return (
@@ -149,7 +149,7 @@ export default function EntregaFoto() {
       {/* HEADER */}
       <div className="p-4 mb-6 bg-orange-50 border border-orange-200 rounded-lg">
         <h1 className="text-2xl font-bold text-orange-600">
-          Pre Aprobacion de la Entrega
+          Verificacion de la Entrega
         </h1>
 
         {cliente && (

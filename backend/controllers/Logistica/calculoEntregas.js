@@ -1,9 +1,35 @@
 exports.calcularEstadoEntrega = (fechaHoraLlamada) => {
-  // Si viene como string (por seguridad), lo convertimos
-  const fechaLlamada =
-    fechaHoraLlamada instanceof Date
-      ? fechaHoraLlamada
-      : new Date(fechaHoraLlamada);
+  // 🚨 Si no hay fecha, no se puede calcular
+  if (!fechaHoraLlamada) {
+    return {
+      fechaLlamada: null,
+      fechaLimite: null,
+      horasRestantes: null,
+      minutosRestantes: null,
+      estado: "Sin llamada",
+    };
+  }
+
+  let fechaLlamada;
+
+  if (fechaHoraLlamada instanceof Date) {
+    fechaLlamada = fechaHoraLlamada;
+  } else if (typeof fechaHoraLlamada === "string") {
+    // Acepta "YYYY-MM-DD HH:mm" o "YYYY-MM-DDTHH:mm"
+    const normalizada = fechaHoraLlamada.replace("T", " ");
+    const [fecha, hora] = normalizada.split(" ");
+
+    if (!fecha || !hora) {
+      throw new Error(`Formato inválido: ${fechaHoraLlamada}`);
+    }
+
+    const [year, month, day] = fecha.split("-").map(Number);
+    const [hour, minute] = hora.split(":").map(Number);
+
+    fechaLlamada = new Date(year, month - 1, day, hour, minute);
+  } else {
+    throw new Error("Formato de FechaHoraLlamada no soportado");
+  }
 
   const fechaLimite = new Date(fechaLlamada);
   fechaLimite.setHours(fechaLimite.getHours() + 72);
@@ -11,16 +37,13 @@ exports.calcularEstadoEntrega = (fechaHoraLlamada) => {
   const ahora = new Date();
 
   const diffMs = fechaLimite - ahora;
-
   const totalMinutos = Math.floor(diffMs / (1000 * 60));
-  const horas = Math.floor(Math.max(totalMinutos, 0) / 60);
-  const minutos = Math.max(totalMinutos, 0) % 60;
+  const minutosSeguros = Math.max(totalMinutos, 0);
 
   let estado;
-
-  if (totalMinutos <= 0) {
+  if (minutosSeguros <= 0) {
     estado = "Perdida";
-  } else if (totalMinutos <= 12 * 60) {
+  } else if (minutosSeguros <= 12 * 60) {
     estado = "Urgente";
   } else {
     estado = "Pendiente";
@@ -29,8 +52,8 @@ exports.calcularEstadoEntrega = (fechaHoraLlamada) => {
   return {
     fechaLlamada,
     fechaLimite,
-    horasRestantes: horas,
-    minutosRestantes: minutos,
+    horasRestantes: Math.floor(minutosSeguros / 60),
+    minutosRestantes: minutosSeguros % 60,
     estado,
   };
 };

@@ -36,7 +36,6 @@ export default function EntregasPendientes() {
     try {
       const { data } = await axios.get(`${API_URL}/alertas/entregas-pendientes`);
       setFilas(data || []);
-      console.log(data)
     } catch (err) {
       console.error(err);
       setError("Error al cargar las alertas");
@@ -107,7 +106,7 @@ export default function EntregasPendientes() {
 
   return (
     <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Alertas de Entregas</h1>
+      <h1 className="text-xl font-bold mb-4">Alerta Entregas Pendientes</h1>
 
       {error && <p className="text-red-500 mb-3">{error}</p>}
 
@@ -118,11 +117,15 @@ export default function EntregasPendientes() {
           <thead className="bg-gray-200">
             <tr>
               <th className="p-2 border">Caso #</th>
-              <th className="p-2 border">Estado</th>
+              <th className="p-2 border">Cliente</th>
+              <th className="p-2 border">Telefono</th>
+                            <th className="p-2 border">Fecha llamada</th>
+
               <th className="p-2 border">Horas restantes</th>
               <th className="p-2 border">Minutos restantes</th>
-              <th className="p-2 border">Fecha llamada</th>
               <th className="p-2 border">Fecha límite</th>
+                            <th className="p-2 border">Estado</th>
+
               <th className="p-2 border">Observación</th>
               <th className="p-2 border">Acciones</th>
             </tr>
@@ -139,8 +142,25 @@ export default function EntregasPendientes() {
               filas.map((f) => (
                 <tr key={f.id}>
                   <td className="p-2 border">{f.id}</td>
+                  <td className="p-2 border">{f.cliente.nombre}</td>
+                  <td className="p-2 border">{f.cliente.telefono}</td>
 
+                  
                   <td className="p-2 border">
+                    {formatFecha(f.FechaHoraLlamada)}
+                  </td>
+
+
+                
+
+                  
+
+                  <td className="p-2 border">{f.horasRestantes ?? 0}</td>
+                  <td className="p-2 border">{f.minutosRestantes ?? 0}</td>
+
+                  <td className="p-2 border">{formatFecha(f.fechaLimite)}</td>
+
+  <td className="p-2 border">
                     <span
                       className={`px-2 py-1 rounded font-semibold ${estadoColor(
                         f.estado
@@ -149,15 +169,6 @@ export default function EntregasPendientes() {
                       {f.estado}
                     </span>
                   </td>
-
-                  <td className="p-2 border">{f.horasRestantes ?? 0}</td>
-                  <td className="p-2 border">{f.minutosRestantes ?? 0}</td>
-
-                  <td className="p-2 border">
-                    {formatFecha(f.FechaHoraLlamada)}
-                  </td>
-
-                  <td className="p-2 border">{formatFecha(f.fechaLimite)}</td>
 
                   <td className="p-2 border">{f.observacion?.trim() || "-"}</td>
 

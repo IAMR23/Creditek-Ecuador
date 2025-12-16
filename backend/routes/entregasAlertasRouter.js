@@ -4,18 +4,26 @@ const { Op } = require("sequelize");
 const {
   calcularEstadoEntrega,
 } = require("../controllers/Logistica/calculoEntregas");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
+const Cliente = require("../models/Cliente");
 
 const router = express.Router();
 router.get("/entregas-pendientes", async (req, res) => {
   try {
     const entregas = await Entrega.findAll({
       where: {
-        estado: 'Pendiente',
-    //    FechaHoraLlamada: { [Op.ne]: null },
+        estado: "Pendiente",
+        //    FechaHoraLlamada: { [Op.ne]: null },
       },
       attributes: ["id", "FechaHoraLlamada", "observacion"],
+      include: [
+        {
+          model: Cliente,
+          as: "cliente",
+          attributes: ["id", "cliente", "telefono"],
+        },
+      ],
     });
-         // console.log("entregas", entregas);
 
     const alertas = entregas.map((entrega) => {
       const calculo = calcularEstadoEntrega(entrega.FechaHoraLlamada);
@@ -27,6 +35,11 @@ router.get("/entregas-pendientes", async (req, res) => {
         FechaHoraLlamada: entrega.FechaHoraLlamada,
         fechaLimite: calculo.fechaLimite,
         observacion: entrega.observacion,
+        cliente: {
+          nombre: entrega.cliente?.cliente,
+          telefono: entrega.cliente?.telefono,
+          cedula: entrega.cliente?.cedula,
+        },
       };
     });
 

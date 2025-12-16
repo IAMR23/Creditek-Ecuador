@@ -31,8 +31,8 @@ router.get("/entrega/:entregaId", async (req, res) => {
               as: "dispositivo",
               attributes: ["id", "nombre"]
             },
-            {
-              model: Marca,              // <-- AQUI
+            {  
+              model: Marca,              
               as: "marca",
               attributes: ["id", "nombre"]
             }

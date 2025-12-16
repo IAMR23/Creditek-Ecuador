@@ -72,7 +72,7 @@ export default function EntregaObsequioPage() {
   const handlePreAprobarEntrega = async () => {
     const { isConfirmed } = await Swal.fire({
       icon: "question",
-      title: "Pre aprobar entrega",
+      title: "Finalizar entrega",
       showCancelButton: true,
       confirmButtonText: "Sí",
       cancelButtonText: "Cancelar",
@@ -214,7 +214,7 @@ export default function EntregaObsequioPage() {
             onClick={handlePreAprobarEntrega}
             className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded"
           >
-            Pre Aprobar
+            Finalizar Entrega
           </button>
         </div>
       </div>

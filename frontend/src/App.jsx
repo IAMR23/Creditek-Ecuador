@@ -45,7 +45,6 @@ import EstadoEntrega from "./pages/Admin/EstadoEntrega";
 import MisVentas from "./pages/Vendedores/Ventas/MisVentas";
 import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
 
-
 import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
 import MetasComercialesGraficas from "./pages/Admin/MetasComercialesGraficas";
@@ -53,6 +52,10 @@ import VentasCompletas from "./pages/Admin/VentasCompletas";
 import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
 import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
 import EntregasTransito from "./pages/Logistica/EntregasTransito";
+import EntregasAuditoria from "./pages/Auditoria/EntregaSAuditoria";
+import EntregaAuditoria from "./pages/Auditoria/EntregaAuditoria";
+import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
+import VentaAuditoria from "./pages/Auditoria/VentaAuditoria";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -141,7 +144,10 @@ function App() {
               <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
               <Route path="ventas" element={<VentasPage />} />
               <Route path="entregas" element={<Entregas />} />
-              <Route path="entrega-logistica/:id" element={<DetalleEntrega />} />
+              <Route
+                path="entrega-logistica/:id"
+                element={<DetalleEntrega />}
+              />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="rol" element={<AdminUsuariosRoles />} />
               <Route path="dispositivos" element={<Dispositivos />} />
@@ -156,19 +162,35 @@ function App() {
               <Route path="origen" element={<OrigenAdmin />} />
               <Route path="obsequios" element={<AdminObsequios />} />
               <Route path="metas-comerciales" element={<MetasComerciales />} />
-              <Route path="metas-comerciales-graficas" element={<MetasComercialesGraficas />} />
-              <Route path="entregas-pendientes" element={<EntregasPendientes />} />
+              <Route
+                path="metas-comerciales-graficas"
+                element={<MetasComercialesGraficas />}
+              />
+              <Route
+                path="entregas-pendientes"
+                element={<EntregasPendientes />}
+              />
               <Route path="entregas-transito" element={<EntregasTransito />} />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />
-{/*               <Route path="copa-creditek" element={<MarketingVentasAgencia/>}/>
- */}            </Route>
+              {/*               <Route path="copa-creditek" element={<MarketingVentasAgencia/>}/>
+               */}
+              {/* AUDITORIAS */}
+              <Route
+                path="entregas-auditoria"
+                element={<EntregasAuditoria />}
+              />
+              <Route
+                path="entregas-auditoria/:id"
+                element={<EntregaAuditoria />}
+              />
+              <Route path="ventas-auditoria" element={<VentasAuditoria />} />
+              <Route path="ventas-auditoria/:id" element={<VentaAuditoria />} />
+
+            </Route>
 
             {/* REPARTIDORES */}
-            <Route
-              path="/logistica-panel"
-              element={<LogisticaPanel />}
-            />
+            <Route path="/logistica-panel" element={<LogisticaPanel />} />
             <Route path="/vendedor-panel" element={<VendedorPanel />} />
 
             <Route path="/mis-ventas" element={<MisVentas />} />
@@ -191,13 +213,22 @@ function App() {
               element={<FormularioClienteEntrega />}
             />
             <Route path="/crear-entrega" element={<CrearEntrega />} />
-            <Route path="/entregas/:id/detalles" element={<DetalleEntregaVendedores />} />
+            <Route
+              path="/entregas/:id/detalles"
+              element={<DetalleEntregaVendedores />}
+            />
             <Route
               path="/entregas/:id/obsequios"
               element={<EntregaObsequioPage />}
             />
-            <Route path="/entregas/:id/pre-aprobacion" element={<EntregaFoto />} />
-            <Route path="/entregas/:id/fecha-llamada" element={<FotoFechaHoraEntrega />} />
+            <Route
+              path="/entregas/:id/pre-aprobacion"
+              element={<EntregaFoto />}
+            />
+            <Route
+              path="/entregas/:id/fecha-llamada"
+              element={<FotoFechaHoraEntrega />}
+            />
             <Route path="/mis-entregas" element={<MisEntregas />} />
           </Routes>
         </main>

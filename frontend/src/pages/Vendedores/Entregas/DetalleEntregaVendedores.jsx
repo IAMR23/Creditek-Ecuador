@@ -22,6 +22,8 @@ export default function DetalleEntregaVendedores() {
     entregaId: entregaId,
     cantidad: "1",
     precioUnitario: "0",
+        precioVendedor: "0", // 👁 visible
+
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
@@ -30,6 +32,7 @@ export default function DetalleEntregaVendedores() {
     alcance: "0",
     ubicacion: "",
     ubicacionDispositivo: "",
+    observacionDetalle: "",
   });
 
   useEffect(() => {
@@ -126,7 +129,7 @@ export default function DetalleEntregaVendedores() {
       setForm((prev) => ({ ...prev, [name]: value }));
     }
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -145,11 +148,13 @@ export default function DetalleEntregaVendedores() {
         entregaId: entregaId,
         cantidad: parseFloat(form.cantidad) || 0,
         precioUnitario: parseFloat(form.precioUnitario) || 0,
+        precioVendedor: parseFloat(form.precioVendedor) || 0,
         entrada: parseFloat(form.entrada) || 0,
         alcance: parseFloat(form.alcance) || 0,
         subtotal:
           (parseFloat(form.cantidad) || 0) *
-          (parseFloat(form.precioUnitario) || 0),
+          (parseFloat(form.precioVendedor) || 0),
+        observacionDetalle: form.observacionDetalle || null,
       };
 
       await axios.post(`${API_URL}/detalle-entrega`, detalleData);
@@ -160,6 +165,7 @@ export default function DetalleEntregaVendedores() {
         entregaId: entregaId,
         cantidad: "1",
         precioUnitario: "0",
+        precioVendedor: "0", 
         dispositivoMarcaId: "",
         modeloId: "",
         contrato: "",
@@ -168,6 +174,7 @@ export default function DetalleEntregaVendedores() {
         alcance: "0",
         ubicacion: "",
         ubicacionDispositivo: "",
+        observacionDetalle: "",
       });
       setModelos([]);
     } catch (err) {
@@ -200,7 +207,6 @@ export default function DetalleEntregaVendedores() {
 
     if (isConfirmed) {
       try {
-
         navigate(`/entregas/${entregaId}/fecha-llamada`, {
           state: { cliente: cliente },
         });
@@ -232,7 +238,7 @@ export default function DetalleEntregaVendedores() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-orange-600">
-              Información de la Entrega
+              Información de la Entrega Productos
             </h1>
             {cliente && (
               <p className="text-gray-700 mt-1">
@@ -285,7 +291,6 @@ export default function DetalleEntregaVendedores() {
                 </select>
               </div>
 
-              {/* Modelo */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Modelo *
@@ -307,7 +312,6 @@ export default function DetalleEntregaVendedores() {
                 </select>
               </div>
 
-              {/* Contrato */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Contrato
@@ -334,6 +338,20 @@ export default function DetalleEntregaVendedores() {
                   value={form.ubicacion}
                   onChange={handleChange}
                   className="w-full p-2 border border-orange-500 rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observación
+                </label>
+                <textarea
+                  name="observacionDetalle"
+                  placeholder="El cliente va a cancelar la entrada en dos pagos bajo mi responsabilidad..."
+                  value={form.observacionDetalle}
+                  onChange={handleChange}
+                  rows={3}
+                  className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
             </div>
@@ -377,7 +395,7 @@ export default function DetalleEntregaVendedores() {
                   />
                 </div>
 
-                <div>
+{/*                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Precio Unitario
                   </label>
@@ -387,6 +405,22 @@ export default function DetalleEntregaVendedores() {
                     value={form.precioUnitario}
                     readOnly
                     className="w-full p-2 border border-orange-500 bg-gray-50 rounded"
+                  />
+                </div> */}
+
+                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Precio *
+                  </label>
+                  <input
+                    type="number"
+                    name="precioVendedor"
+                    placeholder="Ingrese el precio del vendedor"
+                    value={form.precioVendedor}
+                    onChange={handleChange}
+                    step="0.01"
+                    required
+                    className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500"
                   />
                 </div>
               </div>
@@ -488,7 +522,7 @@ export default function DetalleEntregaVendedores() {
                     </td>
                     <td className="p-3 border">{d.cantidad}</td>
                     <td className="p-3 border font-semibold">
-                      ${(d.cantidad * parseFloat(d.precioUnitario)).toFixed(2)}
+                      ${(d.cantidad * parseFloat(d.precioVendedor)).toFixed(2)}
                     </td>
                     <td className="p-3 border">
                       {formasPago.find((fp) => fp.id === d.formaPagoId)
@@ -518,7 +552,7 @@ export default function DetalleEntregaVendedores() {
                     {detalles
                       .reduce(
                         (total, d) =>
-                          total + d.cantidad * parseFloat(d.precioUnitario),
+                          total + d.cantidad * parseFloat(d.precioVendedor),
                         0
                       )
                       .toFixed(2)}

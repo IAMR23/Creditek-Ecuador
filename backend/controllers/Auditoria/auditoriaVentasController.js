@@ -17,11 +17,9 @@ const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
-
-exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
+exports.obtenerReporte = async ({  fechaInicio, fechaFin }) => {
   const where = {};
 
-  // Filtrado por fechas
   if (fechaInicio && fechaFin) {
     where.createdAt = {
       [Op.between]: [
@@ -39,16 +37,12 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
     };
   }
 
-  // Filtrado por id del vendedor
-  const usuarioAgenciaWhere = id ? { usuarioId: id } : {};
-
   const ventas = await Venta.findAll({
     where,
     include: [
       {
         model: UsuarioAgencia,
         as: "usuarioAgencia",
-        where: usuarioAgenciaWhere,
         include: [
           { model: Usuario, as: "usuario", attributes: ["nombre"] },
           { model: Agencia, as: "agencia", attributes: ["nombre"] },
@@ -72,7 +66,7 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
           { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
         ],
       },
-          {
+      {
         model: VentaObsequio,
         as: "obsequiosVenta",
         include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
@@ -95,7 +89,7 @@ const obtenerDiaSemana = (fechaISO) => {
   ];
   return dias[new Date(fechaISO).getDay()];
 };
-  
+
 exports.formatearReporte = (ventas) => {
   const filas = [];
 
@@ -136,7 +130,7 @@ exports.formatearReporte = (ventas) => {
 
         observaciones: entrega.observacion || "",
         contrato: detalle.contrato || "",
-        validada : entrega.validada || "",
+        validada: entrega.validada || "",
       });
     });
   });
@@ -152,7 +146,8 @@ exports.actualizarVentaCompleta = async (req, res) => {
     await sequelize.transaction(async (t) => {
       // 1️⃣ Actualizar datos principales de la venta
       const venta = await Venta.findByPk(id, { transaction: t });
-      if (!venta) return res.status(404).json({ ok: false, msg: "Venta no encontrada" });
+      if (!venta)
+        return res.status(404).json({ ok: false, msg: "Venta no encontrada" });
 
       await venta.update(datosVenta, { transaction: t });
 
@@ -161,10 +156,16 @@ exports.actualizarVentaCompleta = async (req, res) => {
         for (const detalle of datosVenta.detalleVentas) {
           if (detalle.id) {
             // actualizar si ya existe
-            await DetalleVenta.update(detalle, { where: { id: detalle.id }, transaction: t });
+            await DetalleVenta.update(detalle, {
+              where: { id: detalle.id },
+              transaction: t,
+            });
           } else {
             // crear si no existe
-            await DetalleVenta.create({ ...detalle, entregaId: id }, { transaction: t });
+            await DetalleVenta.create(
+              { ...detalle, entregaId: id },
+              { transaction: t }
+            );
           }
         }
       }
@@ -173,9 +174,15 @@ exports.actualizarVentaCompleta = async (req, res) => {
       if (datosVenta.obsequiosVenta && datosVenta.obsequiosVenta.length > 0) {
         for (const obsequio of datosVenta.obsequiosVenta) {
           if (obsequio.id) {
-            await VentaObsequio.update(obsequio, { where: { id: obsequio.id }, transaction: t });
+            await VentaObsequio.update(obsequio, {
+              where: { id: obsequio.id },
+              transaction: t,
+            });
           } else {
-            await VentaObsequio.create({ ...obsequio, entregaId: id }, { transaction: t });
+            await VentaObsequio.create(
+              { ...obsequio, entregaId: id },
+              { transaction: t }
+            );
           }
         }
       }
@@ -184,7 +191,9 @@ exports.actualizarVentaCompleta = async (req, res) => {
     res.json({ ok: true, msg: "Venta actualizada correctamente" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ ok: false, msg: "Error al actualizar la venta", error });
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error al actualizar la venta", error });
   }
 };
 
@@ -201,8 +210,12 @@ exports.obtenerVentaPorId = async (req, res) => {
             { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
           ],
         },
-        { model: Cliente, as: "cliente", attributes: ["id", "cliente", "cedula", "telefono"] },
-        { model: Origen, as: "origen", attributes: ["id", "nombre" ] },
+        {
+          model: Cliente,
+          as: "cliente",
+          attributes: ["id", "cliente", "cedula", "telefono"],
+        },
+        { model: Origen, as: "origen", attributes: ["id", "nombre"] },
         {
           model: DetalleVenta,
           as: "detalleVenta",
@@ -212,7 +225,11 @@ exports.obtenerVentaPorId = async (req, res) => {
               model: DispositivoMarca,
               as: "dispositivoMarca",
               include: [
-                { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+                {
+                  model: Dispositivo,
+                  as: "dispositivo",
+                  attributes: ["id", "nombre"],
+                },
                 { model: Marca, as: "marca", attributes: ["id", "nombre"] },
               ],
             },
@@ -222,7 +239,9 @@ exports.obtenerVentaPorId = async (req, res) => {
         {
           model: VentaObsequio,
           as: "obsequiosVenta",
-          include: [{ model: Obsequio, as: "obsequio", attributes: ["id", "nombre"] }],
+          include: [
+            { model: Obsequio, as: "obsequio", attributes: ["id", "nombre"] },
+          ],
         },
       ],
     });
@@ -243,8 +262,6 @@ exports.obtenerVentaPorId = async (req, res) => {
       alcance: venta.alcance,
       pvp: venta.pvp,
       observacion: venta.observacion,
-      validada : venta.validada, 
-      fotoValidacion: venta.fotoValidacion,
       usuarioAgencia: {
         id: venta.usuarioAgencia?.id,
         usuario: {
@@ -273,7 +290,3 @@ exports.obtenerVentaPorId = async (req, res) => {
     return res.status(500).json({ ok: false, error: error.message });
   }
 };
-
-
-
- 

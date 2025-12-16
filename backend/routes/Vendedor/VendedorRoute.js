@@ -38,7 +38,7 @@ router.get("/entrega/:id", async (req, res) => {
 });
 
   
-/* OBTENER UNA VENTA ESPECIFICA */
+/* OBTENER UNA Entrega ESPECIFICA */
 router.get("/entrega-logistica/:id", entregaVendedorController.obtenerEntregaPorId);
 
 

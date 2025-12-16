@@ -36,33 +36,75 @@ export default function Sidebar() {
     comercial: {
       title: "Gerencia",
       items: [
-        { label: "Metas Comerciales", icon: <BarChart3 size={20} />, path: "/metas-comerciales" },
-/*         { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "/metas-comerciales-graficas" },
- */        { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
-/*         { label: "Ventas Completas", icon: <BarChart3 size={20} />, path: "/ventas-completas" },
- */      ],
+        {
+          label: "Metas Comerciales",
+          icon: <BarChart3 size={20} />,
+          path: "/metas-comerciales",
+        },
+        /*         { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "/metas-comerciales-graficas" },
+         */ {
+          label: "Reporte Entregas",
+          icon: <BarChart3 size={20} />,
+          path: "/reporte-entregas",
+        },
+        /*         { label: "Ventas Completas", icon: <BarChart3 size={20} />, path: "/ventas-completas" },
+         */
+      ],
     },
-        Marketing: {
+    Marketing: {
       title: "Marketing",
       items: [
-        { label: "Copa Creditek", icon: <BarChart3 size={20} />, path: "/copa-creditek" },
-       
+        {
+          label: "Copa Creditek",
+          icon: <BarChart3 size={20} />,
+          path: "/copa-creditek",
+        },
       ],
     },
     logistica: {
       title: "Logística",
       items: [
-        { label: "Entregas Pendientes", icon: <PackageCheck size={20} />, path: "/entregas-pendientes" },
-        { label: "Entregas en Transito", icon: <PackageCheck size={20} />, path: "/entregas-transito" },
+        {
+          label: "Entregas Pendientes",
+          icon: <PackageCheck size={20} />,
+          path: "/entregas-pendientes",
+        },
+        {
+          label: "Entregas en Transito",
+          icon: <PackageCheck size={20} />,
+          path: "/entregas-transito",
+        },
       ],
     },
+
+    Auditoria: {
+      title: "Auditoria",
+      items: [
+        {
+          label: "Entregas Auditoria",
+          icon: <PackageCheck size={20} />,
+          path: "/entregas-auditoria",
+        },
+         {
+          label: "Ventas Auditoria",
+          icon: <PackageCheck size={20} />,
+          path: "/ventas-auditoria",
+        },
+
+      ],
+    },
+
     admin: {
       title: "Administración",
       items: [
         { label: "Usuarios", icon: <Users size={20} />, path: "/usuarios" },
         { label: "Roles", icon: <Users size={20} />, path: "/rol" },
         { label: "Agencias", icon: <Building2 size={20} />, path: "/agencias" },
-        { label: "Asignar usuarios a agencias", icon: <UserPlus size={20} />, path: "/usuarios-agencias" },
+        {
+          label: "Asignar usuarios a agencias",
+          icon: <UserPlus size={20} />,
+          path: "/usuarios-agencias",
+        },
       ],
     },
     catalogos: {
@@ -70,12 +112,28 @@ export default function Sidebar() {
       items: [
         { label: "Marcas", icon: <Tag size={20} />, path: "/marcas" },
         { label: "Modelos", icon: <Layers size={20} />, path: "/modelos" },
-        { label: "Dispositivos", icon: <Factory size={20} />, path: "/dispositivos" },
-        { label: "Dispositivos-Marcas", icon: <Boxes size={20} />, path: "/dispositivosMarcas" },
-        { label: "Formas de Pago", icon: <CreditCard size={20} />, path: "/formas-pago" },
+        {
+          label: "Dispositivos",
+          icon: <Factory size={20} />,
+          path: "/dispositivos",
+        },
+        {
+          label: "Dispositivos-Marcas",
+          icon: <Boxes size={20} />,
+          path: "/dispositivosMarcas",
+        },
+        {
+          label: "Formas de Pago",
+          icon: <CreditCard size={20} />,
+          path: "/formas-pago",
+        },
         { label: "Origen", icon: <Tag size={20} />, path: "/origen" },
         { label: "Obsequios", icon: <Gift size={20} />, path: "/obsequios" },
-        { label: "Costo Histórico", icon: <ClipboardList size={20} />, path: "/costoHistorico" },
+        {
+          label: "Costo Histórico",
+          icon: <ClipboardList size={20} />,
+          path: "/costoHistorico",
+        },
       ],
     },
   };
@@ -96,7 +154,9 @@ export default function Sidebar() {
             <span className="font-semibold">{section.title}</span>
             <ChevronDown
               size={18}
-              className={`transition-transform ${open[key] ? "rotate-180" : ""}`}
+              className={`transition-transform ${
+                open[key] ? "rotate-180" : ""
+              }`}
             />
           </button>
 
@@ -114,7 +174,11 @@ export default function Sidebar() {
                     <Link
                       to={item.path}
                       className={`flex items-center gap-3 p-3 rounded-lg transition
-                        ${active ? "bg-green-600 text-black" : "hover:bg-neutral-800"}
+                        ${
+                          active
+                            ? "bg-green-600 text-black"
+                            : "hover:bg-neutral-800"
+                        }
                       `}
                     >
                       {item.icon}

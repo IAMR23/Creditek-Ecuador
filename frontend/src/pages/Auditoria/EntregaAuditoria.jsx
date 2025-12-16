@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../config";
 import Swal from "sweetalert2";
 
-export default function DetalleEntrega() {
+export default function EntregaAuditoria() {
   const { id } = useParams();
   const [form, setForm] = useState(null);
   const [observacionesLogistica, setObservacionesLogistica] = useState("");
@@ -44,7 +44,7 @@ export default function DetalleEntrega() {
         showConfirmButton: false,
       });
 
-      navigate("/entregas-pendientes");
+      navigate("/entregas-auditoria");
     } catch (error) {
       console.error(error);
       Swal.fire({
@@ -304,29 +304,20 @@ export default function DetalleEntrega() {
         {/* Botones */}
         <div className="grid md:grid-cols-3 gap-4 mt-6">
 
-                    <button
+ <button
             type="button"
-            onClick={() => actualizarEstado("Entregado")}
-            className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl"
+            onClick={() => actualizarEstado("Pendiente")}
+            className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 rounded-xl"
           >
-            Entregado
-          </button>
-
-
-          <button
-            type="button"
-            onClick={() => actualizarEstado("Transito")}
-            className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-xl"
-          >
-            En tránsito
+            Pendiente
           </button>
 
           <button
             type="button"
-            onClick={() => actualizarEstado("Revisar")}
+            onClick={() => actualizarEstado("Eliminado")}
             className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl"
           >
-            Regresar al Vendedor
+            Eliminar
           </button>
         </div>
       </form>

@@ -89,6 +89,7 @@ connectDB()
     app.use("/entrega-obsequios", require("./routes/entregaObsequioRoutes"));
     app.use("/estado-entrega", require("./routes/estadoEntregaRoutes"));
     app.use("/alertas" , require("./routes/entregasAlertasRouter"))
+    app.use("/auditoria" , require("./routes/Auditoria/auditoriaRoutes"))
 
     console.log(
       "Carpeta uploads que Express está usando:",

@@ -19,9 +19,10 @@ export default function DetalleVenta() {
   const [loading, setLoading] = useState(true);
 
   const [form, setForm] = useState({
-    ventaId: ventaId,
+    ventaId,
     cantidad: "1",
-    precioUnitario: "0",
+    precioUnitario: "0", // 🔒 oculto
+    precioVendedor: "0", // 👁 visible
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
@@ -130,60 +131,33 @@ export default function DetalleVenta() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.modeloId || !form.formaPagoId) {
-      Swal.fire({
-        icon: "warning",
-        title: "Campos incompletos",
-        text: "Por favor, selecciona modelo y forma de pago",
-      });
-      return;
-    }
+    const detalleData = {
+      ...form,
+      ventaId,
+      cantidad: parseInt(form.cantidad),
+      precioUnitario: parseFloat(form.precioUnitario), // oculto
+      precioVendedor: parseFloat(form.precioVendedor), // manual
+      entrada: parseFloat(form.entrada || 0),
+      alcance: parseFloat(form.alcance || 0),
+      subtotal: parseInt(form.cantidad) * parseFloat(form.precioVendedor),
+      observacionDetalle: form.observacionDetalle || null,
+    };
 
-    try {
-      const cantidadNum = parseFloat(form.cantidad) || 0;
-      const precioNum = parseFloat(form.precioUnitario) || 0;
-      const entradaNum = parseFloat(form.entrada) || 0;
-      const alcanceNum = parseFloat(form.alcance) || 0;
+    await axios.post(`${API_URL}/detalle-venta`, detalleData);
 
-      const detalleData = {
-        ...form,
-        ventaId: ventaId,
-        cantidad: cantidadNum,
-        precioUnitario: precioNum,
-        entrada: entradaNum,
-        alcance: alcanceNum,
-        subtotal: cantidadNum * precioNum,
-        observacionDetalle: form.observacionDetalle || null,
-      };
+    await fetchDetalles();
 
-      await axios.post(`${API_URL}/detalle-venta`, detalleData);
-
-      await fetchDetalles();
-
-      setForm({
-        ventaId: ventaId,
-        cantidad: "1",
-        precioUnitario: "0",
-        dispositivoMarcaId: "",
-        modeloId: "",
-        contrato: "",
-        formaPagoId: "",
-        entrada: "0",
-        alcance: "0",
-        observacionDetalle: "",
-      });
-
-      setModelos([]);
-    } catch (err) {
-      console.error("Error al crear detalle:", err);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text:
-          "Error al crear el detalle: " +
-          (err.response?.data?.message || err.message),
-      });
-    }
+    // ✅ LIMPIA FORMULARIO (opcional)
+    setForm((prev) => ({
+      ...prev,
+      modeloId: "",
+      contrato: "",
+      formaPagoId: "",
+      entrada: "0",
+      alcance: "0",
+      observacionDetalle: "",
+      precioVendedor: "0",
+    }));
   };
 
   const handleFinalizarVenta = async () => {
@@ -240,7 +214,6 @@ export default function DetalleVenta() {
 
   return (
     <div className="p-6">
-      {/* Información de la venta */}
       <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
         <div className="flex justify-between items-center">
           <div>
@@ -386,7 +359,7 @@ export default function DetalleVenta() {
                   />
                 </div>
 
-                <div>
+{/*                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Precio Unitario
                   </label>
@@ -397,6 +370,22 @@ export default function DetalleVenta() {
                     value={form.precioUnitario}
                     readOnly
                     className="w-full p-2 border border-green-500 rounded bg-gray-50"
+                  />
+                </div>
+ */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Precio *
+                  </label>
+                  <input
+                    type="number"
+                    name="precioVendedor"
+                    placeholder="Ingrese el precio del vendedor"
+                    value={form.precioVendedor}
+                    onChange={handleChange}
+                    step="0.01"
+                    required
+                    className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500"
                   />
                 </div>
               </div>
@@ -486,7 +475,9 @@ export default function DetalleVenta() {
                     <td className="p-3 border">{d.cantidad}</td>
                     <td className="p-3 border font-semibold">
                       $
-                      {(d.cantidad * parseFloat(d.precioUnitario || 0)).toFixed(2)}
+                      {(d.cantidad * parseFloat(d.precioVendedor || 0)).toFixed(
+                        2
+                      )}
                     </td>
                     <td className="p-3 border">
                       {formasPago.find((fp) => fp.id === d.formaPagoId)
@@ -513,7 +504,8 @@ export default function DetalleVenta() {
                     {detalles
                       .reduce(
                         (total, d) =>
-                          total + (d.cantidad || 0) * parseFloat(d.precioUnitario || 0),
+                          total +
+                          (d.cantidad || 0) * parseFloat(d.precioVendedor || 0),
                         0
                       )
                       .toFixed(2)}

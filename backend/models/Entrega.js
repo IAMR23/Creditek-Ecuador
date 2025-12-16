@@ -44,14 +44,14 @@ const Entrega = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
-    fotoFechaLlamada: {  
+    fotoFechaLlamada: {
       type: DataTypes.STRING,
       allowNull: true,
     },
     FechaHoraLlamada: {
-      type: DataTypes.DATE,
+      type: DataTypes.STRING,
       allowNull: true,
-    },  
+    },
     fotoLogistica: {
       type: DataTypes.STRING,
       allowNull: true,
