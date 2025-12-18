@@ -104,7 +104,7 @@ exports.getVentasCompletas = async ({
     // ------------------- VENTAS DESDE VENTAS -------------------
     const ventasDesdeVentas = await Venta.findAll({
       where: {
-        validada: true,
+        activo: true,
         fecha: { [Op.between]: [fechaInicio, fechaFin] },
       },
       include: [

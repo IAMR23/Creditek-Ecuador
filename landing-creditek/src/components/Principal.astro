@@ -1,0 +1,54 @@
+---
+const frases = ["Sonreir", "Crear", "Capacítate", "Disfruta"];
+---
+
+<span id="hi" class="text-5xl font-bold"></span>
+<style>
+  #hi {
+    display: block;
+    font-family: monospace; 
+    white-space: nowrap;
+    border-right: 4px solid;
+    animation: blink 0.5s infinite step-end alternate;
+    overflow: hidden;
+  }
+  @keyframes blink {
+    50% {
+      border-color: transparent;
+    }
+  }
+</style>
+<script define:vars={{ frases }}>
+  let index = 0;
+  const span = document.getElementById("hi");
+  function escribirTexto(frase, callback) {
+    let i = 0;
+    span.textContent = "";
+    let escribir = setInterval(() => {
+      span.textContent += frase[i];
+      i++;
+      if (i === frase.length) {
+        clearInterval(escribir);
+        setTimeout(() => borrarTexto(frase, callback), 1000);
+      }
+    }, 150);
+  }
+  function borrarTexto(frase, callback) {
+    let i = frase.length;
+    let borrar = setInterval(() => {
+      span.textContent = frase.substring(0, i);
+      i--;
+      if (i < 0) {
+        clearInterval(borrar);
+        setTimeout(callback, 500);
+      }
+    }, 100);
+  }
+  function cambiarFrase() {
+    escribirTexto(frases[index], () => {
+      index = (index + 1) % frases.length;
+      cambiarFrase();
+    });
+  }
+  document.addEventListener("DOMContentLoaded", cambiarFrase);
+</script>

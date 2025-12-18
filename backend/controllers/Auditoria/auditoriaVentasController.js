@@ -10,56 +10,89 @@ const Origen = require("../../models/Origen");
 const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
-const EntregaObsequio = require("../../models/EntregaObsequio");
 
 const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
-exports.obtenerReporte = async ({  fechaInicio, fechaFin }) => {
-  const where = {
-    activo:true,
-  };
 
+exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId }) => {
+  const whereVenta = { activo: true };
+
+  // 🔹 Filtro por fecha
   if (fechaInicio && fechaFin) {
-    where.createdAt = {
+    whereVenta.fecha = {
       [Op.between]: [
         new Date(`${fechaInicio}T00:00:00`),
         new Date(`${fechaFin}T23:59:59`),
       ],
     };
   } else if (fechaInicio) {
-    where.createdAt = {
-      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
-    };
+    whereVenta.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
   } else if (fechaFin) {
-    where.createdAt = {
-      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
-    };
+    whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
   }
 
-  const ventas = await Venta.findAll({
-    where,
+  // 🔹 include dinámico de agencia
+  const includeUsuarioAgencia = {
+    model: UsuarioAgencia,
+    as: "usuarioAgencia",
+    attributes: ["id"],
+    required: !!agenciaId, // 👈 solo INNER JOIN si hay agencia
     include: [
       {
-        model: UsuarioAgencia,
-        as: "usuarioAgencia",
-        include: [
-          { model: Usuario, as: "usuario", attributes: ["nombre"] },
-          { model: Agencia, as: "agencia", attributes: ["nombre"] },
-        ],
+        model: Usuario,
+        as: "usuario",
+        attributes: ["nombre"],
       },
-      { model: Cliente, as: "cliente", attributes: ["cliente"] },
-      { model: Origen, as: "origen", attributes: ["nombre"] },
+      {
+        model: Agencia,
+        as: "agencia",
+        attributes: ["nombre"],
+        ...(agenciaId && agenciaId !== "todas" && {
+          where: { id: agenciaId },
+        }),
+      },
+    ],
+  };
+
+  return await Venta.findAll({
+    where: whereVenta,
+    attributes: [
+      "id",
+      "fecha",
+      "validada",
+      "observacion",
+    ],
+    order: [["fecha", "ASC"]],
+    include: [
+      includeUsuarioAgencia,
+      {
+        model: Cliente,
+        as: "cliente",
+        attributes: ["cliente"],
+      },
+      {
+        model: Origen,
+        as: "origen",
+        attributes: ["nombre"],
+      },
       {
         model: DetalleVenta,
         as: "detalleVenta",
+        attributes: [
+          "precioUnitario",
+          "entrada",
+          "alcance",
+          "contrato",
+        ],
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
+            attributes: ["id"],
             include: [
               { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
               { model: Marca, as: "marca", attributes: ["nombre"] },
@@ -71,12 +104,13 @@ exports.obtenerReporte = async ({  fechaInicio, fechaFin }) => {
       {
         model: VentaObsequio,
         as: "obsequiosVenta",
-        include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
+        attributes: ["id"],
+        include: [
+          { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
+        ],
       },
     ],
   });
-
-  return ventas;
 };
 
 
@@ -91,30 +125,24 @@ const obtenerDiaSemana = (fecha) => {
     "sábado",
   ];
 
-  const d = new Date(
-    fecha.getFullYear(),
-    fecha.getMonth(),
-    fecha.getDate()
-  );
+  const d = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
 
   return dias[d.getDay()];
 };
-
 
 exports.formatearReporte = (ventas) => {
   const filas = [];
 
   ventas.forEach((venta) => {
     venta.detalleVenta?.forEach((detalle) => {
-  const fechaISO = venta.fecha
-  ? venta.fecha.toISOString().slice(0, 10)
-  : "";
-
+      const fechaISO = venta.fecha
+        ? venta.fecha.toISOString().slice(0, 10)
+        : "";
 
       filas.push({
         id: venta.id,
         semana: null,
-        dia: obtenerDiaSemana(venta.createdAt),
+        dia: obtenerDiaSemana(venta.fecha),
         valorAcumulado: null,
 
         fecha: fechaISO,

@@ -1,0 +1,44 @@
+---
+const { title, descripcion, foto } = Astro.props;
+---
+
+<div class="p-14 bg-black"></div>
+<div class="w-full py-16 px-4 md:px-8 overflow-hidden">
+  <div class="container mx-auto max-w-6xl">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+      <!-- Columna izquierda con la imagen de la tarjeta -->
+      <div class="relative">
+        <h2 class="text-3xl md:text-4xl font-bold mb-3 md:hidden">
+          <span class="text-blue-400">Much more</span> than just<br />
+          a payment card
+        </h2>
+
+        <!-- Círculos decorativos -->
+        <div
+          class="absolute w-64 h-64 border border-blue-500 rounded-full -bottom-10 -left-10"
+        >
+        </div>
+        <div
+          class="absolute w-80 h-80 border border-blue-500 rounded-full -bottom-20 -left-20"
+        >
+        </div>
+
+        <!-- Tarjeta flotante -->
+        <div
+          class="relative z-10 transform rotate-6 hover:rotate-0 transition-transform duration-500 shadow-2xl mx-auto md:mx-0 max-w-xs"
+        >
+          <img src={foto} alt="Tarjeta de pago" class="w-full" />
+        </div>
+      </div>
+
+      <!-- Columna derecha con texto y botón -->
+      <div>
+        <h2 class="text-3xl md:text-4xl font-bold mb-6 hidden md:block">
+          {title}
+        </h2>
+
+        <p>{descripcion}</p>
+      </div>
+    </div>
+  </div>
+</div>

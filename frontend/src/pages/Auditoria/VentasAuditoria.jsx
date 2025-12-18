@@ -11,6 +11,31 @@ export default function VentasAuditoria() {
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
+const [agencias, setAgencias] = useState([]);
+const [agenciaId, setAgenciaId] = useState("");
+
+const cargarAgencias = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/agencias`);
+    setAgencias(res.data || []);
+  } catch (error) {
+    console.error("Error cargando agencias:", error);
+
+    Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: "No se pudieron cargar las agencias.",
+    });
+
+    setAgencias([]);
+  }
+};
+
+
+useEffect(() => {
+  cargarAgencias();
+}, []);
+
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -24,53 +49,64 @@ export default function VentasAuditoria() {
     }
   }, []);
 
+
   const fetchData = async () => {
-    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
-      setError("La fecha de inicio no puede ser mayor que la fecha de fin");
-      return;
+  if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+    setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+    return;
+  }
+
+  setError("");
+  setLoading(true);
+
+  try {
+    const params = new URLSearchParams({
+      fechaInicio,
+      fechaFin,
+    });
+
+    if (agenciaId && agenciaId !== "todas") {
+      params.append("agenciaId", agenciaId);
     }
 
-    setError("");
-    setLoading(true);
+    const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
+    const { data } = await axios.get(url);
 
-    try {
-      const url = `${API_URL}/auditoria/ventas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
-      const { data } = await axios.get(url);
+    if (!data.ok) return;
 
-      if (!data.ok) return;
-      console.log(data.ventas)
-      const ventas = data.ventas || [];
-      const resultado = ventas.map((venta) => ({
-        id: venta.id, // guardamos el id para el botón
-        Fecha: venta.fecha ?? "",
-        Día: venta.dia ?? "",
-        Cliente: venta.nombre ?? "",
-        Agencia: venta.local ?? "",  
-        Vendedor: venta.vendedor ?? "",
-        Origen: venta.origen ?? "",
-        "Observaciones de Origen": venta.observaciones ?? "",
-        Dispositivo: venta.tipo ?? "",
-        Marca: venta.marca ?? "",
-        Modelo: venta.modelo ?? "",
-        Precio: venta.pvp ?? venta.valorCorregido ?? "",
-        "Forma Pago": venta.formaPago ?? "",
-        Contrato: venta.contrato ?? "",
-        Entrada: venta.entrada ?? "",
-        Alcance: venta.alcance ?? "",
-        Estado: venta.validada ? "Validada" : "No validada",
-      }));
+    const ventas = data.ventas || [];
 
-      setFilas(resultado);
-    } catch (error) {
-      console.log(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const resultado = ventas.map((venta) => ({
+      id: venta.id,
+      Fecha: venta.fecha ?? "",
+      Día: venta.dia ?? "",
+      Cliente: venta.nombre ?? "",
+      Agencia: venta.local ?? "",
+      Vendedor: venta.vendedor ?? "",
+      Origen: venta.origen ?? "",
+      "Observaciones de Origen": venta.observaciones ?? "",
+      Dispositivo: venta.tipo ?? "",
+      Marca: venta.marca ?? "",
+      Modelo: venta.modelo ?? "",
+      Precio: venta.pvp ?? venta.valorCorregido ?? "",
+      "Forma Pago": venta.formaPago ?? "",
+      Contrato: venta.contrato ?? "",
+      Entrada: venta.entrada ?? "",
+      Alcance: venta.alcance ?? "",
+      Estado: venta.validada ? "Validada" : "No validada",
+    }));
+
+    setFilas(resultado);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
-  }, [fechaInicio, fechaFin]);
+  }, [fechaInicio, fechaFin , agenciaId]);
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
@@ -101,6 +137,23 @@ export default function VentasAuditoria() {
             onChange={(e) => setFechaFin(e.target.value)}
           />
         </div>
+
+        <div>
+  <label className="block text-sm font-medium">Agencia</label>
+  <select
+    className="border px-2 py-1 rounded"
+    value={agenciaId}
+    onChange={(e) => setAgenciaId(e.target.value)}
+  >
+    <option value="">Todas</option>
+    {agencias.map((a) => (
+      <option key={a.id} value={a.id}>
+        {a.nombre}
+      </option>
+    ))}
+  </select>
+</div>
+
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
