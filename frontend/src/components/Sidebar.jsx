@@ -55,9 +55,14 @@ export default function Sidebar() {
       title: "Marketing",
       items: [
         {
-          label: "Copa Creditek",
+          label: "Copa Creditek 🏆",
           icon: <BarChart3 size={20} />,
           path: "/copa-creditek",
+        },
+                {
+          label: "Goleadores ⚽",
+          icon: <BarChart3 size={20} />,
+          path: "/goleadores",
         },
       ],
     },

@@ -155,59 +155,6 @@ exports.getVentasCompletas = async ({
   }
 };
 
-/* exports.contarVentasPorAgencia = (ventas) => {
-  const contador = {};
-
-  ventas.forEach((venta) => {
-    const nombreAgencia =
-      venta.usuarioAgencia?.agencia?.nombre || "Sin Agencia";
-
-    if (!contador[nombreAgencia]) {
-      contador[nombreAgencia] = 0;
-    }
-
-    contador[nombreAgencia]++;
-  });
-
-  return contador;
-};
-
-exports.contarVentasPorUsuario = async (ventas) => {
-
-  try {
-    const contador = {};
-
-    ventas.forEach((v) => {
-      const user = v.usuarioAgencia?.usuario;
-      if (!user) return;
-
-      if (!contador[user.id]) {
-        contador[user.id] = {
-          usuarioId: user.id,
-          nombre: user.nombre,
-          total: 0,
-        };
-      }
-
-      contador[user.id].total++;
-    });
-
-    return {
-      ok: true,
-     
-      totalVentas: ventas.length,
-      usuarios: Object.values(contador),
-    };
-  } catch (error) {
-    console.log("Error en contarVentasPorUsuario:", error);
-    return {
-      ok: false,
-      error: error.message,
-    };
-  }
-};
- */
-
 exports.contarPorAgenciaDetalle = (ventas) => {
   const contador = {};
 

@@ -17,24 +17,23 @@ const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
-
 exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
   const where = {};
 
   // Filtrado por fechas
   if (fechaInicio && fechaFin) {
-    where.createdAt = {
+    where.fecha = {
       [Op.between]: [
         new Date(`${fechaInicio}T00:00:00`),
         new Date(`${fechaFin}T23:59:59`),
       ],
     };
   } else if (fechaInicio) {
-    where.createdAt = {
+    where.fecha = {
       [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
     };
   } else if (fechaFin) {
-    where.createdAt = {
+    where.fecha = {
       [Op.lte]: new Date(`${fechaFin}T23:59:59`),
     };
   }
@@ -44,6 +43,7 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
 
   const ventas = await Venta.findAll({
     where,
+    order: [["fecha", "DESC"]],
     include: [
       {
         model: UsuarioAgencia,
@@ -72,7 +72,7 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
           { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
         ],
       },
-          {
+      {
         model: VentaObsequio,
         as: "obsequiosVenta",
         include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
@@ -83,7 +83,8 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
   return ventas;
 };
 
-const obtenerDiaSemana = (fechaISO) => {
+
+const obtenerDiaSemana = (fecha) => {
   const dias = [
     "domingo",
     "lunes",
@@ -93,24 +94,30 @@ const obtenerDiaSemana = (fechaISO) => {
     "viernes",
     "sábado",
   ];
-  return dias[new Date(fechaISO).getDay()];
+
+  const d = new Date(
+    fecha.getFullYear(),
+    fecha.getMonth(),
+    fecha.getDate()
+  );
+
+  return dias[d.getDay()];
 };
-  
+
+
 exports.formatearReporte = (ventas) => {
   const filas = [];
 
   ventas.forEach((entrega) => {
-    // ❌ antes: entrega.detalleVentas?.forEach(...)
-    // ✅ corregido:
     entrega.detalleVenta?.forEach((detalle) => {
-      const fechaISO = entrega.createdAt
-        ? new Date(entrega.createdAt).toISOString().split("T")[0]
+      const fechaISO = entrega.fecha
+        ? entrega.fecha.toISOString().slice(0, 10)
         : "";
 
       filas.push({
         id: entrega.id,
         semana: null,
-        dia: obtenerDiaSemana(entrega.createdAt),
+        dia: obtenerDiaSemana(entrega.fecha),
         valorAcumulado: null,
 
         fecha: fechaISO,
@@ -136,7 +143,7 @@ exports.formatearReporte = (ventas) => {
 
         observaciones: entrega.observacion || "",
         contrato: detalle.contrato || "",
-        validada : entrega.validada || "",
+        validada: entrega.validada || "",
       });
     });
   });
@@ -152,7 +159,8 @@ exports.actualizarVentaCompleta = async (req, res) => {
     await sequelize.transaction(async (t) => {
       // 1️⃣ Actualizar datos principales de la venta
       const venta = await Venta.findByPk(id, { transaction: t });
-      if (!venta) return res.status(404).json({ ok: false, msg: "Venta no encontrada" });
+      if (!venta)
+        return res.status(404).json({ ok: false, msg: "Venta no encontrada" });
 
       await venta.update(datosVenta, { transaction: t });
 
@@ -161,10 +169,16 @@ exports.actualizarVentaCompleta = async (req, res) => {
         for (const detalle of datosVenta.detalleVentas) {
           if (detalle.id) {
             // actualizar si ya existe
-            await DetalleVenta.update(detalle, { where: { id: detalle.id }, transaction: t });
+            await DetalleVenta.update(detalle, {
+              where: { id: detalle.id },
+              transaction: t,
+            });
           } else {
             // crear si no existe
-            await DetalleVenta.create({ ...detalle, entregaId: id }, { transaction: t });
+            await DetalleVenta.create(
+              { ...detalle, entregaId: id },
+              { transaction: t }
+            );
           }
         }
       }
@@ -173,9 +187,15 @@ exports.actualizarVentaCompleta = async (req, res) => {
       if (datosVenta.obsequiosVenta && datosVenta.obsequiosVenta.length > 0) {
         for (const obsequio of datosVenta.obsequiosVenta) {
           if (obsequio.id) {
-            await VentaObsequio.update(obsequio, { where: { id: obsequio.id }, transaction: t });
+            await VentaObsequio.update(obsequio, {
+              where: { id: obsequio.id },
+              transaction: t,
+            });
           } else {
-            await VentaObsequio.create({ ...obsequio, entregaId: id }, { transaction: t });
+            await VentaObsequio.create(
+              { ...obsequio, entregaId: id },
+              { transaction: t }
+            );
           }
         }
       }
@@ -184,7 +204,9 @@ exports.actualizarVentaCompleta = async (req, res) => {
     res.json({ ok: true, msg: "Venta actualizada correctamente" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ ok: false, msg: "Error al actualizar la venta", error });
+    res
+      .status(500)
+      .json({ ok: false, msg: "Error al actualizar la venta", error });
   }
 };
 
@@ -201,8 +223,12 @@ exports.obtenerVentaPorId = async (req, res) => {
             { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
           ],
         },
-        { model: Cliente, as: "cliente", attributes: ["id", "cliente", "cedula", "telefono"] },
-        { model: Origen, as: "origen", attributes: ["id", "nombre" ] },
+        {
+          model: Cliente,
+          as: "cliente",
+          attributes: ["id", "cliente", "cedula", "telefono"],
+        },
+        { model: Origen, as: "origen", attributes: ["id", "nombre"] },
         {
           model: DetalleVenta,
           as: "detalleVenta",
@@ -212,7 +238,11 @@ exports.obtenerVentaPorId = async (req, res) => {
               model: DispositivoMarca,
               as: "dispositivoMarca",
               include: [
-                { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+                {
+                  model: Dispositivo,
+                  as: "dispositivo",
+                  attributes: ["id", "nombre"],
+                },
                 { model: Marca, as: "marca", attributes: ["id", "nombre"] },
               ],
             },
@@ -222,7 +252,9 @@ exports.obtenerVentaPorId = async (req, res) => {
         {
           model: VentaObsequio,
           as: "obsequiosVenta",
-          include: [{ model: Obsequio, as: "obsequio", attributes: ["id", "nombre"] }],
+          include: [
+            { model: Obsequio, as: "obsequio", attributes: ["id", "nombre"] },
+          ],
         },
       ],
     });
@@ -243,7 +275,7 @@ exports.obtenerVentaPorId = async (req, res) => {
       alcance: venta.alcance,
       pvp: venta.pvp,
       observacion: venta.observacion,
-      validada : venta.validada, 
+      validada: venta.validada,
       fotoValidacion: venta.fotoValidacion,
       usuarioAgencia: {
         id: venta.usuarioAgencia?.id,
@@ -273,7 +305,3 @@ exports.obtenerVentaPorId = async (req, res) => {
     return res.status(500).json({ ok: false, error: error.message });
   }
 };
-
-
-
- 

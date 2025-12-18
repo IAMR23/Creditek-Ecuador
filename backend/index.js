@@ -76,7 +76,7 @@ connectDB()
     app.use("/formaPago", FormaPago);
     app.use("/origen", OrigenRoutes);
     app.use("/ventas", VentaRoutes);
-    app.use("/detalle-venta", DetalleVentaRoutes);  
+    app.use("/detalle-venta", DetalleVentaRoutes);    
     app.use("/precio", precioDispositivoRoutes);
     app.use("/obsequios", require("./routes/obsequioRoutes"));
     app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));

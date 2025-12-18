@@ -18,7 +18,9 @@ const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
 exports.obtenerReporte = async ({  fechaInicio, fechaFin }) => {
-  const where = {};
+  const where = {
+    activo:true,
+  };
 
   if (fechaInicio && fechaFin) {
     where.createdAt = {
@@ -94,8 +96,6 @@ exports.formatearReporte = (ventas) => {
   const filas = [];
 
   ventas.forEach((entrega) => {
-    // ❌ antes: entrega.detalleVentas?.forEach(...)
-    // ✅ corregido:
     entrega.detalleVenta?.forEach((detalle) => {
       const fechaISO = entrega.createdAt
         ? new Date(entrega.createdAt).toISOString().split("T")[0]

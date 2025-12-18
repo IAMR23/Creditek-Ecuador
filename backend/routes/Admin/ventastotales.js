@@ -42,20 +42,53 @@ router.get("/agencias", async (req, res) => {
 
 
 router.get("/usuarios", async (req, res) => {
-  const { fechaInicio, fechaFin } = req.query;
+  try {
+    const { fechaInicio, fechaFin } = req.query;
 
-  const ventas = await adminVentas.getVentasCompletas({
-    fechaInicio,
-    fechaFin,
-  });
+    const ventas = await adminVentas.getVentasCompletas({
+      fechaInicio,
+      fechaFin,
+    });
 
-  const ventasUsuario = await adminVentas.contarPorUsuarioDetalle(ventas);
+    let ventasUsuario = await adminVentas.contarPorUsuarioDetalle(ventas);
 
-  return res.json({
-    fechaInicio,
-    fechaFin,
-    ventasUsuario,
-  });
+    // ORDEN FIJO DE USUARIOS
+    const ordenUsuarios = [
+      "Fernando",
+      "Raul",
+      "Damian",
+      "Alexander",
+      "Mishell",
+      "Damaris",
+      "Anais",
+      "Naomi",
+      "Steiveen", // ajusta si en BD está diferente
+      "Mateo Hoyos",
+      "Andres",
+      "Oscar",
+      "Wiliam",
+    ];
+
+    // ORDENAR SEGÚN EL ORDEN DEFINIDO
+    ventasUsuario = ventasUsuario.sort(
+      (a, b) =>
+        ordenUsuarios.indexOf(a.nombre) -
+        ordenUsuarios.indexOf(b.nombre)
+    );
+
+    return res.json({
+      fechaInicio,
+      fechaFin,
+      ventasUsuario,
+    });
+  } catch (error) {
+    console.error("Error en /usuarios:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener ventas por usuario",
+    });
+  }
 });
+
 
 module.exports = router;

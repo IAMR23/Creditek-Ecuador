@@ -112,12 +112,22 @@ export default function MetasComerciales() {
     });
   };
 
+
   useEffect(() => {
-    const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaInicio(hoyLocal);
-    setFechaFin(hoyLocal);
-    cargarAgencias();
-  }, []);
+  const hoy = new Date();
+
+  // Fecha fin = hoy
+  const fechaFin = hoy.toLocaleDateString("en-CA");
+
+  // Fecha inicio = 1 de diciembre del año actual
+  const fechaInicio = new Date(hoy.getFullYear(), 11, 1)
+    .toLocaleDateString("en-CA");
+
+  setFechaInicio(fechaInicio);
+  setFechaFin(fechaFin);
+  cargarAgencias();
+}, []);
+
 
   return (
     <div className="p-4">

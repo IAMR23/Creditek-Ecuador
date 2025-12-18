@@ -1,125 +1,112 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../../../config";
+import HoraLocal from "../../components/HoraLocal";
 
 export default function MarketingVentasAgencia() {
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
-  const [data, setData] = useState(null);
+  const [fechaInicio, setFechaInicio] = useState("2025-12-01");
+  const [fechaFin, setFechaFin] = useState("2025-12-18");
+  const [ventas, setVentas] = useState({});
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const fetchVentas = async () => {
-    if (!fechaInicio || !fechaFin) return;
-
-    setLoading(true);
-    setError("");
+  const obtenerVentas = async () => {
     try {
+      setLoading(true);
       const response = await axios.get(
-        `http://localhost:5020/admin/ventastotales/completas?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`
+        `${API_URL}/admin/ventastotales/agencias`,
+        {
+          params: { fechaInicio, fechaFin },
+        }
       );
 
-      setData(response.data);
-      console.log(response.data);
-    } catch (err) {
-      setError("Error al obtener los datos");
+      setVentas(response.data.ventasPorAgencia || {});
+    } catch (error) {
+      console.error("Error al obtener ventas por agencia", error);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    obtenerVentas();
+  }, []);
+
   return (
-    <div
-      style={{
-        padding: "20px",
-        width: "100%",
-        height: "80vh",
-        backgroundImage: "url('./CopaCreditek.jpg')",
-        backgroundSize: "contain",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        backgroundColor: "#000",
-      }}
-    >
-      <h2 style={{ color: "white", textShadow: "0px 0px 5px black" }}>
-        Ventas por Agencia
-      </h2>
+    <>
+      <h2 className="text-xl font-bold mb-4">Ventas por Agencia (Marketing)</h2>
+      <div className="flex gap-4 mb-4 flex-wrap">
+        <div>
+          <label className="block text-sm">Fecha inicio</label>
+          <input
+            type="date"
+            value={fechaInicio}
+            onChange={(e) => setFechaInicio(e.target.value)}
+            className="border p-2 rounded"
+          />
+        </div>
 
-      <div style={{ marginBottom: "20px", color: "white" }}>
-        <label>Fecha Inicio:</label>
-        <input
-          type="date"
-          value={fechaInicio}
-          onChange={(e) => setFechaInicio(e.target.value)}
-          style={{ marginLeft: "5px" }}
-        />
-
-        <label style={{ marginLeft: "10px" }}>Fecha Fin:</label>
-        <input
-          type="date"
-          value={fechaFin}
-          onChange={(e) => setFechaFin(e.target.value)}
-          style={{ marginLeft: "5px" }}
-        />
+        <div>
+          <label className="block text-sm">Fecha fin</label>
+          <input
+            type="date"
+            value={fechaFin}
+            onChange={(e) => setFechaFin(e.target.value)}
+            className="border p-2 rounded"
+          />
+        </div>
 
         <button
-          onClick={fetchVentas}
-          style={{
-            marginLeft: "10px",
-            padding: "6px 12px",
-            background: "#ffffffaa",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-          }}
+          onClick={obtenerVentas}
+          className="bg-blue-600 text-white px-4 rounded mt-5"
         >
-          Consultar
+          Buscar
         </button>
       </div>
 
-      {loading && (
-        <p style={{ color: "white", textShadow: "0px 0px 5px black" }}>
-          Cargando...
-        </p>
-      )}
+      <div className="relative w-[70vh] h-[70vh] overflow-hidden bg-red-400">
+        {/* IMAGEN */}
+        <img
+          src="./CopaCreditek.jpg"
+          alt="Fondo marketing"
+          className="absolute inset-0 w-full h-full object-contain"
+        />
 
-      {error && (
-        <p
-          style={{
-            color: "red",
-            fontWeight: "bold",
-            textShadow: "0px 0px 5px black",
-          }}
-        >
-          {error}
-        </p>
-      )}
+        {/* CONTENIDO ENCIMA DE LA IMAGEN */}
+        <div className="relative z-10 grid grid-rows-4 h-full">
+          {/* PARTE 1 */}
+          <div className="flex items-end relative">
+               <HoraLocal />
+          </div>
+       
+          {/* PARTE 2 */}
+          <div></div>
 
-      <table
-        border="1"
-        cellPadding="8"
-        style={{
-          width: "100%",
-          background: "#ffffffdd",
-          borderRadius: "8px",
-        }}
-      >
-        <thead>
-          <tr>
-            <th>Agencia</th>
-            <th>Ventas</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(data.ventasPorAgencia).map(
-            ([agencia, ventas], index) => (
-              <tr key={index}>
-                <td>{agencia}</td>
-                <td>{ventas}</td>
-              </tr>
-            )
-          )}
-        </tbody>
-      </table>
-    </div>
+          {/* PARTE 3 → CONTENIDO */}
+          <div className="flex justify-center items-start w-full  overflow-hidden ">
+            <div className="backdrop-blur rounded-lg p-4 shadow-lg w-full   overflow-y-auto">
+              {loading ? (
+                <p>Cargando...</p>
+              ) : Object.keys(ventas).length === 0 ? (
+                <p className="text-center ">No hay datos</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {Object.entries(ventas).map(([agencia, total]) => (
+                    <div
+                      key={agencia}
+                      className="bg-white rounded-lg flex justify-center items-center shadow-md p-4 border hover:shadow-lg transition"
+                    >
+                      <p className="text-4xl font-extrabold ">{total}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* PARTE 4 */}
+          <div></div>
+        </div>
+      </div>
+    </>
   );
 }

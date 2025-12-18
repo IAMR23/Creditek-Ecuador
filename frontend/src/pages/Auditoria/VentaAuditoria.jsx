@@ -41,7 +41,7 @@ export default function VentaAuditoria() {
         showConfirmButton: false,
       });
 
-    //  navigate("/ventas-auditoria");
+     navigate("/ventas-auditoria");
     } catch (error) {
       console.error(error);
       Swal.fire({

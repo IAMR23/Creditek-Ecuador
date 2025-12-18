@@ -56,6 +56,8 @@ import EntregasAuditoria from "./pages/Auditoria/EntregasAuditoria";
 import EntregaAuditoria from "./pages/Auditoria/EntregaAuditoria";
 import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
 import VentaAuditoria from "./pages/Auditoria/VentaAuditoria";
+import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
+import Goleadores from "./pages/Marketing/Goleadores";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -173,8 +175,18 @@ function App() {
               <Route path="entregas-transito" element={<EntregasTransito />} />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />
-              {/*               <Route path="copa-creditek" element={<MarketingVentasAgencia/>}/>
-               */}
+
+              {/* MARKETING */}
+              <Route
+                path="copa-creditek"
+                element={<MarketingVentasAgencia />}
+              />
+                   <Route
+                path="goleadores"
+                element={<Goleadores />}
+              />
+
+
               {/* AUDITORIAS */}
               <Route
                 path="entregas-auditoria"
@@ -186,7 +198,6 @@ function App() {
               />
               <Route path="ventas-auditoria" element={<VentasAuditoria />} />
               <Route path="ventas-auditoria/:id" element={<VentaAuditoria />} />
-
             </Route>
 
             {/* REPARTIDORES */}
@@ -204,8 +215,10 @@ function App() {
               path="/ventas/:id/obsequios"
               element={<VentaObsequioPage />}
             />
-            <Route path="/ventas/:id/validacion" element={<VentaFoto Unitario
-aFoto />} />
+            <Route
+              path="/ventas/:id/validacion"
+              element={<VentaFoto Unitario aFoto />}
+            />
 
             {/* ENTREGAS */}
 
