@@ -7,7 +7,7 @@ import { jwtDecode } from "jwt-decode";
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaInicio, setFechaInicio] = useState("2025-12-01");
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
@@ -38,13 +38,15 @@ export default function VentasAuditoria() {
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
+      console.log(data.ventas)
       const ventas = data.ventas || [];
       const resultado = ventas.map((venta) => ({
         id: venta.id, // guardamos el id para el botón
         Fecha: venta.fecha ?? "",
         Día: venta.dia ?? "",
+        Cliente: venta.nombre ?? "",
         Agencia: venta.local ?? "",
-        Vendedor: venta.vendedor ?? "",
+        Vendedor: venta.nombre ?? "",
         Origen: venta.origen ?? "",
         "Observaciones de Origen": venta.observaciones ?? "",
         Dispositivo: venta.tipo ?? "",
@@ -72,7 +74,6 @@ export default function VentasAuditoria() {
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaInicio(hoyLocal);
     setFechaFin(hoyLocal);
   }, []);
 

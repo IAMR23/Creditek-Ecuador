@@ -79,7 +79,8 @@ exports.obtenerReporte = async ({  fechaInicio, fechaFin }) => {
   return ventas;
 };
 
-const obtenerDiaSemana = (fechaISO) => {
+
+const obtenerDiaSemana = (fecha) => {
   const dias = [
     "domingo",
     "lunes",
@@ -89,31 +90,40 @@ const obtenerDiaSemana = (fechaISO) => {
     "viernes",
     "sábado",
   ];
-  return dias[new Date(fechaISO).getDay()];
+
+  const d = new Date(
+    fecha.getFullYear(),
+    fecha.getMonth(),
+    fecha.getDate()
+  );
+
+  return dias[d.getDay()];
 };
+
 
 exports.formatearReporte = (ventas) => {
   const filas = [];
 
-  ventas.forEach((entrega) => {
-    entrega.detalleVenta?.forEach((detalle) => {
-      const fechaISO = entrega.createdAt
-        ? new Date(entrega.createdAt).toISOString().split("T")[0]
-        : "";
+  ventas.forEach((venta) => {
+    venta.detalleVenta?.forEach((detalle) => {
+  const fechaISO = venta.fecha
+  ? venta.fecha.toISOString().slice(0, 10)
+  : "";
+
 
       filas.push({
-        id: entrega.id,
+        id: venta.id,
         semana: null,
-        dia: obtenerDiaSemana(entrega.createdAt),
+        dia: obtenerDiaSemana(venta.createdAt),
         valorAcumulado: null,
 
         fecha: fechaISO,
 
-        local: entrega.usuarioAgencia?.agencia?.nombre || "",
-        origen: entrega.origen?.nombre || "",
-        nombre: entrega.cliente?.cliente || "",
+        local: venta.usuarioAgencia?.agencia?.nombre || "",
+        origen: venta.origen?.nombre || "",
+        nombre: venta.cliente?.cliente || "",
 
-        vendedor: entrega.usuarioAgencia?.usuario?.nombre || "",
+        vendedor: venta.usuarioAgencia?.usuario?.nombre || "",
 
         tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
@@ -123,14 +133,14 @@ exports.formatearReporte = (ventas) => {
         pvp: detalle.precioUnitario || "",
         margen: null,
 
-        cierreCaja: entrega.validada || "",
+        cierreCaja: venta.validada || "",
 
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",
 
-        observaciones: entrega.observacion || "",
+        observaciones: venta.observacion || "",
         contrato: detalle.contrato || "",
-        validada: entrega.validada || "",
+        validada: venta.validada || "",
       });
     });
   });
@@ -151,7 +161,7 @@ exports.actualizarVentaCompleta = async (req, res) => {
 
       await venta.update(datosVenta, { transaction: t });
 
-      // 2️⃣ Actualizar detalles de entrega
+      // 2️⃣ Actualizar detalles de venta
       if (datosVenta.detalleVentas && datosVenta.detalleVentas.length > 0) {
         for (const detalle of datosVenta.detalleVentas) {
           if (detalle.id) {
@@ -170,7 +180,7 @@ exports.actualizarVentaCompleta = async (req, res) => {
         }
       }
 
-      // 3️⃣ Actualizar obsequios de entrega
+      // 3️⃣ Actualizar obsequios de venta
       if (datosVenta.obsequiosVenta && datosVenta.obsequiosVenta.length > 0) {
         for (const obsequio of datosVenta.obsequiosVenta) {
           if (obsequio.id) {
