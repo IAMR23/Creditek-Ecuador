@@ -70,7 +70,7 @@ return Entrega.findAll({
 
 const obtenerVentas = async ({ fechaInicio, fechaFin, agenciaId }) => {
   const where = {
-    validada: true,
+    activo: true,
   };
 
   if (fechaInicio && fechaFin) {
