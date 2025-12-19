@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { Link} from "react-router-dom"; // para navegar a otro componente
+import { Link } from "react-router-dom"; // para navegar a otro componente
 import { jwtDecode } from "jwt-decode";
 
 export default function VentasAuditoria() {
@@ -11,31 +11,29 @@ export default function VentasAuditoria() {
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
-const [agencias, setAgencias] = useState([]);
-const [agenciaId, setAgenciaId] = useState("");
+  const [agencias, setAgencias] = useState([]);
+  const [agenciaId, setAgenciaId] = useState("");
 
-const cargarAgencias = async () => {
-  try {
-    const res = await axios.get(`${API_URL}/agencias`);
-    setAgencias(res.data || []);
-  } catch (error) {
-    console.error("Error cargando agencias:", error);
+  const cargarAgencias = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/agencias`);
+      setAgencias(res.data || []);
+    } catch (error) {
+      console.error("Error cargando agencias:", error);
 
-    Swal.fire({
-      icon: "error",
-      title: "Error",
-      text: "No se pudieron cargar las agencias.",
-    });
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar las agencias.",
+      });
 
-    setAgencias([]);
-  }
-};
+      setAgencias([]);
+    }
+  };
 
-
-useEffect(() => {
-  cargarAgencias();
-}, []);
-
+  useEffect(() => {
+    cargarAgencias();
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -49,64 +47,64 @@ useEffect(() => {
     }
   }, []);
 
-
   const fetchData = async () => {
-  if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
-    setError("La fecha de inicio no puede ser mayor que la fecha de fin");
-    return;
-  }
-
-  setError("");
-  setLoading(true);
-
-  try {
-    const params = new URLSearchParams({
-      fechaInicio,
-      fechaFin,
-    });
-
-    if (agenciaId && agenciaId !== "todas") {
-      params.append("agenciaId", agenciaId);
+    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+      setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+      return;
     }
 
-    const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
-    const { data } = await axios.get(url);
+    setError("");
+    setLoading(true);
 
-    if (!data.ok) return;
+    try {
+      const params = new URLSearchParams({
+        fechaInicio,
+        fechaFin,
+      });
 
-    const ventas = data.ventas || [];
+      if (agenciaId && agenciaId !== "todas") {
+        params.append("agenciaId", agenciaId);
+      }
 
-    const resultado = ventas.map((venta) => ({
-      id: venta.id,
-      Fecha: venta.fecha ?? "",
-      Día: venta.dia ?? "",
-      Cliente: venta.nombre ?? "",
-      Agencia: venta.local ?? "",
-      Vendedor: venta.vendedor ?? "",
-      Origen: venta.origen ?? "",
-      "Observaciones de Origen": venta.observaciones ?? "",
-      Dispositivo: venta.tipo ?? "",
-      Marca: venta.marca ?? "",
-      Modelo: venta.modelo ?? "",
-      Precio: venta.pvp ?? venta.valorCorregido ?? "",
-      "Forma Pago": venta.formaPago ?? "",
-      Contrato: venta.contrato ?? "",
-      Entrada: venta.entrada ?? "",
-      Alcance: venta.alcance ?? "",
-      Estado: venta.validada ? "Validada" : "No validada",
-    }));
+      const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
+      const { data } = await axios.get(url);
 
-    setFilas(resultado);
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
+      if (!data.ok) return;
+
+      const ventas = data.ventas || [];
+
+      const resultado = ventas.map((venta) => ({
+        id: venta.id,
+        Fecha: venta.fecha ?? "",
+        Día: venta.dia ?? "",
+        Cliente: venta.nombre ?? "",
+        Agencia: venta.local ?? "",
+        Vendedor: venta.vendedor ?? "",
+        Origen: venta.origen ?? "",
+        "Observaciones de Origen": venta.observaciones ?? "",
+        Dispositivo: venta.tipo ?? "",
+        Marca: venta.marca ?? "",
+        Modelo: venta.modelo ?? "",
+        "Precio Sistema": venta.precioSistema ?? "",
+        "Precio Vendedor": venta.precioVendedor ?? "",
+        "Forma Pago": venta.formaPago ?? "",
+        Contrato: venta.contrato ?? "",
+        Entrada: venta.entrada ?? "",
+        Alcance: venta.alcance ?? "",
+        Estado: venta.validada ? "Validada" : "No validada",
+      }));
+
+      setFilas(resultado);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
-  }, [fechaInicio, fechaFin , agenciaId]);
+  }, [fechaInicio, fechaFin, agenciaId]);
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
@@ -139,21 +137,20 @@ useEffect(() => {
         </div>
 
         <div>
-  <label className="block text-sm font-medium">Agencia</label>
-  <select
-    className="border px-2 py-1 rounded"
-    value={agenciaId}
-    onChange={(e) => setAgenciaId(e.target.value)}
-  >
-    <option value="">Todas</option>
-    {agencias.map((a) => (
-      <option key={a.id} value={a.id}>
-        {a.nombre}
-      </option>
-    ))}
-  </select>
-</div>
-
+          <label className="block text-sm font-medium">Agencia</label>
+          <select
+            className="border px-2 py-1 rounded"
+            value={agenciaId}
+            onChange={(e) => setAgenciaId(e.target.value)}
+          >
+            <option value="">Todas</option>
+            {agencias.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
@@ -181,11 +178,30 @@ useEffect(() => {
                   {i + 1}
                 </td>
 
-                {Object.values(f).map((val, j) => (
-                  <td key={j} className="p-2 border">
-                    {val}
-                  </td>
-                ))}
+                {Object.entries(f).map(([key, val], j) => {
+                  let clase = "p-2 border";
+
+                  if (key === "Precio Sistema") {
+                    clase += " text-blue-600 font-semibold";
+                  }
+
+                  if (key === "Precio Vendedor") {
+                    const precioSistema = Number(f["Precio Sistema"]) || 0;
+                    const precioVendedor = Number(val) || 0;
+
+                    if (precioVendedor < precioSistema) {
+                      clase += " text-red-600 font-bold";
+                    } else {
+                      clase += " text-green-600 font-semibold";
+                    }
+                  }
+
+                  return (
+                    <td key={j} className={clase}>
+                      {val}
+                    </td>
+                  );
+                })}
 
                 <td className="p-2 border">
                   <Link

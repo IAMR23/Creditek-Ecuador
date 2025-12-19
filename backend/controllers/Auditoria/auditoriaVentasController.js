@@ -83,6 +83,7 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId }) => {
         as: "detalleVenta",
         attributes: [
           "precioUnitario",
+          "precioVendedor",
           "entrada",
           "alcance",
           "contrato",
@@ -158,7 +159,8 @@ exports.formatearReporte = (ventas) => {
         modelo: detalle.modelo?.nombre || "",
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
-        pvp: detalle.precioUnitario || "",
+        precioSistema: detalle.precioUnitario || "",
+        precioVendedor : detalle.precioVendedor || "",
         margen: null,
 
         cierreCaja: venta.validada || "",
