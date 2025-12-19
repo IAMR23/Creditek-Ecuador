@@ -61,7 +61,7 @@ const CrearVentaCompleta = () => {
     usuarioAgenciaId: null,
     origenId: "",
     observacion: "",
-    fecha: hoy,
+    fecha: "",
   });
 
   const [detalle, setDetalle] = useState({
