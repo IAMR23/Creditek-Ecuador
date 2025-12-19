@@ -9,7 +9,6 @@ router.get("/:modeloId/:formaPagoId", async (req, res) => {
   try {
     const modeloId = parseInt(req.params.modeloId, 10);
     const formaPagoId = parseInt(req.params.formaPagoId, 10);
-
     if (isNaN(modeloId) || isNaN(formaPagoId)) {
       return res.status(400).json({ message: "ID de modelo o forma de pago inválido" });
     }

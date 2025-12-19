@@ -216,13 +216,6 @@ SE COPIA EL MENSAJE PERO SE ABRE UNA NUEVA PESTAÑA, HACIENDO LA UX NO TAN AGRAD
         {msg && (
           <p className="text-center mt-3 text-green-700 font-medium">{msg}</p>
         )}
-
-        <button
-          onClick={() => navigate(-1)}
-          className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold"
-        >
-          Volver
-        </button>
       </div>
     </div>
   );

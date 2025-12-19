@@ -58,6 +58,7 @@ import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
 import VentaAuditoria from "./pages/Auditoria/VentaAuditoria";
 import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
 import Goleadores from "./pages/Marketing/Goleadores";
+import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -181,11 +182,7 @@ function App() {
                 path="copa-creditek"
                 element={<MarketingVentasAgencia />}
               />
-                   <Route
-                path="goleadores"
-                element={<Goleadores />}
-              />
-
+              <Route path="goleadores" element={<Goleadores />} />
 
               {/* AUDITORIAS */}
               <Route
@@ -244,6 +241,9 @@ function App() {
               element={<FotoFechaHoraEntrega />}
             />
             <Route path="/mis-entregas" element={<MisEntregas />} />
+
+            {/* EXPERIMENTAL */}
+            <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
           </Routes>
         </main>
 

@@ -61,6 +61,16 @@ const DetalleVenta = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    ventaId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: Venta,
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
   },
   {
     tableName: "detalle_ventas",

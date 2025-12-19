@@ -1,7 +1,12 @@
 import { jwtDecode } from "jwt-decode";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MdShoppingCart, MdLocalShipping, MdList, MdPointOfSale } from "react-icons/md";
+import {
+  MdShoppingCart,
+  MdLocalShipping,
+  MdList,
+  MdPointOfSale,
+} from "react-icons/md";
 
 function VendedorPanel() {
   const navigate = useNavigate();
@@ -21,12 +26,20 @@ function VendedorPanel() {
 
   const options = [
     {
+      label: "EXPERIMENTAL",
+      title: "Registrar Ventas",
+      desc: "Ingresa tus ventas del dia",
+      icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
+      path: "/ventacompleta",
+    },
+
+    /*     {
       label: "Ventas",
       title: "Registrar Ventas",
       desc: "Ingresa tus ventas del día",
       icon: <MdPointOfSale className="w-10 h-10 text-green-600" />,
       path: "/registrar-clientes-venta",
-    },
+    }, */
     {
       label: "Logística",
       title: "Registrar Entregas",
@@ -77,7 +90,10 @@ function VendedorPanel() {
   return (
     <div className="p-8 bg-gradient-to-br from-green-50 to-gray-100 min-h-screen">
       <h1 className="text-4xl font-extrabold text-gray-900 mb-6 tracking-tight">
-        Bienvenido <span className="text-green-600">{user?.usuario.nombre || "Vendedor"}</span>
+        Bienvenido{" "}
+        <span className="text-green-600">
+          {user?.usuario.nombre || "Vendedor"}
+        </span>
       </h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">

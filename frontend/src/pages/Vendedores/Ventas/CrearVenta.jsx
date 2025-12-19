@@ -38,7 +38,6 @@ const CrearVenta = () => {
     }
   }, []);
 
-  // Establecer usuarioAgenciaId cuando se cargue usuarioInfo
   useEffect(() => {
     if (usuarioInfo?.agenciaPrincipal?.usuarioAgenciaId) {
       setFormData((prev) => ({

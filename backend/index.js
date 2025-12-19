@@ -90,13 +90,12 @@ connectDB()
     app.use("/estado-entrega", require("./routes/estadoEntregaRoutes"));
     app.use("/alertas" , require("./routes/entregasAlertasRouter"))
     app.use("/auditoria" , require("./routes/Auditoria/auditoriaRoutes"))
+    app.use("/registrar" , require("./routes/Vendedor/crearVentaCompletaRoute"))
 
     console.log(
       "Carpeta uploads que Express está usando:",
       path.join(__dirname, "uploads")
     );
-
-    // Iniciar servidor
 
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`Servidor corriendo en el puerto ${PORT}`);
