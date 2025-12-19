@@ -38,7 +38,7 @@ const crearVentaCompleta = async (req, res) => {
         clienteId: clienteDB.id,
         origenId: venta.origenId,
         observacion: venta.observacion,
-        fecha: new Date(),
+        fecha: venta.fecha ,
         validada: true,
         fotoValidacion: fotoUrl,
       },

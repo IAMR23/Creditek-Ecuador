@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
 import imageCompression from "browser-image-compression";
+import { useNavigate } from "react-router-dom";
 
 const CrearVentaCompleta = () => {
   const [loading, setLoading] = useState(false);
@@ -23,7 +24,7 @@ const CrearVentaCompleta = () => {
     useState(null);
 
   const [modeloSeleccionado, setModeloSeleccionado] = useState(null);
-
+  const navigate = useNavigate();
   // 👉 Capturar foto o archivo
   const handleFoto = (e) => {
     const file = e.target.files[0];
@@ -61,7 +62,7 @@ const CrearVentaCompleta = () => {
     usuarioAgenciaId: null,
     origenId: "",
     observacion: "",
-    fecha: "",
+    fecha: hoy
   });
 
   const [detalle, setDetalle] = useState({
@@ -287,6 +288,7 @@ const CrearVentaCompleta = () => {
       setObsequios([]);
       setCliente({ cliente: "", cedula: "", telefono: "" });
       setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
+      navigate("/")
     } catch (error) {
       console.error(error);
       Swal.fire("Error", "No se pudo crear la venta", "error");
@@ -308,7 +310,7 @@ const CrearVentaCompleta = () => {
 VENTA REGISTRADA ${venta.id || ""}
  Vendedor  ${usuarioInfo.nombre} 
  Agencia: ${usuarioInfo.agenciaPrincipal?.nombre}
- Fecha: ${venta.fecha ? new Date().toLocaleDateString("en-CA") : "N/A"}
+ Fecha: ${venta.fecha  || "N/A"}
 Cliente:
 - Nombre: ${cliente.cliente || "N/A"}
 - Cédula: ${cliente.cedula || "N/A"}
