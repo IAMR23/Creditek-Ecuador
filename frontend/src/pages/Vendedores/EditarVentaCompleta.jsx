@@ -211,6 +211,32 @@ const EditarVentaCompleta = () => {
     }
   };
 
+    const actualizarEstado = async (nuevoEstado) => {
+    try {
+      await axios.put(`${API_URL}/ventas/${id}`, {
+        activo : false
+      });
+
+
+      Swal.fire({
+        icon: "success",
+        title: "Estado actualizado",
+        text: `El estado cambió a: ${nuevoEstado}`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+     navigate("/ventas-auditoria");
+    } catch (error) {
+      console.error(error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo actualizar el estado",
+      });
+    }
+  };
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -744,6 +770,16 @@ const EditarVentaCompleta = () => {
         >
           {loading ? "Guardando..." : "Guardar Venta"}
         </button>
+
+              <div className="grid md:grid-cols-3 gap-4 mt-6">
+        <button
+          onClick={() => actualizarEstado("Eliminar")}
+          className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl"
+        >
+          Eliminar
+        </button>
+      </div>
+
       </form>
     </div>
   );

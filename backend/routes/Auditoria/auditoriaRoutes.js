@@ -4,12 +4,13 @@ const auditoriaVentasController = require("../../controllers/Auditoria/auditoria
 
 router.get("/ventas", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, agenciaId } = req.query;
+    const { fechaInicio, fechaFin, agenciaId, vendedorId } = req.query;
 
     const ventas = await auditoriaVentasController.obtenerReporte({
       fechaInicio,
       fechaFin,
       agenciaId,
+      vendedorId,
     });
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);
@@ -20,6 +21,7 @@ router.get("/ventas", async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
+
 
 
 

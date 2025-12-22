@@ -13,6 +13,20 @@ export default function VentasAuditoria() {
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
   const [agenciaId, setAgenciaId] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+const [vendedorId, setVendedorId] = useState("");
+
+
+const cargarUsuarios = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/usuarios`);
+    setUsuarios(res.data || []);
+  } catch (error) {
+    console.error("Error cargando usuarios:", error);
+    setUsuarios([]);
+  }
+};
+
 
   const cargarAgencias = async () => {
     try {
@@ -33,6 +47,7 @@ export default function VentasAuditoria() {
 
   useEffect(() => {
     cargarAgencias();
+    cargarUsuarios();
   }, []);
 
   useEffect(() => {
@@ -65,6 +80,10 @@ export default function VentasAuditoria() {
       if (agenciaId && agenciaId !== "todas") {
         params.append("agenciaId", agenciaId);
       }
+
+      if (vendedorId && vendedorId !== "todos") {
+  params.append("vendedorId", vendedorId);
+}
 
       const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
       const { data } = await axios.get(url);
@@ -102,9 +121,12 @@ export default function VentasAuditoria() {
     }
   };
 
-  useEffect(() => {
-    if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
-  }, [fechaInicio, fechaFin, agenciaId]);
+useEffect(() => {
+  if (fechaInicio && fechaFin && usuarioInfo?.id) {
+    fetchData();
+  }
+}, [fechaInicio, fechaFin, agenciaId, vendedorId]);
+
 
  /*  useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
@@ -151,6 +173,24 @@ export default function VentasAuditoria() {
             ))}
           </select>
         </div>
+
+        <div>
+  <label className="block text-sm font-medium">Vendedor</label>
+  <select
+    className="border px-2 py-1 rounded"
+    value={vendedorId}
+    onChange={(e) => setVendedorId(e.target.value)}
+  >
+    <option value="">Todos</option>
+    {usuarios.map((u) => (
+      <option key={u.id} value={u.id}>
+        {u.nombre}
+      </option>
+    ))}
+  </select>
+</div>
+
+
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}

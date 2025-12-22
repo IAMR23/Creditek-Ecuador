@@ -17,7 +17,7 @@ const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
 
-exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId }) => {
+exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
   const whereVenta = { activo: true };
 
   // 🔹 Filtro por fecha
@@ -35,30 +35,36 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId }) => {
   }
 
   // 🔹 include dinámico de agencia
+
   const includeUsuarioAgencia = {
-    model: UsuarioAgencia,
-    as: "usuarioAgencia",
-    attributes: ["id"],
-    required: !!agenciaId, // 👈 solo INNER JOIN si hay agencia
-    include: [
-      {
-        model: Usuario,
-        as: "usuario",
-        attributes: ["nombre"],
-      },
-      {
-        model: Agencia,
-        as: "agencia",
-        attributes: ["nombre"],
-        ...(agenciaId && agenciaId !== "todas" && {
-          where: { id: agenciaId },
-        }),
-      },
-    ],
-  };
+  model: UsuarioAgencia,
+  as: "usuarioAgencia",
+  attributes: ["id"],
+  required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
+  include: [
+    {
+      model: Usuario,
+      as: "usuario",
+      attributes: ["id", "nombre"],
+      ...(vendedorId && vendedorId !== "todos" && {
+        where: { id: vendedorId },
+      }),
+    },
+    {
+      model: Agencia,
+      as: "agencia",
+      attributes: ["nombre"],
+      ...(agenciaId && agenciaId !== "todas" && {
+        where: { id: agenciaId },
+      }),
+    },
+  ],
+};
+
+
 
   return await Venta.findAll({
-    where: whereVenta,
+    where: whereVenta,  
     attributes: [
       "id",
       "fecha",
