@@ -7,8 +7,8 @@ import { jwtDecode } from "jwt-decode";
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2025-12-01");
-  const [fechaFin, setFechaFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState("2025-12-30");
+  const [fechaFin, setFechaFin] = useState("2025-12-31");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
@@ -106,10 +106,10 @@ export default function VentasAuditoria() {
     if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
   }, [fechaInicio, fechaFin, agenciaId]);
 
-  useEffect(() => {
+ /*  useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFechaFin(hoyLocal);
-  }, []);
+  }, []); */
 
   return (
     <div className="p-4">

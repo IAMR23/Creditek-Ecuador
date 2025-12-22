@@ -59,7 +59,7 @@ export default function Sidebar() {
           icon: <BarChart3 size={20} />,
           path: "/copa-creditek",
         },
-                {
+        {
           label: "Goleadores ⚽",
           icon: <BarChart3 size={20} />,
           path: "/goleadores",
@@ -90,12 +90,12 @@ export default function Sidebar() {
           icon: <PackageCheck size={20} />,
           path: "/entregas-auditoria",
         },
-         {
+        {
           label: "Ventas Auditoria",
           icon: <PackageCheck size={20} />,
           path: "/ventas-auditoria",
         },
-
+        
       ],
     },
 
