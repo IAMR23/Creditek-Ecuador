@@ -621,7 +621,7 @@ ${
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <div className="hidden">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Cantidad *
                 </label>
@@ -726,7 +726,7 @@ ${
           </div>
         </div>
 
-        <div>
+        <div className="hidden">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Contrato
           </label>
