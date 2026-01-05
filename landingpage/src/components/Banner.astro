@@ -19,27 +19,27 @@ import { FBURL, INS } from "../const/constSocialNetworks";
         <a href="#productos" class="btn btn-secondary"> Quiero un producto </a>
       </div>
 
-      <div class="social-icons">
-        <a href={FBURL} target="_blank" class="social facebook">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path
-              d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"
-            ></path>
-          </svg>
-        </a>
+    <div class="flex justify-normal items-center">
+      <a href={FBURL} class="social-link" target="_blank">
+        <img
+          class="hover:scale-150"
+          src="/icon/icofb.webp"
+          alt=""
+          srcset=""
+          width="40px"
+        />
+      </a>
 
-        <a href={INS} target="_blank" class="social instagram">
-          <img
-            src="/Creditek/instagram.svg"
-            alt="Instagram Creditek"
-            class="icon"
-          />
-        </a>
-      </div>
+      <a href={INS} class="social-link" target="_blank">
+        <img
+          class="hover:scale-150"
+          src="/icon/icoinstagram.webp"
+          alt=""
+          srcset=""
+          width="80px"
+        />
+      </a>
+    </div>
     </div>
 
     <!-- DERECHA -->
