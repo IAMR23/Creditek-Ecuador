@@ -35,6 +35,7 @@ const allowedOrigins = [
   "http://192.168.0.7:5173",
   /^https?:\/\/localhost:\d+$/, // cualquier puerto en localhost
   /^https?:\/\/(www\.)?creditek-ecuador\.com$/, // producción
+  /^https?:\/\/(www\.)?rve.creditek-ecuador\.com$/, // producción
 ];
 
 app.use(
