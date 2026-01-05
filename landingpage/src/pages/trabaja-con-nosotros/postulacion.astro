@@ -125,7 +125,7 @@ import FormProgress from "../../components/FormProgress.astro";
       <div class="grid grid-2 mt-6">
         <div>
           <label for="vivienda" class="label">Tipo de vivienda</label>
-          <select id="vivienda" name="vivienda" class="input" >
+          <select id="vivienda" name="vivienda" class="input">
             <option value="">Selecciona una opción</option>
             <option>Arrendada</option>
             <option>Propia</option>
@@ -135,7 +135,7 @@ import FormProgress from "../../components/FormProgress.astro";
 
         <div>
           <label for="estudios" class="label">Nivel de estudios</label>
-          <select id="estudios" name="estudios" class="input" >
+          <select id="estudios" name="estudios" class="input">
             <option value="">Selecciona una opción</option>
             <option>Primarios</option>
             <option>Secundario</option>
@@ -155,7 +155,6 @@ import FormProgress from "../../components/FormProgress.astro";
           min="0"
           class="input"
           placeholder="Ej: 0"
-          
         />
       </div>
 
@@ -294,132 +293,126 @@ import FormProgress from "../../components/FormProgress.astro";
       </div>
     </div>
 
-
     <div id="step3" class="step hidden">
-  <FormProgress step="3" />
+      <FormProgress step="3" />
 
-  <div class="mt-6">
-    <label class="label">
-      Cuando tienes un objetivo de ventas semanal, ¿cómo planificas tu tiempo y actividades para alcanzarlo?
-    </label>
-    <textarea
-      class="input"
-      name="planificacion_semanal"
-      style="min-height:120px"
-      placeholder="Describe cómo organizas tu semana, prioridades y acciones"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">
+          Cuando tienes un objetivo de ventas semanal, ¿cómo planificas tu
+          tiempo y actividades para alcanzarlo?
+        </label>
+        <textarea
+          class="input"
+          name="planificacion_semanal"
+          style="min-height:120px"
+          placeholder="Describe cómo organizas tu semana, prioridades y acciones"
+        ></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">
-      Si tus ventas no están llegando a la meta, ¿qué haces para mejorar tu rendimiento?
-    </label>
-    <textarea
-      class="input"
-      name="mejora_rendimiento"
-      style="min-height:120px"
-      placeholder="Cambiar estrategia, pedir apoyo, capacitarte, ajustar enfoque"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">
+          Si tus ventas no están llegando a la meta, ¿qué haces para mejorar tu
+          rendimiento?
+        </label>
+        <textarea
+          class="input"
+          name="mejora_rendimiento"
+          style="min-height:120px"
+          placeholder="Cambiar estrategia, pedir apoyo, capacitarte, ajustar enfoque"
+        ></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">
-      ¿Cómo haces seguimiento de tus clientes y de tus ventas para asegurarte de que cada oportunidad se aproveche?
-    </label>
-    <textarea
-      class="input"
-      name="seguimiento_clientes"
-      style="min-height:120px"
-      placeholder="Llamadas, mensajes, agenda, CRM, notas"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">
+          ¿Cómo haces seguimiento de tus clientes y de tus ventas para
+          asegurarte de que cada oportunidad se aproveche?
+        </label>
+        <textarea
+          class="input"
+          name="seguimiento_clientes"
+          style="min-height:120px"
+          placeholder="Llamadas, mensajes, agenda, CRM, notas"></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">
-      ¿Qué harías para vender más celulares o televisores sin aumentar tus horas de trabajo?
-    </label>
-    <textarea
-      class="input"
-      name="estrategia_mas_ventas"
-      style="min-height:120px"
-      placeholder="Estrategias, enfoque, priorización"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">
+          ¿Qué harías para vender más celulares o televisores sin aumentar tus
+          horas de trabajo?
+        </label>
+        <textarea
+          class="input"
+          name="estrategia_mas_ventas"
+          style="min-height:120px"
+          placeholder="Estrategias, enfoque, priorización"></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">
-      ¿Cómo sabes si estás siendo productivo cada día?
-    </label>
-    <textarea
-      class="input"
-      name="indicadores_productividad"
-      style="min-height:120px"
-      placeholder="Indicadores, resultados, tareas cumplidas"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">
+          ¿Cómo sabes si estás siendo productivo cada día?
+        </label>
+        <textarea
+          class="input"
+          name="indicadores_productividad"
+          style="min-height:120px"
+          placeholder="Indicadores, resultados, tareas cumplidas"></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">
-      Entendiendo que el <strong>producto final valioso</strong> es el resultado útil y medible por el cual se te paga:
-      describe el producto final valioso de tu último trabajo e indica si eras
-      <strong>bueno, regular o malo</strong> entregándolo y por qué.
-    </label>
-    <textarea
-      class="input"
-      name="producto_final_valioso"
-      style="min-height:150px"
-      placeholder="Ventas logradas, clientes atendidos, resultados concretos"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">
+          Entendiendo que el <strong>producto final valioso</strong> es el resultado
+          útil y medible por el cual se te paga: describe el producto final valioso
+          de tu último trabajo e indica si eras
+          <strong>bueno, regular o malo</strong> entregándolo y por qué.
+        </label>
+        <textarea
+          class="input"
+          name="producto_final_valioso"
+          style="min-height:150px"
+          placeholder="Ventas logradas, clientes atendidos, resultados concretos"
+        ></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">¿Cómo te ves en un año?</label>
-    <textarea
-      class="input"
-      name="vision_1_ano"
-      style="min-height:100px"
-      placeholder="Laboral, personal, económico"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">¿Cómo te ves en un año?</label>
+        <textarea
+          class="input"
+          name="vision_1_ano"
+          style="min-height:100px"
+          placeholder="Laboral, personal, económico"></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">¿Cómo te ves en 5 años?</label>
-    <textarea
-      class="input"
-      name="vision_5_anos"
-      style="min-height:100px"
-      placeholder="Proyección a largo plazo"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">¿Cómo te ves en 5 años?</label>
+        <textarea
+          class="input"
+          name="vision_5_anos"
+          style="min-height:100px"
+          placeholder="Proyección a largo plazo"></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">¿Cuál fue tu jefe favorito y por qué?</label>
-    <textarea
-      class="input"
-      name="jefe_favorito"
-      style="min-height:100px"
-      placeholder="Qué aprendiste, cómo te trataba, qué valorabas"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">¿Cuál fue tu jefe favorito y por qué?</label>
+        <textarea
+          class="input"
+          name="jefe_favorito"
+          style="min-height:100px"
+          placeholder="Qué aprendiste, cómo te trataba, qué valorabas"
+        ></textarea>
+      </div>
 
-  <div class="mt-6">
-    <label class="label">¿Cuál fue tu jefe menos favorito y por qué?</label>
-    <textarea
-      class="input"
-      name="jefe_menos_favorito"
-      style="min-height:100px"
-      placeholder="Sé honesto pero respetuoso"
-      ></textarea>
-  </div>
+      <div class="mt-6">
+        <label class="label">¿Cuál fue tu jefe menos favorito y por qué?</label>
+        <textarea
+          class="input"
+          name="jefe_menos_favorito"
+          style="min-height:100px"
+          placeholder="Sé honesto pero respetuoso"></textarea>
+      </div>
 
-  <div class="mt-10 flex justify-end">
-    <button type="submit" class="btn-primary">
-      Enviar formulario
-    </button>
-  </div>
-</div>
-
-
+      <div class="mt-10 flex justify-end">
+        <button type="submit" class="btn-primary"> Enviar formulario </button>
+      </div>
+    </div>
   </form>
 
   <Whatsapp />
@@ -610,17 +603,21 @@ import FormProgress from "../../components/FormProgress.astro";
     submitBtn.disabled = true;
     submitBtn.textContent = "Enviando...";
 
+    const BACKEND_API_URL = import.meta.env.BACKEND_API_URL;
+
     try {
-      const res = await fetch("/api/submit-form", {
+      const res = await fetch(`https://api.creditek-ecuador.com/api/postulaciones`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(data),
       });
 
       const result = await res.json();
 
-      if (res.ok && result.success) {
-        alert("✅ " + (result.message || "Formulario enviado correctamente"));
+      if (res.ok) {
+        alert("✅ Formulario enviado correctamente");
 
         // Reset de formulario y pasos
         jobForm.reset();

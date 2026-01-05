@@ -3,15 +3,108 @@ const router = express.Router();
 
 const Postulacion = require("../../models/Postulacion");  
 
+
 router.post("/", async (req, res) => {
   try {
-    const payload = req.body;
+    const data = req.body;
 
+    const clean = (obj) =>
+      Object.fromEntries(
+        Object.entries(obj).filter(([_, v]) => v !== "" && v !== null)
+      );
+
+    // =========================
+    // DATOS PERSONALES
+    // =========================
+    const datos_personales = clean({
+      nombre: data.nombre,
+      cedula: data.cedula,
+      genero: data.genero,
+      edad: data.edad,
+      telefono: data.telefono,
+      direccion: data.direccion,
+      estadoCivil: data.estadoCivil,
+      vivienda: data.vivienda,
+      estudios: data.estudios,
+      hijos: data.hijos,
+    });
+
+    // =========================
+    // EXPERIENCIA LABORAL
+    // =========================
+    const experiencia_laboral = clean({
+      trabajo1: clean({
+        lugar: data.trabajo1_lugar,
+        cargo: data.trabajo1_cargo,
+        inicio: data.trabajo1_inicio,
+        salida: data.trabajo1_salida,
+        razon: data.trabajo1_razon,
+        jefe: data.trabajo1_jefe,
+        telefono: data.trabajo1_telefono,
+      }),
+      trabajo2: clean({
+        lugar: data.trabajo2_lugar,
+        cargo: data.trabajo2_cargo,
+        inicio: data.trabajo2_inicio,
+        salida: data.trabajo2_salida,
+        razon: data.trabajo2_razon,
+        jefe: data.trabajo2_jefe,
+        telefono: data.trabajo2_telefono,
+      }),
+      trabajo3: clean({
+        lugar: data.trabajo3_lugar,
+        cargo: data.trabajo3_cargo,
+        inicio: data.trabajo3_inicio,
+        salida: data.trabajo3_salida,
+        razon: data.trabajo3_razon,
+        jefe: data.trabajo3_jefe,
+        telefono: data.trabajo3_telefono,
+      }),
+    });
+
+    // =========================
+    // EVALUACIÓN
+    // =========================
+    const evaluacion = clean({
+      planificacion_semanal: data.planificacion_semanal,
+      mejora_rendimiento: data.mejora_rendimiento,
+      seguimiento_clientes: data.seguimiento_clientes,
+      estrategia_mas_ventas: data.estrategia_mas_ventas,
+      indicadores_productividad: data.indicadores_productividad,
+      producto_final_valioso: data.producto_final_valioso,
+      vision_1_ano: data.vision_1_ano,
+      vision_5_anos: data.vision_5_anos,
+      jefe_favorito: data.jefe_favorito,
+      jefe_menos_favorito: data.jefe_menos_favorito,
+    });
+
+    // =========================
+    // METADATA
+    // =========================
+    const metadata = {
+      fecha_envio: new Date().toISOString(),
+      origen: "web",
+      version_formulario: "v1",
+    };
+
+    // =========================
+    // PAYLOAD FINAL
+    // =========================
+    const payloadFinal = {
+      datos_personales,
+      experiencia_laboral,
+      evaluacion,
+      metadata,
+    };
+
+    // =========================
+    // GUARDAR EN DB
+    // =========================
     const postulacion = await Postulacion.create({
-      nombre: payload.datos_personales?.nombre ?? null,
-      cedula: payload.datos_personales?.cedula ?? null,
-      telefono: payload.datos_personales?.telefono ?? null,
-      formulario: payload, // 🔥 JSONB directo
+      nombre: datos_personales.nombre ?? null,
+      cedula: datos_personales.cedula ?? null,
+      telefono: datos_personales.telefono ?? null,
+      formulario: payloadFinal, // JSONB directo
     });
 
     res.status(201).json({
@@ -19,7 +112,6 @@ router.post("/", async (req, res) => {
       message: "Postulación guardada",
       id: postulacion.id,
     });
-
   } catch (error) {
     console.error("Error guardando postulación:", error);
     res.status(500).json({
@@ -28,6 +120,8 @@ router.post("/", async (req, res) => {
     });
   }
 });
+
+
 
 router.get("/", async (req, res) => {
   try {
