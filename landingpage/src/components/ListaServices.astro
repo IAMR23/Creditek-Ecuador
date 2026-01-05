@@ -1,0 +1,19 @@
+---
+import { services } from "../const/constsRutas";
+import Button from "./Button.astro";
+---
+
+<div class="rounded-2xl shadow-lg overflow-hidden bg-[#1D1D1B] p-5">
+  <ul class="flex justify-center flex-col gap-1">
+    <li class="text-white uppercase font-bold text-center">Servicios</li>
+    {
+      services.map((service) => (
+        <Button
+          icono={service.icono}
+          link={service.link}
+          servicio={service.title}
+        />
+      ))
+    }
+  </ul>
+</div>

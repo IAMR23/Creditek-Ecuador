@@ -1,0 +1,150 @@
+---
+const { casos } = Astro.props;
+---
+
+<!-- Cambios -->
+<div class="gallery-container">
+  <div class="main-image">
+    <img id="featured1" src="/ed.webp" alt="Imagen destacada" />
+    <img id="featured2" src="/ed.webp" alt="Imagen destacada" />
+  </div>
+
+  <div class="flex justify-center items-center flex-row flex-wrap gap-2">
+    {
+      casos.map((caso: any) => (
+        <div class="thumbnail" data-src={caso.img}>
+          <img src={caso.img} alt={caso.img} />
+        </div>
+      ))
+    }
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const featured1 = document.getElementById(
+        "featured1"
+      ) as HTMLImageElement;
+      const featured2 = document.getElementById(
+        "featured2"
+      ) as HTMLImageElement;
+      const thumbnails = document.querySelectorAll(".thumbnail");
+      let currentIndex = 0;
+      const allThumbnails = Array.from(thumbnails);
+      let activeImage = featured1;
+      let inactiveImage = featured2;
+
+      // Función para actualizar la imagen principal y las miniaturas activas
+      function updateImage(index: number): void {
+        const newSrc = allThumbnails[index].getAttribute("data-src");
+        if (newSrc) {
+          // Intercambiar imágenes para el efecto de desvanecimiento
+          [activeImage, inactiveImage] = [inactiveImage, activeImage];
+
+          // Configurar la nueva imagen
+          inactiveImage.src = newSrc;
+
+          // Añadir y quitar clases para el efecto de transición
+          activeImage.classList.remove("active");
+          inactiveImage.classList.add("active");
+        }
+
+        // Actualizar estado activo de las miniaturas
+        allThumbnails.forEach((thumb) => {
+          thumb.classList.remove("active");
+        });
+        allThumbnails[index].classList.add("active");
+      }
+
+      // Activar la primera miniatura al cargar
+      updateImage(0);
+
+      // Configurar el cambio automático cada 5 segundos
+      function nextImage(): void {
+        currentIndex = (currentIndex + 1) % allThumbnails.length;
+        updateImage(currentIndex);
+      }
+
+      // Iniciar temporizador
+      let interval = setInterval(nextImage, 4000);
+
+      // Manejador de clics en las miniaturas
+      thumbnails.forEach((thumbnail, index) => {
+        thumbnail.addEventListener("click", function () {
+          currentIndex = index;
+          updateImage(index);
+
+          // Reiniciar el temporizador cuando se hace clic en una miniatura
+          clearInterval(interval);
+          interval = setInterval(nextImage, 4000);
+        });
+      });
+    });
+  </script>
+
+  <style>
+    .gallery-container {
+      max-width: 1200px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .main-image {
+      width: 400px;
+      height: 400px;
+      margin-bottom: 1rem;
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .main-image img {
+      width: 400px;
+      height: 400px;
+      object-fit: cover;
+      position: absolute;
+      top: 0;
+      left: 0;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+
+    .main-image img.active {
+      opacity: 1;
+    }
+
+    .thumbnail {
+      cursor: pointer;
+      width: 100px;
+      height: 100px;
+      border-radius: 4px;
+      overflow: hidden;
+      opacity: 0.7;
+      transition: opacity 0.3s ease;
+    }
+
+    .thumbnail.active {
+      opacity: 1;
+      box-shadow: 0 0 0 2px #3498db;
+    }
+
+    .thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    @media (max-width: 768px) {
+      .main-image {
+        height: 400px;
+      }
+
+      .thumbnail {
+        width: 80px;
+        height: 80px;
+      }
+    }
+  </style>
+</div>

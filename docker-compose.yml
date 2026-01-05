@@ -71,6 +71,13 @@ services:
     depends_on:
       - backend
 
+  landingpage:
+    build: ./landingpage
+    container_name: landingpage
+    restart: always
+    networks:
+      - internal
+
 # ------------------------------
 # VOLUMES
 # ------------------------------

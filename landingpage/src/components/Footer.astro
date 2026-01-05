@@ -1,0 +1,229 @@
+---
+import { FBURL, INS } from "../const/constSocialNetworks";
+---
+
+<div class="contact-section">
+  <div class="contact-container">
+    <!-- Teléfono -->
+    <div class="contact-item">
+      <div class="contact-icon">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+          ></path>
+        </svg>
+      </div>
+
+      <a
+        href="https://api.whatsapp.com/send/?phone=593987532398"
+        target="_blank"
+        ><h3 class="text-xl font-bold">
+          <span class="font-bold text-yellow-500">Telé</span>fono
+        </h3>
+        <p class="contact-text">+593 99 906 2417</p></a
+      >
+    </div>
+
+    <!-- Dirección -->
+    <div class="contact-item">
+      <div class="contact-icon">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      </div>
+
+      <a
+        href="https://maps.app.goo.gl/8vrMB2WrGeGgriUq5"
+        target="_blank"
+        ><h3 class="text-xl font-bold">
+          <span class="font-bold text-yellow-500">Dire</span>cción
+        </h3>
+        <p class="contact-text">
+          Martha Bucaram de Roldos Y S37
+        </p>
+        <p class="contact-text">Segundo Piso. Quito 170140</p></a
+      >
+    </div>
+
+    <!-- Email -->
+    <div class="contact-item">
+      <div class="contact-icon">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path
+            d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+          ></path>
+          <polyline points="22,6 12,13 2,6"></polyline>
+        </svg>
+      </div>
+      <a
+        href="mailto:desarrollo.organizacional@creditek-ecuador.com?subject=Atencion%20al%20cliente%"
+        target="_blank"
+      >
+        <h3 class="text-xl font-bold">
+          <span class="font-bold text-yellow-500">Em</span>ail
+        </h3>
+        <p class="contact-text">desarrollo.organizacional@creditek-ecuador.com</p></a
+      >
+    </div>
+  </div>
+</div>
+
+<footer class="footer bg-black">
+  <div class="footer-content">
+    <div class="text-xl">
+      <p>Copyright  © 2026 CrediTek - Todos los derechos reservados</p>
+    </div>
+
+    <div class="flex justify-center items-center">
+      <a href={FBURL} class="social-link" target="_blank">
+        <img
+          class="hover:scale-150"
+          src="/icon/icofb.webp"
+          alt=""
+          srcset=""
+          width="40px"
+        />
+      </a>
+
+      <a href={INS} class="social-link" target="_blank">
+        <img
+          class="hover:scale-150"
+          src="/icon/icoinstagram.webp"
+          alt=""
+          srcset=""
+          width="80px"
+        />
+      </a>
+    </div>
+  </div>
+</footer>
+
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: "Arial", sans-serif;
+  }
+
+  /* Sección de Contacto */
+  .contact-section {
+    background-color: #333333;
+    color: white;
+    padding: 60px 20px;
+  }
+
+  .contact-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 30px;
+  }
+
+  .contact-item {
+    flex: 1;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .contact-icon {
+    margin-bottom: 20px;
+    color: #ffffff;
+  }
+
+  .contact-text {
+    font-size: 14px;
+    color: #cccccc;
+    line-height: 1.5;
+  }
+
+  /* Footer */
+  .footer {
+    color: white;
+    padding: 25px 20px;
+    position: relative;
+  }
+
+  .footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-social {
+    display: flex;
+  }
+
+  .social-link {
+    color: white;
+    text-decoration: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .social-link:hover {
+    opacity: 0.8;
+  }
+
+  .whatsapp-button {
+    position: absolute;
+    left: 20px;
+    bottom: 20px;
+    width: 24px;
+    height: 24px;
+  }
+
+  @media (max-width: 768px) {
+    .contact-container {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .footer-content {
+      flex-direction: column;
+      gap: 20px;
+    }
+  }
+</style>

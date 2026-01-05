@@ -21,13 +21,16 @@ const OrigenRoutes = require("./routes/origenRoutes");
 const VentaRoutes = require("./routes/ventasroutes");
 const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
+
+const postulacionesRouter = require("./routes/DesarrolloOrganizacional/postulacionesRouter");
+
 const path = require("path");
-  
+
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5020;
 
-// Permitir localhost y dominio de producción 
+// Permitir localhost y dominio de producción
 const allowedOrigins = [
   "http://192.168.0.7:5173",
   /^https?:\/\/localhost:\d+$/, // cualquier puerto en localhost
@@ -76,7 +79,7 @@ connectDB()
     app.use("/formaPago", FormaPago);
     app.use("/origen", OrigenRoutes);
     app.use("/ventas", VentaRoutes);
-    app.use("/detalle-venta", DetalleVentaRoutes);    
+    app.use("/detalle-venta", DetalleVentaRoutes);
     app.use("/precio", precioDispositivoRoutes);
     app.use("/obsequios", require("./routes/obsequioRoutes"));
     app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));
@@ -88,10 +91,10 @@ connectDB()
     app.use("/detalle-entrega", require("./routes/detalleEntregaRoutes"));
     app.use("/entrega-obsequios", require("./routes/entregaObsequioRoutes"));
     app.use("/estado-entrega", require("./routes/estadoEntregaRoutes"));
-    app.use("/alertas" , require("./routes/entregasAlertasRouter"))
-    app.use("/auditoria" , require("./routes/Auditoria/auditoriaRoutes"))
-    app.use("/registrar" , require("./routes/Vendedor/crearVentaCompletaRoute"))
-
+    app.use("/alertas", require("./routes/entregasAlertasRouter"));
+    app.use("/auditoria", require("./routes/Auditoria/auditoriaRoutes"));
+    app.use("/registrar", require("./routes/Vendedor/crearVentaCompletaRoute"));
+    app.use("/api/postulaciones", postulacionesRouter  )
     console.log(
       "Carpeta uploads que Express está usando:",
       path.join(__dirname, "uploads")

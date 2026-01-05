@@ -1,0 +1,97 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import NavBar from "../../components/NavBar.astro";
+import Footer from "../../components/Footer.astro";
+import Whatsapp from "../../components/Whatsapp.astro";
+
+---
+
+<Layout title="Trabaja con Nosotros">
+  <NavBar />
+
+  <div class="h-20 bg-black"></div>
+
+  <div class="m-10 shadow-sm">
+    <h2 class="text-4xl lg:text-[2.4rem] font-extrabold text-gray-900 text-center mt-10">
+      Trabaja con 
+      <span class="text-orange-500">Nosotros</span>
+    </h2>
+
+    <div class="mb-8 mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-6">
+      <h3 class="mb-3 text-lg font-semibold text-gray-900">
+        Antes de comenzar
+      </h3>
+
+      <p class="text-gray-600 leading-relaxed">
+        Este formulario ha sido diseñado para conocerte mejor y no tiene límite
+        de tiempo. Te recomendamos completarlo con calma, en un momento en el
+        que dispongas del tiempo necesario y te encuentres en un lugar cómodo.
+      </p>
+
+      <p class="mt-4 text-gray-600 leading-relaxed">
+        Responde de forma honesta y natural. No existen respuestas buenas o
+        malas; cada respuesta es valiosa y refleja quién eres.
+      </p>
+
+      <div class="mt-6 rounded-xl bg-white border border-gray-200 p-4">
+        <h4 class="text-sm font-semibold text-gray-900 mb-2">
+          Protección de datos personales
+        </h4>
+
+        <p class="text-sm text-gray-600">
+          La información proporcionada será tratada de forma confidencial y
+          utilizada únicamente para fines de evaluación y contacto, conforme a
+          la normativa vigente de protección de datos.
+        </p>
+
+        <!-- Checkbox -->
+        <label class="mt-4 flex items-start gap-3 cursor-pointer">
+          <input
+            id="acceptTerms"
+            type="checkbox"
+            class="mt-1 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+          />
+          <span class="text-sm text-gray-600">
+            He leído y acepto el tratamiento de mis datos personales
+          </span>
+        </label>
+
+        <!-- Botón oculto -->
+        <button
+          id="startFormBtn"
+          class="mt-6  w-full rounded-xl bg-orange-500 px-6 py-3
+               font-semibold text-white transition hover:bg-orange-600"
+        >
+          Empezar formulario
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <Whatsapp />
+  <Footer />
+
+
+</Layout>
+
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const checkbox = document.getElementById("acceptTerms") as HTMLInputElement | null;
+    const boton = document.getElementById("startFormBtn") as HTMLButtonElement | null;
+
+    if (!checkbox || !boton) {
+      console.warn("Elementos del formulario no encontrados");
+      return;
+    }
+
+    boton.addEventListener("click", () => {
+      if (checkbox.checked) {
+        window.location.href = "/trabaja-con-nosotros/postulacion";
+      } else {
+        alert("Debes aceptar el tratamiento de datos para continuar");
+      }
+    });
+  });
+</script>
+

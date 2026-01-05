@@ -60,6 +60,7 @@ import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
 import Goleadores from "./pages/Marketing/Goleadores";
 import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
 import EditarVentaCompleta from "./pages/Vendedores/EditarVentaCompleta";
+import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -200,6 +201,11 @@ function App() {
                 path="/ventas-auditoria/:id"
                 element={<EditarVentaCompleta />}
               />
+                  <Route
+                path="/postulaciones"
+                element={<Postulaciones />}
+              />
+
             </Route>
 
             {/* REPARTIDORES */}

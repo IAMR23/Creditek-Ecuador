@@ -1,0 +1,35 @@
+---
+import { useState } from "astro/jsx-runtime";
+import Step1 from "./Step1.astro";
+import Step2 from "./Step2.astro";
+import Step3 from "./Step3.astro";
+
+const [step, setStep] = useState(1);
+
+function nextStep() {
+  setStep(step + 1);
+}
+function backStep() {
+  setStep(step - 1);
+}
+
+function closeModalFn() {
+  const modal = document.getElementById("jobForm");
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+  document.body.style.overflow = "";
+}
+---
+
+<div id="jobForm" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+  <div class="relative w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl p-8 border-t-8 border-emerald-700">
+    
+    <button class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl" onClick={closeModalFn}>
+      &times;
+    </button>
+
+    {step === 1 && <Step1 nextStep={nextStep} />}
+    {step === 2 && <Step2 nextStep={nextStep} backStep={backStep} />}
+    {step === 3 && <Step3 backStep={backStep} />}
+  </div>
+</div>

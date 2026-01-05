@@ -1,0 +1,128 @@
+<section id="quienes-somos" class="container">
+  <h1 class="title">Quienes Somos</h1>
+
+  <div class="cards-container">
+    <div class="card">
+      <div class="icon-container">
+        <img src="/heart.webp" alt="" srcset="" width="48" height="48" />
+      </div>
+      <div class="card-content">
+        <h2>Servicio</h2>
+        <p>Somos una familia de especialistas odontólogos</p>
+        <p class="highlight">Tienes una sola vida para Sonreír</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-container">
+        <img src="/sure.webp" alt="" srcset="" width="48" height="48" />
+      </div>
+      <div class="card-content">
+        <h2>Confianza</h2>
+        <p>
+          Brindamos un servicio de atención exclusiva y de calidad, con personal
+          altamente capacitado para que te sientas seguro de que están en las
+          mejores manos cuando se trata del cuidado bucal.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="icon-container">
+        <img src="/check.webp" alt="" srcset="" width="48" height="48" />
+      </div>
+      <div class="card-content">
+        <h2>Calidad</h2>
+        <p>
+          Somos una familia de especialistas altamente calificados, con vocación
+          formativa en el área de la salud bucal con una visión innovadora para
+          ofrecer el mejor servicio
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Arial", sans-serif;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    background-color: #f9f9f9;
+  }
+
+  .title {
+    text-align: center;
+    color: #333;
+    font-size: 36px;
+    margin-bottom: 50px;
+    font-weight: 600;
+  }
+
+  .cards-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+
+  .card {
+    flex: 1;
+    min-width: 300px;
+    background-color: white;
+    padding: 30px;
+    box-shadow: 0 15px 15px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    transition:
+      transform 0.3s ease,
+      box-shadow 0.3s ease;
+    border-right: 7px solid #d4af37; /* Borde negro exterior */
+    border-bottom: 7px solid #000; /* Borde dorado */
+  }
+
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  }
+
+  .icon-container {
+    margin-bottom: 20px;
+    color: #333;
+  }
+
+  .card-content h2 {
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  .card-content p {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+
+  .highlight {
+    font-style: italic;
+    color: #444;
+  }
+
+  @media (max-width: 768px) {
+    .cards-container {
+      flex-direction: column;
+    }
+
+    .card {
+      min-width: 100%;
+    }
+  }
+</style>

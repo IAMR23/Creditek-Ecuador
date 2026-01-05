@@ -1,0 +1,77 @@
+---
+const items = [
+  {
+    type: "Producto",
+    title: "Célulares a Crédito",
+    desc: "Celulares de última generación disponibles al contado o en cómodas cuotas.",
+    icon: "📱",
+  },
+  {
+    type: "Producto",
+    title: "Televisores Smart TV",
+    desc: "Smart TVs de alta calidad para tu hogar, sin complicaciones.",
+    icon: "📺",
+  },
+  {
+    type: "Servicio",
+    title: "Crédito Inmediato",
+    desc: "Aprobación rápida y sin trámites complicados.",
+    icon: "⚡",
+  },
+  {
+    type: "Servicio",
+    title: "Asesoría Personalizada",
+    desc: "Te ayudamos a elegir el producto ideal según tu presupuesto.",
+    icon: "🤝",
+  },
+];
+---
+
+<section class="py-20 bg-gray-50">
+  <div class="max-w-7xl mx-auto px-6">
+    
+    <!-- Título -->
+    <div class="text-center mb-14">
+      <h2 class="text-4xl font-bold text-gray-800">
+        Productos y Servicios
+      </h2>
+      <p class="mt-4 text-gray-600 max-w-2xl mx-auto">
+        Soluciones tecnológicas accesibles con beneficios pensados para ti.
+      </p>
+    </div>
+
+    <!-- Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+      {items.map(item => (
+        <div class="group bg-white rounded-2xl p-6 shadow-md hover:shadow-2xl 
+                    transition-all duration-300 hover:-translate-y-2 border border-transparent 
+                    hover:border-green-500">
+
+          <!-- Icon -->
+          <div class="text-5xl mb-4 transition-transform duration-300 
+                      group-hover:scale-110">
+            {item.icon}
+          </div>
+
+          <!-- Tipo -->
+          <span class="inline-block mb-2 text-sm font-semibold 
+                       text-green-600 bg-green-100 px-3 py-1 rounded-full">
+            {item.type}
+          </span>
+
+          <!-- Título -->
+          <h3 class="text-xl font-bold text-gray-800 mb-2 
+                     group-hover:text-green-600 transition-colors">
+            {item.title}
+          </h3>
+
+          <!-- Descripción -->
+          <p class="text-gray-600 text-sm">
+            {item.desc}
+          </p>
+        </div>
+      ))}
+    </div>
+
+  </div>
+</section>

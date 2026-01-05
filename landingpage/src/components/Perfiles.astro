@@ -1,0 +1,145 @@
+---
+const perfiles = [
+  {
+    nombre: "Dra. Alexandra Fierro",
+    especialidad: "Especialista en Diseño y Sonrisa",
+    img: "./DraAlexandraFierro1.webp",
+  },
+  {
+    //nombre: "Dra. Andrea Silva",
+    especialidad: "Ortodoncista",
+    img: "./DraAndreaSilva.webp",
+  },
+  {
+    //  nombre: "Dr. Juan Francisco Silva",
+    especialidad: "Implantólogo - Periodonsista",
+    img: "./juanf.webp",
+  },
+];
+---
+
+<div class="testimonial-carousel-container">
+  <div class="swiper testimonialSwiper">
+    <div class="swiper-wrapper py-10">
+      <!-- Slide 1 -->
+      {
+        perfiles.map((perfil) => (
+          <div class="swiper-slide">
+            <div class=" testimonial flex justify-center items-center flex-col">
+              <img class="testimonial-avatar" src={perfil.img} />
+              <p class="testimonial-quote">{perfil.especialidad}</p>
+              <span class="text-yellow-500 font-bold">{perfil.nombre}</span>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="swiper-pagination relative"></div>
+
+    <!-- Navigation buttons -->
+    <div class="swiper-button-prev"></div>
+    <div class="swiper-button-next"></div>
+  </div>
+</div>
+
+<style>
+  .testimonial-carousel-container {
+    background: url("/cirugiaDental.webp") no-repeat center bottom;
+    background-attachment: fixed;
+    background-size: cover;
+    position: relative;
+    padding: 60px 0;
+  }
+
+  .testimonial-carousel-container:before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.8;
+    background: #000;
+    z-index: 0;
+  }
+
+  .swiper {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  .testimonial {
+    text-align: center;
+    max-width: 850px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  .testimonial-avatar {
+    border-radius: 50%;
+    margin-bottom: 20px;
+    height: 300px;
+  }
+
+  .testimonial-quote {
+    display: block;
+    font-size: 24px;
+    padding: 10px 0;
+    line-height: 1.4;
+    color: #fff;
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  .swiper-pagination-bullet {
+    background: #fff;
+    opacity: 0.5;
+  }
+
+  .swiper-pagination-bullet-active {
+    opacity: 1;
+    background: #ff4500; /* Color destacado, puedes cambiarlo */
+  }
+
+  .swiper-button-next,
+  .swiper-button-prev {
+    color: #fff;
+  }
+
+  .swiper-container-horizontal > .swiper-pagination-bullets {
+    bottom: 0px;
+  }
+</style>
+
+<script>
+  import Swiper from "swiper";
+  import { Navigation, Pagination, Autoplay } from "swiper/modules";
+  import "swiper/css";
+  import "swiper/css/navigation";
+  import "swiper/css/pagination";
+
+  // Initialize Swiper
+  document.addEventListener("DOMContentLoaded", () => {
+    const swiper = new Swiper(".testimonialSwiper", {
+      modules: [Navigation, Pagination, Autoplay],
+      slidesPerView: 1,
+      spaceBetween: 30,
+      loop: true,
+      autoplay: {
+        delay: 5000,
+        disableOnInteraction: false,
+      },
+      pagination: {
+        el: ".swiper-pagination",
+        clickable: true,
+      },
+      navigation: {
+        nextEl: ".swiper-button-next",
+        prevEl: ".swiper-button-prev",
+      },
+    });
+  });
+</script>

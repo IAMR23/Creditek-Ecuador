@@ -1,0 +1,50 @@
+---
+// WhatsAppButton.astro
+
+const phoneNumber = "593962749300";
+const message = "Hola, me gustaría obtener más información.";
+
+// Codifica el mensaje para que sea válido en una URL
+const encodedMessage = encodeURIComponent(message);
+const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+---
+
+<style>
+  .whatsapp-button {
+    position: fixed;
+    right: 20px;
+    bottom: 80px;
+    background-color: #25d366;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    z-index: 1000;
+    transition: background-color 0.3s ease;
+  }
+
+  .whatsapp-button:hover {
+    background-color: #128c7e;
+  }
+
+  .whatsapp-button img {
+    width: 24px;
+    height: 24px;
+  }
+</style>
+
+<a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+  <button class="whatsapp-button">
+    <img
+      width="100px"
+      src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
+      alt="WhatsApp Icon"
+    />
+  </button>
+</a>

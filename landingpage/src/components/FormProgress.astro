@@ -1,0 +1,42 @@
+---
+const { step = 1, total = 3 } = Astro.props;
+const percent = Math.round((step / total) * 100);
+---
+
+<div class="progress-card">
+  <div class="progress-header">
+    <span>Paso {step} de {total}</span>
+    <span>{percent}%</span>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-fill" style={`width:${percent}%`}></div>
+  </div>
+</div>
+
+<style>
+.progress-card {
+  margin-bottom: 1.5rem;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  color: #1E7F5C;
+  margin-bottom: 0.4rem;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #E6F4EF;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1E7F5C, #FF8C32);
+  transition: width 0.4s ease;
+}
+</style>

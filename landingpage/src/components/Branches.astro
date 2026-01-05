@@ -1,0 +1,117 @@
+---
+const centralOffice = {
+  name: "Oficinas Creditek",
+  address: "Martha Bucaram de Roldos Y S37 , Quito, Ecuador",
+  image: "/Creditek/oficinas.jpg",
+  map: "https://maps.app.goo.gl/3LLsRCm44XnR8UvR8",
+};
+
+const branches = [
+  {
+    name: "Sangolqui",
+    address: "En frente del parque central Juan de Salinas",
+    image: "/Creditek/1.png",
+    map: "https://maps.app.goo.gl/xst4PCdKCkk1UpA46",
+  },
+  {
+    name: "Nueva Aurora",
+    address: "Sur de Quito",
+    image: "/Creditek/venta2.png",
+    map: "https://maps.app.goo.gl/E2nt2keoTAM9kj2y9",
+  },
+  {
+    name: "Chillogallo",
+    address: "Sector Sur de Quito",
+    image: "/Creditek/Chillogallo.png",
+    map: "https://maps.app.goo.gl/TMVcxpPgyLx2peDE6",
+  },
+  {
+    name: "Caupicho",
+    address: "Sector Sur de Quito",
+    image: "/Creditek/Caupicho2.png",
+    map: "https://maps.app.goo.gl/rJfg7tbzDsaqxPG99",
+  },
+];
+---
+
+<section class="py-20 bg-gray-50">
+  <div class="max-w-7xl mx-auto px-6">
+    <!-- Título -->
+    <div class="text-center mb-8">
+      <h2 class="text-4xl font-extrabold text-gray-800">Nuestras Sucursales</h2>
+      <p class="mt-4 text-gray-600 max-w-3xl mx-auto">
+        Visítanos en nuestra oficina central o en cualquiera de nuestras
+        sucursales autorizadas.
+      </p>
+    </div>
+
+    <!-- Oficina Central -->
+    <div class="mb-20">
+      <h3 class="text-2xl font-bold text-green-600 mb-6">Oficina Central</h3>
+
+      <div
+        class="grid grid-cols-1 lg:grid-cols-2 gap-8 bg-white rounded-2xl shadow-lg overflow-hidden"
+      >
+        <img
+          src={centralOffice.image}
+          alt={centralOffice.name}
+          class="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+        />
+
+        <div class="p-8 flex flex-col justify-center">
+          <h4 class="text-xl font-bold text-gray-800 mb-2">
+            {centralOffice.name}
+          </h4>
+          <p class="text-gray-600 mb-4">
+            📍 {centralOffice.address}
+          </p>
+
+
+
+            <iframe  class="w-full h-80 rounded-xl border" src="https://www.google.com/maps/embed?pb=!1m17!1m12!1m3!1d3989.7664444010516!2d-78.561906!3d-0.292176!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m2!1m1!2zMMKwMTcnMzEuOCJTIDc4wrAzMyc0Mi45Ilc!5e0!3m2!1ses-419!2sec!4v1767419637738!5m2!1ses-419!2sec" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            
+        </div>
+      </div>
+    </div>
+
+    <!-- Sucursales -->
+    <div>
+      <h3 class="text-2xl font-bold text-orange-500 mb-8">
+        Nuestras Sucursales
+      </h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+        {
+          branches.map((branch) => (
+            <div class="bg-white rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden group">
+              <img
+                src={branch.image}
+                alt={branch.name}
+                class="w-full h-72 object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+
+              <div class="p-6">
+                <h4 class="text-lg font-bold text-gray-800 mb-1">
+                  {branch.name}
+                </h4>
+                <p class="text-gray-600 text-sm mb-4">📍 {branch.address}</p>
+
+                <div class="flex justify-end">
+  
+                  <a
+                    href={branch.map}
+                    target="_blank"
+                    class=" p-4 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded-lg transition hover:-translate-y-0.5 hover:shadow-lg
+"
+                  >
+                    Ver ubicación
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,193 @@
+---
+import { FBURL, INS } from "../const/constSocialNetworks";
+---
+
+<section class="hero">
+  <div class="overlay"></div>
+
+  <div class="hero-content">
+    <!-- IZQUIERDA -->
+    <div class="hero-text">
+      <h1>Somos <span>Creditek .</span></h1>
+
+      <p class="subtitle">
+        Celulares y TVs a crédito para toda la región Sierra
+      </p>
+
+      <div class="hero-buttons">
+        <a href="/trabaja-con-nosotros" class="btn btn-primary"> Trabaja con nosotros </a>
+        <a href="#productos" class="btn btn-secondary"> Quiero un producto </a>
+      </div>
+
+      <div class="social-icons">
+        <a href={FBURL} target="_blank" class="social facebook">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path
+              d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"
+            ></path>
+          </svg>
+        </a>
+
+        <a href={INS} target="_blank" class="social instagram">
+          <img
+            src="/Creditek/instagram.svg"
+            alt="Instagram Creditek"
+            class="icon"
+          />
+        </a>
+      </div>
+    </div>
+
+    <!-- DERECHA -->
+    <div class="hero-image">
+      <img src="/Creditek/landing.png" alt="Creditek productos" />
+    </div>
+  </div>
+
+  <div class="wave">
+    <svg viewBox="0 0 1440 100" preserveAspectRatio="none">
+      <path
+        fill="#ffffff"
+        d="M0,64L80,58.7C160,53,320,43,480,48C640,53,800,75,960,80C1120,85,1280,75,1360,69.3L1440,64L1440,320L0,320Z"
+      ></path>
+    </svg>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f9d58, #ff8c00);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 1200px;
+    margin: auto;
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 3rem;
+    color: white;
+  }
+
+  .hero-text h1 {
+    font-size: 3.2rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+  }
+
+  .hero-text h1 span {
+    color: #ffb703;
+  }
+
+  .subtitle {
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+    max-width: 420px;
+  }
+
+  .hero-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .btn {
+    padding: 0.9rem 1.8rem;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary {
+    background: #ff8c00;
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #e67600;
+  }
+
+  .btn-secondary {
+    border: 2px solid white;
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: white;
+    color: #0f9d58;
+  }
+
+  .social-icons {
+    display: flex;
+    gap: 0.8rem;
+  }
+
+  .social {
+    width: 38px;
+    height: 38px;
+    background: white;
+    color: #333;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s;
+  }
+
+  .social:hover {
+    transform: translateY(-3px);
+  }
+
+  .hero-image img {
+    width: 100%;
+    max-width: 500px;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+  }
+
+  .wave {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 100px;
+  }
+
+  @media (max-width: 900px) {
+    .hero-content {
+      grid-template-columns: 1fr;
+      text-align: center;
+    }
+
+    .hero-text h1 {
+      font-size: 2.5rem;
+    }
+
+    .hero-buttons {
+      justify-content: center;
+    }
+
+    .hero-image img {
+      margin: auto;
+    }
+  }
+</style>

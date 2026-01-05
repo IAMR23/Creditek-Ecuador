@@ -105,6 +105,8 @@ export default function Sidebar() {
         { label: "Usuarios", icon: <Users size={20} />, path: "/usuarios" },
         { label: "Roles", icon: <Users size={20} />, path: "/rol" },
         { label: "Agencias", icon: <Building2 size={20} />, path: "/agencias" },
+        { label: "Postulaciones", icon: <Building2 size={20} />, path: "/postulaciones" },
+        
         {
           label: "Asignar usuarios a agencias",
           icon: <UserPlus size={20} />,

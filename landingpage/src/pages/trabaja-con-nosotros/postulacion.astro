@@ -1,0 +1,643 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import NavBar from "../../components/NavBar.astro";
+import Footer from "../../components/Footer.astro";
+import Whatsapp from "../../components/Whatsapp.astro";
+import FormProgress from "../../components/FormProgress.astro";
+---
+
+<Layout title="Trabaja con Nosotros">
+  <NavBar />
+  <div class="h-20 bg-black"></div>
+
+  <form
+    id="jobForm"
+    method="post"
+    class="bg-gray-50 p-6 rounded-2xl border border-gray-200 m-10"
+  >
+    <!-- Paso 1 -->
+    <div
+      id="step1"
+      class="step max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-lg"
+    >
+      <FormProgress step="1" />
+
+      <h2 class="text-3xl font-bold text-emerald-700 mb-2">
+        Información personal
+      </h2>
+      <p class="text-gray-500 mb-8 text-sm">
+        Completa tus datos básicos para continuar con el proceso.
+      </p>
+
+      <!-- DATOS BÁSICOS -->
+      <fieldset class="space-y-5">
+        <legend class="sr-only">Datos personales</legend>
+
+        <!-- Nombre -->
+        <div>
+          <label for="nombre" class="label">Nombre completo</label>
+          <input id="nombre" name="nombre" class="input" />
+        </div>
+
+        <!-- Cédula -->
+        <div>
+          <label for="cedula" class="label">Número de cédula</label>
+          <input id="cedula" name="cedula" class="input" />
+        </div>
+      </fieldset>
+
+      <!-- GÉNERO -->
+      <div class="mt-8">
+        <p class="label mb-3">Género</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {
+            ["Masculino", "Femenino", "Otro"].map((g) => (
+              <label class="radio-card">
+                <input type="radio" name="genero" value={g} class="sr-only" />
+                <span>{g}</span>
+              </label>
+            ))
+          }
+        </div>
+      </div>
+
+      <!-- EDAD / CONTACTO -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-8">
+        <div>
+          <label for="edad" class="label">Edad</label>
+          <input id="edad" type="number" min="18" name="edad" class="input" />
+        </div>
+
+        <div>
+          <label for="telefono" class="label">Teléfono</label>
+          <input id="telefono" name="telefono" class="input" />
+        </div>
+      </div>
+
+      <!-- DIRECCIÓN -->
+      <div class="mt-5">
+        <label for="direccion" class="label">Dirección</label>
+        <input id="direccion" name="direccion" class="input" />
+      </div>
+
+      <!-- ESTADO CIVIL -->
+      <div class="mt-8">
+        <p class="label mb-3">Estado civil</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {
+            [
+              "Soltero/a",
+              "Casado/a",
+              "Conviviente",
+              "Separado/a",
+              "Viudo/a",
+              "Divorciado/a",
+            ].map((e) => (
+              <label class="radio-card">
+                <input
+                  type="radio"
+                  name="estadoCivil"
+                  value={e}
+                  class="sr-only"
+                />
+                <span>{e}</span>
+              </label>
+            ))
+          }
+        </div>
+      </div>
+
+      <!-- BOTÓN -->
+      <div class="mt-10 flex justify-end">
+        <button type="button" id="nextStep1" class="btn-primary">
+          Continuar
+        </button>
+      </div>
+    </div>
+
+    <!-- Paso 2 -->
+    <div id="step2" class="step hidden">
+      <FormProgress step="2" />
+
+      <h2>Información Socio-Laboral</h2>
+
+      <!-- Datos generales -->
+      <div class="grid grid-2 mt-6">
+        <div>
+          <label for="vivienda" class="label">Tipo de vivienda</label>
+          <select id="vivienda" name="vivienda" class="input" >
+            <option value="">Selecciona una opción</option>
+            <option>Arrendada</option>
+            <option>Propia</option>
+            <option>Familiar</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="estudios" class="label">Nivel de estudios</label>
+          <select id="estudios" name="estudios" class="input" >
+            <option value="">Selecciona una opción</option>
+            <option>Primarios</option>
+            <option>Secundario</option>
+            <option>Secundario inconcluso</option>
+            <option>Universidad inconcluso</option>
+            <option>Superior</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <label for="hijos" class="label">Número de hijos</label>
+        <input
+          id="hijos"
+          name="hijos"
+          type="number"
+          min="0"
+          class="input"
+          placeholder="Ej: 0"
+          
+        />
+      </div>
+
+      <!-- Experiencia laboral -->
+      <h3 class="mt-8 font-semibold text-gray-800 text-lg">
+        Información laboral (últimos 3 trabajos)
+      </h3>
+
+      <div class="mt-4 p-5 border rounded-2xl bg-gray-50 grid gap-4">
+        <h4 class="font-semibold text-emerald-700">Trabajo 1</h4>
+
+        <div>
+          <label class="label">Lugar de trabajo</label>
+          <input class="input" name="trabajo1_lugar" />
+        </div>
+
+        <div>
+          <label class="label">Cargo desempeñado</label>
+          <input class="input" name="trabajo1_cargo" />
+        </div>
+
+        <div class="grid grid-2">
+          <div>
+            <label class="label">Fecha de inicio</label>
+            <input type="date" class="input" name="trabajo1_inicio" />
+          </div>
+
+          <div>
+            <label class="label">Fecha de salida</label>
+            <input type="date" class="input" name="trabajo1_salida" />
+          </div>
+        </div>
+
+        <div>
+          <label class="label">Razón de salida</label>
+          <input class="input" name="trabajo1_razon" />
+        </div>
+
+        <div>
+          <label class="label">Nombre del jefe</label>
+          <input class="input" name="trabajo1_jefe" />
+        </div>
+
+        <div>
+          <label class="label">Teléfono</label>
+          <input type="tel" class="input" name="trabajo1_telefono" />
+        </div>
+      </div>
+
+      <div class="mt-4 p-5 border rounded-2xl bg-gray-50 grid gap-4">
+        <h4 class="font-semibold text-emerald-700">Trabajo 2</h4>
+
+        <div>
+          <label class="label">Lugar de trabajo</label>
+          <input class="input" name="trabajo2_lugar" />
+        </div>
+
+        <div>
+          <label class="label">Cargo desempeñado</label>
+          <input class="input" name="trabajo2_cargo" />
+        </div>
+
+        <div class="grid grid-2">
+          <div>
+            <label class="label">Fecha de inicio</label>
+            <input type="date" class="input" name="trabajo2_inicio" />
+          </div>
+
+          <div>
+            <label class="label">Fecha de salida</label>
+            <input type="date" class="input" name="trabajo2_salida" />
+          </div>
+        </div>
+
+        <div>
+          <label class="label">Razón de salida</label>
+          <input class="input" name="trabajo2_razon" />
+        </div>
+
+        <div>
+          <label class="label">Nombre del jefe</label>
+          <input class="input" name="trabajo2_jefe" />
+        </div>
+
+        <div>
+          <label class="label">Teléfono</label>
+          <input type="tel" class="input" name="trabajo2_telefono" />
+        </div>
+      </div>
+
+      <div class="mt-4 p-5 border rounded-2xl bg-gray-50 grid gap-4">
+        <h4 class="font-semibold text-emerald-700">Trabajo 3</h4>
+
+        <div>
+          <label class="label">Lugar de trabajo</label>
+          <input class="input" name="trabajo3_lugar" />
+        </div>
+
+        <div>
+          <label class="label">Cargo desempeñado</label>
+          <input class="input" name="trabajo3_cargo" />
+        </div>
+
+        <div class="grid grid-2">
+          <div>
+            <label class="label">Fecha de inicio</label>
+            <input type="date" class="input" name="trabajo3_inicio" />
+          </div>
+
+          <div>
+            <label class="label">Fecha de salida</label>
+            <input type="date" class="input" name="trabajo3_salida" />
+          </div>
+        </div>
+
+        <div>
+          <label class="label">Razón de salida</label>
+          <input class="input" name="trabajo3_razon" />
+        </div>
+
+        <div>
+          <label class="label">Nombre del jefe</label>
+          <input class="input" name="trabajo3_jefe" />
+        </div>
+
+        <div>
+          <label class="label">Teléfono</label>
+          <input type="tel" class="input" name="trabajo3_telefono" />
+        </div>
+      </div>
+
+      <div class="mt-8 flex justify-end">
+        <button type="button" id="nextStep2" class="btn-next">
+          Continuar
+        </button>
+      </div>
+    </div>
+
+
+    <div id="step3" class="step hidden">
+  <FormProgress step="3" />
+
+  <div class="mt-6">
+    <label class="label">
+      Cuando tienes un objetivo de ventas semanal, ¿cómo planificas tu tiempo y actividades para alcanzarlo?
+    </label>
+    <textarea
+      class="input"
+      name="planificacion_semanal"
+      style="min-height:120px"
+      placeholder="Describe cómo organizas tu semana, prioridades y acciones"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">
+      Si tus ventas no están llegando a la meta, ¿qué haces para mejorar tu rendimiento?
+    </label>
+    <textarea
+      class="input"
+      name="mejora_rendimiento"
+      style="min-height:120px"
+      placeholder="Cambiar estrategia, pedir apoyo, capacitarte, ajustar enfoque"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">
+      ¿Cómo haces seguimiento de tus clientes y de tus ventas para asegurarte de que cada oportunidad se aproveche?
+    </label>
+    <textarea
+      class="input"
+      name="seguimiento_clientes"
+      style="min-height:120px"
+      placeholder="Llamadas, mensajes, agenda, CRM, notas"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">
+      ¿Qué harías para vender más celulares o televisores sin aumentar tus horas de trabajo?
+    </label>
+    <textarea
+      class="input"
+      name="estrategia_mas_ventas"
+      style="min-height:120px"
+      placeholder="Estrategias, enfoque, priorización"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">
+      ¿Cómo sabes si estás siendo productivo cada día?
+    </label>
+    <textarea
+      class="input"
+      name="indicadores_productividad"
+      style="min-height:120px"
+      placeholder="Indicadores, resultados, tareas cumplidas"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">
+      Entendiendo que el <strong>producto final valioso</strong> es el resultado útil y medible por el cual se te paga:
+      describe el producto final valioso de tu último trabajo e indica si eras
+      <strong>bueno, regular o malo</strong> entregándolo y por qué.
+    </label>
+    <textarea
+      class="input"
+      name="producto_final_valioso"
+      style="min-height:150px"
+      placeholder="Ventas logradas, clientes atendidos, resultados concretos"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">¿Cómo te ves en un año?</label>
+    <textarea
+      class="input"
+      name="vision_1_ano"
+      style="min-height:100px"
+      placeholder="Laboral, personal, económico"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">¿Cómo te ves en 5 años?</label>
+    <textarea
+      class="input"
+      name="vision_5_anos"
+      style="min-height:100px"
+      placeholder="Proyección a largo plazo"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">¿Cuál fue tu jefe favorito y por qué?</label>
+    <textarea
+      class="input"
+      name="jefe_favorito"
+      style="min-height:100px"
+      placeholder="Qué aprendiste, cómo te trataba, qué valorabas"
+      ></textarea>
+  </div>
+
+  <div class="mt-6">
+    <label class="label">¿Cuál fue tu jefe menos favorito y por qué?</label>
+    <textarea
+      class="input"
+      name="jefe_menos_favorito"
+      style="min-height:100px"
+      placeholder="Sé honesto pero respetuoso"
+      ></textarea>
+  </div>
+
+  <div class="mt-10 flex justify-end">
+    <button type="submit" class="btn-primary">
+      Enviar formulario
+    </button>
+  </div>
+</div>
+
+
+  </form>
+
+  <Whatsapp />
+  <Footer />
+</Layout>
+
+<style>
+  /* ===== CONTENEDOR STEP ===== */
+  .step {
+    max-width: 720px;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 2.5rem;
+    border-radius: 1.25rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+  }
+
+  /* ===== TEXTOS ===== */
+  h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #047857; /* emerald-700 */
+  }
+
+  p {
+    color: #6b7280; /* gray-500 */
+    font-size: 0.875rem;
+  }
+
+  /* ===== LABELS ===== */
+  .label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151; /* gray-700 */
+    margin-bottom: 0.25rem;
+  }
+
+  .helper {
+    font-size: 0.75rem;
+    color: #9ca3af; /* gray-400 */
+    margin-top: 0.25rem;
+  }
+
+  /* ===== INPUTS ===== */
+  .input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid #d1d5db; /* gray-300 */
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: #10b981; /* emerald-500 */
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  }
+
+  /* ===== GRID UTILITIES ===== */
+  .grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  @media (max-width: 640px) {
+    .grid-2,
+    .grid-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ===== RADIO CARD (PRO) ===== */
+  .radio-card {
+    cursor: pointer;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    text-align: center;
+    font-weight: 500;
+    color: #374151;
+    transition: all 0.2s ease;
+    user-select: none;
+  }
+
+  .radio-card:hover {
+    border-color: #10b981;
+  }
+
+  .radio-card input {
+    display: none;
+  }
+
+  .radio-card:has(input:checked) {
+    border-color: #059669; /* emerald-600 */
+    background-color: #ecfdf5; /* emerald-50 */
+    color: #047857;
+  }
+
+  /* ===== BOTÓN PRINCIPAL ===== */
+  .btn-primary {
+    background-color: #059669;
+    color: #ffffff;
+    padding: 0.75rem 2rem;
+    border-radius: 0.75rem;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      transform 0.1s ease;
+  }
+
+  .btn-primary:hover {
+    background-color: #047857;
+  }
+
+  .btn-primary:active {
+    transform: scale(0.97);
+  }
+
+  /* ===== BOTÓN NEXT SIMPLE ===== */
+  .btn-next {
+    background-color: #059669;
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-next:hover {
+    background-color: #047857;
+  }
+</style>
+
+<script>
+  console.log("Script cargado");
+
+  // ⚡ Forzar tipos correctos para que TypeScript no dé errores
+  const jobForm = document.getElementById("jobForm") as HTMLFormElement;
+
+  const step1 = document.getElementById("step1") as HTMLDivElement;
+  const step2 = document.getElementById("step2") as HTMLDivElement;
+  const step3 = document.getElementById("step3") as HTMLDivElement;
+
+  // Navegación entre pasos
+  const nextStep1Btn = document.getElementById(
+    "nextStep1"
+  ) as HTMLButtonElement;
+  const nextStep2Btn = document.getElementById(
+    "nextStep2"
+  ) as HTMLButtonElement;
+
+  nextStep1Btn?.addEventListener("click", () => {
+    step1.classList.add("hidden");
+    step2.classList.remove("hidden");
+  });
+
+  nextStep2Btn?.addEventListener("click", () => {
+    step2.classList.add("hidden");
+    step3.classList.remove("hidden");
+  });
+
+  // Enviar formulario al backend a través del endpoint de Astro
+  jobForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(jobForm);
+    const data = Object.fromEntries(formData.entries());
+
+    const submitBtn = jobForm.querySelector(
+      'button[type="submit"]'
+    ) as HTMLButtonElement;
+    if (!submitBtn) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Enviando...";
+
+    try {
+      const res = await fetch("/api/submit-form", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        alert("✅ " + (result.message || "Formulario enviado correctamente"));
+
+        // Reset de formulario y pasos
+        jobForm.reset();
+        step1.classList.remove("hidden");
+        step2.classList.add("hidden");
+        step3.classList.add("hidden");
+        jobForm.classList.add("hidden");
+        window.location.href = "/";
+      } else {
+        alert("❌ Error: " + (result.message || "Intenta de nuevo"));
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      alert("❌ Error de conexión. Por favor intenta de nuevo.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Enviar formulario";
+    }
+  });
+</script>

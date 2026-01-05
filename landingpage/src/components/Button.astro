@@ -1,0 +1,33 @@
+---
+const { link, servicio, icono } = Astro.props;
+---
+
+<a
+  href={link}
+  class="nav-link2 text-white font-extralight flex flex-row items-center"
+>
+  <img src={icono} alt={icono} srcset="" width="32px" />
+  {servicio}
+</a>
+
+<style>
+  .nav-link2 {
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .nav-link2:after {
+    content: "";
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: -4px;
+    left: 0;
+    background-color: currentColor;
+    transition: width 0.3s ease;
+  }
+
+  .nav-link2:hover:after {
+    width: 100%;
+  }
+</style>

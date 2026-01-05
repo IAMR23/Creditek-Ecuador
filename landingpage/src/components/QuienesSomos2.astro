@@ -1,0 +1,119 @@
+<section id="quienes-somos" class="container">
+  <h1 class="text-center text-3xl font-bold mb-[50px]">Quienes Somos</h1>
+  <div class="flex justify-center items-center flex-wrap gap-3 text-xl">
+    <div class="card card-servicio">
+      <h2 class="font-bold">Servicio</h2>
+      <p>Somos una familia de especialistas odontólogos</p>
+      <p class="highlight">Tienes una sola vida para Sonreír</p>
+    </div>
+
+    <div class="card card-confianza text-white">
+      <h2 class="font-bold">Confianza</h2>
+      <p>
+        Brindamos un servicio de atención exclusiva y de calidad, con personal
+        altamente capacitado para que te sientas seguro de que están en las
+        mejores manos cuando se trata del cuidado bucal.
+      </p>
+    </div>
+
+    <div class="card card-calidad">
+      <h2 class="font-bold">Calidad</h2>
+      <p class="">
+        Somos una familia de especialistas altamente calificados, con vocación
+        formativa en el área de la salud bucal con una visión innovadora para
+        ofrecer el mejor servicio
+      </p>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Fondos personalizados por card */
+  .card-servicio {
+    background-image: url("/service.jpg");
+    width: 300px;
+    height: 600px;
+  }
+
+  .card-confianza {
+    background-image: url("/confianza.jpeg");
+    width: 300px;
+    height: 600px;
+  }
+
+  .card-calidad {
+    background-image: url("/quality.jpeg");
+    width: 300px;
+    height: 600px;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    background-color: #f9f9f9;
+  }
+
+  .cards-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    flex-wrap: wrap;
+  }
+
+  .card {
+    position: relative;
+    flex: 1;
+    min-width: 300px;
+    height: 350px; /* ← Esto mantiene el tamaño fijo */
+    padding: 30px;
+    background-size: cover; /* La imagen llena el card */
+    background-position: center; /* Centrada */
+    background-repeat: no-repeat;
+    box-shadow: 0 15px 15px rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* El contenido se va al fondo */
+    border-right: 7px solid #d4af37;
+    border-bottom: 7px solid #000;
+    overflow: hidden; /* Por si algo se sale del borde */
+  }
+
+  .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  }
+
+  .icon-container {
+    margin-bottom: 20px;
+    color: #333;
+  }
+
+  .card-content h2 {
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  .card-content p {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+
+  .highlight {
+    font-style: italic;
+    color: #444;
+  }
+
+  @media (max-width: 768px) {
+    .cards-container {
+      flex-direction: column;
+    }
+
+    .card {
+      min-width: 100%;
+    }
+  }
+</style>

@@ -1,0 +1,395 @@
+---
+// Define interfaces for better type safety
+interface ServiceItem {
+  img: string;
+  title: string;
+  link: string;
+}
+
+// Combine all services into one array with a visibility property
+const allServices: (ServiceItem & { initiallyVisible: boolean })[] = [
+  {
+    img: "./ed.webp",
+    title: "Estética Dental",
+    link: "/estetica-dental",
+    initiallyVisible: true,
+  },
+  {
+    img: "./cirugiaDental.webp",
+    title: "Cirugía Dental",
+    link: "/cirugia-dental",
+    initiallyVisible: true,
+  },
+  {
+    img: "./radiografia.webp",
+    title: "Radiografías y Tomografías Dentales",
+    link: "/radiografias",
+    initiallyVisible: true,
+  },
+  {
+    img: "./rehabilitacion.webp",
+    title: "Rehabilitación Oral",
+    link: "/rehabilitacion",
+    initiallyVisible: true,
+  },
+  {
+    img: "./bruxismo.webp",
+    title: "Bruxismo",
+    link: "./bruxismo",
+    initiallyVisible: true,
+  },
+  {
+    img: "./carillas.webp",
+    title: "Carillas",
+    link: "./carillas",
+    initiallyVisible: true,
+  },
+  {
+    img: "./diseñoSonrisa.webp",
+    title: "Diseño de Sonrisa",
+    link: "/sonrisa",
+    initiallyVisible: false,
+  },
+  {
+    img: "./extraccionTerceros.webp",
+    title: "Extracción de Muelas del Juicio",
+    link: "/extraccion",
+    initiallyVisible: false,
+  },
+  {
+    img: "./implante1.webp",
+    title: "Implantes Dentales",
+    link: "/implantes",
+    initiallyVisible: false,
+  },
+  {
+    img: "./Odontepediatria.webp",
+    title: "Odontepediatría",
+    link: "./odontepediatria",
+    initiallyVisible: false,
+  },
+  {
+    img: "./odontologia.webp",
+    title: "Odontología",
+    link: "./odontologia",
+    initiallyVisible: false,
+  },
+  {
+    img: "./allonfour.webp",
+    title: "All on Four",
+    link: "./allonfour",
+    initiallyVisible: false,
+  },
+  {
+    img: "./protesisFija.webp",
+    title: "Protesis Fija",
+    link: "./protesis",
+    initiallyVisible: false,
+  },
+  {
+    img: "./endodoncia.webp",
+    title: "Endodoncia",
+    link: "./endodoncia",
+    initiallyVisible: false,
+  },
+];
+
+// Props configuration for customization
+const {
+  sectionTitle = "Servicios",
+  sectionSubtitle = "Ofrecemos los siguientes servicios para tu salud dental",
+  initialVisibleCount = 6,
+  loadMoreCount = 3,
+} = Astro.props;
+---
+
+<section class="services-section">
+  <h1 class="section-title">{sectionTitle}</h1>
+  <p class="section-subtitle">{sectionSubtitle}</p>
+
+  <div class="services-grid" id="services-grid">
+    {
+      allServices.map((service, index) => (
+        <div
+          class={`service-card ${!service.initiallyVisible ? "hidden-service" : ""}`}
+          data-index={index}
+        >
+          <a href={service.link} class="service-link">
+            <div class="service-image">
+              <img
+                src={service.img}
+                alt={service.title}
+                loading={index < 6 ? "eager" : "lazy"}
+              />
+              {/*          <div class="service-overlay">
+                <h3>{service.title}</h3>
+              </div> */}
+              <div class="service-phone ">
+                <span class="phone-dot" />
+                <span class="phone-number font-bold ">{service.title}</span>
+              </div>
+            </div>
+          </a>
+        </div>
+      ))
+    }
+  </div>
+
+  {
+    allServices.length > initialVisibleCount && (
+      <div class="show-more-container">
+        <button id="show-more-btn" class="show-more-btn">
+          Ver más
+        </button>
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .services-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem;
+  }
+
+  .section-title {
+    text-align: center;
+    font-size: clamp(2rem, 5vw, 2.5rem);
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 0.75rem;
+  }
+
+  .section-subtitle {
+    text-align: center;
+    font-size: clamp(1rem, 3vw, 1.125rem);
+    color: #666;
+    margin-bottom: 3rem;
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .service-card {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+    height: 100%;
+  }
+
+  .service-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .service-link {
+    display: block;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .service-image {
+    position: relative;
+    width: 100%;
+    height: 280px;
+    overflow: hidden;
+  }
+
+  .service-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.6s ease;
+  }
+
+  .service-card:hover .service-image img {
+    transform: scale(1.08);
+  }
+
+  .service-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 1.5rem;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+    color: white;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+  }
+
+  .service-card:hover .service-overlay {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .service-overlay h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+  }
+
+  .service-phone {
+    position: absolute;
+    top: 1rem;
+    right: 0;
+    display: flex;
+    align-items: center;
+    background-color: rgba(255, 204, 0, 0.9);
+    padding: 0.375rem 0.75rem;
+    border-radius: 4px 0 0 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  }
+
+  .phone-dot {
+    width: 8px;
+    height: 8px;
+    background-color: #333;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+  }
+
+  .phone-number {
+    font-size: 0.8rem;
+  }
+
+  .hidden-service {
+    display: none;
+  }
+
+  .show-more-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 2rem;
+  }
+
+  .show-more-btn {
+    background-color: #333;
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 50px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .show-more-btn:hover {
+    background-color: #444;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .show-more-btn:active {
+    transform: translateY(0);
+  }
+
+  @media (max-width: 992px) {
+    .services-grid {
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+  }
+
+  @media (max-width: 768px) {
+    .services-section {
+      padding: 3rem 1rem;
+    }
+  }
+
+  @media (max-width: 576px) {
+    .services-grid {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .service-image {
+      height: 240px;
+    }
+  }
+</style>
+
+<script>
+  // Enhanced script with better performance and accessibility
+  document.addEventListener("DOMContentLoaded", function () {
+    const showMoreBtn = document.getElementById("show-more-btn");
+    const hiddenServices = document.querySelectorAll(".hidden-service");
+    const loadMoreCount = 3; // You can change this or make it a prop
+    let visibleCount = 0;
+
+    if (showMoreBtn && hiddenServices.length > 0) {
+      // Add aria attributes for accessibility
+      showMoreBtn.setAttribute("aria-expanded", "false");
+      showMoreBtn.setAttribute("aria-controls", "services-grid");
+
+      showMoreBtn.addEventListener("click", function () {
+        let newlyVisible = 0;
+
+        // Show next batch of hidden services
+        hiddenServices.forEach((service) => {
+          if (
+            newlyVisible < loadMoreCount &&
+            service.classList.contains("hidden-service")
+          ) {
+            service.classList.remove("hidden-service");
+
+            // Add animation class
+            service.classList.add("fade-in");
+
+            // Ensure images load
+            const img = service.querySelector("img");
+            if (img) img.loading = "eager";
+
+            newlyVisible++;
+            visibleCount++;
+          }
+        });
+
+        // Update button state
+        showMoreBtn.setAttribute("aria-expanded", "true");
+
+        // Hide button if all services are visible
+        if (visibleCount >= hiddenServices.length) {
+          showMoreBtn.style.display = "none";
+        }
+
+        // Update button text to show remaining count
+        const remaining = hiddenServices.length - visibleCount;
+        if (remaining > 0) {
+          showMoreBtn.textContent = `Ver más (${remaining})`;
+        }
+      });
+    }
+  });
+</script>
+
+<style is:global>
+  /* Animation for newly revealed cards */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+</style>
