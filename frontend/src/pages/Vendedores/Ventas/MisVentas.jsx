@@ -102,7 +102,7 @@ export default function MisMetas() {
     texto += `👤 *Vendedor:* ${ventaSeleccionada.usuarioAgencia.usuario.nombre}\n`;
     texto += `🏢 *Agencia:* ${ventaSeleccionada.usuarioAgencia.agencia.nombre}\n`;
     texto += `🧍 *Cliente*\n`;
-    texto += `- Nombre: ${ventaSeleccionada.cliente.nombre}\n`;
+    texto += `- Nombre: ${ventaSeleccionada.cliente.cliente}\n`;
     texto += `- Cédula: ${ventaSeleccionada.cliente.cedula}\n`;
     texto += `- Teléfono: ${ventaSeleccionada.cliente.telefono}\n`;
     texto += `- Correo: ${ventaSeleccionada.cliente.correo}\n`;
@@ -235,7 +235,7 @@ export default function MisMetas() {
             <div className="bg-gray-100 p-2 rounded mb-3">
               <p className="font-semibold">Cliente</p>
               <p>
-                <b>Nombre:</b> {ventaSeleccionada.cliente.nombre}
+                <b>Nombre:</b> {ventaSeleccionada.cliente.cliente}
               </p>
               <p>
                 <b>Cédula:</b> {ventaSeleccionada.cliente.cedula}

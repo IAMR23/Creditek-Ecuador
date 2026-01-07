@@ -6,7 +6,6 @@ exports.getTotalVentas = async (req, res) => {
   try {
     let { fechaInicio, fechaFin } = req.query;
 
-    // Validación por si no llegan fechas
     if (!fechaInicio || !fechaFin) {
       return res.status(400).json({
         message: "Debes enviar fechaInicio y fechaFin en el query params",
@@ -31,7 +30,7 @@ exports.getTotalVentas = async (req, res) => {
 
     const ventasDesdeVentas = await Venta.count({
       where: {
-        validada: true,
+        activo: true,
         fecha: {
           [Op.between]: [fechaInicio, fechaFin],
         }

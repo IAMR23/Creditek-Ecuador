@@ -36,18 +36,24 @@ export default function Sidebar() {
     comercial: {
       title: "Gerencia",
       items: [
+                {
+          label: "Power Bi",
+          icon: <BarChart3 size={20} />,
+          path: "dashboard-powerbi",
+        },
+
         {
           label: "Metas Comerciales",
           icon: <BarChart3 size={20} />,
-          path: "/metas-comerciales",
+          path: "metas-comerciales",
         },
-        /*         { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "/metas-comerciales-graficas" },
+        /*         { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "metas-comerciales-graficas" },
          */ {
           label: "Reporte Entregas",
           icon: <BarChart3 size={20} />,
-          path: "/reporte-entregas",
+          path: "reporte-entregas",
         },
-        /*         { label: "Ventas Completas", icon: <BarChart3 size={20} />, path: "/ventas-completas" },
+        /*         { label: "Ventas Completas", icon: <BarChart3 size={20} />, path: "ventas-completas" },
          */
       ],
     },
@@ -57,12 +63,12 @@ export default function Sidebar() {
         {
           label: "Copa Creditek 🏆",
           icon: <BarChart3 size={20} />,
-          path: "/copa-creditek",
+          path: "copa-creditek",
         },
         {
           label: "Goleadores ⚽",
           icon: <BarChart3 size={20} />,
-          path: "/goleadores",
+          path: "goleadores",
         },
       ],
     },
@@ -72,12 +78,12 @@ export default function Sidebar() {
         {
           label: "Entregas Pendientes",
           icon: <PackageCheck size={20} />,
-          path: "/entregas-pendientes",
+          path: "entregas-pendientes",
         },
         {
           label: "Entregas en Transito",
           icon: <PackageCheck size={20} />,
-          path: "/entregas-transito",
+          path: "entregas-transito",
         },
       ],
     },
@@ -88,12 +94,12 @@ export default function Sidebar() {
         {
           label: "Entregas Auditoria",
           icon: <PackageCheck size={20} />,
-          path: "/entregas-auditoria",
+          path: "entregas-auditoria",
         },
         {
           label: "Ventas Auditoria",
           icon: <PackageCheck size={20} />,
-          path: "/ventas-auditoria",
+          path: "ventas-auditoria",
         },
         
       ],
@@ -102,44 +108,44 @@ export default function Sidebar() {
     admin: {
       title: "Administración",
       items: [
-        { label: "Usuarios", icon: <Users size={20} />, path: "/usuarios" },
-        { label: "Roles", icon: <Users size={20} />, path: "/rol" },
-        { label: "Agencias", icon: <Building2 size={20} />, path: "/agencias" },
-        { label: "Postulaciones", icon: <Building2 size={20} />, path: "/postulaciones" },
+        { label: "Usuarios", icon: <Users size={20} />, path: "usuarios" },
+        { label: "Roles", icon: <Users size={20} />, path: "rol" },
+        { label: "Agencias", icon: <Building2 size={20} />, path: "agencias" },
+        { label: "Postulaciones", icon: <Building2 size={20} />, path: "postulaciones" },
         
         {
           label: "Asignar usuarios a agencias",
           icon: <UserPlus size={20} />,
-          path: "/usuarios-agencias",
+          path: "usuarios-agencias",
         },
       ],
     },
     catalogos: {
       title: "Catálogos",
       items: [
-        { label: "Marcas", icon: <Tag size={20} />, path: "/marcas" },
-        { label: "Modelos", icon: <Layers size={20} />, path: "/modelos" },
+        { label: "Marcas", icon: <Tag size={20} />, path: "marcas" },
+        { label: "Modelos", icon: <Layers size={20} />, path: "modelos" },
         {
           label: "Dispositivos",
           icon: <Factory size={20} />,
-          path: "/dispositivos",
+          path: "dispositivos",
         },
         {
           label: "Dispositivos-Marcas",
           icon: <Boxes size={20} />,
-          path: "/dispositivosMarcas",
+          path: "dispositivosMarcas",
         },
         {
           label: "Formas de Pago",
           icon: <CreditCard size={20} />,
-          path: "/formas-pago",
+          path: "formas-pago",
         },
-        { label: "Origen", icon: <Tag size={20} />, path: "/origen" },
-        { label: "Obsequios", icon: <Gift size={20} />, path: "/obsequios" },
+        { label: "Origen", icon: <Tag size={20} />, path: "origen" },
+        { label: "Obsequios", icon: <Gift size={20} />, path: "obsequios" },
         {
           label: "Costo Histórico",
           icon: <ClipboardList size={20} />,
-          path: "/costoHistorico",
+          path: "costoHistorico",
         },
       ],
     },

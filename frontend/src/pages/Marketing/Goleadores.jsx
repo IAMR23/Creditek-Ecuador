@@ -30,9 +30,9 @@ export default function Goleadores() {
 
   /* ====== DEFINICIÓN DE GRUPOS ====== */
   const grupo1 = ["Fernando", "Raul"];
-  const grupo2 = ["Damian", "Alexander", "Mishell" , "Damaris"];
+  const grupo2 = ["Damian", "Alexander", "Damaris"];
   const grupo3 = ["Anais", "Naomi", ];
-  const grupo4 = ["Steveen", "Mateo Hoyos", "Andres" , "Oscar",  "Wiliam" ];
+  const grupo4 = ["Steveen" , "Oscar",  "Wiliam" ];
 
   const cuadrante1 = ventas.filter((v) => grupo1.includes(v.nombre));
   const cuadrante2 = ventas.filter((v) => grupo2.includes(v.nombre));
@@ -42,7 +42,7 @@ export default function Goleadores() {
   const CardUsuario = ({ nombre, total }) => (
     <p className="text-white">
       <span className="font-bold text-2xl italic px-4">{nombre}</span>{" "}
-      <span className="text-4xl font-extrabold ">{total} ⚽</span>
+      <span className="text-4xl font-extrabold ">{total}</span>
     </p>
   );
 

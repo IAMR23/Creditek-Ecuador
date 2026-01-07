@@ -55,12 +55,12 @@ import EntregasTransito from "./pages/Logistica/EntregasTransito";
 import EntregasAuditoria from "./pages/Auditoria/EntregasAuditoria";
 import EntregaAuditoria from "./pages/Auditoria/EntregaAuditoria";
 import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
-import VentaAuditoria from "./pages/Auditoria/VentaAuditoria";
 import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
 import Goleadores from "./pages/Marketing/Goleadores";
 import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
 import EditarVentaCompleta from "./pages/Vendedores/EditarVentaCompleta";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
+
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -143,6 +143,8 @@ function App() {
                 </ProtectedRoute>
               }
             >
+              <Route index element={<Dashboard />} />
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="ventas-completas" element={<VentasCompletas />} />
               <Route path="usuarios" element={<Usuarios />} />
               <Route path="agencias" element={<Agencias />} />
@@ -153,7 +155,6 @@ function App() {
                 path="entrega-logistica/:id"
                 element={<DetalleEntrega />}
               />
-              <Route path="dashboard" element={<Dashboard />} />
               <Route path="rol" element={<AdminUsuariosRoles />} />
               <Route path="dispositivos" element={<Dispositivos />} />
               <Route path="marcas" element={<MarcasAdmin />} />
@@ -178,14 +179,12 @@ function App() {
               <Route path="entregas-transito" element={<EntregasTransito />} />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />
-
               {/* MARKETING */}
               <Route
                 path="copa-creditek"
                 element={<MarketingVentasAgencia />}
               />
               <Route path="goleadores" element={<Goleadores />} />
-
               {/* AUDITORIAS */}
               <Route
                 path="entregas-auditoria"
@@ -196,16 +195,11 @@ function App() {
                 element={<EntregaAuditoria />}
               />
               <Route path="ventas-auditoria" element={<VentasAuditoria />} />
-             {/*  <Route path="ventas-auditoria/:id" element={<VentaAuditoria />} /> */}
               <Route
                 path="/ventas-auditoria/:id"
                 element={<EditarVentaCompleta />}
               />
-                  <Route
-                path="/postulaciones"
-                element={<Postulaciones />}
-              />
-
+              <Route path="/postulaciones" element={<Postulaciones />} />
             </Route>
 
             {/* REPARTIDORES */}
