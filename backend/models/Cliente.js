@@ -24,12 +24,20 @@ const Cliente = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+
+    correo: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    direccion: {
+      type: DataTypes.STRING,
+      allowNull: true,  
+    },
   },
   {
     timestamps: true,
     tableName: "clientes",
   }
 );
-
 
 module.exports = Cliente;

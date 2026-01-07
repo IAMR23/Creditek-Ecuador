@@ -54,6 +54,8 @@ const CrearVentaCompleta = () => {
     cliente: "",
     cedula: "",
     telefono: "",
+    correo: "",
+    direccion: "",
   });
 
   const [obsequios, setObsequios] = useState([]);
@@ -62,7 +64,7 @@ const CrearVentaCompleta = () => {
     usuarioAgenciaId: null,
     origenId: "",
     observacion: "",
-    fecha: hoy
+    fecha: hoy,
   });
 
   const [detalle, setDetalle] = useState({
@@ -280,18 +282,22 @@ const CrearVentaCompleta = () => {
         "success"
       );
 
-      Swal.fire("Éxito", "Venta creada y validada correctamente", "success");
+      Swal.fire("Éxito", "📄 Venta creada y copiada al portapapeles", "success");
 
       // 🔄 Reset
-      setFoto(null);
+        setFoto(null);
       setPreview(null);
       setObsequios([]);
-      setCliente({ cliente: "", cedula: "", telefono: "" });
+      setCliente({ cliente: "", cedula: "", telefono: "" ,correo :"" , direccion: "" });
       setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/")
+      navigate("/") 
     } catch (error) {
       console.error(error);
-      Swal.fire("Error", "No se pudo crear la venta", "error");
+
+      const mensaje =
+        error.response?.data?.message || "No se pudo crear la venta";
+
+      Swal.fire("Error", mensaje, "error");
     } finally {
       setLoading(false);
     }
@@ -310,11 +316,13 @@ const CrearVentaCompleta = () => {
 VENTA REGISTRADA ${venta.id || ""}
  Vendedor  ${usuarioInfo.nombre} 
  Agencia: ${usuarioInfo.agenciaPrincipal?.nombre}
- Fecha: ${venta.fecha  || "N/A"}
+ Fecha: ${venta.fecha || "N/A"}
 Cliente:
 - Nombre: ${cliente.cliente || "N/A"}
 - Cédula: ${cliente.cedula || "N/A"}
 - Teléfono: ${cliente.telefono || "N/A"}
+- Correo: ${cliente.correo || "N/A"}
+- Direccion: ${cliente.direccion || "N/A"}
 📍 Origen
 - Origen : ${origen.nombre || "N/A"}
 - Observación: ${venta.observacion || "N/A"}
@@ -377,7 +385,7 @@ ${
               htmlFor="cliente"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Nombre del cliente *
+              Nombre Completo *
             </label>
             <input
               id="cliente"
@@ -426,6 +434,45 @@ ${
               placeholder="Ej: 0991234567"
               value={cliente.telefono}
               onChange={handleClienteChange}
+              required
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+          {/* Correo */}
+          <div>
+            <label
+              htmlFor="correo"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Correo Electronico
+            </label>
+            <input
+              id="correo"
+              type="text"
+              name="correo"
+              placeholder="Ej: soycreditek@gmail.com"
+              value={cliente.correo}
+              onChange={handleClienteChange}
+              required
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+          {/* Direccion */}
+          <div>
+            <label
+              htmlFor="direccion"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Dirección
+            </label>
+            <input
+              id="direccion"
+              type="text"
+              name="direccion"
+              placeholder="Sangolqui, Parque Turismo"
+              value={cliente.direccion}
+              onChange={handleClienteChange}
+              required
               className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
             />
           </div>
@@ -758,110 +805,103 @@ ${
           🎁 Obsequios
         </h4>
 
+        <div className="space-y-3">
+          {obsequiosDisponibles.map((o) => {
+            const obsSeleccionado = obsequios.find(
+              (obs) => obs.obsequioId === o.id
+            );
 
+            const toggleSeleccion = () => {
+              setObsequios((prev) => {
+                if (obsSeleccionado) {
+                  return prev.filter((obs) => obs.obsequioId !== o.id);
+                } else {
+                  return [...prev, { obsequioId: o.id, cantidad: 1 }];
+                }
+              });
+            };
 
-<div className="space-y-3">
-  {obsequiosDisponibles.map((o) => {
-    const obsSeleccionado = obsequios.find(
-      (obs) => obs.obsequioId === o.id
-    );
-
-    const toggleSeleccion = () => {
-      setObsequios((prev) => {
-        if (obsSeleccionado) {
-          return prev.filter((obs) => obs.obsequioId !== o.id);
-        } else {
-          return [...prev, { obsequioId: o.id, cantidad: 1 }];
-        }
-      });
-    };
-
-    return (
-      <div
-        key={o.id}
-        onClick={toggleSeleccion}
-        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer select-none transition
+            return (
+              <div
+                key={o.id}
+                onClick={toggleSeleccion}
+                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer select-none transition
           ${
             obsSeleccionado
               ? "border-green-500 bg-green-50"
               : "border-gray-200 bg-white hover:border-green-300"
           }`}
-      >
-        {/* CHECKBOX */}
-        <input
-          type="checkbox"
-          checked={!!obsSeleccionado}
-          onChange={() => {}}
-          onClick={(e) => e.stopPropagation()}
-          className="h-5 w-5 accent-green-600 cursor-pointer"
-        />
+              >
+                {/* CHECKBOX */}
+                <input
+                  type="checkbox"
+                  checked={!!obsSeleccionado}
+                  onChange={() => {}}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-5 w-5 accent-green-600 cursor-pointer"
+                />
 
-        {/* TEXTO CLICKEABLE */}
-        <span className="flex-1 text-sm font-medium text-gray-700">
-          {o.nombre}
-        </span>
+                {/* TEXTO CLICKEABLE */}
+                <span className="flex-1 text-sm font-medium text-gray-700">
+                  {o.nombre}
+                </span>
 
-        {/* CANTIDAD */}
-        {obsSeleccionado && (
-          <input
-            type="number"
-            min="1"
-            value={obsSeleccionado.cantidad}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              const cantidad = parseInt(e.target.value) || 1;
-              setObsequios((prev) =>
-                prev.map((obs) =>
-                  obs.obsequioId === o.id
-                    ? { ...obs, cantidad }
-                    : obs
-                )
-              );
-            }}
-            className="w-20 px-2 py-1 text-sm text-center rounded-lg border border-green-400 focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          />
-        )}
-      </div>
-    );
-  })}
-</div>
+                {/* CANTIDAD */}
+                {obsSeleccionado && (
+                  <input
+                    type="number"
+                    min="1"
+                    value={obsSeleccionado.cantidad}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const cantidad = parseInt(e.target.value) || 1;
+                      setObsequios((prev) =>
+                        prev.map((obs) =>
+                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs
+                        )
+                      );
+                    }}
+                    className="w-20 px-2 py-1 text-sm text-center rounded-lg border border-green-400 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-<div className="bg-white p-4 rounded shadow border border-green-500">
-  <h2 className="text-lg font-semibold text-green-600 mb-4">
-    Toma o selecciona una foto
-  </h2>
+        <div className="bg-white p-4 rounded shadow border border-green-500">
+          <h2 className="text-lg font-semibold text-green-600 mb-4">
+            Toma o selecciona una foto
+          </h2>
 
-  {/* CONTENEDOR FIJO */}
-  <div className="w-full h-64 border rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-    {preview ? (
-      <img
-        src={preview}
-        alt="preview"
-        className="w-full h-full object-contain"
-      />
-    ) : (
-      <span className="text-gray-400">
-        Vista previa de la imagen
-      </span>
-    )}
-  </div>
+          {/* CONTENEDOR FIJO */}
+          <div className="w-full h-64 border rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+            {preview ? (
+              <img
+                src={preview}
+                alt="preview"
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <span className="text-gray-400">Vista previa de la imagen</span>
+            )}
+          </div>
 
-  {/* INPUT FILE */}
-  <label className="block mt-4">
-    <span className="text-green-600 font-semibold">Elegir foto:</span>
-    <input
-      type="file"
-      accept="image/*"
-      capture="environment"
-      onChange={handleFoto}
-      className="block mt-2"
-    />
-    <p className="text-sm text-gray-500">
-      (Usa la cámara directamente o selecciona una imagen)
-    </p>
-  </label>
-</div>
-
+          {/* INPUT FILE */}
+          <label className="block mt-4">
+            <span className="text-green-600 font-semibold">Elegir foto:</span>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFoto}
+              className="block mt-2"
+            />
+            <p className="text-sm text-gray-500">
+              (Usa la cámara directamente o selecciona una imagen)
+            </p>
+          </label>
+        </div>
 
         <button
           type="submit"

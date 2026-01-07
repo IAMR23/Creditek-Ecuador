@@ -134,6 +134,7 @@ exports.formatearReporte = (ventas) => {
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         pvp: detalle.precioUnitario || "",
+        
         margen: null,
 
         cierreCaja: entrega.validada || "",
@@ -226,7 +227,7 @@ exports.obtenerVentaPorId = async (req, res) => {
         {
           model: Cliente,
           as: "cliente",
-          attributes: ["id", "cliente", "cedula", "telefono"],
+          attributes: ["id", "cliente", "cedula", "telefono" ,"correo" , "direccion"],
         },
         { model: Origen, as: "origen", attributes: ["id", "nombre"] },
         {
@@ -293,13 +294,15 @@ exports.obtenerVentaPorId = async (req, res) => {
         nombre: venta.cliente?.cliente, // atención: en tu include pusiste "cliente" como atributo
         cedula: venta.cliente?.cedula,
         telefono: venta.cliente?.telefono,
+        correo: venta.cliente?.correo,
+        direccion: venta.cliente?.direccion,
       },
       origen: { id: venta.origen?.id, nombre: venta.origen?.nombre },
       detalleVenta: venta.detalleVenta || [],
       obsequiosVenta: venta.obsequiosVenta || [],
     };
 
-    return res.json({ ok: true, venta: ventaFormateada });
+    return res.json({ ok: true, venta });
   } catch (error) {
     console.error("Error obteniendo venta por ID:", error);
     return res.status(500).json({ ok: false, error: error.message });

@@ -3,13 +3,23 @@ const Venta = require("../../models/Venta");
 const DetalleVenta = require("../../models/DetalleVenta");
 const VentaObsequio = require("../../models/VentaObsequio");
 const { sequelize } = require("../../config/db");
+const { validarCedulaEC } = require("../../middleware/validacionCedula");
 
 const crearVentaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
-
+  console.log("CP1");
   try {
     // 🔥 JSON viene stringeado
     const { cliente, venta, detalle, obsequios } = JSON.parse(req.body.data);
+    console.log("CP2");
+
+    if (!validarCedulaEC(cliente.cedula)) {
+      await t.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "Cédula inválida según validación oficial del Ecuador",
+      });
+    }
 
     // 🔥 FOTO
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
@@ -26,6 +36,18 @@ const crearVentaCompleta = async (req, res) => {
           cliente: cliente.cliente,
           cedula: cliente.cedula,
           telefono: cliente.telefono,
+          correo: cliente.correo,
+          direccion: cliente.direccion,
+        },
+        { transaction: t }
+      );
+    } else {
+      await clienteDB.update(
+        {
+          cliente: cliente.cliente,
+          telefono: cliente.telefono,
+          correo: cliente.correo,
+          direccion: cliente.direccion,
         },
         { transaction: t }
       );
@@ -38,7 +60,7 @@ const crearVentaCompleta = async (req, res) => {
         clienteId: clienteDB.id,
         origenId: venta.origenId,
         observacion: venta.observacion,
-        fecha: venta.fecha ,
+        fecha: venta.fecha,
         validada: true,
         fotoValidacion: fotoUrl,
       },

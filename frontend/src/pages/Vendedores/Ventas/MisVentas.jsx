@@ -104,7 +104,9 @@ export default function MisMetas() {
     texto += `🧍 *Cliente*\n`;
     texto += `- Nombre: ${ventaSeleccionada.cliente.nombre}\n`;
     texto += `- Cédula: ${ventaSeleccionada.cliente.cedula}\n`;
-    texto += `- Teléfono: ${ventaSeleccionada.cliente.telefono}\n\n`;
+    texto += `- Teléfono: ${ventaSeleccionada.cliente.telefono}\n`;
+    texto += `- Correo: ${ventaSeleccionada.cliente.correo}\n`;
+    texto += `- Direccion: ${ventaSeleccionada.cliente.direccion}\n`;
     texto += `🧍 *Origen*\n`;
     texto += `- Origen: ${ventaSeleccionada.origen.nombre}\n`;
     texto += `- Observacion del origen: ${ventaSeleccionada.observacion}\n`;
@@ -116,7 +118,7 @@ export default function MisMetas() {
       texto += `- Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}\n`;
       texto += `- Marca: ${item.dispositivoMarca.marca.nombre}\n`;
       texto += `- Modelo: ${item.modelo.nombre}\n`;
-      texto += `- Precio: ${item.precioUnitario}\n`;
+      texto += `- Precio: ${item.precioVendedor}\n`;
       texto += `- Entrada: ${item.entrada}\n`;
       texto += `- Alcance: ${item.alcance}\n`;
       texto += `- Forma de pago: ${item.formaPago.nombre}\n`;
@@ -152,7 +154,7 @@ export default function MisMetas() {
 
       <div className="flex gap-4 mb-4 items-end">
         <div>
-          <label className="block text-sm font-medium">Fecha Inicio</label>
+          <label className="block text-sm font-medium">Fecha - Inicio</label>
           <input
             type="date"
             className="border px-2 py-1 rounded"
