@@ -7,7 +7,7 @@ import { jwtDecode } from "jwt-decode";
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2025-11-30");
+  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
@@ -107,7 +107,6 @@ const cargarUsuarios = async () => {
         "Precio Sistema": venta.precioSistema ?? "",
         "Precio Vendedor": venta.precioVendedor ?? "",
         "Forma Pago": venta.formaPago ?? "",
-        Contrato: venta.contrato ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
         Estado: venta.validada ? "Validada" : "No validada",

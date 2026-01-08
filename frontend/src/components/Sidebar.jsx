@@ -16,6 +16,8 @@ import {
   Layers,
   Factory,
   Gift,
+  ShieldCheck,
+  FileText,
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -36,25 +38,18 @@ export default function Sidebar() {
     comercial: {
       title: "Gerencia",
       items: [
-                {
-          label: "Power Bi",
-          icon: <BarChart3 size={20} />,
-          path: "dashboard-powerbi",
-        },
-
+            
         {
           label: "Metas Comerciales",
           icon: <BarChart3 size={20} />,
           path: "metas-comerciales",
         },
-        /*         { label: "Metas Comerciales Gráficas", icon: <BarChart3 size={20} />, path: "metas-comerciales-graficas" },
-         */ {
+ {
           label: "Reporte Entregas",
           icon: <BarChart3 size={20} />,
           path: "reporte-entregas",
         },
-        /*         { label: "Ventas Completas", icon: <BarChart3 size={20} />, path: "ventas-completas" },
-         */
+       
       ],
     },
     Marketing: {
@@ -105,21 +100,35 @@ export default function Sidebar() {
       ],
     },
 
-    admin: {
-      title: "Administración",
-      items: [
-        { label: "Usuarios", icon: <Users size={20} />, path: "usuarios" },
-        { label: "Roles", icon: <Users size={20} />, path: "rol" },
-        { label: "Agencias", icon: <Building2 size={20} />, path: "agencias" },
-        { label: "Postulaciones", icon: <Building2 size={20} />, path: "postulaciones" },
-        
-        {
-          label: "Asignar usuarios a agencias",
-          icon: <UserPlus size={20} />,
-          path: "usuarios-agencias",
-        },
-      ],
+admin : {
+  title: "Administración",
+  items: [
+    {
+      label: "Usuarios",
+      icon: <Users size={20} />,
+      path: "usuarios",
     },
+    {
+      label: "Roles",
+      icon: <ShieldCheck size={20} />,
+      path: "rol",
+    },
+    {
+      label: "Agencias",
+      icon: <Building2 size={20} />,
+      path: "agencias",
+    },
+    {
+      label: "Postulaciones",
+      icon: <FileText size={20} />,
+      path: "postulaciones",
+    },
+    {
+      label: "Asignar usuarios a agencias",
+      icon: <UserPlus size={20} />,
+      path: "usuarios-agencias",
+    },]
+  },
     catalogos: {
       title: "Catálogos",
       items: [

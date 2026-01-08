@@ -207,7 +207,7 @@ export default function AdminUsuariosRoles() {
   };
 
   return (
-<div className=" w-full min-h-screen ">
+<div className=" w-full p-6 min-h-screen ">
   <div className="bg-white rounded-2xl shadow-2xl border border-green-200 overflow-hidden h-full w-full">
     <div className="p-6 bg-gradient-to-r from-green-600 to-green-500 text-white">
       <h2 className="text-2xl font-extrabold">Gestión de Roles</h2>

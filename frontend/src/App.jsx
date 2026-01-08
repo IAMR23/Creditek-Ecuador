@@ -47,7 +47,6 @@ import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
 
 import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
-import MetasComercialesGraficas from "./pages/Admin/MetasComercialesGraficas";
 import VentasCompletas from "./pages/Admin/VentasCompletas";
 import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
 import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
@@ -168,10 +167,7 @@ function App() {
               <Route path="origen" element={<OrigenAdmin />} />
               <Route path="obsequios" element={<AdminObsequios />} />
               <Route path="metas-comerciales" element={<MetasComerciales />} />
-              <Route
-                path="metas-comerciales-graficas"
-                element={<MetasComercialesGraficas />}
-              />
+        
               <Route
                 path="entregas-pendientes"
                 element={<EntregasPendientes />}

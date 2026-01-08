@@ -8,7 +8,7 @@ import DashboardGraficas from "./DashboardGraficas";
 export default function Dashboard() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2025-11-30");
+  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
@@ -141,7 +141,7 @@ useEffect(() => {
   }, []); 
   return (
     <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Ventas Auditoria</h1>
+      <h1 className="text-xl font-bold mb-4">Dashboard</h1>
 
       <div className="flex gap-4 mb-4 items-end">
         <div>

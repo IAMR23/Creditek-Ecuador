@@ -1,23 +1,33 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import * as XLSX from "xlsx";
-import Swal from "sweetalert2";
+import { Link } from "react-router-dom"; // para navegar a otro componente
+import { jwtDecode } from "jwt-decode";
+
+import { DataGrid } from "@mui/x-data-grid";
+
 
 export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // 📅 Fechas
-  const [fechaInicio, setFechaInicio] = useState("");
+  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
   const [fechaFin, setFechaFin] = useState("");
-
-  // 🏢 Agencia
+  const [error, setError] = useState("");
+  const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
   const [agenciaId, setAgenciaId] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [vendedorId, setVendedorId] = useState("");
 
-  // ❗ Validación
-  const [error, setError] = useState("");
+  const cargarUsuarios = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/usuarios`);
+      setUsuarios(res.data || []);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+      setUsuarios([]);
+    }
+  };
 
   const cargarAgencias = async () => {
     try {
@@ -36,6 +46,23 @@ export default function MetasComerciales() {
     }
   };
 
+  useEffect(() => {
+    cargarAgencias();
+    cargarUsuarios();
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        const decoded = jwtDecode(token);
+        setUsuarioInfo(decoded.usuario);
+      } catch (error) {
+        console.error("Error decodificando token:", error);
+      }
+    }
+  }, []);
+
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
@@ -46,31 +73,42 @@ export default function MetasComerciales() {
     setLoading(true);
 
     try {
-      const url = `${API_URL}/admin/metas-comerciales/general?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&agenciaId=${agenciaId}`;
+      const params = new URLSearchParams({
+        fechaInicio,
+        fechaFin,
+      });
+
+      if (agenciaId && agenciaId !== "todas") {
+        params.append("agenciaId", agenciaId);
+      }
+
+      if (vendedorId && vendedorId !== "todos") {
+        params.append("vendedorId", vendedorId);
+      }
+
+      const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
 
-      const registros = data.data || [];
+      const ventas = data.ventas || [];
 
-      const resultado = registros.map((r, i = 1) => ({
-        N: i + 1,
-        Tipo: r.tipoRegistro ?? "", // VENTA / ENTREGA
-        Día: r.dia ?? "",
-        Fecha: r.fecha ?? "",
-        Local: r.local ?? "",
-        Origen: r.origen ?? "",
-        Observacion: r.observaciones ?? "",
-        Vendedor: r.vendedor ?? "",
-        Producto: r.tipoProducto ?? "",
-        Marca: r.marca ?? "",
-        Modelo: r.modelo ?? "",
-        "Forma Pago": r.formaPago ?? "",
-        Precio: r.pvp ?? r.valor ?? "",
-        "Precio Vendedor": r.precioVendedor ?? "",
-        Entrada: r.entrada ?? "",
-        Alcance: r.alcance ?? "",
-        Contrato: r.contrato ?? "",
+      const resultado = ventas.map((venta) => ({
+        id: venta.id,
+        Día: venta.dia ?? "",
+        Fecha: venta.fecha ?? "",
+        Agencia: venta.local ?? "",
+        Origen: venta.origen ?? "",
+        "Observaciones de Origen": venta.observaciones ?? "",
+        Vendedor: venta.vendedor ?? "",
+        Dispositivo: venta.tipo ?? "",
+        Marca: venta.marca ?? "",
+        Modelo: venta.modelo ?? "",
+        "Forma Pago": venta.formaPago ?? "",
+        "Precio Sistema": venta.precioSistema ?? "",
+        "Precio Vendedor": venta.precioVendedor ?? "",
+        Entrada: venta.entrada ?? "",
+        Alcance: venta.alcance ?? "",
       }));
 
       setFilas(resultado);
@@ -81,61 +119,44 @@ export default function MetasComerciales() {
     }
   };
 
+  const columnas = [
+  {
+    field: "numero",
+    headerName: "#",
+    width: 70,
+    sortable: false,
+    filterable: false,
+    align: "center",
+    headerAlign: "center",
+    renderCell: (params) =>
+      params.api.getRowIndexRelativeToVisibleRows(params.id) + 1,
+  },
+  ...Object.keys(filas[0] || {}).map((key) => ({
+    field: key,
+    headerName: key,
+    flex: 1,
+    editable: true,
+  })),
+];
+
+
+
+
   useEffect(() => {
-    if (fechaInicio && fechaFin) {
+    if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
-  }, [fechaInicio, fechaFin, agenciaId]);
-
-  const descargarExcel = () => {
-    if (filas.length === 0) {
-      return Swal.fire({
-        icon: "warning",
-        title: "Sin datos",
-        text: "No hay datos para descargar.",
-      });
-    }
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(filas);
-    XLSX.utils.book_append_sheet(wb, ws, "Metas");
-
-    const nombreArchivo = `MetasComerciales_${fechaInicio}_a_${fechaFin}.xlsx`;
-    XLSX.writeFile(wb, nombreArchivo);
-
-    Swal.fire({
-      icon: "success",
-      title: "Excel generado",
-      text: "El archivo se descargó correctamente.",
-      timer: 1500,
-      showConfirmButton: false,
-    });
-  };
-
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId]);
 
   useEffect(() => {
-  const hoy = new Date();
-
-  // Fecha fin = hoy
-  const fechaFin = hoy.toLocaleDateString("en-CA");
-
-  // Fecha inicio = 1 de diciembre del año actual
-  const fechaInicio = new Date(hoy.getFullYear(), 11, 1)
-    .toLocaleDateString("en-CA");
-
-  setFechaInicio(fechaInicio);
-  setFechaFin(fechaFin);
-  cargarAgencias();
-}, []);
-
-
+    const hoyLocal = new Date().toLocaleDateString("en-CA");
+    setFechaFin(hoyLocal);
+  }, []);
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Metas Comerciales</h1>
 
-      {/* 📅 Filtros */}
       <div className="flex gap-4 mb-4 items-end">
-        {/* FECHA INICIO */}
         <div>
           <label className="block text-sm font-medium">Fecha Inicio</label>
           <input
@@ -146,7 +167,6 @@ export default function MetasComerciales() {
           />
         </div>
 
-        {/* FECHA FIN */}
         <div>
           <label className="block text-sm font-medium">Fecha Fin</label>
           <input
@@ -157,7 +177,6 @@ export default function MetasComerciales() {
           />
         </div>
 
-        {/* AGENCIA */}
         <div>
           <label className="block text-sm font-medium">Agencia</label>
           <select
@@ -174,62 +193,45 @@ export default function MetasComerciales() {
           </select>
         </div>
 
-        {/* 🔽 Botón Excel */}
-        <button
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          onClick={descargarExcel}
-        >
-          Descargar Excel
-        </button>
+        <div>
+          <label className="block text-sm font-medium">Vendedor</label>
+          <select
+            className="border px-2 py-1 rounded"
+            value={vendedorId}
+            onChange={(e) => setVendedorId(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {usuarios.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Error */}
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
 
-      {/* TABLA */}
       {loading ? (
         <p>Cargando...</p>
       ) : (
-        <table className="w-full border mt-4 text-sm">
-          <thead className="bg-gray-200">
-            <tr>
-              {Object.keys(filas[0] || {}).map((key) => (
-                <th key={key} className="p-2 border">
-                  {key}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((f, i) => (
-              <tr key={i}>
-                {Object.entries(f).map(([key, val], j) => {
-                  let colorClass = "";
-
-                  const precio = parseFloat(f["Precio"]) || 0;
-                  const precioVendedor = parseFloat(f["Precio Vendedor"]) || 0;
-
-                  if (key === "Precio") {
-                    colorClass = "text-blue-600 font-semibold";
-                  }
-
-                  if (key === "Precio Vendedor") {
-                    colorClass =
-                      precioVendedor < precio
-                        ? "text-red-600 font-bold bg-red-50"
-                        : "text-green-600 font-bold bg-green-50";
-                  }
-
-                  return (
-                    <td key={j} className={`p-2 border ${colorClass}`}>
-                      {val}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <DataGrid
+  rows={filas.map((f, i) => ({ id: f.id ?? i, ...f }))}
+  columns={columnas}
+  autoHeight
+  pageSizeOptions={[10, 25, 50]}
+  sx={{
+    "& .precio-rojo": { color: "red", fontWeight: "bold" },
+    "& .precio-verde": { color: "green", fontWeight: "bold" },
+  }}
+  getCellClassName={(params) => {
+    if (params.field === "Precio Vendedor") {
+      const ps = Number(params.row["Precio Sistema"]) || 0;
+      const pv = Number(params.value) || 0;
+      return pv < ps ? "precio-rojo" : "precio-verde";
+    }
+  }}
+/>
       )}
     </div>
   );
