@@ -1,12 +1,10 @@
-// utils/calcularEstadisticasVentas.js
-
 exports.calcularEstadisticasVentas = (ventas = []) => {
   const stats = {
     totalVentas: ventas.length,
-    //montoTotal: 0,
 
     porVendedor: {},
     porAgencia: {},
+    porOrigen: {},   // ✅ AÑADIDO
     porFecha: {},
     porDia: {},
     porMarca: {},
@@ -14,10 +12,7 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     porTipo: {},
   };
 
-  ventas.forEach(v => {
-   // const monto = Number(v.precioSistema) || 0;
-
-   // stats.montoTotal += monto;
+  ventas.forEach((v) => {
 
     // 👤 Vendedor
     if (v.vendedor) {
@@ -29,6 +24,12 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     if (v.local) {
       stats.porAgencia[v.local] =
         (stats.porAgencia[v.local] || 0) + 1;
+    }
+
+    // 🌐 Origen (Referidos, Redes, Tienda, etc.)
+    if (v.origen) {
+      stats.porOrigen[v.origen] =
+        (stats.porOrigen[v.origen] || 0) + 1;
     }
 
     // 📅 Fecha

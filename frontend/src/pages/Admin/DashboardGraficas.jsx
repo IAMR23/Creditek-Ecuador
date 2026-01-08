@@ -144,6 +144,24 @@ export default function DashboardGraficas({ estadisticas }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      <div className="bg-white p-6 rounded-2xl shadow">
+  <h3 className="font-semibold mb-4">Ventas por Origen</h3>
+
+  <ResponsiveContainer width="100%" height={300}>
+    <BarChart data={toArray(estadisticas.porOrigen)}>
+      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+      <XAxis dataKey="name" hide />
+      <YAxis />
+      <Tooltip {...tooltipStyle} />
+      <Bar
+        dataKey="value"
+        fill={COLORS[4]} // puedes cambiar el índice
+        radius={[6, 6, 0, 0]}
+      />
+    </BarChart>
+  </ResponsiveContainer>
+</div>
+
 
     </div>
   );
