@@ -18,7 +18,7 @@ const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
 exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
-  const where = {};
+  const where = { activo: true };
 
   // Filtrado por fechas
   if (fechaInicio && fechaFin) {

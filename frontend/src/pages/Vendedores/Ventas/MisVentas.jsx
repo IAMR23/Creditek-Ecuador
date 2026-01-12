@@ -45,8 +45,7 @@ export default function MisMetas() {
         id: venta.id, // guardamos el id para el botón
         Fecha: venta.fecha ?? "",
         Día: venta.dia ?? "",
-        Agencia: venta.local ?? "",
-        Vendedor: venta.vendedor ?? "",
+        Cliente : venta.nombre , 
         Origen: venta.origen ?? "",
         "Observaciones de Origen": venta.observaciones ?? "",
         Dispositivo: venta.tipo ?? "",
@@ -54,10 +53,8 @@ export default function MisMetas() {
         Modelo: venta.modelo ?? "",
         Precio: venta.pvp ?? venta.valorCorregido ?? "",
         "Forma Pago": venta.formaPago ?? "",
-        Contrato: venta.contrato ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
-        Estado: venta.validada ? "Validada" : "No validada",
       }));
 
       setFilas(resultado);
