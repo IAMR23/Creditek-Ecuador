@@ -15,22 +15,19 @@ export default function Dashboard() {
   const [agencias, setAgencias] = useState([]);
   const [agenciaId, setAgenciaId] = useState("");
   const [usuarios, setUsuarios] = useState([]);
-const [vendedorId, setVendedorId] = useState("");
+  const [vendedorId, setVendedorId] = useState("");
 
-const [estadisticas, setEstadisticas] = useState(null);
+  const [estadisticas, setEstadisticas] = useState(null);
 
-
-
-const cargarUsuarios = async () => {
-  try {
-    const res = await axios.get(`${API_URL}/usuarios`);
-    setUsuarios(res.data || []);
-  } catch (error) {
-    console.error("Error cargando usuarios:", error);
-    setUsuarios([]);
-  }
-};
-
+  const cargarUsuarios = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/usuarios`);
+      setUsuarios(res.data || []);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+      setUsuarios([]);
+    }
+  };
 
   const cargarAgencias = async () => {
     try {
@@ -86,16 +83,14 @@ const cargarUsuarios = async () => {
       }
 
       if (vendedorId && vendedorId !== "todos") {
-  params.append("vendedorId", vendedorId);
-}
+        params.append("vendedorId", vendedorId);
+      }
 
       const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
       setEstadisticas(data.estadisticas);
-
-
 
       const ventas = data.ventas || [];
 
@@ -107,6 +102,7 @@ const cargarUsuarios = async () => {
         Agencia: venta.local ?? "",
         Vendedor: venta.vendedor ?? "",
         Origen: venta.origen ?? "",
+        Modelo: venta.modelo ?? "",
         "Observaciones de Origen": venta.observaciones ?? "",
         Dispositivo: venta.tipo ?? "",
         Marca: venta.marca ?? "",
@@ -128,17 +124,16 @@ const cargarUsuarios = async () => {
     }
   };
 
-useEffect(() => {
-  if (fechaInicio && fechaFin && usuarioInfo?.id) {
-    fetchData();
-  }
-}, [fechaInicio, fechaFin, agenciaId, vendedorId]);
+  useEffect(() => {
+    if (fechaInicio && fechaFin && usuarioInfo?.id) {
+      fetchData();
+    }
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId]);
 
-
-   useEffect(() => {
+  useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFechaFin(hoyLocal);
-  }, []); 
+  }, []);
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Dashboard</h1>
@@ -181,22 +176,20 @@ useEffect(() => {
         </div>
 
         <div>
-  <label className="block text-sm font-medium">Vendedor</label>
-  <select
-    className="border px-2 py-1 rounded"
-    value={vendedorId}
-    onChange={(e) => setVendedorId(e.target.value)}
-  >
-    <option value="">Todos</option>
-    {usuarios.map((u) => (
-      <option key={u.id} value={u.id}>
-        {u.nombre}
-      </option>
-    ))}
-  </select>
-</div>
-
-
+          <label className="block text-sm font-medium">Vendedor</label>
+          <select
+            className="border px-2 py-1 rounded"
+            value={vendedorId}
+            onChange={(e) => setVendedorId(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {usuarios.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
@@ -204,10 +197,7 @@ useEffect(() => {
       {loading ? (
         <p>Cargando...</p>
       ) : (
-  
-          <DashboardGraficas estadisticas={estadisticas} />
-
-
+        <DashboardGraficas estadisticas={estadisticas} />
       )}
     </div>
   );

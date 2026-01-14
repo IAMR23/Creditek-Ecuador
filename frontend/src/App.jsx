@@ -57,9 +57,10 @@ import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
 import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
 import Goleadores from "./pages/Marketing/Goleadores";
 import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
-import EditarVentaCompleta from "./pages/Vendedores/EditarVentaCompleta";
+import EditarVentaCompletaAuditoria from "./pages/Vendedores/EditarVentaCompletaAuditoria";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
-
+import EditarVentaCompletaVendedores from "./pages/Vendedores/EditarVentaCompletaVendedores";
+ 
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -193,7 +194,7 @@ function App() {
               <Route path="ventas-auditoria" element={<VentasAuditoria />} />
               <Route
                 path="/ventas-auditoria/:id"
-                element={<EditarVentaCompleta />}
+                element={<EditarVentaCompletaAuditoria />}
               />
               <Route path="/postulaciones" element={<Postulaciones />} />
             </Route>
@@ -245,6 +246,7 @@ function App() {
 
             {/* EXPERIMENTAL */}
             <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
+            <Route path="/editar-venta/:id" element={<EditarVentaCompletaVendedores />} />
           </Routes>
         </main>
 

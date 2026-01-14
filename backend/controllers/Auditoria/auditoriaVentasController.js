@@ -18,7 +18,7 @@ const VentaObsequio = require("../../models/VentaObsequio");
 
 
 exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
-  const whereVenta = { activo: true };
+  const whereVenta = {};
 
   // 🔹 Filtro por fecha
   if (fechaInicio && fechaFin) {
@@ -70,6 +70,7 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId 
       "fecha",
       "validada",
       "observacion",
+      "activo"
     ],
     order: [["fecha", "ASC"]],
     include: [
@@ -148,6 +149,7 @@ exports.formatearReporte = (ventas) => {
 
       filas.push({
         id: venta.id,
+        activo : venta.activo , 
         semana: null,
         dia: obtenerDiaSemana(venta.fecha),
         valorAcumulado: null,

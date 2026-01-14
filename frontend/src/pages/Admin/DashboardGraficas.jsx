@@ -21,7 +21,6 @@ const COLORS = [
   "#0891b2",
 ];
 
-
 const toArray = (obj = {}) =>
   Object.entries(obj).map(([name, value]) => ({ name, value }));
 
@@ -38,7 +37,6 @@ export default function DashboardGraficas({ estadisticas }) {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-
       {/* KPI */}
       <div className="bg-white p-6 rounded-2xl shadow">
         <h3 className="text-gray-500 text-sm">Total Ventas</h3>
@@ -56,11 +54,7 @@ export default function DashboardGraficas({ estadisticas }) {
             <XAxis dataKey="name" />
             <YAxis />
             <Tooltip {...tooltipStyle} />
-            <Bar
-              dataKey="value"
-              fill={COLORS[0]}
-              radius={[6, 6, 0, 0]}
-            />
+            <Bar dataKey="value" fill={COLORS[0]} radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -74,11 +68,7 @@ export default function DashboardGraficas({ estadisticas }) {
             <XAxis dataKey="name" hide />
             <YAxis />
             <Tooltip {...tooltipStyle} />
-            <Bar
-              dataKey="value"
-              fill={COLORS[1]}
-              radius={[6, 6, 0, 0]}
-            />
+            <Bar dataKey="value" fill={COLORS[1]} radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -116,10 +106,7 @@ export default function DashboardGraficas({ estadisticas }) {
               label
             >
               {toArray(estadisticas.porTipo).map((_, i) => (
-                <Cell
-                  key={i}
-                  fill={COLORS[i % COLORS.length]}
-                />
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
               ))}
             </Pie>
             <Tooltip {...tooltipStyle} />
@@ -136,33 +123,70 @@ export default function DashboardGraficas({ estadisticas }) {
             <XAxis dataKey="name" hide />
             <YAxis />
             <Tooltip {...tooltipStyle} />
-            <Bar
-              dataKey="value"
-              fill={COLORS[3]}
-              radius={[6, 6, 0, 0]}
-            />
+            <Bar dataKey="value" fill={COLORS[3]} radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
+
       <div className="bg-white p-6 rounded-2xl shadow">
-  <h3 className="font-semibold mb-4">Ventas por Origen</h3>
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h3 className="font-semibold mb-4">Origen</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={toArray(estadisticas.porOrigen)}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={95}
+                label
+              >
+                {toArray(estadisticas.porOrigen).map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip {...tooltipStyle} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
 
-  <ResponsiveContainer width="100%" height={300}>
-    <BarChart data={toArray(estadisticas.porOrigen)}>
-      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-      <XAxis dataKey="name" hide />
-      <YAxis />
-      <Tooltip {...tooltipStyle} />
-      <Bar
-        dataKey="value"
-        fill={COLORS[4]} // puedes cambiar el índice
-        radius={[6, 6, 0, 0]}
-      />
-    </BarChart>
-  </ResponsiveContainer>
-</div>
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h3 className="font-semibold mb-4">Modelo</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={toArray(estadisticas.porModelo)}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={95}
+                label
+              >
+                {toArray(estadisticas.porModelo).map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip {...tooltipStyle} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-
+      <div className="bg-white p-6 rounded-2xl shadow">
+        <h3 className="font-semibold mb-4">Modelo</h3>
+        {toArray(estadisticas.porModelo).map((m) => (
+          <div key={m.name} className="mb-2">
+            <div className="flex justify-between text-sm">
+              <span>{m.name}</span>
+              <span>{m.value}</span>
+            </div>
+            <div className="h-2 bg-gray-200 rounded">
+              <div
+                className="h-2 bg-blue-500 rounded"
+                style={{ width: `${m.value}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

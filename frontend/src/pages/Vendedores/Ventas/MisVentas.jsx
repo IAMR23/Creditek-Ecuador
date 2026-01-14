@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../../config";
-import { useNavigate } from "react-router-dom"; // para navegar a otro componente
+import { Link, useNavigate } from "react-router-dom"; // para navegar a otro componente
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
+import { Eye } from "lucide-react";
+import { FaPen } from "react-icons/fa";
 
 export default function MisMetas() {
   const [filas, setFilas] = useState([]);
@@ -45,7 +47,7 @@ export default function MisMetas() {
         id: venta.id, // guardamos el id para el botón
         Fecha: venta.fecha ?? "",
         Día: venta.dia ?? "",
-        Cliente : venta.nombre , 
+        Cliente: venta.nombre,
         Origen: venta.origen ?? "",
         "Observaciones de Origen": venta.observaciones ?? "",
         Dispositivo: venta.tipo ?? "",
@@ -120,7 +122,6 @@ export default function MisMetas() {
       texto += `- Alcance: ${item.alcance}\n`;
       texto += `- Forma de pago: ${item.formaPago.nombre}\n`;
       texto += `- Obs: ${item.observacionDetalle}\n`;
-
     });
 
     // 🎁 Obsequios
@@ -140,10 +141,8 @@ export default function MisMetas() {
       text: "Información copiada al portapapeles",
       confirmButtonColor: "#3085d6",
     });
-      setModalAbierto(false);
+    setModalAbierto(false);
   };
-
-
 
   return (
     <div className="p-4">
@@ -195,13 +194,19 @@ export default function MisMetas() {
                     {val}
                   </td>
                 ))}
-                <td className="p-2 border">
+                <td className="flex justify-center items-center flex-row gap-2 p-2">
                   <button
-                    className="bg-blue-500 text-white px-2 py-1 rounded"
+                    className="bg-green-500 text-white px-2 py-1 rounded"
                     onClick={() => handleVerVenta(f.id)}
                   >
-                    Ver
+                    <Eye size={18} />
                   </button>
+                    <Link
+                      className="bg-blue-500 text-white px-2 py-1 rounded"
+                      to={`/editar-venta/${f.id}`}
+                    >
+                      <FaPen size={18} />
+                    </Link>
                 </td>
               </tr>
             ))}
