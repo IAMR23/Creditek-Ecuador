@@ -102,7 +102,6 @@ export default function Dashboard() {
         Agencia: venta.local ?? "",
         Vendedor: venta.vendedor ?? "",
         Origen: venta.origen ?? "",
-        Modelo: venta.modelo ?? "",
         "Observaciones de Origen": venta.observaciones ?? "",
         Dispositivo: venta.tipo ?? "",
         Marca: venta.marca ?? "",

@@ -7,7 +7,7 @@ router.get("/ventas", async (req, res) => {
   try {
     const { fechaInicio, fechaFin, agenciaId, vendedorId } = req.query;
 
-    const ventas = await auditoriaVentasController.obtenerReporte({
+    const ventas = await auditoriaVentasController.obtenerReporteAuditoria({
       fechaInicio,
       fechaFin,
       agenciaId,
@@ -26,7 +26,7 @@ router.get("/ventas2", async (req, res) => {
   try {
     const { fechaInicio, fechaFin, agenciaId, vendedorId } = req.query;
 
-    const ventas = await auditoriaVentasController.obtenerReporte({
+    const ventas = await auditoriaVentasController.obtenerReporteGerencia({
       fechaInicio,
       fechaFin,
       agenciaId,

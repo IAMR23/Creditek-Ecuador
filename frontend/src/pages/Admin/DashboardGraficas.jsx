@@ -128,7 +128,7 @@ export default function DashboardGraficas({ estadisticas }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow">
+      <div className="bg-white p-6 rounded-2xl shadow flex  flex-col gap-2 ">
         <div className="bg-white p-6 rounded-2xl shadow">
           <h3 className="font-semibold mb-4">Origen</h3>
           <ResponsiveContainer width="100%" height={260}>
