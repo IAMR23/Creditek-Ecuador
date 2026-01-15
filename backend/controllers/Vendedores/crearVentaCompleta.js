@@ -4,14 +4,13 @@ const DetalleVenta = require("../../models/DetalleVenta");
 const VentaObsequio = require("../../models/VentaObsequio");
 const { sequelize } = require("../../config/db");
 const { validarCedulaEC } = require("../../middleware/validacionCedula");
+const DispositivoMarca = require("../../models/DispositivoMarca");
 
 const crearVentaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
-  console.log("CP1");
   try {
     // 🔥 JSON viene stringeado
     const { cliente, venta, detalle, obsequios } = JSON.parse(req.body.data);
-    console.log("CP2");
 
     if (!validarCedulaEC(cliente.cedula)) {
       await t.rollback();
@@ -67,6 +66,29 @@ const crearVentaCompleta = async (req, res) => {
       { transaction: t }
     );
 
+    // 🔹 Obtener el dispositivo (TV o CELULAR) desde dispositivoMarcas
+    const dispositivoMarca = await DispositivoMarca.findByPk(
+      detalle.dispositivoMarcaId,
+      { transaction: t }
+    );
+
+    if (!dispositivoMarca) {
+      throw new Error("DispositivoMarca no existe");
+    }
+
+    const dispositivoId = dispositivoMarca.dispositivoId;
+    // 🔹 Calcular cierreCaj  a
+    let cierreCaja = "CONTADO"; // valor por defecto
+    if (detalle.formaPagoId === 1) {
+
+      // crédito
+      if (dispositivoId === 1) {
+        cierreCaja = "CREDITV";
+      } else if (dispositivoId === 2) {
+        cierreCaja = "UPHONE";
+      }
+    }
+
     // 3️⃣ Detalle
     const detalleDB = await DetalleVenta.create(
       {
@@ -77,8 +99,9 @@ const crearVentaCompleta = async (req, res) => {
         dispositivoMarcaId: detalle.dispositivoMarcaId,
         modeloId: detalle.modeloId,
         formaPagoId: detalle.formaPagoId,
+        cierreCaja: cierreCaja,
         entrada: detalle.entrada,
-        alcance: detalle.alcance,
+        alcance: detalle.alcance, 
         contrato: detalle.contrato,
         observacionDetalle: detalle.observacionDetalle,
       },

@@ -61,6 +61,11 @@ const DetalleVenta = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    cierreCaja: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "cierreCaja",
+    },
     ventaId: {
       type: DataTypes.INTEGER,
       allowNull: false,

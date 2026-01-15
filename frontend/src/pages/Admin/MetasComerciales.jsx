@@ -107,6 +107,7 @@ export default function MetasComerciales() {
         "Forma Pago": venta.formaPago ?? "",
         "Precio Sistema": venta.precioSistema ?? "",
         "Precio Vendedor": venta.precioVendedor ?? "",
+        "Cierre de caja" : venta.cierreCaja ?? "" , 
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
       }));

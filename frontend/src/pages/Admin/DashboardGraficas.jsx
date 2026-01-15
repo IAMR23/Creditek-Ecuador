@@ -168,6 +168,27 @@ export default function DashboardGraficas({ estadisticas }) {
             </PieChart>
           </ResponsiveContainer>
         </div>
+
+         <div className="bg-white p-6 rounded-2xl shadow">
+          <h3 className="font-semibold mb-4">Cierre de Caja</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={toArray(estadisticas.porCierreCaja)}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={95}
+                label
+              >
+                {toArray(estadisticas.porCierreCaja).map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip {...tooltipStyle} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+ 
       </div>
 
       <div className="bg-white p-6 rounded-2xl shadow">

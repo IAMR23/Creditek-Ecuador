@@ -10,16 +10,15 @@ const Origen = require("../../models/Origen");
 const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
-
+ 
 const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
-const { sequelize } = require("../../config/db");
+const { sequelize } = require("../../config/db");    
 const VentaObsequio = require("../../models/VentaObsequio");
 
 
 exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
   const whereVenta = {
-    
   };
 
   // 🔹 Filtro por fecha
@@ -95,7 +94,8 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
           "precioVendedor",
           "entrada",
           "alcance",
-          "contrato",
+          "contrato",  
+          "cierreCaja"
         ],
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
@@ -123,10 +123,11 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
   });
 };
 
-exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
+exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , vendedorId, cierreCaja  }) => {
   const whereVenta = {
     activo : true
   };
+  
 
   // 🔹 Filtro por fecha
   if (fechaInicio && fechaFin) {
@@ -142,7 +143,12 @@ exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , ven
     whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
   }
 
-  // 🔹 include dinámico de agencia
+  const whereDetalleVenta = {};
+
+if (cierreCaja && cierreCaja !== "todos") {
+  whereDetalleVenta.cierreCaja = cierreCaja;
+}
+
 
   const includeUsuarioAgencia = {
   model: UsuarioAgencia,
@@ -202,7 +208,12 @@ exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , ven
           "entrada",
           "alcance",
           "contrato",
+          "cierreCaja"
         ],
+         ...(Object.keys(whereDetalleVenta).length > 0 && {
+    where: whereDetalleVenta,
+    required: true, // INNER JOIN cuando filtras por cierreCaja
+  }),
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
           {
@@ -228,9 +239,6 @@ exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , ven
     ],
   });
 };
-
-
-
 
 const obtenerDiaSemana = (fecha) => {
   const dias = [
@@ -249,6 +257,8 @@ const obtenerDiaSemana = (fecha) => {
 };
 
 exports.formatearReporte = (ventas) => {
+
+ // console.log(ventas)
   const filas = [];
 
   ventas.forEach((venta) => {
@@ -281,7 +291,7 @@ exports.formatearReporte = (ventas) => {
         precioVendedor : detalle.precioVendedor || "",
         margen: null,
 
-        cierreCaja: venta.validada || "",
+        cierreCaja: detalle.cierreCaja || "",
 
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",

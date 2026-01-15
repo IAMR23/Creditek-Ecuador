@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [agenciaId, setAgenciaId] = useState("");
   const [usuarios, setUsuarios] = useState([]);
   const [vendedorId, setVendedorId] = useState("");
+  const [cierreCajaTipo, setCierreCajaTipo] = useState("");
 
   const [estadisticas, setEstadisticas] = useState(null);
 
@@ -86,6 +87,11 @@ export default function Dashboard() {
         params.append("vendedorId", vendedorId);
       }
 
+      if (cierreCajaTipo && cierreCajaTipo !== "todos") {
+  params.append("cierreCaja", cierreCajaTipo);
+}
+
+
       const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
       const { data } = await axios.get(url);
 
@@ -127,7 +133,7 @@ export default function Dashboard() {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId]);
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo]);
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
@@ -189,6 +195,24 @@ export default function Dashboard() {
             ))}
           </select>
         </div>
+
+<div>
+  <label className="block text-sm font-medium">
+    Tipo de cierre de caja
+  </label>
+  <select
+    className="border px-2 py-1 rounded"
+    value={cierreCajaTipo}
+    onChange={(e) => setCierreCajaTipo(e.target.value)}
+  >
+    <option value="">Todos</option>
+    <option value="CONTADO">Contado</option>
+    <option value="CREDITV">CrediTV</option>
+    <option value="UPHONE">Uphone</option>
+  </select>
+</div>
+
+
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}

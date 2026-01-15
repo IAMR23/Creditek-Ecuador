@@ -21,16 +21,17 @@ router.get("/ventas", async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
-
+  
 router.get("/ventas2", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, agenciaId, vendedorId } = req.query;
+    const { fechaInicio, fechaFin, agenciaId, vendedorId , cierreCaja  } = req.query;
 
     const ventas = await auditoriaVentasController.obtenerReporteGerencia({
       fechaInicio,
       fechaFin,
       agenciaId,
       vendedorId,
+      cierreCaja
     });
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);
