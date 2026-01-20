@@ -6,7 +6,7 @@ import { jwtDecode } from "jwt-decode";
 import imageCompression from "browser-image-compression";
 import { useNavigate } from "react-router-dom";
 
-const CrearVentaCompleta = () => {
+const CrearEntregaCompleta = () => {
   const [loading, setLoading] = useState(false);
   const [origenes, setOrigenes] = useState([]);
   const [usuarioInfo, setUsuarioInfo] = useState(null);
@@ -60,11 +60,13 @@ const CrearVentaCompleta = () => {
 
   const [obsequios, setObsequios] = useState([]);
 
-  const [venta, setVenta] = useState({
+  const [entrega, setEntrega] = useState({
     usuarioAgenciaId: null,
     origenId: "",
     observacion: "",
     fecha: hoy,
+    FechaHoraLlamada: "",
+    estado: "Pendiente",
   });
 
   const [detalle, setDetalle] = useState({
@@ -78,7 +80,29 @@ const CrearVentaCompleta = () => {
     entrada: "",
     alcance: "",
     observacionDetalle: "",
+    ubicacionDispositivo: "",
+    ubicacion: "",
   });
+
+  useEffect(() => {
+    const handlePaste = (event) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            setFoto(file);
+            setPreview(URL.createObjectURL(file));
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
 
   useEffect(() => {
     const fetchSelects = async () => {
@@ -103,7 +127,7 @@ const CrearVentaCompleta = () => {
 
       try {
         const res = await axios.get(
-          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}`
+          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}`,
         );
 
         setDetalle((prev) => ({
@@ -138,7 +162,7 @@ const CrearVentaCompleta = () => {
 
     try {
       const res = await axios.get(
-        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`
+        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`,
       );
       setModelos(res.data);
     } catch (err) {
@@ -154,7 +178,7 @@ const CrearVentaCompleta = () => {
       const decoded = jwtDecode(token);
       setUsuarioInfo(decoded.usuario);
 
-      setVenta((prev) => ({
+      setEntrega((prev) => ({
         ...prev,
         usuarioAgenciaId:
           decoded.usuario?.agenciaPrincipal?.usuarioAgenciaId || null,
@@ -193,8 +217,8 @@ const CrearVentaCompleta = () => {
   const handleClienteChange = (e) =>
     setCliente({ ...cliente, [e.target.name]: e.target.value });
 
-  const handleVentaChange = (e) =>
-    setVenta({ ...venta, [e.target.name]: e.target.value });
+  const handleEntregaChange = (e) =>
+    setEntrega({ ...entrega, [e.target.name]: e.target.value });
 
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
@@ -217,10 +241,10 @@ const CrearVentaCompleta = () => {
         "data",
         JSON.stringify({
           cliente,
-          venta: {
-            ...venta,
-            usuarioAgenciaId: Number(venta.usuarioAgenciaId),
-            origenId: Number(venta.origenId),
+          entrega: {
+            ...entrega,
+            usuarioAgenciaId: Number(entrega.usuarioAgenciaId),
+            origenId: Number(entrega.origenId),
           },
           detalle: {
             ...detalle,
@@ -231,9 +255,11 @@ const CrearVentaCompleta = () => {
             precioVendedor: Number(detalle.precioVendedor),
             entrada: detalle.entrada ? Number(detalle.entrada) : 0,
             alcance: detalle.alcance ? Number(detalle.alcance) : 0,
+            ubicacionDispositivo: detalle.ubicacionDispositivo,
+            ubicacion: detalle.ubicacion,
           },
           obsequios,
-        })
+        }),
       );
 
       const options = {
@@ -248,53 +274,64 @@ const CrearVentaCompleta = () => {
       formData.append("foto", imagenComprimida);
 
       const response = await axios.post(
-        `${API_URL}/registrar/ventas-completas`,
+        `${API_URL}/registrar2/entrega-completa`,
         formData,
         {
           headers: {
             "Content-Type": "multipart/form-data",
           },
-        }
+        },
       );
 
-      const ventaData = response.data;
-      const texto = buildVentaText({
+      const entregaData = response.data;
+      const texto = buildEntregaText({
         cliente,
         origen: origenSeleccionado,
         dispositivoMarca: dispositivoMarcaSeleccionado,
         formaPago: formaPagoSeleccionada,
         modelo: modeloSeleccionado,
-        venta: {
-          ...venta,
-          id: ventaData.venta.id,
-          fecha: ventaData.venta.fecha,
+        entrega: {
+          ...entrega,
+          id: entregaData.entrega.id,
+          fecha: entregaData.entrega.fecha,
         },
         detalle,
         usuarioInfo,
         obsequios,
       });
+      console.log(texto);
 
       await navigator.clipboard.writeText(texto);
       Swal.fire(
-        "Venta registrada",
+        "Entrega registrada",
         "La información fue copiada al portapapeles",
-        "success"
+        "success",
       );
 
-      Swal.fire("Éxito", "📄 Venta creada y copiada al portapapeles", "success");
+      Swal.fire(
+        "Éxito",
+        "📄 Entrega creada y copiada al portapapeles",
+        "success",
+      );
 
       // 🔄 Reset
-        setFoto(null);
+/*       setFoto(null);
       setPreview(null);
       setObsequios([]);
-      setCliente({ cliente: "", cedula: "", telefono: "" ,correo :"" , direccion: "" });
-      setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/") 
+      setCliente({
+        cliente: "",
+        cedula: "",
+        telefono: "",
+        correo: "",
+        direccion: "",
+      });
+      setEntrega((prev) => ({ ...prev, origenId: "", observacion: "" }));
+      navigate("/"); */
     } catch (error) {
       console.error(error);
 
       const mensaje =
-        error.response?.data?.message || "No se pudo crear la venta";
+        error.response?.data?.message || "No se pudo crear la entrega";
 
       Swal.fire("Error", mensaje, "error");
     } finally {
@@ -302,9 +339,9 @@ const CrearVentaCompleta = () => {
     }
   };
 
-  const buildVentaText = ({
+  const buildEntregaText = ({
     cliente = {},
-    venta = {},
+    entrega = {},
     detalle = {},
     obsequios = [],
     origen,
@@ -312,10 +349,10 @@ const CrearVentaCompleta = () => {
     modelo,
   }) => {
     return `
-VENTA REGISTRADA ${venta.id || ""}
+ENTREGA REGISTRADA ${entrega.id || ""}
  Vendedor  ${usuarioInfo.nombre} 
  Agencia: ${usuarioInfo.agenciaPrincipal?.nombre}
- Fecha: ${venta.fecha || "N/A"}
+ Fecha: ${entrega.fecha || "N/A"}
 Cliente:
 - Nombre: ${cliente.cliente || "N/A"}
 - Cédula: ${cliente.cedula || "N/A"}
@@ -324,7 +361,7 @@ Cliente:
 - Direccion: ${cliente.direccion || "N/A"}
 📍 Origen
 - Origen : ${origen.nombre || "N/A"}
-- Observación: ${venta.observacion || "N/A"}
+- Observación: ${entrega.observacion || "N/A"}
 Detalle:
 - Dispositivo: ${dispositivoMarcaSeleccionado?.dispositivo?.nombre || "N/A"}
 - Marca: ${dispositivoMarcaSeleccionado?.marca?.nombre || "N/A"}
@@ -352,21 +389,21 @@ ${
   };
 
   return (
-    <div className="max-w-3xl mx-auto shadow-sm p-4 m-4 bg-white rounded-lg border border-green-500">
+    <div className="max-w-3xl mx-auto shadow-sm p-4 m-4 bg-white rounded-lg border border-orange-500">
       {usuarioInfo && (
-        <div className="mb-6 p-5 bg-gradient-to-r from-green-50 to-white border border-green-200 rounded-xl shadow-sm">
+        <div className="mb-6 p-5 bg-gradient-to-r from-orange-50 to-white border border-orange-200 rounded-xl shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             {/* Columna izquierda */}
             <div>
-              <p className="text-lg font-semibold text-green-700">
+              <p className="text-lg font-bold text-orange-500">
                 {usuarioInfo.nombre}
               </p>
             </div>
 
             {/* Columna derecha */}
             <div className="md:text-right">
-              <p className="text-sm font-medium text-gray-700">Agencia</p>
-              <p className="text-base font-semibold text-green-900">
+              <p className="text-sm font-medium ">Agencia</p>
+              <p className="text-base font-semibold text-orange-500">
                 {usuarioInfo.agenciaPrincipal?.nombre}
               </p>
             </div>
@@ -382,7 +419,7 @@ ${
           <div>
             <label
               htmlFor="cliente"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Nombre Completo *
             </label>
@@ -394,7 +431,7 @@ ${
               value={cliente.cliente}
               onChange={handleClienteChange}
               required
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
 
@@ -402,7 +439,7 @@ ${
           <div>
             <label
               htmlFor="cedula"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Cédula *
             </label>
@@ -414,7 +451,7 @@ ${
               value={cliente.cedula}
               onChange={handleClienteChange}
               required
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
 
@@ -422,7 +459,7 @@ ${
           <div>
             <label
               htmlFor="telefono"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Teléfono
             </label>
@@ -434,14 +471,14 @@ ${
               value={cliente.telefono}
               onChange={handleClienteChange}
               required
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
           {/* Correo */}
           <div>
             <label
               htmlFor="correo"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Correo Electronico
             </label>
@@ -453,14 +490,14 @@ ${
               value={cliente.correo}
               onChange={handleClienteChange}
               required
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
           {/* Direccion */}
           <div>
             <label
               htmlFor="direccion"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Dirección
             </label>
@@ -472,52 +509,52 @@ ${
               value={cliente.direccion}
               onChange={handleClienteChange}
               required
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
         </div>
 
-        <h4 className="font-bold">Datos de la Venta</h4>
+        <h4 className="font-bold">Datos de la Entrega</h4>
 
         <div className="space-y-4">
           <div>
             <label
               htmlFor="fecha"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
-              Fecha de la venta *
+              Fecha de la entrega *
             </label>
             <input
               id="fecha"
               type="date"
               name="fecha"
-              value={venta.fecha}
-              onChange={handleVentaChange}
+              value={entrega.fecha}
+              onChange={handleEntregaChange}
               required
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
 
           <div>
             <label
               htmlFor="origenId"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Origen *
             </label>
             <select
               id="origenId"
               name="origenId"
-              value={venta.origenId}
+              value={entrega.origenId}
               onChange={(e) => {
                 const id = Number(e.target.value);
                 const origen = origenes.find((o) => o.id === id);
 
-                setVenta((prev) => ({ ...prev, origenId: id }));
+                setEntrega((prev) => ({ ...prev, origenId: id }));
                 setOrigenSeleccionado(origen || null);
               }}
               required
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             >
               <option value="">Seleccionar origen</option>
               {origenes.map((o) => (
@@ -531,18 +568,18 @@ ${
           <div>
             <label
               htmlFor="observacion"
-              className="block text-sm font-medium text-gray-700 mb-1"
+              className="block text-sm font-medium text-gray-400 mb-1"
             >
               Observación
             </label>
             <textarea
               id="observacion"
               name="observacion"
-              placeholder="Detalle adicional de la venta"
-              value={venta.observacion}
-              onChange={handleVentaChange}
+              placeholder="Detalle adicional de la entrega"
+              value={entrega.observacion}
+              onChange={handleEntregaChange}
               rows={3}
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
             />
           </div>
         </div>
@@ -552,7 +589,7 @@ ${
         <div className="grid grid-cols-1 gap-4">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-400 mb-1">
                 Dispositivo y Marca *
               </label>
               <select
@@ -570,7 +607,7 @@ ${
 
                   // Buscar el objeto completo
                   const seleccionado = dispositivoMarcas.find(
-                    (dm) => String(dm.id) === value
+                    (dm) => String(dm.id) === value,
                   );
 
                   setDispositivoMarcaSeleccionado(seleccionado || null);
@@ -585,7 +622,7 @@ ${
                     setModelos([]);
                   }
                 }}
-                className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 required
               >
                 <option value="">Selecciona Dispositivo y Marca</option>
@@ -598,7 +635,7 @@ ${
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-400 mb-1">
                 Modelo *
               </label>
 
@@ -614,10 +651,10 @@ ${
                   }));
 
                   setModeloSeleccionado(
-                    modelos.find((m) => m.id === value) || null
+                    modelos.find((m) => m.id === value) || null,
                   );
                 }}
-                className="w-full p-2 border border-green-500 rounded"
+                className="w-full p-2 border border-orange-500 rounded"
                 required
                 disabled={!detalle.dispositivoMarcaId}
               >
@@ -631,7 +668,7 @@ ${
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-400 mb-1">
                 Forma de Pago *
               </label>
               <select
@@ -652,7 +689,7 @@ ${
                   setDetalle((prev) => ({ ...prev, formaPagoId: id }));
                   setFormaPagoSeleccionada(forma || null);
                 }}
-                className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 required
               >
                 <option value="">Selecciona Forma de Pago</option>
@@ -668,7 +705,7 @@ ${
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3">
               <div className="hidden">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-400 mb-1">
                   Cantidad *
                 </label>
                 <input
@@ -679,13 +716,13 @@ ${
                   value={detalle.cantidad}
                   onChange={handleChange}
                   step="1"
-                  className="w-full p-2 border border-green-500 bg-gray-50 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="w-full p-2 border border-orange-500 bg-gray-50 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   readOnly
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-400 mb-1">
                   Precio *
                 </label>
 
@@ -708,14 +745,14 @@ ${
                     }
                   }}
                   required
-                  className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500"
+                  className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-400 mb-1">
                   Entrada
                 </label>
                 <input
@@ -736,13 +773,13 @@ ${
                       }));
                     }
                   }}
-                  className="w-full p-2 border border-green-500 rounded
-             focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="w-full p-2 border border-orange-500 rounded
+             focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-400 mb-1">
                   Alcance
                 </label>
 
@@ -764,16 +801,16 @@ ${
                       }));
                     }
                   }}
-                  className="w-full p-2 border border-green-500 rounded
-             focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  className="w-full p-2 border border-orange-500 rounded
+             focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                 />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="hidden">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+        <div className="">
+          <label className="block text-sm font-medium text-gray-400 mb-1">
             Contrato
           </label>
           <input
@@ -782,12 +819,41 @@ ${
             placeholder="Número de contrato"
             value={detalle.contrato}
             onChange={handleChange}
-            className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
+            Ubicación del Cliente
+          </label>
+          <input
+            type="text"
+            name="ubicacion"
+            placeholder="Pegar la url"
+            value={detalle.ubicacion}
+            onChange={handleChange}
+            className="w-full p-2 border border-orange-500 rounded"
+          />
+        </div>
+
+        {/* Ubicación del dispositivo */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Ubicación exacta del dispositivo
+          </label>
+          <input
+            type="text"
+            name="ubicacionDispositivo"
+            placeholder="Ej: Oficinas Creditek"
+            value={detalle.ubicacionDispositivo}
+            onChange={handleChange}
+            className="w-full p-2 border border-orange-500 rounded"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-400 mb-1">
             Observación
           </label>
           <textarea
@@ -796,8 +862,53 @@ ${
             value={detalle.observacionDetalle}
             onChange={handleChange}
             rows={3}
-            className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           />
+        </div>
+
+        <div className="bg-white p-4 rounded shadow border border-orange-500">
+          {/* FECHA Y HORA */}
+          <h2 className="text-lg font-semibold text-orange-600 mb-2">
+            Fecha y hora de la llamada
+          </h2>
+
+          <input
+            type="datetime-local"
+            name="FechaHoraLlamada" // 👈 CLAVE
+            value={entrega.FechaHoraLlamada}
+            onChange={handleEntregaChange}
+            required
+            className="w-full mb-6 p-2 border rounded"
+          />
+
+          <h2 className="text-lg font-semibold text-orange-600 mb-4">
+            Toma o selecciona una foto
+          </h2>
+
+          {preview ? (
+            <img
+              src={preview}
+              alt="preview"
+              className="w-full rounded-lg mb-4 border"
+            />
+          ) : (
+            <div className="w-full h-64 bg-gray-100 rounded-lg flex flex-col justify-center items-center text-gray-400 border border-dashed border-gray-400 text-center px-4">
+              <p className="font-medium">Pega una imagen aquí</p>
+              <p className="text-sm mt-1">(Ctrl + V)</p>
+            </div>
+          )}
+
+          {/* INPUT DE FOTO */}
+          <label className="block mt-4">
+            <span className="text-orange-600 font-semibold">Elegir foto:</span>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFoto}
+              className="block mt-2"
+            />
+          </label>
         </div>
 
         <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -807,7 +918,7 @@ ${
         <div className="space-y-3">
           {obsequiosDisponibles.map((o) => {
             const obsSeleccionado = obsequios.find(
-              (obs) => obs.obsequioId === o.id
+              (obs) => obs.obsequioId === o.id,
             );
 
             const toggleSeleccion = () => {
@@ -827,8 +938,8 @@ ${
                 className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer select-none transition
           ${
             obsSeleccionado
-              ? "border-green-500 bg-green-50"
-              : "border-gray-200 bg-white hover:border-green-300"
+              ? "border-orange-500 bg-orange-50"
+              : "border-gray-200 bg-white hover:border-orange-300"
           }`}
               >
                 {/* CHECKBOX */}
@@ -837,11 +948,11 @@ ${
                   checked={!!obsSeleccionado}
                   onChange={() => {}}
                   onClick={(e) => e.stopPropagation()}
-                  className="h-5 w-5 accent-green-600 cursor-pointer"
+                  className="h-5 w-5 accent-orange-600 cursor-pointer"
                 />
 
                 {/* TEXTO CLICKEABLE */}
-                <span className="flex-1 text-sm font-medium text-gray-700">
+                <span className="flex-1 text-sm font-medium text-gray-400">
                   {o.nombre}
                 </span>
 
@@ -856,11 +967,11 @@ ${
                       const cantidad = parseInt(e.target.value) || 1;
                       setObsequios((prev) =>
                         prev.map((obs) =>
-                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs
-                        )
+                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs,
+                        ),
                       );
                     }}
-                    className="w-20 px-2 py-1 text-sm text-center rounded-lg border border-green-400 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="w-20 px-2 py-1 text-sm text-center rounded-lg border border-orange-400 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   />
                 )}
               </div>
@@ -868,50 +979,16 @@ ${
           })}
         </div>
 
-        <div className="bg-white p-4 rounded shadow border border-green-500">
-          <h2 className="text-lg font-semibold text-green-600 mb-4">
-            Toma o selecciona una foto
-          </h2>
-
-          {/* CONTENEDOR FIJO */}
-          <div className="w-full h-64 border rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
-            {preview ? (
-              <img
-                src={preview}
-                alt="preview"
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <span className="text-gray-400">Vista previa de la imagen</span>
-            )}
-          </div>
-
-          {/* INPUT FILE */}
-          <label className="block mt-4">
-            <span className="text-green-600 font-semibold">Elegir foto:</span>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleFoto}
-              className="block mt-2"
-            />
-            <p className="text-sm text-gray-500">
-              (Usa la cámara directamente o selecciona una imagen)
-            </p>
-          </label>
-        </div>
-
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-green-600 text-white py-2 rounded"
+          className="w-full bg-orange-600 text-white py-2 rounded"
         >
-          {loading ? "Guardando..." : "Guardar Venta"}
+          {loading ? "Guardando..." : "Guardar Entrega"}
         </button>
       </form>
     </div>
   );
 };
 
-export default CrearVentaCompleta;
+export default CrearEntregaCompleta;

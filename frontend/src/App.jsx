@@ -60,6 +60,7 @@ import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
 import EditarVentaCompletaAuditoria from "./pages/Vendedores/EditarVentaCompletaAuditoria";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
 import EditarVentaCompletaVendedores from "./pages/Vendedores/EditarVentaCompletaVendedores";
+import CrearEntregaCompleta from "./pages/Vendedores/CrearEntregaCompleta";
  
 function App() {
   const [auth, setAuth] = useState({
@@ -247,6 +248,10 @@ function App() {
             {/* EXPERIMENTAL */}
             <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
             <Route path="/editar-venta/:id" element={<EditarVentaCompletaVendedores />} />
+
+
+             <Route path="/crear-entrega-completa" element={<CrearEntregaCompleta />} />
+            
           </Routes>
         </main>
 

@@ -95,6 +95,7 @@ connectDB()
     app.use("/alertas", require("./routes/entregasAlertasRouter"));
     app.use("/auditoria", require("./routes/Auditoria/auditoriaRoutes"));
     app.use("/registrar", require("./routes/Vendedor/crearVentaCompletaRoute"));
+    app.use("/registrar2", require("./routes/Vendedor/crearEntregaCompletaRoute"));
     app.use("/api/postulaciones", postulacionesRouter  )
     console.log(
       "Carpeta uploads que Express está usando:",

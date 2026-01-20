@@ -61,6 +61,14 @@ function VendedorPanel() {
       icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
       path: "/mis-entregas",
     },
+
+        {
+      label: "EXPERIMENTAL",
+      title: "Registrar Entregas",
+      desc: "Ingresa tus entregas del dia",
+      icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
+      path: "/crear-entrega-completa",
+    },
   ];
 
   const Card = ({ label, title, desc, icon, path }) => (

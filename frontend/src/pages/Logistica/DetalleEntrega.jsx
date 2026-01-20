@@ -3,6 +3,7 @@ import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../config";
 import Swal from "sweetalert2";
+import Field from "../../components/Field";
 
 export default function DetalleEntrega() {
   const { id } = useParams();
@@ -15,7 +16,7 @@ export default function DetalleEntrega() {
     const fetchEntrega = async () => {
       try {
         const { data } = await axios.get(
-          `${API_URL}/vendedor/entrega-logistica/${id}`
+          `${API_URL}/vendedor/entrega-logistica/${id}`,
         );
 
         if (data.ok) setForm(data.entrega);
@@ -26,6 +27,7 @@ export default function DetalleEntrega() {
     fetchEntrega();
   }, [id]);
 
+  console.log(form);
   if (!form)
     return <p className="text-green-600 font-semibold">Cargando entrega...</p>;
 
@@ -70,27 +72,30 @@ export default function DetalleEntrega() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 bg-green-50 rounded-2xl shadow-xl mt-8">
+    <div className="max-w-5xl mx-auto p-6  rounded-2xl shadow-xl mt-8">
       {/* Vendedor y Agencia */}
+
       <div className="grid md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-2">
-          <label className="block font-semibold text-green-800">Vendedor</label>
-          <input
-            type="text"
-            className={inputStyle}
-            value={form.usuarioAgencia?.usuario?.nombre || ""}
-            readOnly
-          />
+        {/* Vendedor */}
+        <div className="rounded-2xl /80 backdrop-blur border border-green-200 p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
+            Vendedor
+          </p>
+
+          <p className="mt-2 text-lg font-medium text-gray-800">
+            {form.usuarioAgencia?.usuario?.nombre || "No asignado"}
+          </p>
         </div>
 
-        <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-2">
-          <label className="block font-semibold text-green-800">Agencia</label>
-          <input
-            type="text"
-            className={inputStyle}
-            value={form.usuarioAgencia?.agencia?.nombre || ""}
-            readOnly
-          />
+        {/* Agencia */}
+        <div className="rounded-2xl /80 backdrop-blur border border-green-200 p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
+            Agencia
+          </p>
+
+          <p className="mt-2 text-lg font-medium text-gray-800">
+            {form.usuarioAgencia?.agencia?.nombre || "No asignada"}
+          </p>
         </div>
       </div>
 
@@ -99,59 +104,94 @@ export default function DetalleEntrega() {
           Detalle de Entrega
         </h2>
 
-        {/* Cliente */}
-        <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-3">
-          <h3 className="text-xl font-semibold text-green-800">Cliente</h3>
-
-          <div className="grid md:grid-cols-3 gap-4">
-            <input
-              type="text"
-              className={inputStyle}
-              value={form.cliente?.nombre || ""}
-              readOnly
-            />
-            <input
-              type="text"
-              className={inputStyle}
-              value={form.cliente?.cedula || ""}
-              readOnly
-            />
-            <input
-              type="text"
-              className={inputStyle}
-              value={form.cliente?.telefono || ""}
-              readOnly
-            />
+        <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-6">
+          {/* HEADER */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-bold">
+              C
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Cliente</h3>
+              <p className="text-sm text-gray-500">
+                Información registrada y validada
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Fecha */}
-        <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-2">
-          <label className="block font-semibold text-green-800">Fecha</label>
-          <input
-            type="text"
-            className={inputStyle}
-            value={form.fecha?.substring(0, 10) || ""}
-            readOnly
-          />
-        </div>
+          {/* DATOS DEL CLIENTE */}
+          <div className="grid md:grid-cols-3 gap-4">
+            {[
+              { label: "Nombre", value: form.cliente?.nombre },
+              { label: "Cédula", value: form.cliente?.cedula },
+              { label: "Teléfono", value: form.cliente?.telefono },
+              { label: "Correo", value: form.cliente?.correo },
+              { label: "Dirección", value: form.cliente?.direccion },
+            ].map((field, i) => (
+              <div key={i} className="flex flex-col space-y-1">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  {field.label}
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={field.value || ""}
+                  className="
+            w-full px-4 py-2 rounded-lg
+            bg-gray-50 text-gray-800
+            border border-gray-200
+            shadow-inner
+            cursor-default
+          "
+                />
+              </div>
+            ))}
+          </div>
 
-        {/* Hora de llamada */}
-        <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-2">
-          <label className="block font-semibold text-green-800">
-            Hora de llamada
-          </label>
-          <input
-            type="text"
-            className={inputStyle}
-            value={form.FechaHoraLlamada || ""}
-            readOnly
-          />
+          {/* FECHAS */}
+          <div className="grid md:grid-cols-2 gap-4 pt-2">
+            {/* Fecha de registro */}
+            <div className="flex flex-col space-y-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Fecha de registro
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={form.fecha?.substring(0, 10) || ""}
+                className="
+          w-full px-4 py-2 rounded-lg
+           text-gray-800
+          border border-green-200
+          shadow-inner
+          cursor-default
+        "
+              />
+            </div>
+
+            {/* Fecha y hora de la llamada */}
+            <div className="flex flex-col space-y-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Fecha y hora de la llamada
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={form.FechaHoraLlamada || ""}
+                className="
+          w-full px-4 py-2 rounded-lg
+           text-gray-800
+          border border-green-200
+          shadow-inner
+          cursor-default
+        "
+              />
+            </div>
+          </div>
         </div>
 
         {/* Foto de fecha de llamada */}
         {form.fotoFechaLlamada && (
-          <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-3">
+          <div className=" p-5 rounded-xl shadow-md space-y-3">
             <h3 className="text-xl font-semibold text-green-800">
               Foto Fecha Llamada
             </h3>
@@ -167,151 +207,148 @@ export default function DetalleEntrega() {
           </div>
         )}
 
-        {/* Origen */}
-        <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-2">
-          <label className="block font-semibold text-green-800">Origen</label>
-          <input
-            type="text"
-            className={inputStyle}
-            value={form.origen?.nombre || ""}
-            readOnly
-          />
+        <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">Origen</h3>
+            <p className="text-sm text-gray-500">Procedencia y observación</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="flex flex-col space-y-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Origen
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={form.origen?.nombre || ""}
+                className="
+          w-full px-4 py-2 rounded-lg
+           text-gray-800
+          border border-green-200
+          shadow-inner
+          cursor-default
+        "
+              />
+            </div>
+
+            <div className="flex flex-col space-y-1">
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                Observación
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={form.observacion || ""}
+                className="
+          w-full px-4 py-2 rounded-lg
+          bg-gray-50 text-gray-800
+          border border-gray-200
+          shadow-inner
+          cursor-default
+        "
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Detalle productos */}
-        <div>
-          <h3 className="text-2xl font-bold text-green-700 mb-3">
-            Detalle de Productos
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Detalle de productos
           </h3>
 
           {form.detalleEntrega?.map((detalle) => (
             <div
               key={detalle.id}
-              className="bg-green-50 p-5 rounded-xl border border-green-200 mb-4"
+              className="bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-md p-6 space-y-4"
             >
-              <div className="grid md:grid-cols-2 gap-4 mb-3">
-                <input
-                  className={inputStyle}
-                  value={`Modelo: ${detalle.modelo?.nombre}`}
-                  readOnly
-                />
-                <input
-                  className={inputStyle}
-                  value={`Marca: ${detalle.dispositivoMarca?.marca?.nombre}`}
-                  readOnly
-                />
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4 mb-3">
-                <input
-                  className={inputStyle}
-                  value={`Dispositivo: ${detalle.dispositivoMarca?.dispositivo?.nombre}`}
-                  readOnly
-                />
-                <input
-                  className={inputStyle}
-                  value={`Forma Pago: ${detalle.formaPago?.nombre}`}
-                  readOnly
-                />
-              </div>
-
-              <div className="grid md:grid-cols-3 gap-4 mb-3">
-                <input
-                  className={inputStyle}
-                  value={`Contrato: ${detalle.contrato}`}
-                  readOnly
-                />
-                <input
-                  className={inputStyle}
-                  value={`Entrada: $${detalle.entrada}`}
-                  readOnly
-                />
-                <input
-                  className={inputStyle}
-                  value={`Alcance: $${detalle.alcance}`}
-                  readOnly
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Modelo" value={detalle.modelo?.nombre} />
+                <Field
+                  label="Marca"
+                  value={detalle.dispositivoMarca?.marca?.nombre}
                 />
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <input
-                  className={inputStyle}
-                  value={`Ubicación: ${detalle.ubicacion}`}
-                  readOnly
+                <Field
+                  label="Dispositivo"
+                  value={detalle.dispositivoMarca?.dispositivo?.nombre}
                 />
-                <input
-                  className={inputStyle}
-                  value={`Ubicación dispositivo: ${detalle.ubicacionDispositivo}`}
-                  readOnly
+                <Field
+                  label="Forma de pago"
+                  value={detalle.formaPago?.nombre}
                 />
               </div>
+
+              <div className="grid md:grid-cols-3 gap-4">
+                <Field label="Contrato" value={detalle.contrato} />
+                <Field label="Entrada" value={`$${detalle.entrada}`} />
+                <Field label="Alcance" value={`$${detalle.alcance}`} />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <Field label="Ubicación" value={detalle.ubicacion} />
+                <Field
+                  label="Ubicación del dispositivo"
+                  value={detalle.ubicacionDispositivo}
+                />
+              </div>
+
+              <Field label="Observación" value={detalle.observacionDetalle} />
             </div>
           ))}
         </div>
 
-        {/* Obsequios */}
-        <div>
-          <h3 className="text-2xl font-bold text-green-700 mb-3">Obsequios</h3>
-
-          {form.obsequiosEntrega?.map((ob) => (
-            <div
-              key={ob.id}
-              className="bg-green-50 p-4 rounded-xl border border-green-200 mb-4 grid md:grid-cols-2 gap-4"
-            >
-              <input
-                className={inputStyle}
-                value={ob.obsequio?.nombre}
-                readOnly
-              />
-              <input className={inputStyle} value={ob.cantidad} readOnly />
+        <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-5">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Obsequios</h3>
+              <p className="text-sm text-gray-500">
+                Beneficios adicionales entregados al cliente
+              </p>
             </div>
-          ))}
-        </div>
 
-        {/* Observaciones logística */}
-        <div className="bg-green-200 p-5 rounded-xl shadow-md">
-          <label className="block font-semibold text-green-800">
-            Observaciones de Logística
-          </label>
-          <textarea
-            className="w-full p-3 border border-green-400 rounded-xl bg-white"
-            rows={4}
-            placeholder="Escribe una observación..."
-            value={observacionesLogistica}
-            onChange={(e) => setObservacionesLogistica(e.target.value)}
-          />
-        </div>
-
-        {/* Foto validación */}
-        {form.fotoValidacion && (
-          <div className="bg-green-100 p-5 rounded-xl shadow-md space-y-3 mt-6">
-            <h3 className="text-xl font-semibold text-green-800">
-              Foto de Respaldo
-            </h3>
-
-            <img
-              src={`${API_URL}${form.fotoValidacion}`}
-              alt="Foto de validación"
-              onClick={() =>
-                verImagenCompleta(`${API_URL}${form.fotoValidacion}`)
-              }
-              s
-              className="w-full max-w-md rounded-xl border-2 border-green-400 shadow-lg cursor-zoom-in hover:opacity-90 transition"
-            />
+            <span className="px-3 py-1 text-xs font-semibold rounded-full  text-green-700 border border-green-200">
+              {form.obsequiosEntrega?.length || 0} ítem(s)
+            </span>
           </div>
-        )}
+
+          {/* Lista */}
+          <div className="space-y-3">
+            {form.obsequiosEntrega?.map((ob) => (
+              <div
+                key={ob.id}
+                className="
+          flex flex-col md:flex-row md:items-center md:justify-between
+          gap-4 p-5 rounded-xl
+          bg-gradient-to-r from-green-50 to-white
+          border border-green-200
+          shadow-sm
+        "
+              >
+                <div className="flex-1">
+                  <Field label="Obsequio" value={ob.obsequio?.nombre} />
+                </div>
+
+                <div className="w-full md:w-40">
+                  <Field label="Cantidad" value={ob.cantidad} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Botones */}
         <div className="grid md:grid-cols-3 gap-4 mt-6">
-
-                    <button
+          <button
             type="button"
             onClick={() => actualizarEstado("Entregado")}
-            className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl"
+            className="0 hover:bg-green-600 text-white font-bold py-3 rounded-xl"
           >
             Entregado
           </button>
-
 
           <button
             type="button"

@@ -143,7 +143,7 @@ exports.obtenerEntregaPorId = async (req, res) => {
         {
           model: Cliente,
           as: "cliente",
-          attributes: ["id", "cliente", "cedula", "telefono"],
+          attributes: ["id", "cliente", "cedula", "telefono" , "direccion" , "correo"],
         },
         {
           model: Origen,
@@ -226,6 +226,9 @@ exports.obtenerEntregaPorId = async (req, res) => {
         nombre: entrega.cliente?.cliente,
         cedula: entrega.cliente?.cedula,
         telefono: entrega.cliente?.telefono,
+        correo: entrega.cliente?.correo,
+        direccion: entrega.cliente?.direccion,
+        
       },
 
       origen: {
