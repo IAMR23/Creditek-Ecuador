@@ -3,6 +3,7 @@ import axios from "axios";
 import { API_URL } from "../../../../config";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
+import { Eye } from "lucide-react";
 
 export default function MisEntregas() {
   const [filas, setFilas] = useState([]);
@@ -56,8 +57,7 @@ export default function MisEntregas() {
         id: entrega.id,
         Fecha: entrega.fecha ?? "",
         Día: entrega.dia ?? "",
-        Agencia: entrega.local ?? "",
-        Vendedor: entrega.vendedor ?? "",
+        
         Origen: entrega.origen ?? "",
         Dispositivo: entrega.tipo ?? "",
         Marca: entrega.marca ?? "",
@@ -111,6 +111,8 @@ export default function MisEntregas() {
 - Nombre: ${cliente.nombre}
 - Cédula: ${cliente.cedula}
 - Teléfono: ${cliente.telefono}
+- Correo : ${cliente.correo || ""}
+- Dirección: ${cliente.direccion || ""}
 
 📍 Origen
 - Origen: ${origen.nombre}
@@ -121,7 +123,6 @@ export default function MisEntregas() {
 
 📦 Detalle de la Venta
 `;
-
     detalleEntrega.forEach((item, index) => {
       texto += `
 📌 Producto ${index + 1}
@@ -141,7 +142,6 @@ export default function MisEntregas() {
 
 🎁 Obsequios
 `;
-
     if (obsequiosEntrega.length === 0) {
       texto += "(No se registraron obsequios)\n";
     } else {
@@ -201,7 +201,7 @@ export default function MisEntregas() {
                       className="bg-orange-600 text-white px-2 py-1 rounded"
                       onClick={() => handleCopiarDatos(f.id)}
                     >
-                      Ver
+                      <Eye size={18}/>
                     </button>
                   </td>
                 </tr>

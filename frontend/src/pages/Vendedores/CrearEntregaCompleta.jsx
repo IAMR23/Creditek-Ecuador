@@ -315,7 +315,7 @@ const CrearEntregaCompleta = () => {
       );
 
       // 🔄 Reset
-/*       setFoto(null);
+       setFoto(null);
       setPreview(null);
       setObsequios([]);
       setCliente({
@@ -326,7 +326,7 @@ const CrearEntregaCompleta = () => {
         direccion: "",
       });
       setEntrega((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/"); */
+      navigate("/"); 
     } catch (error) {
       console.error(error);
 
@@ -349,11 +349,11 @@ const CrearEntregaCompleta = () => {
     modelo,
   }) => {
     return `
-ENTREGA REGISTRADA ${entrega.id || ""}
- Vendedor  ${usuarioInfo.nombre} 
+ENTREGA REGISTRADA 🛻 ${entrega.id || ""}
+ 😁 Vendedor  ${usuarioInfo.nombre} 
  Agencia: ${usuarioInfo.agenciaPrincipal?.nombre}
  Fecha: ${entrega.fecha || "N/A"}
-Cliente:
+👨‍🦰 Cliente:
 - Nombre: ${cliente.cliente || "N/A"}
 - Cédula: ${cliente.cedula || "N/A"}
 - Teléfono: ${cliente.telefono || "N/A"}
@@ -362,7 +362,7 @@ Cliente:
 📍 Origen
 - Origen : ${origen.nombre || "N/A"}
 - Observación: ${entrega.observacion || "N/A"}
-Detalle:
+📱Detalle:
 - Dispositivo: ${dispositivoMarcaSeleccionado?.dispositivo?.nombre || "N/A"}
 - Marca: ${dispositivoMarcaSeleccionado?.marca?.nombre || "N/A"}
 - Modelo: ${modelo?.nombre || "N/A"}
@@ -372,6 +372,8 @@ Detalle:
 - Entrada : $${detalle.entrada || 0}
 - Alcance : $${detalle.alcance || 0}
 - Contrato: ${detalle.contrato || "N/A"}
+- Ubicacion del Cliente : ${detalle.ubicacion || "N/A"}
+- Ubicación del Dispositivo : ${detalle.ubicacionDispositivo || "N/A"}
 - Observación del detalle: ${detalle.observacionDetalle || "N/A"}
 Obsequios:
 ${

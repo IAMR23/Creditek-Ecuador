@@ -26,7 +26,7 @@ function VendedorPanel() {
 
   const options = [
     {
-      label: "EXPERIMENTAL",
+      label: "Comercial",
       title: "Registrar Ventas",
       desc: "Ingresa tus ventas del dia",
       icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
@@ -40,12 +40,12 @@ function VendedorPanel() {
       icon: <MdPointOfSale className="w-10 h-10 text-green-600" />,
       path: "/registrar-clientes-venta",
     }, */
-    {
-      label: "Logística",
+        {
+      label: "Logistica",
       title: "Registrar Entregas",
-      desc: "Registra envíos y entregas",
-      icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
-      path: "/registrar-clientes-entrega",
+      desc: "Ingresa tus entregas del dia",
+      icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
+      path: "/crear-entrega-completa",
     },
     {
       label: "Ventas",
@@ -62,13 +62,7 @@ function VendedorPanel() {
       path: "/mis-entregas",
     },
 
-        {
-      label: "EXPERIMENTAL",
-      title: "Registrar Entregas",
-      desc: "Ingresa tus entregas del dia",
-      icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
-      path: "/crear-entrega-completa",
-    },
+
   ];
 
   const Card = ({ label, title, desc, icon, path }) => (
