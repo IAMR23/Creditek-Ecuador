@@ -3,9 +3,11 @@ import axios from "axios";
 import { API_URL } from "../../../config";
 import { Link } from "react-router-dom"; // para navegar a otro componente
 import { jwtDecode } from "jwt-decode";
+import { FaFileExcel } from "react-icons/fa";
 
 import { DataGrid } from "@mui/x-data-grid";
-
+import * as XLSX from "xlsx";
+import Swal from "sweetalert2";
 
 export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
@@ -105,9 +107,8 @@ export default function MetasComerciales() {
         Marca: venta.marca ?? "",
         Modelo: venta.modelo ?? "",
         "Forma Pago": venta.formaPago ?? "",
-        "Precio Sistema": venta.precioSistema ?? "",
-        "Precio Vendedor": venta.precioVendedor ?? "",
-        "Cierre de caja" : venta.cierreCaja ?? "" , 
+        "Precio de Venta": venta.precioVendedor ?? "",
+        "Cierre de caja": venta.cierreCaja ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
       }));
@@ -121,27 +122,47 @@ export default function MetasComerciales() {
   };
 
   const columnas = [
-  {
-    field: "numero",
-    headerName: "#",
-    width: 70,
-    sortable: false,
-    filterable: false,
-    align: "center",
-    headerAlign: "center",
-    renderCell: (params) =>
-      params.api.getRowIndexRelativeToVisibleRows(params.id) + 1,
-  },
-  ...Object.keys(filas[0] || {}).map((key) => ({
-    field: key,
-    headerName: key,
-    flex: 1,
-    editable: true,
-  })),
-];
+    {
+      field: "numero",
+      headerName: "#",
+      width: 70,
+      sortable: false,
+      filterable: false,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (params) =>
+        params.api.getRowIndexRelativeToVisibleRows(params.id) + 1,
+    },
+    ...Object.keys(filas[0] || {}).map((key) => ({
+      field: key,
+      headerName: key,
+      flex: 1,
+      editable: true,
+    })),
+  ];
 
+  const descargarExcel = () => {
+    if (!filas || filas.length === 0) {
+      Swal.fire("Atención", "No hay datos para exportar", "warning");
+      return;
+    }
 
+    // 🔹 Quitar el id interno
+    const data = filas.map(({ id, ...rest }) => rest);
 
+    // 🔹 Crear hoja
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // 🔹 Crear libro
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Metas Comerciales");
+
+    // 🔹 Nombre dinámico
+    const nombreArchivo = `Metas_Comerciales_${fechaInicio}_a_${fechaFin}.xlsx`;
+
+    // 🔹 Descargar
+    XLSX.writeFile(workbook, nombreArchivo);
+  };
 
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
@@ -209,6 +230,13 @@ export default function MetasComerciales() {
             ))}
           </select>
         </div>
+
+        <button
+          onClick={descargarExcel}
+          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+        >
+          <FaFileExcel size={18} />
+        </button>
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
@@ -216,23 +244,23 @@ export default function MetasComerciales() {
       {loading ? (
         <p>Cargando...</p>
       ) : (
-      <DataGrid
-  rows={filas.map((f, i) => ({ id: f.id ?? i, ...f }))}
-  columns={columnas}
-  autoHeight
-  pageSizeOptions={[10, 25, 50]}
-  sx={{
-    "& .precio-rojo": { color: "red", fontWeight: "bold" },
-    "& .precio-verde": { color: "green", fontWeight: "bold" },
-  }}
-  getCellClassName={(params) => {
-    if (params.field === "Precio Vendedor") {
-      const ps = Number(params.row["Precio Sistema"]) || 0;
-      const pv = Number(params.value) || 0;
-      return pv < ps ? "precio-rojo" : "precio-verde";
-    }
-  }}
-/>
+        <DataGrid
+          rows={filas.map((f, i) => ({ id: f.id ?? i, ...f }))}
+          columns={columnas}
+          autoHeight
+          pageSizeOptions={[10, 25, 50]}
+          sx={{
+            "& .precio-rojo": { color: "red", fontWeight: "bold" },
+            "& .precio-verde": { color: "green", fontWeight: "bold" },
+          }}
+          getCellClassName={(params) => {
+            if (params.field === "Precio Vendedor") {
+              const ps = Number(params.row["Precio Sistema"]) || 0;
+              const pv = Number(params.value) || 0;
+              return pv < ps ? "precio-rojo" : "precio-verde";
+            }
+          }}
+        />
       )}
     </div>
   );

@@ -3,8 +3,8 @@ const http = require("http");
 const cors = require("cors");
 require("dotenv").config();
 const { connectDB } = require("./config/db");
-require("./models/associations");
-// Rutas
+require("./models/associations");      
+// Rutas  
 const authRoutes = require("./routes/authRoutes");
 const agencia = require("./routes/AgenciaRoutes");
 const usuario_agencia = require("./routes/UsuarioAgenciaRoutes");

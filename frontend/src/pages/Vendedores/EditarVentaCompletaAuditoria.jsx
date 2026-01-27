@@ -6,7 +6,7 @@ import imageCompression from "browser-image-compression";
 import { useNavigate, useParams } from "react-router-dom";
 
 const EditarVentaCompletaAuditoria = () => {
-  const { id } = useParams(); // ventaId
+  const { id } = useParams(); 
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
@@ -78,7 +78,7 @@ const EditarVentaCompletaAuditoria = () => {
     const cargarVenta = async () => {
       try {
         const res = await axios.get(
-          `${API_URL}/registrar/venta-completa/${id}`
+          `${API_URL}/registrar/venta-completa/${id}`,
         );
 
         const {
@@ -120,13 +120,13 @@ const EditarVentaCompletaAuditoria = () => {
           obsequiosDB?.map((o) => ({
             obsequioId: o.obsequioId,
             cantidad: o.cantidad,
-          })) || []
+          })) || [],
         );
 
         // 🔹 Cargar modelos del dispositivo seleccionado (CLAVE)
         if (detalleDB?.dispositivoMarcaId) {
           const resModelos = await axios.get(
-            `${API_URL}/dispositivoMarca/${detalleDB.dispositivoMarcaId}`
+            `${API_URL}/dispositivoMarca/${detalleDB.dispositivoMarcaId}`,
           );
           setModelos(resModelos.data || []);
         }
@@ -180,7 +180,7 @@ const EditarVentaCompletaAuditoria = () => {
           venta,
           detalle,
           obsequios,
-        })
+        }),
       );
 
       if (foto) {
@@ -453,7 +453,7 @@ const EditarVentaCompletaAuditoria = () => {
 
                   // Buscar el objeto completo
                   const seleccionado = dispositivoMarcas.find(
-                    (dm) => String(dm.id) === value
+                    (dm) => String(dm.id) === value,
                   );
 
                   setDispositivoMarcaSeleccionado(seleccionado || null);
@@ -497,7 +497,7 @@ const EditarVentaCompletaAuditoria = () => {
                   }));
 
                   setModeloSeleccionado(
-                    modelos.find((m) => m.id === value) || null
+                    modelos.find((m) => m.id === value) || null,
                   );
                 }}
                 className="w-full p-2 border border-green-500 rounded"
@@ -690,7 +690,7 @@ const EditarVentaCompletaAuditoria = () => {
         <div className="space-y-3">
           {obsequiosDisponibles.map((o) => {
             const obsSeleccionado = obsequios.find(
-              (obs) => obs.obsequioId === o.id
+              (obs) => obs.obsequioId === o.id,
             );
 
             const toggleSeleccion = () => {
@@ -739,8 +739,8 @@ const EditarVentaCompletaAuditoria = () => {
                       const cantidad = parseInt(e.target.value) || 1;
                       setObsequios((prev) =>
                         prev.map((obs) =>
-                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs
-                        )
+                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs,
+                        ),
                       );
                     }}
                     className="w-20 px-2 py-1 text-sm text-center rounded-lg border border-green-400 focus:ring-2 focus:ring-green-500 focus:border-green-500"

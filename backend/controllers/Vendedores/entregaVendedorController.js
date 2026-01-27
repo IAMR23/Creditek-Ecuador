@@ -110,6 +110,7 @@ exports.formatearReporte = (entregas) => {
         modelo: detalle.modelo?.nombre || "",
         formaPago: detalle.formaPago?.nombre || "",
         precioUnitario: detalle.precioUnitario || "",
+       // precioVendedor: detalle.precioVendedor || "",
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",
         contrato: detalle.contrato || "",
@@ -196,6 +197,8 @@ exports.obtenerEntregaPorId = async (req, res) => {
       entrada: entrega.entrada,
       alcance: entrega.alcance,
       pvp: entrega.pvp,
+      precioUnitario : entrega.precioUnitario,
+      precioVendedor : entrega.precioVendedor,
       fotoFechaLlamada: entrega.fotoFechaLlamada,
       FechaHoraLlamada: entrega.FechaHoraLlamada
         ? entrega.FechaHoraLlamada.toLocaleString("sv-SE", {

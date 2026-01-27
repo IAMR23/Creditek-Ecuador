@@ -181,7 +181,7 @@ export default function EntregaAuditoria() {
         {/* Detalle productos */}
         <div>
           <h3 className="text-2xl font-bold text-green-700 mb-3">
-            Detalle de Productos
+            Detalle de Productos Auditoria
           </h3>
 
           {form.detalleEntrega?.map((detalle) => (

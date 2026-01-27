@@ -61,7 +61,8 @@ import EditarVentaCompletaAuditoria from "./pages/Vendedores/EditarVentaCompleta
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
 import EditarVentaCompletaVendedores from "./pages/Vendedores/EditarVentaCompletaVendedores";
 import CrearEntregaCompleta from "./pages/Vendedores/CrearEntregaCompleta";
- 
+import EditarEntregaCompleta from "./pages/Vendedores/EditarEntregaCompleta";
+
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -169,7 +170,7 @@ function App() {
               <Route path="origen" element={<OrigenAdmin />} />
               <Route path="obsequios" element={<AdminObsequios />} />
               <Route path="metas-comerciales" element={<MetasComerciales />} />
-        
+
               <Route
                 path="entregas-pendientes"
                 element={<EntregasPendientes />}
@@ -247,11 +248,19 @@ function App() {
 
             {/* EXPERIMENTAL */}
             <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
-            <Route path="/editar-venta/:id" element={<EditarVentaCompletaVendedores />} />
+            <Route
+              path="/editar-venta/:id"
+              element={<EditarVentaCompletaVendedores />}
+            />
 
-
-             <Route path="/crear-entrega-completa" element={<CrearEntregaCompleta />} />
-            
+            <Route
+              path="/crear-entrega-completa"
+              element={<CrearEntregaCompleta />}
+            />
+            <Route
+              path="/editar-entrega/:id"
+              element={<EditarEntregaCompleta />}
+            />
           </Routes>
         </main>
 

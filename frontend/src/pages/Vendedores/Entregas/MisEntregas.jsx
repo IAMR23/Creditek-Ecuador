@@ -3,7 +3,9 @@ import axios from "axios";
 import { API_URL } from "../../../../config";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
-import { Eye } from "lucide-react";
+import { Eye, Pen } from "lucide-react";
+import { FaPen } from "react-icons/fa";
+import { Link } from "react-router-dom";
 
 export default function MisEntregas() {
   const [filas, setFilas] = useState([]);
@@ -57,16 +59,13 @@ export default function MisEntregas() {
         id: entrega.id,
         Fecha: entrega.fecha ?? "",
         Día: entrega.dia ?? "",
-        
+
         Origen: entrega.origen ?? "",
         Dispositivo: entrega.tipo ?? "",
         Marca: entrega.marca ?? "",
         Modelo: entrega.modelo ?? "",
         Precio:
-          entrega.pvp ??
-          entrega.valorCorregido ??
-          entrega.precioUnitario ??
-          "",
+          entrega.precioVendedor != null ? `$${entrega.precioVendedor}` : "",
         "Forma Pago": entrega.formaPago ?? "",
         Contrato: entrega.contrato ?? "",
         Entrada: entrega.entrada ?? "",
@@ -129,7 +128,8 @@ export default function MisEntregas() {
 - Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}
 - Marca: ${item.dispositivoMarca.marca.nombre}
 - Modelo: ${item.modelo.nombre}
-- Precio: $${item.precioUnitario}
+- Precio: $${item.precioVendedor}
+- Contrato : $${item.contrato}
 - Entrada : $${item.entrada} 
 - Alcance : $${item.alcance}
 - Forma de pago: ${item.formaPago.nombre}
@@ -190,19 +190,30 @@ export default function MisEntregas() {
 
             <tbody>
               {filas.map((f, i) => (
-                <tr key={i}>
+                <tr key={f.id ?? i}>
                   {Object.values(f).map((val, j) => (
                     <td key={j} className="p-2 border">
                       {val}
                     </td>
                   ))}
+
                   <td className="p-2 border">
-                    <button
-                      className="bg-orange-600 text-white px-2 py-1 rounded"
-                      onClick={() => handleCopiarDatos(f.id)}
-                    >
-                      <Eye size={18}/>
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="bg-orange-600 text-white px-2 py-1 rounded flex items-center justify-center"
+                        onClick={() => handleCopiarDatos(f.id)}
+                      >
+                        <Eye size={18} />
+                      </button>
+
+                      <Link
+                        to={`/editar-entrega/${f.id}`}
+                        className="bg-blue-500 text-white px-2 py-1 rounded flex items-center justify-center"
+                      >
+                        <FaPen size={18} />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -250,7 +261,11 @@ export default function MisEntregas() {
               className="mt-3 w-full bg-blue-600 text-white py-2 rounded"
               onClick={() => {
                 navigator.clipboard.writeText(textoEntrega);
-                Swal.fire("¡Copiado!", "Texto copiado al portapapeles", "success");
+                Swal.fire(
+                  "¡Copiado!",
+                  "Texto copiado al portapapeles",
+                  "success",
+                );
                 setModalAbierto(false);
               }}
             >

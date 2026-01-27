@@ -1,7 +1,5 @@
 const Cliente = require("../../models/Cliente");
-const Venta = require("../../models/Venta");
-const DetalleVenta = require("../../models/DetalleVenta");
-const VentaObsequio = require("../../models/VentaObsequio");
+const Entrega = require("../../models/Entrega");
 const { sequelize } = require("../../config/db");
 const Modelo = require("../../models/Modelo");
 const DispositivoMarca = require("../../models/DispositivoMarca");
@@ -10,32 +8,35 @@ const Marca = require("../../models/Marca");
 const FormaPago = require("../../models/FormaPago");
 const Obsequio = require("../../models/Obsequio");
 const Origen = require("../../models/Origen");
+const DetalleEntrega = require("../../models/DetalleEntrega");
+const EntregaObsequio = require("../../models/EntregaObsequio");
 
-const editarVentaCompleta = async (req, res) => {
+const editarEntregaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
-    // 🔥 JSON stringeado
-    const { ventaId, cliente, venta, detalle, obsequios } = JSON.parse(
-      req.body.data
-    );
+    // ✅ ID viene de la URL
+    const { id } = req.params;
 
-    // 🔥 FOTO nueva (opcional)
+    // ✅ Data viene stringeada (multipart/form-data)
+    const { cliente, entrega, detalle, obsequios } = JSON.parse(req.body.data);
+
+    // ✅ Foto opcional
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
 
-    // 1️⃣ Buscar venta existente
-    const ventaDB = await Venta.findByPk(ventaId, { transaction: t });
+    // 1️⃣ Buscar entrega
+    const entregaDB = await Entrega.findByPk(id, { transaction: t });
 
-    if (!ventaDB) {
+    if (!entregaDB) {
       await t.rollback();
       return res.status(404).json({
         ok: false,
-        message: "Venta no encontrada",
+        message: "Entrega no encontrada",
       });
     }
 
-    // 2️⃣ Cliente (actualizar datos)
-    const clienteDB = await Cliente.findByPk(ventaDB.clienteId, {
+    // 2️⃣ Cliente
+    const clienteDB = await Cliente.findByPk(entregaDB.clienteId, {
       transaction: t,
     });
 
@@ -58,20 +59,21 @@ const editarVentaCompleta = async (req, res) => {
       { transaction: t }
     );
 
-    // 3️⃣ Venta
-    await ventaDB.update(
+    // 3️⃣ Entrega
+    await entregaDB.update(
       {
-        origenId: venta.origenId,
-        observacion: venta.observacion,
-        fecha: venta.fecha,
-        ...(fotoUrl && { fotoValidacion: fotoUrl }),
+        origenId: entrega.origenId,
+        observacion: entrega.observacion,
+        fecha: entrega.fecha,
+        FechaHoraLlamada: entrega.FechaHoraLlamada,
+        ...(fotoUrl && { fotoFechaLlamada: fotoUrl }),
       },
       { transaction: t }
     );
 
     // 4️⃣ Detalle
-    const detalleDB = await DetalleVenta.findOne({
-      where: { ventaId },
+    const detalleDB = await DetalleEntrega.findOne({
+      where: { entregaId: id },
       transaction: t,
     });
 
@@ -79,7 +81,7 @@ const editarVentaCompleta = async (req, res) => {
       await t.rollback();
       return res.status(404).json({
         ok: false,
-        message: "Detalle de venta no encontrado",
+        message: "Detalle de entrega no encontrado",
       });
     }
 
@@ -99,17 +101,17 @@ const editarVentaCompleta = async (req, res) => {
       { transaction: t }
     );
 
-    // 5️⃣ Obsequios (borramos y recreamos)
-    await VentaObsequio.destroy({
-      where: { ventaId },
+    // 5️⃣ Obsequios (reset)
+    await EntregaObsequio.destroy({
+      where: { entregaId: id },
       transaction: t,
     });
 
-    if (obsequios?.length) {
+    if (Array.isArray(obsequios) && obsequios.length > 0) {
       for (const obs of obsequios) {
-        await VentaObsequio.create(
+        await EntregaObsequio.create(
           {
-            ventaId,
+            entregaId: id,
             obsequioId: obs.obsequioId,
             cantidad: obs.cantidad || 1,
           },
@@ -120,39 +122,40 @@ const editarVentaCompleta = async (req, res) => {
 
     await t.commit();
 
-    res.json({
+    return res.json({
       ok: true,
-      message: "Venta actualizada correctamente",
+      message: "Entrega actualizada correctamente",
     });
   } catch (error) {
     await t.rollback();
     console.error(error);
 
-    res.status(500).json({
+    return res.status(500).json({
       ok: false,
-      message: "Error al editar la venta",
+      message: "Error al editar la entrega",
       error: error.message,
     });
   }
 };
 
-const obtenerVentaCompleta = async (req, res) => {
+
+const obtenerEntregaCompleta = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const venta = await Venta.findOne({
+    const entrega = await Entrega.findOne({
       where: { id },
       include: [
         {
           model: Cliente,
           as: "cliente",
-          attributes: ["cliente", "cedula", "telefono"],
+          attributes: ["cliente", "cedula", "telefono", "correo", "direccion"],
         },
         { model: Origen, as: "origen", attributes: ["id", "nombre"] },
 
         {
-          model: DetalleVenta,
-          as: "detalleVenta",
+          model: DetalleEntrega,
+          as: "detalleEntregas",
           attributes: [
             "cantidad",
             "precioUnitario",
@@ -163,6 +166,8 @@ const obtenerVentaCompleta = async (req, res) => {
             "entrada",
             "alcance",
             "contrato",
+            "ubicacionDispositivo",
+            "ubicacion",
             "observacionDetalle",
           ],
           include: [
@@ -183,8 +188,8 @@ const obtenerVentaCompleta = async (req, res) => {
           ],
         },
         {
-          model: VentaObsequio,
-          as: "obsequiosVenta",
+          model: EntregaObsequio,
+          as: "obsequiosEntrega",
           include: [
             { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
           ],
@@ -192,21 +197,23 @@ const obtenerVentaCompleta = async (req, res) => {
       ],
     });
 
-    if (!venta) {
-      return res.status(404).json({ message: "Venta no encontrada" });
+    if (!entrega) {
+      return res.status(404).json({ message: "Entrega no encontrada" });
     }
 
     res.json({
-      cliente: venta.cliente || { cliente: "", cedula: "", telefono: "" },
-      venta: {
-        usuarioAgenciaId: venta.usuarioAgenciaId,
-        origenId: venta.origenId,
-        origen: venta.origen || null,
-        observacion: venta.observacion,
-        fecha: venta.fecha,
-        fotoValidacion: venta.fotoValidacion || null,
+      cliente: entrega.cliente || { cliente: "", cedula: "", telefono: "" },
+      entrega: {
+        usuarioAgenciaId: entrega.usuarioAgenciaId,
+        fotoFechaLlamada: entrega.fotoFechaLlamada || null,
+        FechaHoraLlamada: entrega.FechaHoraLlamada || null,
+        origenId: entrega.origenId,
+        origen: entrega.origen || null,
+        observacion: entrega.observacion,
+        fecha: entrega.fecha,
+        
       },
-      detalle: venta.detalleVenta?.[0] || {
+      detalle: entrega.detalleEntregas?.[0] || {
         cantidad: 1,
         precioUnitario: "",
         precioVendedor: "",
@@ -217,13 +224,15 @@ const obtenerVentaCompleta = async (req, res) => {
         entrada: "",
         alcance: "",
         observacionDetalle: "",
+        ubicacion: "",
+        ubicacionDispositivo: "",
       },
-      obsequios: venta.obsequiosVenta || [],
+      obsequios: entrega.obsequiosEntrega || [],
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al obtener la venta" });
+    res.status(500).json({ message: "Error al obtener la entrega" });
   }
 };
 
-module.exports = { editarVentaCompleta, obtenerVentaCompleta };
+module.exports = { editarEntregaCompleta, obtenerEntregaCompleta };
