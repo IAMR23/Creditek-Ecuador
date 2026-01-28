@@ -8,7 +8,7 @@ import { Eye } from "lucide-react";
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
+  const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
@@ -94,6 +94,7 @@ export default function VentasAuditoria() {
       const resultado = ventas.map((venta) => ({
         id: venta.id,
         Fecha: venta.fecha ?? "",
+        Cedula: venta.cedula ?? "",
         Cliente: venta.nombre ?? "",
         Agencia: venta.local ?? "",
         Vendedor: venta.vendedor ?? "",
@@ -125,6 +126,7 @@ export default function VentasAuditoria() {
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
+    setFechaInicio(hoyLocal)
     setFechaFin(hoyLocal);
   }, []);
   return (

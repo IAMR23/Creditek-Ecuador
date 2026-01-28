@@ -79,7 +79,7 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
       {
         model: Cliente,
         as: "cliente",
-        attributes: ["cliente"],
+        attributes: [ "cedula", "cliente"],
       },
       {
         model: Origen,
@@ -390,6 +390,7 @@ exports.formatearReporte = (ventas) => {
         local: venta.usuarioAgencia?.agencia?.nombre || "",
         origen: venta.origen?.nombre || "",
         nombre: venta.cliente?.cliente || "",
+        cedula: venta.cliente?.cedula || "",
 
         vendedor: venta.usuarioAgencia?.usuario?.nombre || "",
 
