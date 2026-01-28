@@ -24,6 +24,12 @@ const Modelo = sequelize.define(
       defaultValue: true,
     },
 
+    PVP1: {
+  type: DataTypes.DOUBLE,
+  allowNull: false,
+  defaultValue: 0,
+},
+
     // 🔥 La relación correcta (UN modelo pertenece a UNA combinación dispositivo-marca)
     dispositivoMarcaId: {
       type: DataTypes.INTEGER,

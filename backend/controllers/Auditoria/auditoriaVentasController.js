@@ -93,6 +93,116 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
           "precioUnitario",
           "precioVendedor",
           "entrada",
+          "margen",
+          "alcance",
+          "contrato",  
+          "cierreCaja"
+        ],
+        include: [
+          { model: Modelo, as: "modelo", attributes: ["nombre"] },
+          {
+            model: DispositivoMarca,
+            as: "dispositivoMarca",
+            attributes: ["id"],
+            include: [
+              { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
+              { model: Marca, as: "marca", attributes: ["nombre"] },
+            ],
+          },
+          { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
+        ],
+      },
+      {
+        model: VentaObsequio,
+        as: "obsequiosVenta",
+        attributes: ["id"],
+        include: [
+          { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
+        ],
+      },
+    ],
+  });
+};
+
+
+exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
+  const whereVenta = {
+    activo : true
+  };
+
+  // 🔹 Filtro por fecha
+  if (fechaInicio && fechaFin) {
+    whereVenta.fecha = {
+      [Op.between]: [
+        new Date(`${fechaInicio}T00:00:00`),
+        new Date(`${fechaFin}T23:59:59`),
+      ],
+    };
+  } else if (fechaInicio) {
+    whereVenta.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
+  } else if (fechaFin) {
+    whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+  }
+
+  // 🔹 include dinámico de agencia
+
+  const includeUsuarioAgencia = {
+  model: UsuarioAgencia,
+  as: "usuarioAgencia",
+  attributes: ["id"],
+  required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
+  include: [
+    {
+      model: Usuario,
+      as: "usuario",
+      attributes: ["id", "nombre"],
+      ...(vendedorId && vendedorId !== "todos" && {
+        where: { id: vendedorId },
+      }),
+    },
+    {
+      model: Agencia,
+      as: "agencia",
+      attributes: ["nombre"],
+      ...(agenciaId && agenciaId !== "todas" && {
+        where: { id: agenciaId },
+      }),
+    },
+  ],
+};
+
+
+
+  return await Venta.findAll({
+    where: whereVenta,  
+    attributes: [
+      "id",
+      "fecha",
+      "validada",
+      "observacion",
+      "activo"
+    ],
+    order: [["fecha", "ASC"]],
+    include: [
+      includeUsuarioAgencia,
+      {
+        model: Cliente,
+        as: "cliente",
+        attributes: ["cliente"],
+      },
+      {
+        model: Origen,
+        as: "origen",
+        attributes: ["nombre"],
+      },
+      {
+        model: DetalleVenta,
+        as: "detalleVenta",
+        attributes: [
+          "precioUnitario",
+          "precioVendedor",
+          "entrada",
+          "margen",
           "alcance",
           "contrato",  
           "cierreCaja"
@@ -208,7 +318,8 @@ if (cierreCaja && cierreCaja !== "todos") {
           "entrada",
           "alcance",
           "contrato",
-          "cierreCaja"
+          "cierreCaja",
+          "margen"
         ],
          ...(Object.keys(whereDetalleVenta).length > 0 && {
     where: whereDetalleVenta,
@@ -289,7 +400,7 @@ exports.formatearReporte = (ventas) => {
         valorCorregido: detalle.precioUnitario || "",
         precioSistema: detalle.precioUnitario || "",
         precioVendedor : detalle.precioVendedor || "",
-        margen: null,
+        margen: detalle.margen || "",
 
         cierreCaja: detalle.cierreCaja || "",
 

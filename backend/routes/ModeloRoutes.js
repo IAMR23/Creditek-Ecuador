@@ -20,6 +20,7 @@ router.post("/", async (req, res) => {
       descripcion,
       activo,
       dispositivoMarcaId,
+      PVP1
     });
 
     res.status(201).json(nuevo);
@@ -89,7 +90,7 @@ router.get("/:id", async (req, res) => {
 // =========================
 router.put("/:id", async (req, res) => {
   try {
-    const { nombre, descripcion, activo, dispositivoMarcaId } = req.body;
+    const { nombre, descripcion, activo, dispositivoMarcaId , PVP1} = req.body;
 
     const modelo = await Modelo.findByPk(req.params.id);
     if (!modelo) {
@@ -108,6 +109,7 @@ router.put("/:id", async (req, res) => {
       descripcion,
       activo,
       dispositivoMarcaId,
+      PVP1
     });
 
     res.json(modelo);
@@ -117,9 +119,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// =========================
-// 📌 Eliminar modelo
-// =========================
+
 router.delete("/:id", async (req, res) => {
   try {
     const modelo = await Modelo.findByPk(req.params.id);

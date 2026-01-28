@@ -88,7 +88,7 @@ export default function MetasComerciales() {
         params.append("vendedorId", vendedorId);
       }
 
-      const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
+      const url = `${API_URL}/auditoria/informe?${params.toString()}`;
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
@@ -111,6 +111,7 @@ export default function MetasComerciales() {
         "Cierre de caja": venta.cierreCaja ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
+        Margen : venta.margen ?? "",
       }));
 
       setFilas(resultado);

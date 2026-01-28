@@ -109,10 +109,13 @@ export default function DetalleVenta() {
         `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`
       );
       setModelos(res.data);
+      console.log(res.data);
     } catch (err) {
       console.error(err);
     }
   };
+
+  console.log(modelos)
 
   const handleChange = (e) => {
     const { name, value } = e.target;

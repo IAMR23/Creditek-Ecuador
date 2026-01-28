@@ -17,7 +17,7 @@ const editarVentaCompleta = async (req, res) => {
   try {
     // 🔥 JSON stringeado
     const { ventaId, cliente, venta, detalle, obsequios } = JSON.parse(
-      req.body.data
+      req.body.data,
     );
 
     // 🔥 FOTO nueva (opcional)
@@ -55,7 +55,7 @@ const editarVentaCompleta = async (req, res) => {
         correo: cliente.correo,
         direccion: cliente.direccion,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 3️⃣ Venta
@@ -66,7 +66,7 @@ const editarVentaCompleta = async (req, res) => {
         fecha: venta.fecha,
         ...(fotoUrl && { fotoValidacion: fotoUrl }),
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 4️⃣ Detalle
@@ -83,11 +83,27 @@ const editarVentaCompleta = async (req, res) => {
       });
     }
 
+    const modeloDB = await Modelo.findByPk(detalle.modeloId, {
+      attributes: ["id", "PVP1"],
+      transaction: t,
+    });
+
+    if (!modeloDB) {
+      throw new Error("Modelo no existe");
+    }
+
+    const pvp1 = modeloDB.PVP1;
+
+    const margen = Number(
+      (detalle.precioVendedor + detalle.alcance - pvp1).toFixed(2),
+    );
+
     await detalleDB.update(
       {
         cantidad: detalle.cantidad,
         precioUnitario: detalle.precioUnitario,
         precioVendedor: detalle.precioVendedor,
+        margen: margen,
         dispositivoMarcaId: detalle.dispositivoMarcaId,
         modeloId: detalle.modeloId,
         formaPagoId: detalle.formaPagoId,
@@ -96,7 +112,7 @@ const editarVentaCompleta = async (req, res) => {
         contrato: detalle.contrato,
         observacionDetalle: detalle.observacionDetalle,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 5️⃣ Obsequios (borramos y recreamos)
@@ -113,7 +129,7 @@ const editarVentaCompleta = async (req, res) => {
             obsequioId: obs.obsequioId,
             cantidad: obs.cantidad || 1,
           },
-          { transaction: t }
+          { transaction: t },
         );
       }
     }

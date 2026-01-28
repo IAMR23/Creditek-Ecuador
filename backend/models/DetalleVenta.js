@@ -35,6 +35,12 @@ const DetalleVenta = sequelize.define(
       onDelete: "RESTRICT",
     },
 
+    margen: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+      defaultValue: 0,
+    },
+
     modeloId: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -80,7 +86,7 @@ const DetalleVenta = sequelize.define(
   {
     tableName: "detalle_ventas",
     timestamps: true,
-  }
+  },
 );
 
 module.exports = DetalleVenta;

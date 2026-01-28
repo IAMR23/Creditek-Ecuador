@@ -5,6 +5,7 @@ const VentaObsequio = require("../../models/VentaObsequio");
 const { sequelize } = require("../../config/db");
 const { validarCedulaEC } = require("../../middleware/validacionCedula");
 const DispositivoMarca = require("../../models/DispositivoMarca");
+const Modelo = require("../../models/Modelo");
 
 const crearVentaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
@@ -12,13 +13,13 @@ const crearVentaCompleta = async (req, res) => {
     // 🔥 JSON viene stringeado
     const { cliente, venta, detalle, obsequios } = JSON.parse(req.body.data);
 
-    if (!validarCedulaEC(cliente.cedula)) {
+    /*     if (!validarCedulaEC(cliente.cedula)) {
       await t.rollback();
       return res.status(400).json({
         ok: false,
         message: "Cédula inválida según validación oficial del Ecuador",
       });
-    }
+    } */
 
     // 🔥 FOTO
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
@@ -38,7 +39,7 @@ const crearVentaCompleta = async (req, res) => {
           correo: cliente.correo,
           direccion: cliente.direccion,
         },
-        { transaction: t }
+        { transaction: t },
       );
     } else {
       await clienteDB.update(
@@ -48,7 +49,7 @@ const crearVentaCompleta = async (req, res) => {
           correo: cliente.correo,
           direccion: cliente.direccion,
         },
-        { transaction: t }
+        { transaction: t },
       );
     }
 
@@ -63,13 +64,13 @@ const crearVentaCompleta = async (req, res) => {
         validada: true,
         fotoValidacion: fotoUrl,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 🔹 Obtener el dispositivo (TV o CELULAR) desde dispositivoMarcas
     const dispositivoMarca = await DispositivoMarca.findByPk(
       detalle.dispositivoMarcaId,
-      { transaction: t }
+      { transaction: t },
     );
 
     if (!dispositivoMarca) {
@@ -80,7 +81,6 @@ const crearVentaCompleta = async (req, res) => {
     // 🔹 Calcular cierreCaj  a
     let cierreCaja = "CONTADO"; // valor por defecto
     if (detalle.formaPagoId === 1) {
-
       // crédito
       if (dispositivoId === 1) {
         cierreCaja = "CREDITV";
@@ -89,23 +89,39 @@ const crearVentaCompleta = async (req, res) => {
       }
     }
 
+    // 🔹 Obtener modelo y PVP1
+    const modeloDB = await Modelo.findByPk(detalle.modeloId, {
+      attributes: ["id", "PVP1"],
+      transaction: t,
+    });
+
+    if (!modeloDB) {
+      throw new Error("Modelo no existe");
+    }
+
+
+    const pvp1 = modeloDB.PVP1;
+
+    const margen = Number((detalle.precioVendedor  + detalle.alcance - pvp1).toFixed(2));
+
     // 3️⃣ Detalle
-    const detalleDB = await DetalleVenta.create(
+    const detalleDB = await DetalleVenta.create(  
       {
         ventaId: ventaDB.id,
         cantidad: detalle.cantidad,
         precioUnitario: detalle.precioUnitario,
         precioVendedor: detalle.precioVendedor,
+        margen: margen,
         dispositivoMarcaId: detalle.dispositivoMarcaId,
         modeloId: detalle.modeloId,
         formaPagoId: detalle.formaPagoId,
         cierreCaja: cierreCaja,
         entrada: detalle.entrada,
-        alcance: detalle.alcance, 
+        alcance: detalle.alcance,
         contrato: detalle.contrato,
         observacionDetalle: detalle.observacionDetalle,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 4️⃣ Obsequios
@@ -117,7 +133,7 @@ const crearVentaCompleta = async (req, res) => {
             obsequioId: obs.obsequioId,
             cantidad: obs.cantidad || 1,
           },
-          { transaction: t }
+          { transaction: t },
         );
       }
     }
