@@ -10,7 +10,6 @@ import Usuarios from "./pages/Admin/Usuarios";
 import SidebarLayout from "./components/SidebarLayout";
 import Agencias from "./pages/Admin/Agencias";
 import UsuariosAgencias from "./pages/Admin/UsuariosAgencias";
-import VentasPage from "./pages/Contabilidad/VentasPage";
 import Entregas from "./pages/Logistica/Entregas";
 import DetalleEntrega from "./pages/Logistica/DetalleEntrega";
 import Dashboard from "./pages/Admin/Dashboard";
@@ -62,6 +61,8 @@ import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
 import EditarVentaCompletaVendedores from "./pages/Vendedores/EditarVentaCompletaVendedores";
 import CrearEntregaCompleta from "./pages/Vendedores/CrearEntregaCompleta";
 import EditarEntregaCompleta from "./pages/Vendedores/EditarEntregaCompleta";
+import Permisos from "./pages/Admin/Permisos";
+import AsignarPermisos from "./pages/Admin/AsignarPermisos";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -151,7 +152,6 @@ function App() {
               <Route path="usuarios" element={<Usuarios />} />
               <Route path="agencias" element={<Agencias />} />
               <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
-              <Route path="ventas" element={<VentasPage />} />
               <Route path="entregas" element={<Entregas />} />
               <Route
                 path="entrega-logistica/:id"
@@ -199,6 +199,10 @@ function App() {
                 element={<EditarVentaCompletaAuditoria />}
               />
               <Route path="/postulaciones" element={<Postulaciones />} />
+              <Route path="/permisos" element={<Permisos />} />
+              <Route path="/asignar-permisos" element={<AsignarPermisos />} />
+              
+              
             </Route>
 
             {/* REPARTIDORES */}

@@ -54,6 +54,27 @@ router.get("/", async (req, res) => {
   }
 });
 
+
+router.get("/activos", async (req, res) => {
+  try {
+    const relacionesActivas = await UsuarioAgencia.findAll({
+      where: { activo: true }, // Solo activos
+      include: [
+        { model: Usuario, as: "usuario" },
+        { model: Agencia, as: "agencia" },
+      ],
+      order: [
+        ["id", "ASC"], // opcional, orden por id
+      ],
+    });
+
+    res.json(relacionesActivas);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener relaciones activas", error });
+  }
+});
+
 // Obtener relación por ID
 router.get("/:id", async (req, res) => {
   try {

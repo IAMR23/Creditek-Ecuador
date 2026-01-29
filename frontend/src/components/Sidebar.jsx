@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   FileText,
 } from "lucide-react";
+import { MdSecurity } from "react-icons/md";
 
 export default function Sidebar() {
   const location = useLocation();
@@ -95,9 +96,8 @@ export default function Sidebar() {
           label: "Ventas Auditoria",
           icon: <PackageCheck size={20} />,
           path: "ventas-auditoria",
-        },
-        
-      ],
+        }        
+      ], 
     },
 
 admin : {
@@ -127,7 +127,18 @@ admin : {
       label: "Asignar usuarios a agencias",
       icon: <UserPlus size={20} />,
       path: "usuarios-agencias",
-    },]
+    },
+      {
+      label: "Permisos",
+      icon: <MdSecurity size={20} />,
+      path: "permisos",
+    },
+          {
+      label: "Asignar Permisos",
+      icon: <MdSecurity size={20} />,
+      path: "asignar-permisos",
+    },
+  ]
   },
     catalogos: {
       title: "Catálogos",

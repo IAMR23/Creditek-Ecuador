@@ -13,16 +13,16 @@ router.get("/entregas-pendientes", async (req, res) => {
     const entregas = await Entrega.findAll({
       where: {
         estado: "Pendiente",
-        //    FechaHoraLlamada: { [Op.ne]: null },
       },
-      attributes: ["id", "FechaHoraLlamada", "observacion"],
+      attributes: ["id", "FechaHoraLlamada", "observacion", "createdAt"],
       include: [
         {
           model: Cliente,
           as: "cliente",
-          attributes: ["id", "cliente", "telefono"],
+          attributes: ["id", "cliente", "telefono", "cedula"],
         },
       ],
+      order: [["createdAt", "DESC"]], // 🔥 más recientes primero
     });
 
     const alertas = entregas.map((entrega) => {

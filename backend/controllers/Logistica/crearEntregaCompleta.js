@@ -12,13 +12,13 @@ const crearEntregaCompleta = async (req, res) => {
     // 🔥 JSON viene stringeado
     const { cliente, entrega, detalle, obsequios } = JSON.parse(req.body.data);
 
-    if (!validarCedulaEC(cliente.cedula)) {
+/*     if (!validarCedulaEC(cliente.cedula)) {
       await t.rollback();
       return res.status(400).json({
         ok: false,
         message: "Cédula inválida según validación oficial del Ecuador",
       });
-    }
+    } */
 
     // 🔥 FOTO
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
@@ -43,7 +43,6 @@ const crearEntregaCompleta = async (req, res) => {
     } else {
       await clienteDB.update(
         {
-          cliente: cliente.cliente,
           telefono: cliente.telefono,
           correo: cliente.correo,
           direccion: cliente.direccion,

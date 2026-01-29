@@ -48,16 +48,39 @@ const editarEntregaCompleta = async (req, res) => {
       });
     }
 
+   // buscar cliente correcto por cédula
+    let clienteCorrecto = await Cliente.findOne({
+      where: { cedula: cliente.cedula },
+      transaction: t,
+    });
+
+    if (!clienteCorrecto) {
+      clienteCorrecto = await Cliente.create(
+        {
+          cliente: cliente.cliente,
+          cedula: cliente.cedula,
+          telefono: cliente.telefono,
+          correo: cliente.correo,
+          direccion: cliente.direccion,
+        },
+        { transaction: t },
+      );
+    }
+
+    // reasignar la entrega
+    await entregaDB.update({ clienteId: clienteCorrecto.id }, { transaction: t });
+
     await clienteDB.update(
       {
         cliente: cliente.cliente,
-        cedula: cliente.cedula,
+        //     cedula: cliente.cedula,
         telefono: cliente.telefono,
         correo: cliente.correo,
         direccion: cliente.direccion,
       },
-      { transaction: t }
+      { transaction: t },
     );
+
 
     // 3️⃣ Entrega
     await entregaDB.update(
