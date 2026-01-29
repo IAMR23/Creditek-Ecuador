@@ -98,10 +98,11 @@ const crearVentaCompleta = async (req, res) => {
       throw new Error("Modelo no existe");
     }
 
+    const precioVendedor = Number(detalle.precioVendedor) || 0;
+    const alcance = Number(detalle.alcance) || 0;
+    const pvp1 = Number(modeloDB.PVP1) || 0;
 
-    const pvp1 = modeloDB.PVP1;
-
-    const margen = Number((detalle.precioVendedor  + detalle.alcance - pvp1).toFixed(2));
+    const margen = Number((precioVendedor + alcance - pvp1).toFixed(2));
 
     // 3️⃣ Detalle
     const detalleDB = await DetalleVenta.create(  

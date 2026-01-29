@@ -47,10 +47,32 @@ const editarVentaCompleta = async (req, res) => {
       });
     }
 
+    // buscar cliente correcto por cédula
+    let clienteCorrecto = await Cliente.findOne({
+      where: { cedula: cliente.cedula },
+      transaction: t,
+    });
+
+    if (!clienteCorrecto) {
+      clienteCorrecto = await Cliente.create(
+        {
+          cliente: cliente.cliente,
+          cedula: cliente.cedula,
+          telefono: cliente.telefono,
+          correo: cliente.correo,
+          direccion: cliente.direccion,
+        },
+        { transaction: t },
+      );
+    }
+
+    // reasignar la venta
+    await ventaDB.update({ clienteId: clienteCorrecto.id }, { transaction: t });
+
     await clienteDB.update(
       {
         cliente: cliente.cliente,
-        cedula: cliente.cedula,
+        //     cedula: cliente.cedula,
         telefono: cliente.telefono,
         correo: cliente.correo,
         direccion: cliente.direccion,
@@ -92,11 +114,11 @@ const editarVentaCompleta = async (req, res) => {
       throw new Error("Modelo no existe");
     }
 
-    const pvp1 = modeloDB.PVP1;
+    const precioVendedor = Number(detalle.precioVendedor) || 0;
+    const alcance = Number(detalle.alcance) || 0;
+    const pvp1 = Number(modeloDB.PVP1) || 0;
 
-    const margen = Number(
-      (detalle.precioVendedor + detalle.alcance - pvp1).toFixed(2),
-    );
+    const margen = Number((precioVendedor + alcance - pvp1).toFixed(2));
 
     await detalleDB.update(
       {
