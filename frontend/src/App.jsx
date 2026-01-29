@@ -85,7 +85,7 @@ function App() {
       if (decodedToken.exp < now) {
         console.warn("Token expirado");
         localStorage.removeItem("token");
-        setAuth({ isAuthenticated: false, rol: null });
+        setAuth({ isAuthenticated: false, rol: null  , usuario: null });
         return;
       }
 

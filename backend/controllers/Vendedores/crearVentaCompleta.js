@@ -29,7 +29,7 @@ const crearVentaCompleta = async (req, res) => {
       where: { cedula: cliente.cedula },
       transaction: t,
     });
-
+  
     if (!clienteDB) {
       clienteDB = await Cliente.create(
         {
@@ -44,10 +44,9 @@ const crearVentaCompleta = async (req, res) => {
     } else {
       await clienteDB.update(
         {
-          cliente: cliente.cliente,
           telefono: cliente.telefono,
           correo: cliente.correo,
-          direccion: cliente.direccion,
+          direccion: cliente.direccion ,
         },
         { transaction: t },
       );
