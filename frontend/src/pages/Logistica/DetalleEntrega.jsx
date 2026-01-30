@@ -9,6 +9,9 @@ export default function DetalleEntrega() {
   const { id } = useParams();
   const [form, setForm] = useState(null);
   const [observacionesLogistica, setObservacionesLogistica] = useState("");
+  const [repartidores, setRepartidores] = useState([]);
+  const [repartidorSeleccionado, setRepartidorSeleccionado] = useState("");
+  const [loadingRepartidores, setLoadingRepartidores] = useState(false);
 
   const navigate = useNavigate();
 
@@ -27,7 +30,57 @@ export default function DetalleEntrega() {
     fetchEntrega();
   }, [id]);
 
-  console.log(form);
+  useEffect(() => {
+    const fetchRepartidores = async () => {
+      try {
+        setLoadingRepartidores(true);
+        const { data } = await axios.get(
+          `${API_URL}/api/usuario-agencia-permisos/usuarios-repartidores`,
+        );
+        setRepartidores(data);
+      } catch (error) {
+        console.error("Error cargando repartidores", error);
+      } finally {
+        setLoadingRepartidores(false);
+      }
+    };
+
+    fetchRepartidores();
+  }, []);
+
+  const asignarRepartidor = async () => {
+    if (!repartidorSeleccionado) {
+      Swal.fire({
+        icon: "warning",
+        title: "Seleccione un repartidor",
+        text: "Debe asignar un repartidor antes de continuar",
+      });
+      return;
+    }
+
+    try {
+      await axios.post(`${API_URL}/entregas/${id}/asignar-repartidor`, {
+        usuarioAgenciaId: repartidorSeleccionado,
+      });
+
+      Swal.fire({
+        icon: "success",
+        title: "Repartidor asignado",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+      actualizarEstado("Transito");
+    } catch (error) {
+      console.error(error);
+      Swal.fire({
+        icon: "error",
+        title: "Error al asignar",
+        text: "No se pudo asignar el repartidor",
+      });
+    }
+  };
+
   if (!form)
     return <p className="text-green-600 font-semibold">Cargando entrega...</p>;
 
@@ -340,32 +393,37 @@ export default function DetalleEntrega() {
           </div>
         </div>
 
-        {/* Botones */}
-        <div className="grid md:grid-cols-3 gap-4 mt-6">
-          <button
-            type="button"
-            onClick={() => actualizarEstado("Entregado")}
-            className="0 hover:bg-green-600 text-white font-bold py-3 rounded-xl"
-          >
-            Entregado
-          </button>
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            Asignar repartidor
+          </label>
 
-          <button
-            type="button"
-            onClick={() => actualizarEstado("Transito")}
-            className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-xl"
+          <select
+            value={repartidorSeleccionado}
+            onChange={(e) => setRepartidorSeleccionado(e.target.value)}
+            className="w-full p-3 border border-green-300 rounded-xl bg-white"
           >
-            En tránsito
-          </button>
+            <option value="">-- Seleccione un repartidor --</option>
 
-          <button
-            type="button"
-            onClick={() => actualizarEstado("Revisar")}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl"
-          >
-            Regresar al Vendedor
-          </button>
+            {repartidores.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.usuario.nombre} — {r.agencia.nombre}
+              </option>
+            ))}
+          </select>
+
+          {loadingRepartidores && (
+            <p className="text-sm text-gray-500">Cargando repartidores...</p>
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={asignarRepartidor}
+          className="p-10 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-xl"
+        >
+          Asignar repartidor y enviar a tránsito
+        </button>
       </form>
     </div>
   );

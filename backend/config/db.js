@@ -35,7 +35,7 @@ const connectDB = async () => {
   } catch (error) {
     console.error("❌ Error de conexión o sincronización:", error);
     process.exit(1);
-  }
-};
+  }  
+}; 
 
 module.exports = { sequelize, connectDB };

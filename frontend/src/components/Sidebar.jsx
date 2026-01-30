@@ -138,6 +138,18 @@ admin : {
       icon: <MdSecurity size={20} />,
       path: "asignar-permisos",
     },
+              {
+      label: "Asignar Permisos Uusuario-Agencia",
+      icon: <MdSecurity size={20} />,
+      path: "asignar-permisos-usuario-agencia",
+    },
+
+              {
+      label: "Usuarios con Permisos",
+      icon: <MdSecurity size={20} />,
+      path: "usuarios-permisos",
+    },
+
   ]
   },
     catalogos: {

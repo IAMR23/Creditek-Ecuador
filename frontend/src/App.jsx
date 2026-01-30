@@ -63,6 +63,8 @@ import CrearEntregaCompleta from "./pages/Vendedores/CrearEntregaCompleta";
 import EditarEntregaCompleta from "./pages/Vendedores/EditarEntregaCompleta";
 import Permisos from "./pages/Admin/Permisos";
 import AsignarPermisos from "./pages/Admin/AsignarPermisos";
+import AsignarPermisosUsuarioAgencia from "./pages/Admin/AsignarPermisosUsuarioAgencia";
+import UsuariosConPermisos from "./pages/Admin/UsuariosConPermisos";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -86,7 +88,7 @@ function App() {
       if (decodedToken.exp < now) {
         console.warn("Token expirado");
         localStorage.removeItem("token");
-        setAuth({ isAuthenticated: false, rol: null  , usuario: null });
+        setAuth({ isAuthenticated: false, rol: null, usuario: null });
         return;
       }
 
@@ -201,8 +203,14 @@ function App() {
               <Route path="/postulaciones" element={<Postulaciones />} />
               <Route path="/permisos" element={<Permisos />} />
               <Route path="/asignar-permisos" element={<AsignarPermisos />} />
-              
-              
+              <Route
+                path="/asignar-permisos-usuario-agencia"
+                element={<AsignarPermisosUsuarioAgencia />}
+              />
+              <Route
+                path="/usuarios-permisos"
+                element={<UsuariosConPermisos />}
+              />
             </Route>
 
             {/* REPARTIDORES */}

@@ -4,6 +4,9 @@ const permisoController = require("../controllers/permisoController");
 const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Permiso = require("../models/Permiso");
+const Usuario = require("../models/Usuario");
+const Agencia = require("../models/Agencia");
+const Rol = require("../models/Rol");
 
 router.post("/", async (req, res) => {
   try {
@@ -55,5 +58,106 @@ router.post("/", async (req, res) => {
     res.status(500).json({ message: "Error creando permisos asignados" });
   }
 });
+
+
+router.get("/usuarios-permisos", async (req, res) => {
+  try {
+    const usuariosConPermisos = await UsuarioAgencia.findAll({
+      where: { activo: true },
+      include: [
+        {
+          model: Usuario,
+          as: "usuario",
+        },
+        {
+          model: Agencia,
+          as: "agencia",
+        },
+        {
+          model: UsuarioAgenciaPermiso,
+          as: "permisosAsignados",
+          where: { activo: true },
+          required: false, // ← importante: usuarios sin permisos igual salen
+          include: [
+            {
+              model: Permiso,
+              as: "permiso",
+            },
+          ],
+        },
+      ],
+      order: [["id", "ASC"]],
+    });
+
+    res.json(usuariosConPermisos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Error al obtener usuarios con permisos",
+      error,
+    });
+  }
+});
+
+router.get("/usuarios-repartidores", async (req, res) => {
+  try {
+    const relaciones = await UsuarioAgencia.findAll({
+      where: { activo: true },
+      include: [
+        {
+          model: Usuario,  
+          as: "usuario",
+          where: { activo: true },
+          attributes: ["id", "nombre", "email"],
+          include: [
+            {
+              model: Rol,
+              as: "rol",
+              required: false, // ⬅️ puede no tener rol repartidor
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
+        {
+          model: Agencia,
+          as: "agencia",
+          attributes: ["id", "nombre"],
+        },
+        {
+          model: UsuarioAgenciaPermiso,
+          as: "permisosAsignados",
+          required: false, // ⬅️ puede no tener permisos
+          include: [
+            {
+              model: Permiso,
+              as: "permiso",
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
+      ],
+    });
+
+    // 🧠 FILTRO OR REAL
+    const repartidores = relaciones.filter((ua) => {
+      const tieneRol =
+        ua.usuario?.rol?.nombre === "Repartidor";
+
+      const tienePermiso =
+        ua.permisosAsignados?.some(
+          (p) => p.permiso?.nombre === "Repartir"
+        );
+
+      return tieneRol || tienePermiso;
+    });
+
+    res.json(repartidores);
+  } catch (error) {
+    console.error("❌ Error obteniendo repartidores:", error);
+    res.status(500).json({ message: "Error al obtener repartidores" });
+  }
+});
+
+
 
 module.exports = router;
