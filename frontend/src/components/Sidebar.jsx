@@ -5,8 +5,6 @@ import {
   Users,
   Building2,
   UserPlus,
-  ShoppingCart,
-  Package,
   PackageCheck,
   Boxes,
   ClipboardList,
@@ -24,14 +22,21 @@ import { MdSecurity } from "react-icons/md";
 export default function Sidebar() {
   const location = useLocation();
 
+  // Estado del sidebar (expandido / colapsado)
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Estado de acordeones
   const [open, setOpen] = useState({
     comercial: true,
+    Marketing: false,
     logistica: false,
+    Auditoria: false,
     admin: false,
     catalogos: false,
   });
 
   const toggle = (key) => {
+    if (collapsed) return;
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -39,20 +44,19 @@ export default function Sidebar() {
     comercial: {
       title: "Gerencia",
       items: [
-            
         {
           label: "Metas Comerciales",
           icon: <BarChart3 size={20} />,
           path: "metas-comerciales",
         },
- {
+        {
           label: "Reporte Entregas",
           icon: <BarChart3 size={20} />,
           path: "reporte-entregas",
         },
-       
       ],
     },
+
     Marketing: {
       title: "Marketing",
       items: [
@@ -68,6 +72,7 @@ export default function Sidebar() {
         },
       ],
     },
+
     logistica: {
       title: "Logística",
       items: [
@@ -77,7 +82,7 @@ export default function Sidebar() {
           path: "entregas-pendientes",
         },
         {
-          label: "Entregas en Transito",
+          label: "Entregas en Tránsito",
           icon: <PackageCheck size={20} />,
           path: "entregas-transito",
         },
@@ -85,73 +90,60 @@ export default function Sidebar() {
     },
 
     Auditoria: {
-      title: "Auditoria",
+      title: "Auditoría",
       items: [
         {
-          label: "Entregas Auditoria",
+          label: "Entregas Auditoría",
           icon: <PackageCheck size={20} />,
           path: "entregas-auditoria",
         },
         {
-          label: "Ventas Auditoria",
+          label: "Ventas Auditoría",
           icon: <PackageCheck size={20} />,
           path: "ventas-auditoria",
-        }        
-      ], 
+        },
+      ],
     },
 
-admin : {
-  title: "Administración",
-  items: [
-    {
-      label: "Usuarios",
-      icon: <Users size={20} />,
-      path: "usuarios",
-    },
-    {
-      label: "Roles",
-      icon: <ShieldCheck size={20} />,
-      path: "rol",
-    },
-    {
-      label: "Agencias",
-      icon: <Building2 size={20} />,
-      path: "agencias",
-    },
-    {
-      label: "Postulaciones",
-      icon: <FileText size={20} />,
-      path: "postulaciones",
-    },
-    {
-      label: "Asignar usuarios a agencias",
-      icon: <UserPlus size={20} />,
-      path: "usuarios-agencias",
-    },
-      {
-      label: "Permisos",
-      icon: <MdSecurity size={20} />,
-      path: "permisos",
-    },
-          {
-      label: "Asignar Permisos",
-      icon: <MdSecurity size={20} />,
-      path: "asignar-permisos",
-    },
-              {
-      label: "Asignar Permisos Uusuario-Agencia",
-      icon: <MdSecurity size={20} />,
-      path: "asignar-permisos-usuario-agencia",
+    admin: {
+      title: "Administración",
+      items: [
+        { label: "Usuarios", icon: <Users size={20} />, path: "usuarios" },
+        { label: "Roles", icon: <ShieldCheck size={20} />, path: "rol" },
+        { label: "Agencias", icon: <Building2 size={20} />, path: "agencias" },
+        {
+          label: "Postulaciones",
+          icon: <FileText size={20} />,
+          path: "postulaciones",
+        },
+        {
+          label: "Asignar usuarios a agencias",
+          icon: <UserPlus size={20} />,
+          path: "usuarios-agencias",
+        },
+        {
+          label: "Permisos",
+          icon: <MdSecurity size={20} />,
+          path: "permisos",
+        },
+        {
+          label: "Asignar Permisos",
+          icon: <MdSecurity size={20} />,
+          path: "asignar-permisos",
+        },
+        {
+          label: "Asignar Permisos Usuario-Agencia",
+          icon: <MdSecurity size={20} />,
+          path: "asignar-permisos-usuario-agencia",
+        },
+        {
+          label: "Usuarios con Permisos",
+          icon: <MdSecurity size={20} />,
+          path: "usuarios-permisos",
+        },
+      ],
     },
 
-              {
-      label: "Usuarios con Permisos",
-      icon: <MdSecurity size={20} />,
-      path: "usuarios-permisos",
-    },
-
-  ]
-  },
     catalogos: {
       title: "Catálogos",
       items: [
@@ -184,50 +176,75 @@ admin : {
   };
 
   return (
-    <div className="w-64 min-h-screen bg-neutral-900 text-white px-4 py-6 border-r border-neutral-800">
-      <h1 className="text-xl font-bold mb-6 text-green-400">
-        <Link to="/dashboard">Dashboard</Link>
+    <div
+      className={`relative min-h-screen bg-neutral-900 text-white border-r border-neutral-800
+        transition-all duration-300
+        ${collapsed ? "w-20 px-2" : "w-64 px-4"}
+      `}
+    >
+      {/* Botón colapsar */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-6 bg-neutral-800 p-1 rounded-full border border-neutral-700 hover:bg-neutral-700"
+      >
+        <ChevronDown
+          size={18}
+          className={`transition-transform ${
+            collapsed ? "-rotate-90" : "rotate-90"
+          }`}
+        />
+      </button>
+
+      {/* Logo / Dashboard */}
+      <h1 className="text-xl font-bold mb-6 text-green-400 text-center">
+        {!collapsed && <Link to="/dashboard">Dashboard</Link>}
       </h1>
 
+      {/* Secciones */}
       {Object.entries(sections).map(([key, section]) => (
         <div key={key} className="mb-3">
-          {/* Botón del acordeón */}
+          {/* Header sección */}
           <button
             onClick={() => toggle(key)}
-            className="flex justify-between items-center w-full py-2 px-2 text-left hover:bg-neutral-800 rounded-lg"
+            className="flex justify-between items-center w-full py-2 px-2 hover:bg-neutral-800 rounded-lg"
           >
-            <span className="font-semibold">{section.title}</span>
-            <ChevronDown
-              size={18}
-              className={`transition-transform ${
-                open[key] ? "rotate-180" : ""
-              }`}
-            />
+            {!collapsed && (
+              <span className="font-semibold">{section.title}</span>
+            )}
+            {!collapsed && (
+              <ChevronDown
+                size={18}
+                className={`transition-transform ${
+                  open[key] ? "rotate-180" : ""
+                }`}
+              />
+            )}
           </button>
 
-          {/* Contenido */}
+          {/* Items */}
           <div
-            className={`overflow-hidden transition-all duration-300 ${
-              open[key] ? "max-h-[1000px]" : "max-h-0"
-            }`}
+            className={`overflow-hidden transition-all duration-300
+              ${open[key] && !collapsed ? "max-h-[1000px]" : "max-h-0"}
+            `}
           >
             <ul className="flex flex-col gap-1 mt-2">
               {section.items.map((item, i) => {
                 const active = location.pathname === item.path;
+
                 return (
                   <li key={i}>
                     <Link
                       to={item.path}
+                      title={collapsed ? item.label : ""}
                       className={`flex items-center gap-3 p-3 rounded-lg transition
-                        ${
-                          active
-                            ? "bg-green-600 text-black"
-                            : "hover:bg-neutral-800"
-                        }
+                        ${active
+                          ? "bg-green-600 text-black"
+                          : "hover:bg-neutral-800"}
+                        ${collapsed ? "justify-center" : ""}
                       `}
                     >
                       {item.icon}
-                      <span>{item.label}</span>
+                      {!collapsed && <span>{item.label}</span>}
                     </Link>
                   </li>
                 );

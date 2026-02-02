@@ -20,6 +20,7 @@ export default function MetasComerciales() {
   const [agenciaId, setAgenciaId] = useState("");
   const [usuarios, setUsuarios] = useState([]);
   const [vendedorId, setVendedorId] = useState("");
+  const [observacion, setObservacion] = useState("");
 
   const cargarUsuarios = async () => {
     try {
@@ -52,6 +53,25 @@ export default function MetasComerciales() {
     cargarAgencias();
     cargarUsuarios();
   }, []);
+
+  const observaciones = [
+    "Luis",
+    "Uphone",
+    "Creditv",
+    "Anais",
+    "Bryan",
+    "Andres",
+    "Damian",
+    "Elizeth",
+    "Oscar",
+    "Alejandra",
+    "Damaris",
+    "Mirka",
+    "Fernando",
+    "Mateo",
+    "Raul",
+    "Steeven Furgo",
+  ];
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -88,6 +108,10 @@ export default function MetasComerciales() {
         params.append("vendedorId", vendedorId);
       }
 
+      if (observacion && observacion.trim() !== "") {
+        params.append("observacion", observacion.trim());
+      }
+
       const url = `${API_URL}/auditoria/informe?${params.toString()}`;
       const { data } = await axios.get(url);
 
@@ -111,7 +135,7 @@ export default function MetasComerciales() {
         "Cierre de caja": venta.cierreCaja ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
-        Margen : venta.margen ?? "",
+        Margen: venta.margen ?? "",
       }));
 
       setFilas(resultado);
@@ -165,16 +189,18 @@ export default function MetasComerciales() {
     XLSX.writeFile(workbook, nombreArchivo);
   };
 
-  useEffect(() => {
-    if (fechaInicio && fechaFin && usuarioInfo?.id) {
-      fetchData();
-    }
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId]);
+useEffect(() => {
+  if (fechaInicio && fechaFin && usuarioInfo?.id) {
+    fetchData();
+  }
+}, [fechaInicio, fechaFin, agenciaId, vendedorId, observacion]);
+
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFechaFin(hoyLocal);
   }, []);
+
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Metas Comerciales</h1>
@@ -230,6 +256,23 @@ export default function MetasComerciales() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Promotor</label>
+          <input
+            type="text"
+            list="observaciones-list"
+            className="border px-2 py-1 rounded"
+            placeholder="Escriba o seleccione"
+            value={observacion}
+            onChange={(e) => setObservacion(e.target.value)}
+          />
+          <datalist id="observaciones-list">
+            {observaciones.map((o) => (
+              <option key={o} value={o} />
+            ))}
+          </datalist>
         </div>
 
         <button

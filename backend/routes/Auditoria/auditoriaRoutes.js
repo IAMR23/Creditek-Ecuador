@@ -24,13 +24,14 @@ router.get("/ventas", async (req, res) => {
 
 router.get("/informe", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, agenciaId, vendedorId } = req.query;
+    const { fechaInicio, fechaFin, agenciaId, vendedorId   , observacion} = req.query;
 
     const ventas = await auditoriaVentasController.obtenerReporte({
       fechaInicio,
       fechaFin,
       agenciaId,
       vendedorId,
+      observacion   , 
     });
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);

@@ -99,6 +99,7 @@ export default function VentasAuditoria() {
         Agencia: venta.local ?? "",
         Vendedor: venta.vendedor ?? "",
         Origen: venta.origen ?? "",
+        Observacion : venta.observaciones ?? "",  
         Dispositivo: venta.tipo ?? "",
         Marca: venta.marca ?? "",
         Modelo: venta.modelo ?? "",
@@ -126,7 +127,7 @@ export default function VentasAuditoria() {
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaInicio(hoyLocal)
+    setFechaInicio("2026-01-01");
     setFechaFin(hoyLocal);
   }, []);
   return (

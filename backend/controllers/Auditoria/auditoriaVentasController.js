@@ -10,16 +10,19 @@ const Origen = require("../../models/Origen");
 const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
- 
+
 const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
-const { sequelize } = require("../../config/db");    
+const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
 
-
-exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
-  const whereVenta = {
-  };
+exports.obtenerReporteAuditoria = async ({
+  fechaInicio,
+  fechaFin,
+  agenciaId,
+  vendedorId,
+}) => {
+  const whereVenta = {};
 
   // 🔹 Filtro por fecha
   if (fechaInicio && fechaFin) {
@@ -38,48 +41,42 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
   // 🔹 include dinámico de agencia
 
   const includeUsuarioAgencia = {
-  model: UsuarioAgencia,
-  as: "usuarioAgencia",
-  attributes: ["id"],
-  required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
-  include: [
-    {
-      model: Usuario,
-      as: "usuario",
-      attributes: ["id", "nombre"],
-      ...(vendedorId && vendedorId !== "todos" && {
-        where: { id: vendedorId },
-      }),
-    },
-    {
-      model: Agencia,
-      as: "agencia",
-      attributes: ["nombre"],
-      ...(agenciaId && agenciaId !== "todas" && {
-        where: { id: agenciaId },
-      }),
-    },
-  ],
-};
-
-
+    model: UsuarioAgencia,
+    as: "usuarioAgencia",
+    attributes: ["id"],
+    required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
+    include: [
+      {
+        model: Usuario,
+        as: "usuario",
+        attributes: ["id", "nombre"],
+        ...(vendedorId &&
+          vendedorId !== "todos" && {
+            where: { id: vendedorId },
+          }),
+      },
+      {
+        model: Agencia,
+        as: "agencia",
+        attributes: ["nombre"],
+        ...(agenciaId &&
+          agenciaId !== "todas" && {
+            where: { id: agenciaId },
+          }),
+      },
+    ],
+  };
 
   return await Venta.findAll({
-    where: whereVenta,  
-    attributes: [
-      "id",
-      "fecha",
-      "validada",
-      "observacion",
-      "activo"
-    ],
+    where: whereVenta,
+    attributes: ["id", "fecha", "validada", "observacion", "activo"],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
       {
         model: Cliente,
         as: "cliente",
-        attributes: [ "cedula", "cliente"],
+        attributes: ["cedula", "cliente"],
       },
       {
         model: Origen,
@@ -95,8 +92,8 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
           "entrada",
           "margen",
           "alcance",
-          "contrato",  
-          "cierreCaja"
+          "contrato",
+          "cierreCaja",
         ],
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
@@ -116,18 +113,24 @@ exports.obtenerReporteAuditoria = async ({ fechaInicio, fechaFin, agenciaId , ve
         model: VentaObsequio,
         as: "obsequiosVenta",
         attributes: ["id"],
-        include: [
-          { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
-        ],
+        include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
       },
     ],
   });
 };
 
-
-exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId  }) => {
+exports.obtenerReporte = async ({
+  fechaInicio,
+  fechaFin,
+  agenciaId,
+  vendedorId,
+  observacion,
+}) => {
+  /* ===============================
+     WHERE VENTA
+  =============================== */
   const whereVenta = {
-    activo : true
+    activo: true,
   };
 
   // 🔹 Filtro por fecha
@@ -139,49 +142,58 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId 
       ],
     };
   } else if (fechaInicio) {
-    whereVenta.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
+    whereVenta.fecha = {
+      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
+    };
   } else if (fechaFin) {
-    whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+    whereVenta.fecha = {
+      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
+    };
   }
 
-  // 🔹 include dinámico de agencia
+  // 🔹 Filtro por observación (búsqueda parcial, compatible con datalist)
+  if (observacion && observacion !== "todas") {
+    whereVenta.observacion = {
+      [Op.iLike]: `%${observacion}%`, // PostgreSQL
+    };
+  }
 
+  /* ===============================
+     INCLUDE USUARIO-AGENCIA
+  =============================== */
   const includeUsuarioAgencia = {
-  model: UsuarioAgencia,
-  as: "usuarioAgencia",
-  attributes: ["id"],
-  required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
-  include: [
-    {
-      model: Usuario,
-      as: "usuario",
-      attributes: ["id", "nombre"],
-      ...(vendedorId && vendedorId !== "todos" && {
-        where: { id: vendedorId },
-      }),
-    },
-    {
-      model: Agencia,
-      as: "agencia",
-      attributes: ["nombre"],
-      ...(agenciaId && agenciaId !== "todas" && {
-        where: { id: agenciaId },
-      }),
-    },
-  ],
-};
-
-
-
-  return await Venta.findAll({
-    where: whereVenta,  
-    attributes: [
-      "id",
-      "fecha",
-      "validada",
-      "observacion",
-      "activo"
+    model: UsuarioAgencia,
+    as: "usuarioAgencia",
+    attributes: ["id"],
+    required: !!agenciaId || !!vendedorId,
+    include: [
+      {
+        model: Usuario,
+        as: "usuario",
+        attributes: ["id", "nombre"],
+        ...(vendedorId &&
+          vendedorId !== "todos" && {
+            where: { id: vendedorId },
+          }),
+      },
+      {
+        model: Agencia,
+        as: "agencia",
+        attributes: ["nombre"],
+        ...(agenciaId &&
+          agenciaId !== "todas" && {
+            where: { id: agenciaId },
+          }),
+      },
     ],
+  };
+
+  /* ===============================
+     QUERY FINAL
+  =============================== */
+  return await Venta.findAll({
+    where: whereVenta,
+    attributes: ["id", "fecha", "validada", "observacion", "activo"],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -204,21 +216,37 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId 
           "entrada",
           "margen",
           "alcance",
-          "contrato",  
-          "cierreCaja"
+          "contrato",
+          "cierreCaja",
         ],
         include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre"] },
+          {
+            model: Modelo,
+            as: "modelo",
+            attributes: ["nombre"],
+          },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
             attributes: ["id"],
             include: [
-              { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
-              { model: Marca, as: "marca", attributes: ["nombre"] },
+              {
+                model: Dispositivo,
+                as: "dispositivo",
+                attributes: ["nombre"],
+              },
+              {
+                model: Marca,
+                as: "marca",
+                attributes: ["nombre"],
+              },
             ],
           },
-          { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
+          {
+            model: FormaPago,
+            as: "formaPago",
+            attributes: ["nombre"],
+          },
         ],
       },
       {
@@ -226,18 +254,27 @@ exports.obtenerReporte = async ({ fechaInicio, fechaFin, agenciaId , vendedorId 
         as: "obsequiosVenta",
         attributes: ["id"],
         include: [
-          { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
+          {
+            model: Obsequio,
+            as: "obsequio",
+            attributes: ["nombre"],
+          },
         ],
       },
     ],
   });
 };
 
-exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , vendedorId, cierreCaja  }) => {
+exports.obtenerReporteGerencia = async ({
+  fechaInicio,
+  fechaFin,
+  agenciaId,
+  vendedorId,
+  cierreCaja,
+}) => {
   const whereVenta = {
-    activo : true
+    activo: true,
   };
-  
 
   // 🔹 Filtro por fecha
   if (fechaInicio && fechaFin) {
@@ -255,47 +292,40 @@ exports.obtenerReporteGerencia = async ({ fechaInicio, fechaFin, agenciaId , ven
 
   const whereDetalleVenta = {};
 
-if (cierreCaja && cierreCaja !== "todos") {
-  whereDetalleVenta.cierreCaja = cierreCaja;
-}
-
+  if (cierreCaja && cierreCaja !== "todos") {
+    whereDetalleVenta.cierreCaja = cierreCaja;
+  }
 
   const includeUsuarioAgencia = {
-  model: UsuarioAgencia,
-  as: "usuarioAgencia",
-  attributes: ["id"],
-  required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
-  include: [
-    {
-      model: Usuario,
-      as: "usuario",
-      attributes: ["id", "nombre"],
-      ...(vendedorId && vendedorId !== "todos" && {
-        where: { id: vendedorId },
-      }),
-    },
-    {
-      model: Agencia,
-      as: "agencia",
-      attributes: ["nombre"],
-      ...(agenciaId && agenciaId !== "todas" && {
-        where: { id: agenciaId },
-      }),
-    },
-  ],
-};
-
-
+    model: UsuarioAgencia,
+    as: "usuarioAgencia",
+    attributes: ["id"],
+    required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
+    include: [
+      {
+        model: Usuario,
+        as: "usuario",
+        attributes: ["id", "nombre"],
+        ...(vendedorId &&
+          vendedorId !== "todos" && {
+            where: { id: vendedorId },
+          }),
+      },
+      {
+        model: Agencia,
+        as: "agencia",
+        attributes: ["nombre"],
+        ...(agenciaId &&
+          agenciaId !== "todas" && {
+            where: { id: agenciaId },
+          }),
+      },
+    ],
+  };
 
   return await Venta.findAll({
-    where: whereVenta,  
-    attributes: [
-      "id",
-      "fecha",
-      "validada",
-      "observacion",
-      "activo"
-    ],
+    where: whereVenta,
+    attributes: ["id", "fecha", "validada", "observacion", "activo"],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -319,12 +349,12 @@ if (cierreCaja && cierreCaja !== "todos") {
           "alcance",
           "contrato",
           "cierreCaja",
-          "margen"
+          "margen",
         ],
-         ...(Object.keys(whereDetalleVenta).length > 0 && {
-    where: whereDetalleVenta,
-    required: true, // INNER JOIN cuando filtras por cierreCaja
-  }),
+        ...(Object.keys(whereDetalleVenta).length > 0 && {
+          where: whereDetalleVenta,
+          required: true, // INNER JOIN cuando filtras por cierreCaja
+        }),
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
           {
@@ -343,9 +373,7 @@ if (cierreCaja && cierreCaja !== "todos") {
         model: VentaObsequio,
         as: "obsequiosVenta",
         attributes: ["id"],
-        include: [
-          { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
-        ],
+        include: [{ model: Obsequio, as: "obsequio", attributes: ["nombre"] }],
       },
     ],
   });
@@ -368,8 +396,7 @@ const obtenerDiaSemana = (fecha) => {
 };
 
 exports.formatearReporte = (ventas) => {
-
- // console.log(ventas)
+  // console.log(ventas)
   const filas = [];
 
   ventas.forEach((venta) => {
@@ -380,7 +407,7 @@ exports.formatearReporte = (ventas) => {
 
       filas.push({
         id: venta.id,
-        activo : venta.activo , 
+        activo: venta.activo,
         semana: null,
         dia: obtenerDiaSemana(venta.fecha),
         valorAcumulado: null,
@@ -400,7 +427,7 @@ exports.formatearReporte = (ventas) => {
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         precioSistema: detalle.precioUnitario || "",
-        precioVendedor : detalle.precioVendedor || "",
+        precioVendedor: detalle.precioVendedor || "",
         margen: detalle.margen || "",
 
         cierreCaja: detalle.cierreCaja || "",
@@ -444,7 +471,7 @@ exports.actualizarVentaCompleta = async (req, res) => {
             // crear si no existe
             await DetalleVenta.create(
               { ...detalle, entregaId: id },
-              { transaction: t }
+              { transaction: t },
             );
           }
         }
@@ -461,7 +488,7 @@ exports.actualizarVentaCompleta = async (req, res) => {
           } else {
             await VentaObsequio.create(
               { ...obsequio, entregaId: id },
-              { transaction: t }
+              { transaction: t },
             );
           }
         }

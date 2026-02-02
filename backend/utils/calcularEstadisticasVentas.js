@@ -10,7 +10,8 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     porMarca: {},
     porModelo: {},
     porTipo: {},
-    porCierreCaja : {}  ,
+    porCierreCaja: {},
+    porObservacion: {},
   };
 
   ventas.forEach((v) => {
@@ -54,7 +55,13 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
       stats.porTipo[v.tipo] = (stats.porTipo[v.tipo] || 0) + 1;
     }
     if (v.cierreCaja) {
-      stats.porCierreCaja[v.cierreCaja] = (stats.porCierreCaja[v.cierreCaja] || 0) + 1;
+      stats.porCierreCaja[v.cierreCaja] =
+        (stats.porCierreCaja[v.cierreCaja] || 0) + 1;
+    }
+
+    if (v.observacion) {
+      stats.porObservacion[v.observacion] =
+        (stats.porObservacion[v.observacion] || 0) + 1;
     }
   });
 

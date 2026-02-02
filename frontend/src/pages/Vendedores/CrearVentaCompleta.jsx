@@ -103,7 +103,7 @@ const CrearVentaCompleta = () => {
 
       try {
         const res = await axios.get(
-          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}`
+          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}`,
         );
 
         setDetalle((prev) => ({
@@ -138,7 +138,7 @@ const CrearVentaCompleta = () => {
 
     try {
       const res = await axios.get(
-        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`
+        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`,
       );
       setModelos(res.data);
     } catch (err) {
@@ -233,7 +233,7 @@ const CrearVentaCompleta = () => {
             alcance: detalle.alcance ? Number(detalle.alcance) : 0,
           },
           obsequios,
-        })
+        }),
       );
 
       const options = {
@@ -254,7 +254,7 @@ const CrearVentaCompleta = () => {
           headers: {
             "Content-Type": "multipart/form-data",
           },
-        }
+        },
       );
 
       const ventaData = response.data;
@@ -278,18 +278,28 @@ const CrearVentaCompleta = () => {
       Swal.fire(
         "Venta registrada",
         "La información fue copiada al portapapeles",
-        "success"
+        "success",
       );
 
-      Swal.fire("Éxito", "📄 Venta creada y copiada al portapapeles", "success");
+      Swal.fire(
+        "Éxito",
+        "📄 Venta creada y copiada al portapapeles",
+        "success",
+      );
 
       // 🔄 Reset
-        setFoto(null);
+      setFoto(null);
       setPreview(null);
       setObsequios([]);
-      setCliente({ cliente: "", cedula: "", telefono: "" ,correo :"" , direccion: "" });
+      setCliente({
+        cliente: "",
+        cedula: "",
+        telefono: "",
+        correo: "",
+        direccion: "",
+      });
       setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/") 
+      navigate("/");
     } catch (error) {
       console.error(error);
 
@@ -350,6 +360,25 @@ ${
 }
     `;
   };
+
+  const observaciones = [
+    "Luis",
+    "Uphone",
+    "Creditv",
+    "Anais",
+    "Bryan",
+    "Andres",
+    "Damian",
+    "Elizeth",
+    "Oscar",
+    "Alejandra",
+    "Damaris",
+    "Mirka",
+    "Fernando",
+    "Mateo",
+    "Raul",
+    "Steeven Furgo",
+  ];
 
   return (
     <div className="max-w-3xl mx-auto shadow-sm p-4 m-4 bg-white rounded-lg border border-green-500">
@@ -535,15 +564,23 @@ ${
             >
               Observación
             </label>
-            <textarea
+
+            <input
               id="observacion"
               name="observacion"
-              placeholder="Detalle adicional de la venta"
+              list="observaciones-list"
               value={venta.observacion}
               onChange={handleVentaChange}
-              rows={3}
-              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder="Escriba o seleccione una observación"
+              className="w-full border border-gray-300 p-2 rounded
+               focus:ring-2 focus:ring-green-500 focus:border-green-500"
             />
+
+            <datalist id="observaciones-list">
+              {observaciones.map((obs) => (
+                <option key={obs} value={obs} />
+              ))}
+            </datalist>
           </div>
         </div>
 
@@ -570,7 +607,7 @@ ${
 
                   // Buscar el objeto completo
                   const seleccionado = dispositivoMarcas.find(
-                    (dm) => String(dm.id) === value
+                    (dm) => String(dm.id) === value,
                   );
 
                   setDispositivoMarcaSeleccionado(seleccionado || null);
@@ -614,7 +651,7 @@ ${
                   }));
 
                   setModeloSeleccionado(
-                    modelos.find((m) => m.id === value) || null
+                    modelos.find((m) => m.id === value) || null,
                   );
                 }}
                 className="w-full p-2 border border-green-500 rounded"
@@ -807,7 +844,7 @@ ${
         <div className="space-y-3">
           {obsequiosDisponibles.map((o) => {
             const obsSeleccionado = obsequios.find(
-              (obs) => obs.obsequioId === o.id
+              (obs) => obs.obsequioId === o.id,
             );
 
             const toggleSeleccion = () => {
@@ -856,8 +893,8 @@ ${
                       const cantidad = parseInt(e.target.value) || 1;
                       setObsequios((prev) =>
                         prev.map((obs) =>
-                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs
-                        )
+                          obs.obsequioId === o.id ? { ...obs, cantidad } : obs,
+                        ),
                       );
                     }}
                     className="w-20 px-2 py-1 text-sm text-center rounded-lg border border-green-400 focus:ring-2 focus:ring-green-500 focus:border-green-500"
