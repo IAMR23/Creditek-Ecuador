@@ -1,0 +1,422 @@
+[
+  {
+    "id": 61,
+    "usuarioAgenciaId": 36,
+    "clienteId": 677,
+    "origenId": 1,
+    "activo": true,
+    "observacion": "",
+    "fecha": "2026-01-27T00:00:00.000Z",
+    "validada": true,
+    "fotoValidacion": null,
+    "fotoFechaLlamada": "/uploads/ventas/1769552253358-805238059",
+    "FechaHoraLlamada": "2026-01-27T22:17:00.000Z",
+    "fotoLogistica": null,
+    "estado": "Transito",
+    "observacionLogistica": "",
+    "createdAt": "2026-01-27T22:17:33.372Z",
+    "updatedAt": "2026-02-03T17:50:00.714Z",
+    "ventaId": null,
+    "UsuarioAgenciaEntrega": {
+      "id": 6,
+      "usuario_agencia_id": 27,
+      "entrega_id": 61,
+      "estado": "Asignada",
+      "fecha_asignacion": "2026-02-03T17:50:00.693Z",
+      "fecha_finalizacion": null,
+      "activo": true,
+      "createdAt": "2026-02-03T17:50:00.694Z",
+      "updatedAt": "2026-02-03T17:50:00.694Z"
+    },
+    "cliente": {
+      "cliente": "MARIA OLGA LEINES MINANGO",
+      "cedula": "1714322110",
+      "telefono": "0985067205",
+      "correo": "factuacionempresarial2026@gmail.co.",
+      "direccion": "Sangolqui"
+    },
+    "origen": {
+      "id": 1,
+      "nombre": "Redes"
+    },
+    "detalleEntregas": [
+      {
+        "id": 53,
+        "cantidad": 1,
+        "precioUnitario": "324.00",
+        "precioVendedor": "324.00",
+        "dispositivoMarcaId": 7,
+        "modeloId": 5,
+        "contrato": "116034",
+        "formaPagoId": 1,
+        "entrada": "0.00",
+        "alcance": "0.00",
+        "ubicacion": "https://www.google.com/maps?q=-0.177429,-78.5121777&z=17&hl=es",
+        "ubicacionDispositivo": "Creditek Bodega",
+        "observacionDetalle": "",
+        "createdAt": "2026-01-27T22:17:33.375Z",
+        "updatedAt": "2026-01-27T22:17:33.375Z",
+        "entregaId": 61,
+        "modelo": {
+          "nombre": "TV INNOVA LED 43"
+        },
+        "dispositivoMarca": {
+          "id": 7,
+          "dispositivoId": 1,
+          "marcaId": 7,
+          "activo": true,
+          "createdAt": "2025-12-06T18:33:28.696Z",
+          "updatedAt": "2025-12-06T18:33:28.696Z",
+          "dispositivo": {
+            "nombre": "TV"
+          },
+          "marca": {
+            "nombre": "INNOVA"
+          }
+        },
+        "formaPago": {
+          "nombre": "Credito"
+        }
+      }
+    ],
+    "obsequiosEntrega": [
+      {
+        "id": 66,
+        "entregaId": 61,
+        "obsequioId": 2,
+        "cantidad": 1,
+        "createdAt": "2026-01-27T22:17:33.379Z",
+        "updatedAt": "2026-01-27T22:17:33.379Z",
+        "obsequio": {
+          "nombre": "Soporte"
+        }
+      },
+      {
+        "id": 67,
+        "entregaId": 61,
+        "obsequioId": 4,
+        "cantidad": 1,
+        "createdAt": "2026-01-27T22:17:33.381Z",
+        "updatedAt": "2026-01-27T22:17:33.381Z",
+        "obsequio": {
+          "nombre": "Cerveza"
+        }
+      }
+    ]
+  },
+  {
+    "id": 62,
+    "usuarioAgenciaId": 52,
+    "clienteId": 680,
+    "origenId": 1,
+    "activo": true,
+    "observacion": "",
+    "fecha": "2026-01-27T00:00:00.000Z",
+    "validada": true,
+    "fotoValidacion": null,
+    "fotoFechaLlamada": "/uploads/ventas/1769558457548-3819086",
+    "FechaHoraLlamada": "2026-01-27T21:27:00.000Z",
+    "fotoLogistica": null,
+    "estado": "Transito",
+    "observacionLogistica": "",
+    "createdAt": "2026-01-28T00:00:57.570Z",
+    "updatedAt": "2026-01-30T22:32:53.485Z",
+    "ventaId": null,
+    "UsuarioAgenciaEntrega": {
+      "id": 5,
+      "usuario_agencia_id": 27,
+      "entrega_id": 62,
+      "estado": "Asignada",
+      "fecha_asignacion": "2026-01-30T22:32:53.476Z",
+      "fecha_finalizacion": null,
+      "activo": true,
+      "createdAt": "2026-01-30T22:32:53.476Z",
+      "updatedAt": "2026-01-30T22:32:53.476Z"
+    },
+    "cliente": {
+      "cliente": "JUAN GABRIEL SILVA ORTIZ",
+      "cedula": "1721261855",
+      "telefono": "0995098148",
+      "correo": "facturacion.empresarial.2026@gmail.com",
+      "direccion": "Guamote"
+    },
+    "origen": {
+      "id": 1,
+      "nombre": "Redes"
+    },
+    "detalleEntregas": [
+      {
+        "id": 54,
+        "cantidad": 1,
+        "precioUnitario": "324.00",
+        "precioVendedor": "324.00",
+        "dispositivoMarcaId": 7,
+        "modeloId": 5,
+        "contrato": "115951",
+        "formaPagoId": 1,
+        "entrada": "29.16",
+        "alcance": "0.00",
+        "ubicacion": "https://www.google.com/maps/place/SERVIENTREGA/@-1.9327959,-78.7114439,17z/data=!3m1!4b1!4m6!3m5!1s0x91d2f900240e5731:0x170cb3ada34593b4!8m2!3d-1.9327959!4d-78.708869!16s%2Fg%2F11ynfbx6y7?entry=ttu&g_ep=EgoyMDI2MDEyNS4wIKXMDSoKLDEwMDc5MjA2N0gBUAM%3D",
+        "ubicacionDispositivo": "BODEGA CREDITEK",
+        "observacionDetalle": "EL CLIENTE CANCELA LA ENTRADA AL MOMENTO DE LA ENTREGA BAJO MI RESPONSABILIDAD",
+        "createdAt": "2026-01-28T00:00:57.575Z",
+        "updatedAt": "2026-01-28T00:00:57.575Z",
+        "entregaId": 62,
+        "modelo": {
+          "nombre": "TV INNOVA LED 43"
+        },
+        "dispositivoMarca": {
+          "id": 7,
+          "dispositivoId": 1,
+          "marcaId": 7,
+          "activo": true,
+          "createdAt": "2025-12-06T18:33:28.696Z",
+          "updatedAt": "2025-12-06T18:33:28.696Z",
+          "dispositivo": {
+            "nombre": "TV"
+          },
+          "marca": {
+            "nombre": "INNOVA"
+          }
+        },
+        "formaPago": {
+          "nombre": "Credito"
+        }
+      }
+    ],
+    "obsequiosEntrega": [
+      {
+        "id": 68,
+        "entregaId": 62,
+        "obsequioId": 2,
+        "cantidad": 1,
+        "createdAt": "2026-01-28T00:00:57.582Z",
+        "updatedAt": "2026-01-28T00:00:57.582Z",
+        "obsequio": {
+          "nombre": "Soporte"
+        }
+      },
+      {
+        "id": 69,
+        "entregaId": 62,
+        "obsequioId": 4,
+        "cantidad": 1,
+        "createdAt": "2026-01-28T00:00:57.584Z",
+        "updatedAt": "2026-01-28T00:00:57.584Z",
+        "obsequio": {
+          "nombre": "Cerveza"
+        }
+      }
+    ]
+  },
+  {
+    "id": 63,
+    "usuarioAgenciaId": 5,
+    "clienteId": 683,
+    "origenId": 1,
+    "activo": true,
+    "observacion": "Comunicarse con el cliente para coordinar la entrega el dia de hoy",
+    "fecha": "2026-01-28T00:00:00.000Z",
+    "validada": true,
+    "fotoValidacion": null,
+    "fotoFechaLlamada": "/uploads/ventas/1769612887410-125288081",
+    "FechaHoraLlamada": "2026-01-28T14:45:00.000Z",
+    "fotoLogistica": null,
+    "estado": "Transito",
+    "observacionLogistica": "",
+    "createdAt": "2026-01-28T15:08:07.461Z",
+    "updatedAt": "2026-01-30T22:11:37.845Z",
+    "ventaId": null,
+    "UsuarioAgenciaEntrega": {
+      "id": 4,
+      "usuario_agencia_id": 27,
+      "entrega_id": 63,
+      "estado": "Asignada",
+      "fecha_asignacion": "2026-01-30T22:11:37.827Z",
+      "fecha_finalizacion": null,
+      "activo": true,
+      "createdAt": "2026-01-30T22:11:37.827Z",
+      "updatedAt": "2026-01-30T22:11:37.827Z"
+    },
+    "cliente": {
+      "cliente": "DINA ABIGAIL PALATE PALATE",
+      "cedula": "1804267779",
+      "telefono": "0987469389",
+      "correo": "facturacion.empresarial.2026@gmail.com",
+      "direccion": "AMBATO"
+    },
+    "origen": {
+      "id": 1,
+      "nombre": "Redes"
+    },
+    "detalleEntregas": [
+      {
+        "id": 55,
+        "cantidad": 1,
+        "precioUnitario": "246.00",
+        "precioVendedor": "246.00",
+        "dispositivoMarcaId": 2,
+        "modeloId": 28,
+        "contrato": "3256536",
+        "formaPagoId": 1,
+        "entrada": "0.00",
+        "alcance": "0.00",
+        "ubicacion": "https://maps.app.goo.gl/veTMbjR6HV5q9U3PA?g_st=ac",
+        "ubicacionDispositivo": "BODEGA CREDITEK",
+        "observacionDetalle": "",
+        "createdAt": "2026-01-28T15:08:07.470Z",
+        "updatedAt": "2026-01-28T15:08:07.470Z",
+        "entregaId": 63,
+        "modelo": {
+          "nombre": "Hot 60i 8+256gb"
+        },
+        "dispositivoMarca": {
+          "id": 2,
+          "dispositivoId": 2,
+          "marcaId": 2,
+          "activo": true,
+          "createdAt": "2025-12-06T18:32:41.359Z",
+          "updatedAt": "2025-12-06T18:32:41.359Z",
+          "dispositivo": {
+            "nombre": "Celular"
+          },
+          "marca": {
+            "nombre": "INFINIX"
+          }
+        },
+        "formaPago": {
+          "nombre": "Credito"
+        }
+      }
+    ],
+    "obsequiosEntrega": [
+      {
+        "id": 73,
+        "entregaId": 63,
+        "obsequioId": 3,
+        "cantidad": 1,
+        "createdAt": "2026-01-28T15:08:07.478Z",
+        "updatedAt": "2026-01-28T15:08:07.478Z",
+        "obsequio": {
+          "nombre": "Envio"
+        }
+      }
+    ]
+  },
+  {
+    "id": 65,
+    "usuarioAgenciaId": 49,
+    "clienteId": 685,
+    "origenId": 1,
+    "activo": true,
+    "observacion": "Facebook ",
+    "fecha": "2026-01-28T00:00:00.000Z",
+    "validada": true,
+    "fotoValidacion": null,
+    "fotoFechaLlamada": "/uploads/ventas/1769616611114-363623518",
+    "FechaHoraLlamada": "2026-01-28T14:55:00.000Z",
+    "fotoLogistica": null,
+    "estado": "Transito",
+    "observacionLogistica": "",
+    "createdAt": "2026-01-28T16:10:11.131Z",
+    "updatedAt": "2026-01-30T20:27:26.669Z",
+    "ventaId": null,
+    "UsuarioAgenciaEntrega": {
+      "id": 2,
+      "usuario_agencia_id": 27,
+      "entrega_id": 65,
+      "estado": "Asignada",
+      "fecha_asignacion": "2026-01-30T20:27:26.653Z",
+      "fecha_finalizacion": null,
+      "activo": true,
+      "createdAt": "2026-01-30T20:27:26.654Z",
+      "updatedAt": "2026-01-30T20:27:26.654Z"
+    },
+    "cliente": {
+      "cliente": "DIEGO GEOVANNY CACUANGO QUILO",
+      "cedula": "1726293820",
+      "telefono": "0999112264",
+      "correo": "facturacion.empresarial.2026@gmail.com",
+      "direccion": "SANGOLQUÍ"
+    },
+    "origen": {
+      "id": 1,
+      "nombre": "Redes"
+    },
+    "detalleEntregas": [
+      {
+        "id": 57,
+        "cantidad": 1,
+        "precioUnitario": "213.00",
+        "precioVendedor": "213.00",
+        "dispositivoMarcaId": 1,
+        "modeloId": 19,
+        "contrato": "3256625",
+        "formaPagoId": 1,
+        "entrada": "0.00",
+        "alcance": "0.00",
+        "ubicacion": "https://maps.app.goo.gl/Q9hGTbcS1w93qhfw6",
+        "ubicacionDispositivo": "Bodega Creditek",
+        "observacionDetalle": "",
+        "createdAt": "2026-01-28T16:10:11.136Z",
+        "updatedAt": "2026-01-28T16:10:11.136Z",
+        "entregaId": 65,
+        "modelo": {
+          "nombre": "X6C 6gb/ 256"
+        },
+        "dispositivoMarca": {
+          "id": 1,
+          "dispositivoId": 2,
+          "marcaId": 1,
+          "activo": true,
+          "createdAt": "2025-12-06T18:32:33.158Z",
+          "updatedAt": "2025-12-06T18:32:33.158Z",
+          "dispositivo": {
+            "nombre": "Celular"
+          },
+          "marca": {
+            "nombre": "HONOR"
+          }
+        },
+        "formaPago": {
+          "nombre": "Credito"
+        }
+      }
+    ],
+    "obsequiosEntrega": [
+      {
+        "id": 77,
+        "entregaId": 65,
+        "obsequioId": 1,
+        "cantidad": 1,
+        "createdAt": "2026-01-28T16:10:11.139Z",
+        "updatedAt": "2026-01-28T16:10:11.139Z",
+        "obsequio": {
+          "nombre": "Audifonos"
+        }
+      },
+      {
+        "id": 78,
+        "entregaId": 65,
+        "obsequioId": 3,
+        "cantidad": 1,
+        "createdAt": "2026-01-28T16:10:11.140Z",
+        "updatedAt": "2026-01-28T16:10:11.140Z",
+        "obsequio": {
+          "nombre": "Envio"
+        }
+      },
+      {
+        "id": 79,
+        "entregaId": 65,
+        "obsequioId": 4,
+        "cantidad": 1,
+        "createdAt": "2026-01-28T16:10:11.141Z",
+        "updatedAt": "2026-01-28T16:10:11.141Z",
+        "obsequio": {
+          "nombre": "Cerveza"
+        }
+      }
+    ]
+  }
+]

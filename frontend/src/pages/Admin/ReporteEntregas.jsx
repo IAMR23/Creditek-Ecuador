@@ -52,11 +52,11 @@ export default function DashboardEntregas() {
           estados: data.porEstado.transito,
           fill: "#3B82F6",
         },
-        {
+/*         {
           name: "Revisar",
           estados: data.porEstado.revisar,
           fill: "#EC4899",
-        },
+        }, */
         {
           name: "Entregado",
           estados: data.porEstado.entregado,
@@ -153,14 +153,14 @@ export default function DashboardEntregas() {
                 </p>
               </div>
 
-              <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-pink-500">
+{/*               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-pink-500">
                 <p className="text-xs text-gray-500">
                   Revisar - Hubo inconsistencias en la informacion
                 </p>
                 <p className="mt-3 text-2xl font-semibold text-pink-600">
                   {data.porEstado.revisar}
                 </p>
-              </div>
+              </div> */}
 
               <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-green-500">
                 <p className="text-xs text-gray-500">

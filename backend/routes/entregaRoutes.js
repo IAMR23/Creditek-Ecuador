@@ -23,8 +23,9 @@ const Marca = require("../models/Marca");
 const FormaPago = require("../models/FormaPago");
 const EntregaObsequio = require("../models/EntregaObsequio");
 const Obsequio = require("../models/Obsequio");
+const { Op } = require("sequelize");
 
-router.get("/mis-entregas/:userId", async (req, res) => {
+router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
@@ -32,7 +33,11 @@ router.get("/mis-entregas/:userId", async (req, res) => {
       include: [
         {
           model: Entrega,
-          as: "entregas", 
+          as: "entregas",
+          where: {
+            estado: "Pendiente",
+          },
+          required: false, // evita que falle si no tiene entregas pendientes
           include: [
             {
               model: Cliente,
@@ -77,13 +82,84 @@ router.get("/mis-entregas/:userId", async (req, res) => {
         },
       ],
     });
-    res.json(usuario.entregas);
+
+    res.json(usuario?.entregas || []);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener tus entregas" });
   }
 });
 
+
+
+router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const usuario = await UsuarioAgencia.findByPk(userId, {
+      include: [
+        {
+          model: Entrega,
+          as: "entregas",
+          where: {
+            estado: {
+              [Op.in]: ["Entregado", "No Entregado"],
+            },
+          },
+          required: false, // evita que falle si no tiene entregas con esos estados
+          include: [
+            {
+              model: Cliente,
+              as: "cliente",
+              attributes: [
+                "cliente",
+                "cedula",
+                "telefono",
+                "correo",
+                "direccion",
+              ],
+            },
+            { model: Origen, as: "origen", attributes: ["id", "nombre"] },
+            {
+              model: DetalleEntrega,
+              as: "detalleEntregas",
+              include: [
+                { model: Modelo, as: "modelo", attributes: ["nombre"] },
+                {
+                  model: DispositivoMarca,
+                  as: "dispositivoMarca",
+                  include: [
+                    {
+                      model: Dispositivo,
+                      as: "dispositivo",
+                      attributes: ["nombre"],
+                    },
+                    { model: Marca, as: "marca", attributes: ["nombre"] },
+                  ],
+                },
+                { model: FormaPago, as: "formaPago", attributes: ["nombre"] },
+              ],
+            },
+            {
+              model: EntregaObsequio,
+              as: "obsequiosEntrega",
+              include: [
+                { model: Obsequio, as: "obsequio", attributes: ["nombre"] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    res.json(usuario?.entregas || []);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener tus entregas" });
+  }
+});
+
+ 
 router.post("/:entregaId/asignar-repartidor", asignarEntrega);
 
 // --------------------- CONTROLADORES ---------------------

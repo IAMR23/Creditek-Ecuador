@@ -121,8 +121,7 @@ export default function EntregasPendientes() {
               <th className="p-2 border">Telefono</th>
                             <th className="p-2 border">Fecha llamada</th>
 
-              <th className="p-2 border">Horas restantes</th>
-              <th className="p-2 border">Minutos restantes</th>
+              <th className="p-2 border">Tiempo restante</th>
               <th className="p-2 border">Fecha límite</th>
                             <th className="p-2 border">Estado</th>
 
@@ -155,8 +154,8 @@ export default function EntregasPendientes() {
 
                   
 
-                  <td className="p-2 border">{f.horasRestantes ?? 0}</td>
-                  <td className="p-2 border">{f.minutosRestantes ?? 0}</td>
+                  <td className="p-2 border">{f.horasRestantes ?? 0} Horas {f.minutosRestantes ?? 0} Minutos </td>
+           
 
                   <td className="p-2 border">{formatFecha(f.fechaLimite)}</td>
 

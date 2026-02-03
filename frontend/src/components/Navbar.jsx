@@ -11,7 +11,11 @@ function Navbar({ auth, setAuth }) {
     if (token) {
       try {
         const decodedToken = jwtDecode(token);
-        setAuth({ isAuthenticated: true, role: decodedToken.role });
+        setAuth({
+          isAuthenticated: true,
+          role: decodedToken.role,
+          permisos: decodedToken.usuario?.permisosAsignados || [],
+        });
       } catch (error) {
         console.error("Error al decodificar el token", error);
         localStorage.removeItem("token");
@@ -26,16 +30,20 @@ function Navbar({ auth, setAuth }) {
       return;
     }
 
+    const permiso = localStorage.getItem("activeMode");
+
     switch (auth.rol) {
       case "admin":
-        navigate("/dashboard");
+        if (auth.rol === "admin" && permiso === "REPARTO") {
+          navigate("/logistica-panel");
+        } else {
+          navigate("/dashboard");
+        }
         break;
-
       case "vendedor":
         navigate("/vendedor-panel");
         break;
 
-      case "logistica":
       case "repartidor":
         navigate("/logistica-panel"); // Ajusta si tu ruta es distinta
         break;
@@ -49,6 +57,7 @@ function Navbar({ auth, setAuth }) {
     localStorage.removeItem("token");
     localStorage.removeItem("rol");
     localStorage.removeItem("usuario");
+    localStorage.removeItem("activeMode");
     setAuth({ isAuthenticated: false, role: null });
     navigate("/");
   };
@@ -100,9 +109,9 @@ function Navbar({ auth, setAuth }) {
           {auth.isAuthenticated && (
             <button
               onClick={handleLogout}
-              className="bg-green-500 hover:bg-green-400 text-white font-semibold px-4 py-2 rounded-lg shadow-md transition duration-300 transform hover:-translate-y-0.5 hover:scale-105"
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white font-semibold px-4 py-2 rounded-lg shadow-md transition duration-300 transform hover:-translate-y-0.5 hover:scale-105"
             >
-              Cerrar Sesión
+              <span>Cerrar sesión</span>
             </button>
           )}
         </div>

@@ -65,11 +65,15 @@ import Permisos from "./pages/Admin/Permisos";
 import AsignarPermisos from "./pages/Admin/AsignarPermisos";
 import AsignarPermisosUsuarioAgencia from "./pages/Admin/AsignarPermisosUsuarioAgencia";
 import UsuariosConPermisos from "./pages/Admin/UsuariosConPermisos";
+import SeleccionarModo from "./pages/SeleccionarModo";
+import MisEntregasPendientes from "./pages/Logistica/MisEntregasPendientes";
+import MisEntregasRealizadas from "./pages/Logistica/MisEntregasRealizadas";
 
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
     rol: null,
+    permisos : null , 
   });
 
   // 🔹 Validar token y rol al cargar la app
@@ -257,6 +261,8 @@ function App() {
               element={<FotoFechaHoraEntrega />}
             />
             <Route path="/mis-entregas" element={<MisEntregas />} />
+              <Route path="/mis-entregas-pendientes" element={<MisEntregasPendientes />} />
+              <Route path="/mis-entregas-realizadas" element={<MisEntregasRealizadas   />} />
 
             {/* EXPERIMENTAL */}
             <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
@@ -273,6 +279,8 @@ function App() {
               path="/editar-entrega/:id"
               element={<EditarEntregaCompleta />}
             />
+
+            <Route path="/seleccionar-modo" element={<SeleccionarModo />} />
           </Routes>
         </main>
 

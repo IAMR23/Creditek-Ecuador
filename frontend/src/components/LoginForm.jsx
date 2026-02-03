@@ -20,7 +20,7 @@ function LoginForm({ setAuth }) {
     setCredentials((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+/*   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -43,7 +43,57 @@ function LoginForm({ setAuth }) {
       setLoading(false);
     }
   };
+ */
+  
+  
 
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
+
+  try {
+    const response = await loginUser(credentials);
+    localStorage.setItem("token", response.token);
+
+    const decodedToken = jwtDecode(response.token);
+
+    const permisos = decodedToken.usuario?.permisosAsignados || [];
+    const rol = decodedToken.usuario?.rol?.nombre;
+
+    setAuth({
+      isAuthenticated: true,
+      rol,
+      permisos,
+    });
+
+    const puedeRepartir = permisos.includes("Repartir");
+    console.log(rol)
+
+    if (rol === "Repartidor") {
+      navigate("/logistica-panel");
+      console.log("llegue aca")
+      return;
+    } else if (rol === "admin") {
+      navigate("/dashboard");
+      return;
+    }
+    // 🔥 DECISIÓN DE FLUJO
+/*     if (puedeRepartir && rol !== "Repartidor" ) {
+      navigate("/seleccionar-modo");
+    } */ /* else {
+      navigate("/dashboard");
+    }  */
+
+  } catch (error) {
+    setError(error.response?.data?.message || "Error al iniciar sesión.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
       <div className="w-full max-w-md h-3/5 bg-white p-8 rounded-2xl shadow-lg flex flex-col justify-center">

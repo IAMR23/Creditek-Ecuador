@@ -32,7 +32,7 @@ const PORT = process.env.PORT || 5020;
 
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
-  "http://192.168.0.7:5173",
+  "http://192.168.1.123:5173",
   /^https?:\/\/localhost:\d+$/, // cualquier puerto en localhost
   /^https?:\/\/(www\.)?creditek-ecuador\.com$/, // producción
   /^https?:\/\/(www\.)?rve.creditek-ecuador\.com$/, // producción

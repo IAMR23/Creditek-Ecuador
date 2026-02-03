@@ -7,14 +7,19 @@ const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Agencia = require("../models/Agencia");
 const Rol = require("../models/Rol");
+const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
+const Permiso = require("../models/Permiso");
 
 const JWT_SECRET = process.env.JWT_SECRET || "tu_clave_secreta";
+
 
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Buscar usuario + rol
+    /* =========================
+       1. Buscar usuario + rol
+       ========================= */
     const usuario = await Usuario.findOne({
       where: { email },
       include: [
@@ -34,15 +39,22 @@ router.post("/login", async (req, res) => {
       return res.status(403).json({ message: "Usuario no activo" });
     }
 
-    // Verificar contraseña
+    /* =========================
+       2. Verificar contraseña
+       ========================= */
     const isMatch = await bcrypt.compare(password, usuario.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Usuario o contraseña incorrectos" });
     }
 
-    // Agencias relacionadas
+    /* =========================
+       3. Obtener agencias activas
+       ========================= */
     const relaciones = await UsuarioAgencia.findAll({
-      where: { usuarioId: usuario.id, activo: true },
+      where: {
+        usuarioId: usuario.id,
+        activo: true,
+      },
       include: [
         {
           model: Agencia,
@@ -53,10 +65,11 @@ router.post("/login", async (req, res) => {
     });
 
     if (relaciones.length === 0) {
-      return res.status(400).json({ message: "El usuario no tiene agencias activas" });
+      return res.status(400).json({
+        message: "El usuario no tiene agencias activas",
+      });
     }
 
-    // Convertir relaciones en objeto
     const agencias = relaciones.map((rel) => ({
       usuarioAgenciaId: rel.id,
       agenciaId: rel.agencia.id,
@@ -67,21 +80,43 @@ router.post("/login", async (req, res) => {
       rolAgencia: rel.rolAgencia,
     }));
 
-    // Agencia principal (la primera)
     const agenciaPrincipal = agencias[0];
 
-    // CREAR TOKEN COMPLETO (todo dentro)
+    /* =========================
+       4. Obtener permisos
+       (UsuarioAgenciaPermiso)
+       ========================= */
+    const permisosAsignados = await UsuarioAgenciaPermiso.findAll({
+      where: {
+        usuarioAgenciaId: relaciones.map((r) => r.id),
+        activo: true,
+      },
+      include: [
+        {
+          model: Permiso,
+          as: "permiso",
+          attributes: ["id", "nombre"],
+        },
+      ],
+    });
+
+    /* =========================
+       5. Crear JWT completo
+       ========================= */
     const token = jwt.sign(
       {
         usuario: {
           id: usuario.id,
           nombre: usuario.nombre,
           email: usuario.email,
+
           rol: {
             id: usuario.rol.id,
             nombre: usuario.rol.nombre,
-            descripcion: usuario.rol.descripcion,
           },
+
+          permisosAsignados: permisosAsignados.map((p) => p.permiso.nombre), 
+
           agencias,
           agenciaPrincipal,
         },
@@ -97,7 +132,10 @@ router.post("/login", async (req, res) => {
 
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error en el login", error });
+    return res.status(500).json({
+      message: "Error en el login",
+      error,
+    });
   }
 });
 

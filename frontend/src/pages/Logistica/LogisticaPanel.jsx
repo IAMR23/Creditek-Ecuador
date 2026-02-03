@@ -29,9 +29,16 @@ function LogisticaPanel() {
       label: "Logística",
       title: "Revisa tus entregas pendientes",
       icon: <MdPointOfSale className="w-10 h-10 text-green-600" />,
-      path: "/entregas-repartidor",
+      path: "/mis-entregas-pendientes",
+    }, {
+      label: "Logística",
+      title: "Revisa tus entregas realizadas",
+      icon: <MdPointOfSale className="w-10 h-10 text-green-600" />,
+      path: "/mis-entregas-realizadas",
     },
   ];
+
+  console.log(user)
 
   const Card = ({ label, title, desc, icon, path }) => (
     <div

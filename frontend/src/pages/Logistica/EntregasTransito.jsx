@@ -72,9 +72,9 @@ export default function EntregasTransito() {
       } catch (err) {
         console.error(err);
       }
-    }, 60000); // cada 1 minuto
+    }, 600000); 
 
-    return () => clearInterval(interval); // Limpiar el intervalo cuando el componente se desmonte
+    return () => clearInterval(interval); 
   }, []);
 
   const handleVerEntrega = (id) => {
@@ -118,8 +118,7 @@ export default function EntregasTransito() {
             <tr>
               <th className="p-2 border">Caso #</th>
               <th className="p-2 border">Estado</th>
-              <th className="p-2 border">Horas restantes</th>
-              <th className="p-2 border">Minutos restantes</th>
+              <th className="p-2 border">Tiempo restante</th>
               <th className="p-2 border">Fecha llamada</th>
               <th className="p-2 border">Fecha límite</th>
               <th className="p-2 border">Observación</th>
@@ -149,8 +148,7 @@ export default function EntregasTransito() {
                     </span>
                   </td>
 
-                  <td className="p-2 border">{f.horasRestantes ?? 0}</td>
-                  <td className="p-2 border">{f.minutosRestantes ?? 0}</td>
+                  <td className="p-2 border">{f.horasRestantes ?? 0} Horas {f.minutosRestantes ?? 0} Minutos</td>
 
                   <td className="p-2 border">
                     {formatFecha(f.FechaHoraLlamada)}
