@@ -64,7 +64,7 @@ app.use(express.json());
 connectDB()
   .then(() => {
     console.log("Base de datos conectada");
-
+ 
     app.use("/agencias", agencia);
     app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));
     app.use("/auth", authRoutes);

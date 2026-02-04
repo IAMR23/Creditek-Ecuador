@@ -23,7 +23,9 @@ const Marca = require("../models/Marca");
 const FormaPago = require("../models/FormaPago");
 const EntregaObsequio = require("../models/EntregaObsequio");
 const Obsequio = require("../models/Obsequio");
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
+const Usuario = require("../models/Usuario");
+const Agencia = require("../models/Agencia");
 
 router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -35,7 +37,7 @@ router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
           model: Entrega,
           as: "entregas",
           where: {
-            estado: "Pendiente",
+            estado: "Transito",
           },
           required: false, // evita que falle si no tiene entregas pendientes
           include: [
@@ -103,7 +105,7 @@ router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
           as: "entregas",
           where: {
             estado: {
-              [Op.in]: ["Entregado", "No Entregado"],
+              [Op.in]: ["Entregado", "No Entregado" , "Transito"],
             },
           },
           required: false, // evita que falle si no tiene entregas con esos estados
@@ -159,7 +161,168 @@ router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
   }
 });
 
- 
+router.get("/entregas", async (req, res) => {
+  const { userId, fechaInicio, fechaFin, estado } = req.query;
+
+  try {
+
+    const whereUsuario = userId ? { id: userId } : {};
+
+    // Entrega
+    const whereEntrega = {};
+
+    // Filtro por fechas
+    if (fechaInicio && fechaFin) {
+      whereEntrega.fecha = {
+        [Op.between]: [fechaInicio, fechaFin],
+      };
+    } else if (fechaInicio) {
+      whereEntrega.fecha = {
+        [Op.gte]: fechaInicio,
+      };
+    } else if (fechaFin) {
+      whereEntrega.fecha = {
+        [Op.lte]: fechaFin,
+      };
+    }
+
+    // Filtro por estado
+    if (estado) {
+      whereEntrega.estado = estado;
+    }
+
+    /* =========================
+       Query principal
+    ========================= */
+
+    const usuarios = await UsuarioAgencia.findAll({
+      where: whereUsuario,
+      include: [
+        {
+          model: Entrega,
+          as: "entregas",
+          where: Object.keys(whereEntrega).length ? whereEntrega : undefined,
+          required: false, // 🔥 importante: no romper cuando no hay entregas
+          through: {
+            where: { activo: true },
+            attributes: ["estado", "activo"],
+          },
+          include: [
+            {
+              model: Cliente,
+              as: "cliente",
+              attributes: [
+                "cliente",
+                "cedula",
+                "telefono",
+                "correo",
+                "direccion",
+              ],
+            },
+            {
+              model: Origen,
+              as: "origen",
+              attributes: ["id", "nombre"],
+            },
+            {
+              model: DetalleEntrega,
+              as: "detalleEntregas",
+              include: [
+                {
+                  model: Modelo,
+                  as: "modelo",
+                  attributes: ["nombre"],
+                },
+                {
+                  model: DispositivoMarca,
+                  as: "dispositivoMarca",
+                  include: [
+                    {
+                      model: Dispositivo,
+                      as: "dispositivo",
+                      attributes: ["nombre"],
+                    },
+                    {
+                      model: Marca,
+                      as: "marca",
+                      attributes: ["nombre"],
+                    },
+                  ],
+                },
+                {
+                  model: FormaPago,
+                  as: "formaPago",
+                  attributes: ["nombre"],
+                },
+              ],
+            },
+            {
+              model: EntregaObsequio,
+              as: "obsequiosEntrega",
+              include: [
+                {
+                  model: Obsequio,
+                  as: "obsequio",
+                  attributes: ["nombre"],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    /* =========================
+       Aplanar entregas
+    ========================= */
+
+    const entregas = usuarios.flatMap((u) => u.entregas ?? []);
+
+    res.json(entregas);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Error al obtener entregas",
+    });
+  }
+});
+
+router.get("/contador", async (req, res) => {
+  const { userId } = req.query;
+
+  try {
+    const wherePivot = {};
+
+    // 🔹 userId opcional
+    if (userId) {
+      wherePivot.usuario_agencia_id = userId;
+    }
+
+    const resumen = await UsuarioAgenciaEntrega.findAll({
+      attributes: [
+        [Sequelize.col("entrega.estado"), "estado"],
+        [Sequelize.fn("COUNT", Sequelize.literal("*")), "total"],
+      ],
+      where: wherePivot,
+      include: [
+        {
+          model: Entrega,
+          as: "entrega",
+          attributes: [],
+        },
+      ],
+      group: ["entrega.estado"],
+      raw: true,
+    });
+
+    res.json(resumen);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al obtener resumen de entregas" });
+  }
+});
+
+
 router.post("/:entregaId/asignar-repartidor", asignarEntrega);
 
 // --------------------- CONTROLADORES ---------------------

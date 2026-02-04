@@ -565,22 +565,21 @@ ${
               Observación
             </label>
 
-            <input
+            <select
               id="observacion"
               name="observacion"
-              list="observaciones-list"
               value={venta.observacion}
               onChange={handleVentaChange}
-              placeholder="Escriba o seleccione una observación"
               className="w-full border border-gray-300 p-2 rounded
-               focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            />
-
-            <datalist id="observaciones-list">
+           focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            >
+              <option value="">Ninguna</option>
               {observaciones.map((obs) => (
-                <option key={obs} value={obs} />
+                <option key={obs} value={obs}>
+                  {obs}
+                </option>
               ))}
-            </datalist>
+            </select>
           </div>
         </div>
 

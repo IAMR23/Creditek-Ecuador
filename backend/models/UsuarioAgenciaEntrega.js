@@ -55,3 +55,4 @@ const UsuarioAgenciaEntrega = sequelize.define(
 );
 
 module.exports = UsuarioAgenciaEntrega;
+  

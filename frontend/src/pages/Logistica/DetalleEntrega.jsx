@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../config";
 import Swal from "sweetalert2";
 import Field from "../../components/Field";
+import { MdCancel } from "react-icons/md";
 
 export default function DetalleEntrega() {
   const { id } = useParams();
@@ -417,13 +418,49 @@ export default function DetalleEntrega() {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={asignarRepartidor}
-          className="p-10 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-xl"
-        >
-          Asignar repartidor y enviar a tránsito
-        </button>
+        <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">
+              Observación de logística
+            </h3>
+            <p className="text-sm text-gray-500">
+              Comentarios internos del área logística
+            </p>
+          </div>
+
+          <textarea
+            rows={4}
+            value={observacionesLogistica}
+            onChange={(e) => setObservacionesLogistica(e.target.value)}
+            placeholder="Ej: Cliente no estuvo en domicilio, reprogramar entrega..."
+            className="
+      w-full p-3 rounded-xl
+      border border-green-300
+      focus:outline-none focus:ring-2 focus:ring-green-400
+      bg-white
+      resize-none
+    "
+          />
+        </div>
+
+        <div className="flex justify-end items-center gap-4 mt-4">
+          <button
+            type="button"
+            onClick={asignarRepartidor}
+            className="flex items-center justify-center bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-xl font-semibold shadow transition"
+          >
+            Asignar repartidor y enviar a tránsito
+          </button>
+
+          <button
+            type="button"
+            onClick={() => actualizarEstado("No Entregado")}
+            className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-xl text-sm font-semibold shadow transition"
+          >
+            <MdCancel size={18} />
+            No entregado
+          </button>
+        </div>
       </form>
     </div>
   );

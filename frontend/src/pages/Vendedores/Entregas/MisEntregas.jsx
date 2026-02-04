@@ -59,6 +59,8 @@ export default function MisEntregas() {
         id: entrega.id,
         Fecha: entrega.fecha ?? "",
         Día: entrega.dia ?? "",
+        Cliente : entrega.cliente ?? "",
+
 
         Origen: entrega.origen ?? "",
         Dispositivo: entrega.tipo ?? "",

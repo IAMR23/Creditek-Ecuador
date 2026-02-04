@@ -42,7 +42,7 @@ exports.calcularEstadoEntrega = (fechaHoraLlamada) => {
 
   let estado;
   if (minutosSeguros <= 0) {
-    estado = "Perdida";
+    estado = "No Entregado";
   } else if (minutosSeguros <= 12 * 60) {
     estado = "Urgente";
   } else {

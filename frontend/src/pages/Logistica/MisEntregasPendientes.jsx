@@ -51,47 +51,44 @@ export default function MisEntregasPendientes() {
     );
   }
 
-
-const actualizarEstado = async (id, nuevoEstado) => {
-  const result = await Swal.fire({
-    title: "¿Confirmar acción?",
-    text: `¿Deseas cambiar el estado a "${nuevoEstado}"?`,
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonColor: "#16a34a", // green-600
-    cancelButtonColor: "#dc2626", // red-600
-    confirmButtonText: "Sí, actualizar",
-    cancelButtonText: "Cancelar",
-    reverseButtons: true,
-  });
-
-  if (!result.isConfirmed) return;
-
-  try {
-    await axios.put(`${API_URL}/entregas/${id}`, {
-      estado: nuevoEstado,
+  const actualizarEstado = async (id, nuevoEstado) => {
+    const result = await Swal.fire({
+      title: "¿Confirmar acción?",
+      text: `¿Deseas cambiar el estado a "${nuevoEstado}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#16a34a", // green-600
+      cancelButtonColor: "#dc2626", // red-600
+      confirmButtonText: "Sí, actualizar",
+      cancelButtonText: "Cancelar",
+      reverseButtons: true,
     });
 
-    Swal.fire({
-      icon: "success",
-      title: "Estado actualizado",
-      text: `El estado cambió a: ${nuevoEstado}`,
-      timer: 1500,
-      showConfirmButton: false,
-    });
+    if (!result.isConfirmed) return;
 
-    cargarEntregas();
+    try {
+      await axios.put(`${API_URL}/entregas/${id}`, {
+        estado: nuevoEstado,
+      });
 
+      Swal.fire({
+        icon: "success",
+        title: "Estado actualizado",
+        text: `El estado cambió a: ${nuevoEstado}`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
 
-  } catch (error) {
-    console.error(error);
-    Swal.fire({
-      icon: "error",
-      title: "Error al actualizar",
-      text: "Ocurrió un problema al guardar el estado.",
-    });
-  }
-};
+      cargarEntregas();
+    } catch (error) {
+      console.error(error);
+      Swal.fire({
+        icon: "error",
+        title: "Error al actualizar",
+        text: "Ocurrió un problema al guardar el estado.",
+      });
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -154,6 +151,10 @@ const actualizarEstado = async (id, nuevoEstado) => {
             <p className="text-sm flex items-center gap-1">
               Observacion: {entrega.observacion}
             </p>
+
+                        <p className="text-sm flex items-center gap-1">
+              Observacion de Logistica: {entrega.observacionLogistica || "—"}
+            </p>
           </div>
 
           {/* PRODUCTOS */}
@@ -205,23 +206,23 @@ const actualizarEstado = async (id, nuevoEstado) => {
               </ul>
             </div>
           )}
-<div className="flex justify-end gap-3 pt-4 border-t">
-  <button
-    onClick={() => actualizarEstado(entrega.id, "Entregado")}
-    className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow"
-  >
-    <MdCheckCircle />
-    Entregado
-  </button>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => actualizarEstado(entrega.id, "Entregado")}
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow"
+            >
+              <MdCheckCircle />
+              Entregado
+            </button>
 
-  <button
-    onClick={() => actualizarEstado(entrega.id, "No Entregado")}
-    className="flex items-center gap-2 bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow"
-  >
-    <MdCancel />
-    No Entregado
-  </button>
-</div>
+            <button
+              onClick={() => actualizarEstado(entrega.id, "No Entregado")}
+              className="flex items-center gap-2 bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow"
+            >
+              <MdCancel />
+              No Entregado
+            </button>
+          </div>
         </div>
       ))}
     </div>

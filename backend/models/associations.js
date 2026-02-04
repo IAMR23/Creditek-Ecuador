@@ -177,6 +177,7 @@ formaPago.hasMany(DetalleEntrega, {
   as: "detalleEntregas"
 });
 
+/* USUARIO AGNCIAS ENTREGAS ENTREGAS */
 
 UsuarioAgencia.belongsToMany(Entrega, {
   through: UsuarioAgenciaEntrega,
@@ -192,3 +193,15 @@ Entrega.belongsToMany(UsuarioAgencia, {
   as: "repartidores",
 });
 
+
+// UsuarioAgenciaEntrega → UsuarioAgencia
+UsuarioAgenciaEntrega.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuario_agencia_id",
+  as: "usuarioAgencia",
+});
+
+// UsuarioAgenciaEntrega → Entrega
+UsuarioAgenciaEntrega.belongsTo(Entrega, {
+  foreignKey: "entrega_id",
+  as: "entrega",
+});

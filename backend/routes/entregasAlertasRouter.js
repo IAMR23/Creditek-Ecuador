@@ -50,26 +50,39 @@ router.get("/entregas-pendientes", async (req, res) => {
   }
 });
 
+
 router.get("/entregas-transito", async (req, res) => {
   try {
     const entregas = await Entrega.findAll({
       where: {
         estado: "Transito",
-        FechaHoraLlamada: { [Op.ne]: null },
       },
-      attributes: ["id", "FechaHoraLlamada", "estado"],
+      attributes: ["id", "FechaHoraLlamada", "observacion", "createdAt"],
+      include: [
+        {
+          model: Cliente,
+          as: "cliente",
+          attributes: ["id", "cliente", "telefono", "cedula"],
+        },
+      ],
+      order: [["createdAt", "DESC"]], 
     });
+
     const alertas = entregas.map((entrega) => {
       const calculo = calcularEstadoEntrega(entrega.FechaHoraLlamada);
-
       return {
         id: entrega.id,
-        estado: entrega.estado,
+        estado: calculo.estado,
         horasRestantes: calculo.horasRestantes,
         minutosRestantes: calculo.minutosRestantes,
         FechaHoraLlamada: entrega.FechaHoraLlamada,
         fechaLimite: calculo.fechaLimite,
         observacion: entrega.observacion,
+        cliente: {
+          nombre: entrega.cliente?.cliente,
+          telefono: entrega.cliente?.telefono,
+          cedula: entrega.cliente?.cedula,
+        },
       };
     });
 
@@ -79,5 +92,6 @@ router.get("/entregas-transito", async (req, res) => {
     res.status(500).json({ ok: false });
   }
 });
+
 
 module.exports = router;

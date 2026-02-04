@@ -49,7 +49,6 @@ import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
 import VentasCompletas from "./pages/Admin/VentasCompletas";
 import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
 import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
-import EntregasTransito from "./pages/Logistica/EntregasTransito";
 import EntregasAuditoria from "./pages/Auditoria/EntregasAuditoria";
 import EntregaAuditoria from "./pages/Auditoria/EntregaAuditoria";
 import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
@@ -68,6 +67,8 @@ import UsuariosConPermisos from "./pages/Admin/UsuariosConPermisos";
 import SeleccionarModo from "./pages/SeleccionarModo";
 import MisEntregasPendientes from "./pages/Logistica/MisEntregasPendientes";
 import MisEntregasRealizadas from "./pages/Logistica/MisEntregasRealizadas";
+import EntregasRepartidores from "./pages/Logistica/EntregasRepartidores";
+import EntregasTotales from "./pages/Logistica/ResumenEntregas";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -163,6 +164,11 @@ function App() {
                 path="entrega-logistica/:id"
                 element={<DetalleEntrega />}
               />
+                            <Route
+                path="entregas-repartidores"
+                element={<EntregasRepartidores />}
+              />
+
               <Route path="rol" element={<AdminUsuariosRoles />} />
               <Route path="dispositivos" element={<Dispositivos />} />
               <Route path="marcas" element={<MarcasAdmin />} />
@@ -181,9 +187,9 @@ function App() {
                 path="entregas-pendientes"
                 element={<EntregasPendientes />}
               />
-              <Route path="entregas-transito" element={<EntregasTransito />} />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />
+
               {/* MARKETING */}
               <Route
                 path="copa-creditek"

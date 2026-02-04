@@ -81,11 +81,13 @@ export default function Sidebar() {
           icon: <PackageCheck size={20} />,
           path: "entregas-pendientes",
         },
-        {
-          label: "Entregas en Tránsito",
+
+                {
+          label: "Entregas Repartidores",
           icon: <PackageCheck size={20} />,
-          path: "entregas-transito",
+          path: "entregas-repartidores",
         },
+
       ],
     },
 
