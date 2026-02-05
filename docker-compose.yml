@@ -93,5 +93,5 @@ volumes:
 # ------------------------------
 networks:
   public:
-  internal:
-    internal: true
+#  internal:
+#    internal: true
