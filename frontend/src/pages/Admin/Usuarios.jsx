@@ -142,7 +142,7 @@ export default function Usuarios() {
   const actualizarUsuario = async (e) => {
     e.preventDefault();
     try {
-      await axios.patch(`${API_URL}/usuarios/${editForm.id}`, {
+      await axios.put(`${API_URL}/usuarios/${editForm.id}`, {
         nombre: editForm.nombre,
         cedula: editForm.cedula,
         email: editForm.email,
@@ -262,12 +262,12 @@ export default function Usuarios() {
                       Editar
                     </button>
 
-                    <button
+                 {/*    <button
                       onClick={() => eliminarUsuario(u.id)}
                       className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
                     >
                       Eliminar
-                    </button>
+                    </button> */}
                   </td>
                 </tr>
               ))}
