@@ -20,23 +20,20 @@ const VentaObsequio = require("../../models/VentaObsequio");
 exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
   const where = { activo: true };
 
-  // Filtrado por fechas
   if (fechaInicio && fechaFin) {
-    where.fecha = {
-      [Op.between]: [
-        new Date(`${fechaInicio}T00:00:00`),
-        new Date(`${fechaFin}T23:59:59`),
-      ],
-    };
-  } else if (fechaInicio) {
-    where.fecha = {
-      [Op.gte]: new Date(`${fechaInicio}T00:00:00`),
-    };
-  } else if (fechaFin) {
-    where.fecha = {
-      [Op.lte]: new Date(`${fechaFin}T23:59:59`),
-    };
-  }
+  where.fecha = {
+    [Op.between]: [fechaInicio, fechaFin],
+  };
+} else if (fechaInicio) {
+  where.fecha = {
+    [Op.gte]: fechaInicio,
+  };
+} else if (fechaFin) {
+  where.fecha = {
+    [Op.lte]: fechaFin,
+  };
+}
+
 
   // Filtrado por id del vendedor
   const usuarioAgenciaWhere = id ? { usuarioId: id } : {};
@@ -95,11 +92,7 @@ const obtenerDiaSemana = (fecha) => {
     "sábado",
   ];
 
-  const d = new Date(
-    fecha.getFullYear(),
-    fecha.getMonth(),
-    fecha.getDate()
-  );
+ const d = new Date(fecha);
 
   return dias[d.getDay()];
 };
@@ -110,9 +103,10 @@ exports.formatearReporte = (ventas) => {
 
   ventas.forEach((entrega) => {
     entrega.detalleVenta?.forEach((detalle) => {
-      const fechaISO = entrega.fecha
-        ? entrega.fecha.toISOString().slice(0, 10)
-        : "";
+const fechaISO = entrega.fecha
+  ? entrega.fecha.toString().slice(0, 10)
+  : "";
+
 
       filas.push({
         id: entrega.id,

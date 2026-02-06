@@ -32,7 +32,7 @@ const Venta = sequelize.define(
       type: DataTypes.STRING,
     },
     fecha: {
-      type: DataTypes.DATE,
+      type: DataTypes.DATEONLY,
       defaultValue: DataTypes.NOW,
     },
     validada: {

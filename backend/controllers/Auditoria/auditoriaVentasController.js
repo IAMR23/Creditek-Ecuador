@@ -402,14 +402,14 @@ exports.formatearReporte = (ventas) => {
   ventas.forEach((venta) => {
     venta.detalleVenta?.forEach((detalle) => {
       const fechaISO = venta.fecha
-        ? venta.fecha.toISOString().slice(0, 10)
+        ? new Date(venta.fecha).toISOString().split("T")[0]
         : "";
 
       filas.push({
         id: venta.id,
         activo: venta.activo,
         semana: null,
-        dia: obtenerDiaSemana(venta.fecha),
+        dia: obtenerDiaSemana(new Date(venta.fecha)),
         valorAcumulado: null,
 
         fecha: fechaISO,

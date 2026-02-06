@@ -2,3 +2,7 @@
 pgadmin-config
 postgres-backups
 IntegraDent/ 
+
+.env.example
+
+powerbi.txt
