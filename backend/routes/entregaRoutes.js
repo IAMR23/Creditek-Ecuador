@@ -108,7 +108,7 @@ router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
           as: "entregas",
           where: {
             estado: {
-              [Op.in]: ["Entregado", "No Entregado", "Transito"],
+              [Op.in]: ["Entregado", "No Entregado"],
             },
           },
           required: false, // evita que falle si no tiene entregas con esos estados

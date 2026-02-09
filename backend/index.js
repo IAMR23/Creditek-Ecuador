@@ -99,6 +99,7 @@ connectDB()
     app.use("/api/postulaciones", postulacionesRouter  )
     app.use("/api/permisos-catalogo", require("./routes/permisoRoutes"));
     app.use("/api/usuario-agencia-permisos", require("./routes/usuarioAgenciaPermisoRoutes"));
+    app.use("/api/traslados", require("./routes/trasladosRoutes"));
 
     console.log(
       "Carpeta uploads que Express está usando:",

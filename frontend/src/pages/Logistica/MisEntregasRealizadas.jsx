@@ -91,7 +91,7 @@ export default function MisEntregasRealizadas() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold flex items-center gap-2">
-        <MdLocalShipping /> Mis Entregas
+        <MdLocalShipping /> Mis Entregas Realizadas
       </h1>
 
       {entregas.map((entrega) => (
