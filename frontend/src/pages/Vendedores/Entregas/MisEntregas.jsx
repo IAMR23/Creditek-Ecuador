@@ -57,23 +57,19 @@ export default function MisEntregas() {
       const ventas = data.entrega || [];
       const resultado = ventas.map((entrega) => ({
         id: entrega.id,
-        Fecha: entrega.fecha ?? "",
-        Día: entrega.dia ?? "",
-        Cliente : entrega.cliente ?? "",
+        Fecha: entrega.dia + " " + entrega.fecha ?? "",
 
-
-        Origen: entrega.origen ?? "",
-        Dispositivo: entrega.tipo ?? "",
-        Marca: entrega.marca ?? "",
-        Modelo: entrega.modelo ?? "",
+        Cliente: entrega.cliente ?? "",
+Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? ""}`.toUpperCase().trim(),
         Precio:
           entrega.precioVendedor != null ? `$${entrega.precioVendedor}` : "",
         "Forma Pago": entrega.formaPago ?? "",
-        Contrato: entrega.contrato ?? "",
         Entrada: entrega.entrada ?? "",
         Alcance: entrega.alcance ?? "",
         Estado: entrega.estado ?? "",
-        ObservacionLogistica: entrega.observacionLogistica ?? "",
+        "Observacion de Logistica": entrega.observacionLogistica ?? "",
+        "Fecha y hora de asignacion" : entrega.fechaHoraAsignacion ?? "",
+        "Horario de entrega" : entrega.horaEstimadaEntrega ?? "",
       }));
 
       setFilas(resultado);

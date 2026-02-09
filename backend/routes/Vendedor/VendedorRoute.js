@@ -12,7 +12,7 @@ router.get("/venta/:id", vendedorController.obtenerVentaPorId);
 /* OBTENER TODAS LAS ENTREGAS DEL VENDEDOR   */
 router.get("/entrega/:id", async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const { page = 1, limit = 15 } = req.query;
     const { id } = req.params;
 
     const entrega = await entregaVendedorController.obtenerReporte({

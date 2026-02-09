@@ -39,6 +39,11 @@ router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
           where: {
             estado: "Transito",
           },
+          through: {
+            where: {
+              estado: "Asignada", // estado en la tabla intermedia
+            },
+          },
           required: false, // evita que falle si no tiene entregas pendientes
           include: [
             {
@@ -92,8 +97,6 @@ router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
   }
 });
 
-
-
 router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
   const { userId } = req.params;
 
@@ -105,7 +108,7 @@ router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
           as: "entregas",
           where: {
             estado: {
-              [Op.in]: ["Entregado", "No Entregado" , "Transito"],
+              [Op.in]: ["Entregado", "No Entregado", "Transito"],
             },
           },
           required: false, // evita que falle si no tiene entregas con esos estados
@@ -165,7 +168,6 @@ router.get("/entregas", async (req, res) => {
   const { userId, fechaInicio, fechaFin, estado } = req.query;
 
   try {
-
     const whereUsuario = userId ? { id: userId } : {};
 
     // Entrega
@@ -321,7 +323,6 @@ router.get("/contador", async (req, res) => {
     res.status(500).json({ error: "Error al obtener resumen de entregas" });
   }
 });
-
 
 router.post("/:entregaId/asignar-repartidor", asignarEntrega);
 

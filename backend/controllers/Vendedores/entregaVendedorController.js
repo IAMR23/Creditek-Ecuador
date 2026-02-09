@@ -120,6 +120,8 @@ exports.formatearReporte = (entregas) => {
         estado: entrega.estado || "",
         observacionLogistica:
           entrega.observacionLogistica || "Sin observaciones",
+        fechaHoraAsignacion : entrega.fechaHoraAsignacion , 
+        horaEstimadaEntrega : entrega.horaEstimadaEntrega ,
       });
     });
   });

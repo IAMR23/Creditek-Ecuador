@@ -21,6 +21,7 @@ import Swal from "sweetalert2";
 export default function MisEntregasPendientes() {
   const [entregas, setEntregas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [observacionesEntrega, setObservacionesEntrega] = useState({});
 
   useEffect(() => {
     cargarEntregas();
@@ -51,44 +52,53 @@ export default function MisEntregasPendientes() {
     );
   }
 
+
+
+
   const actualizarEstado = async (id, nuevoEstado) => {
-    const result = await Swal.fire({
-      title: "¿Confirmar acción?",
-      text: `¿Deseas cambiar el estado a "${nuevoEstado}"?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#16a34a", // green-600
-      cancelButtonColor: "#dc2626", // red-600
-      confirmButtonText: "Sí, actualizar",
-      cancelButtonText: "Cancelar",
-      reverseButtons: true,
+  const observacion = observacionesEntrega[id] || "";
+
+  const result = await Swal.fire({
+    title: "¿Confirmar acción?",
+    text: `¿Deseas cambiar el estado a "${nuevoEstado}"?`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#16a34a",
+    cancelButtonColor: "#dc2626",
+    confirmButtonText: "Sí, actualizar",
+    cancelButtonText: "Cancelar",
+    reverseButtons: true,
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    await axios.put(`${API_URL}/entregas/${id}`, {
+      estado: nuevoEstado,
+      observacionEntrega: observacion,
     });
 
-    if (!result.isConfirmed) return;
+    Swal.fire({
+      icon: "success",
+      title: "Actualizado",
+      text: `Estado cambiado a: ${nuevoEstado}`,
+      timer: 1500,
+      showConfirmButton: false,
+    });
 
-    try {
-      await axios.put(`${API_URL}/entregas/${id}`, {
-        estado: nuevoEstado,
-      });
+    setObservacionesEntrega((prev) => ({ ...prev, [id]: "" }));
+    cargarEntregas();
+  } catch (error) {
+    console.error(error);
+    Swal.fire({
+      icon: "error",
+      title: "Error",
+      text: "Ocurrió un problema al actualizar.",
+    });
+  }
+};
 
-      Swal.fire({
-        icon: "success",
-        title: "Estado actualizado",
-        text: `El estado cambió a: ${nuevoEstado}`,
-        timer: 1500,
-        showConfirmButton: false,
-      });
 
-      cargarEntregas();
-    } catch (error) {
-      console.error(error);
-      Swal.fire({
-        icon: "error",
-        title: "Error al actualizar",
-        text: "Ocurrió un problema al guardar el estado.",
-      });
-    }
-  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -152,7 +162,7 @@ export default function MisEntregasPendientes() {
               Observacion: {entrega.observacion}
             </p>
 
-                        <p className="text-sm flex items-center gap-1">
+            <p className="text-sm flex items-center gap-1">
               Observacion de Logistica: {entrega.observacionLogistica || "—"}
             </p>
           </div>
@@ -206,6 +216,33 @@ export default function MisEntregasPendientes() {
               </ul>
             </div>
           )}
+
+          {/* OBSERVACIONES REPARTIDOR */}
+          <div className="pt-4 border-t space-y-2">
+            <h3 className="font-semibold text-sm">
+              Observaciones de Entrega (Repartidor)
+            </h3>
+
+            <textarea
+              value={observacionesEntrega[entrega.id] || ""}
+              onChange={(e) =>
+                setObservacionesEntrega((prev) => ({
+                  ...prev,
+                  [entrega.id]: e.target.value,
+                }))
+              }
+              placeholder="Ej: Cliente no se encontraba en domicilio, dirección incorrecta, entrega exitosa sin novedades..."
+              className="w-full border rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              rows={3}
+            />
+
+            {entrega.observacionEntrega && (
+              <p className="text-xs text-gray-500">
+                Observación registrada: {entrega.observacionEntrega}
+              </p>
+            )}
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
               onClick={() => actualizarEstado(entrega.id, "Entregado")}

@@ -13,6 +13,19 @@ export default function DetalleEntrega() {
   const [repartidores, setRepartidores] = useState([]);
   const [repartidorSeleccionado, setRepartidorSeleccionado] = useState("");
   const [loadingRepartidores, setLoadingRepartidores] = useState(false);
+  const [fechaHoraAsignacion, setFechaHoraAsignacion] = useState("");
+  const [horaEstimadaEntrega, setHoraEstimadaEntrega] = useState("");
+
+  const rangosHorarios = [
+    "7 - 9",
+    "9 - 11",
+    "11 - 13",
+    "13 - 15",
+    "15 - 17",
+    "17 - 19",
+    "19 - 21",
+    "21 - 22",
+  ];
 
   const navigate = useNavigate();
 
@@ -64,6 +77,10 @@ export default function DetalleEntrega() {
         usuarioAgenciaId: repartidorSeleccionado,
       });
 
+      await axios.put(`${API_URL}/entregas/${id}`, {
+        fechaHoraAsignacion,
+        horaEstimadaEntrega,
+      });
       Swal.fire({
         icon: "success",
         title: "Repartidor asignado",
@@ -73,12 +90,45 @@ export default function DetalleEntrega() {
 
       actualizarEstado("Transito");
     } catch (error) {
-      console.error(error);
-      Swal.fire({
-        icon: "error",
-        title: "Error al asignar",
-        text: "No se pudo asignar el repartidor",
-      });
+      if (error.response?.status === 409) {
+        const result = await Swal.fire({
+          title: "Entrega ya asignada",
+          text: "¿Deseas reasignarla?",
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Sí, reasignar",
+          cancelButtonText: "Cancelar",
+        });
+
+        if (result.isConfirmed) {
+          await axios.post(`${API_URL}/entregas/${id}/asignar-repartidor`, {
+            usuarioAgenciaId: repartidorSeleccionado,
+
+            forzarReasignacion: true,
+          });
+
+          await axios.put(`${API_URL}/entregas/${id}`, {
+            fechaHoraAsignacion,
+            horaEstimadaEntrega,
+          });
+
+          Swal.fire({
+            icon: "success",
+            title: "Reasignado correctamente",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+
+          actualizarEstado("Transito");
+        }
+      } else {
+        console.error(error);
+        Swal.fire({
+          icon: "error",
+          title: "Error al asignar",
+          text: "No se pudo asignar el repartidor",
+        });
+      }
     }
   };
 
@@ -418,7 +468,53 @@ export default function DetalleEntrega() {
           )}
         </div>
 
-        <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-3">
+        {/* ASIGNACIÓN Y HORARIO */}
+        <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-5">
+          {/* Fecha y hora de asignación */}
+          <div className="flex flex-col space-y-2">
+            <label className="text-sm font-semibold text-gray-700">
+              Fecha y hora de asignación
+            </label>
+
+            <input
+              type="datetime-local"
+              value={fechaHoraAsignacion}
+              onChange={(e) => setFechaHoraAsignacion(e.target.value)}
+              className="w-full p-3 border border-green-300 rounded-xl"
+            />
+          </div>
+
+          {/* Hora estimada */}
+          <div className="flex flex-col space-y-3">
+            <label className="text-sm font-semibold text-gray-700">
+              Hora estimada de entrega
+            </label>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {rangosHorarios.map((rango) => (
+                <label
+                  key={rango}
+                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition
+            ${
+              horaEstimadaEntrega === rango
+                ? "bg-green-100 border-green-500"
+                : "border-gray-300"
+            }`}
+                >
+                  <input
+                    type="radio"
+                    name="horaEstimada"
+                    value={rango}
+                    checked={horaEstimadaEntrega === rango}
+                    onChange={(e) => setHoraEstimadaEntrega(e.target.value)}
+                    className="accent-green-600"
+                  />
+                  <span className="text-sm">{rango}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div>
             <h3 className="text-lg font-semibold text-gray-800">
               Observación de logística

@@ -13,8 +13,6 @@ import {
   MdInventory,
   MdCalendarToday,
   MdCardGiftcard,
-  MdCheckCircle,
-  MdCancel,
 } from "react-icons/md";
 import Swal from "sweetalert2";
 
@@ -149,7 +147,15 @@ export default function MisEntregasRealizadas() {
             </p>
 
             <p className="text-sm flex items-center gap-1">
-              Observacion: {entrega.observacion}
+              Observacion de vendedor: {entrega.observacion}
+            </p>
+
+            <p className="text-sm flex items-center gap-1">
+              Observacion de Logistica: {entrega.observacionLogistica || "—"}
+            </p>
+
+            <p className="text-sm flex items-center gap-1">
+              Observacion del Repartidor: {entrega.observacionEntrega || "—"}
             </p>
           </div>
 

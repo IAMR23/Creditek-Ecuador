@@ -64,13 +64,26 @@ const Entrega = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    observacionEntrega: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    fechaHoraAsignacion: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    horaEstimadaEntrega: { 
+      type: DataTypes.STRING,
+      allowNull: true,
+    }
+    
   },
-  {
-    tableName: "entregas",
+  { 
+    tableName: "entregas",  
     timestamps: true,
-  }
+  }   
 );
-
+ 
 Entrega.belongsTo(UsuarioAgencia, {
   foreignKey: "usuarioAgenciaId",
   as: "usuarioAgencia",
