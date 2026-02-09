@@ -73,8 +73,7 @@ Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? "
         Alcance: entrega.alcance ?? "",
         Estado: entrega.estado ?? "",
         "Observacion de Logistica": entrega.observacionLogistica ?? "",
-"Fecha y hora de Asignacion": new Date(entrega.fechaHoraAsignacion)
-  .toLocaleString("es-EC"),
+        "Fecha y hora de asignacion" : entrega.fechaHoraAsignacion ?? "",
         "Horario de entrega" : entrega.horaEstimadaEntrega ?? "",
       }));
 
