@@ -37,11 +37,6 @@ export default function MisEntregas() {
     }
   }, []);
 
- 
- 
-
-
-  
   // ==============================
   // Fetch principal con paginación
   // ==============================
@@ -65,7 +60,10 @@ export default function MisEntregas() {
         Fecha: entrega.dia + " " + entrega.fecha ?? "",
 
         Cliente: entrega.cliente ?? "",
-Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? ""}`.toUpperCase().trim(),
+        Dispositivo:
+          `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? ""}`
+            .toUpperCase()
+            .trim(),
         Precio:
           entrega.precioVendedor != null ? `$${entrega.precioVendedor}` : "",
         "Forma Pago": entrega.formaPago ?? "",
@@ -73,8 +71,16 @@ Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? "
         Alcance: entrega.alcance ?? "",
         Estado: entrega.estado ?? "",
         "Observacion de Logistica": entrega.observacionLogistica ?? "",
-        "Fecha y hora de asignacion" : entrega.fechaHoraAsignacion ?? "",
-        "Horario de entrega" : entrega.horaEstimadaEntrega ?? "",
+        "Fecha y hora de asignacion": entrega.fechaHoraAsignacion
+          ? new Date(entrega.fechaHoraAsignacion).toLocaleString("es-EC", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "",
+        "Horario de entrega": entrega.horaEstimadaEntrega ?? "",
       }));
 
       setFilas(resultado);
