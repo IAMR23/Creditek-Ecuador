@@ -37,6 +37,11 @@ export default function MisEntregas() {
     }
   }, []);
 
+ 
+ 
+
+
+  
   // ==============================
   // Fetch principal con paginación
   // ==============================
@@ -68,7 +73,8 @@ Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? "
         Alcance: entrega.alcance ?? "",
         Estado: entrega.estado ?? "",
         "Observacion de Logistica": entrega.observacionLogistica ?? "",
-        "Fecha y hora de asignacion" : entrega.fechaHoraAsignacion ?? "",
+"Fecha y hora de Asignacion": new Date(entrega.fechaHoraAsignacion)
+  .toLocaleString("es-EC"),
         "Horario de entrega" : entrega.horaEstimadaEntrega ?? "",
       }));
 
