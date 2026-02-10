@@ -32,23 +32,15 @@ function VendedorPanel() {
       icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
       path: "/ventacompleta",
     },
-
-    /*     {
-      label: "Ventas",
-      title: "Registrar Ventas",
-      desc: "Ingresa tus ventas del día",
-      icon: <MdPointOfSale className="w-10 h-10 text-green-600" />,
-      path: "/registrar-clientes-venta",
-    }, */
-        {
+    {
       label: "Logistica",
       title: "Registrar Entregas",
       desc: "Ingresa tus entregas del dia",
-      icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
+      icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
       path: "/crear-entrega-completa",
     },
     {
-      label: "Ventas",
+      label: "Comercial",
       title: "Mis ventas",
       desc: "Revisa tus ventas del día",
       icon: <MdList className="w-10 h-10 text-green-600" />,
@@ -58,11 +50,26 @@ function VendedorPanel() {
       label: "Logística",
       title: "Entregas generales",
       desc: "Consulta todas tus entregas",
-      icon: <MdShoppingCart className="w-10 h-10 text-green-600" />,
+      icon: <MdList className="w-10 h-10 text-green-600" />,
       path: "/mis-entregas",
     },
 
+    {
+      label: "Logística",
+      title: "Crear Traslado",
+      desc: "Realiza traslados entre agencias",
+      icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
+      path: "/crear-traslado",
+    },
 
+        {
+      label: "Logística",
+      title: "Mis Traslados",
+      desc: "Consulta tus traslados",
+      icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
+      path: "/mis-traslados",
+    },
+    
   ];
 
   const Card = ({ label, title, desc, icon, path }) => (

@@ -4,8 +4,14 @@ const { sequelize } = require("../config/db");
 
 const Traslado = require("../models/Traslado");
 const DetalleTraslado = require("../models/DetalleTraslado");
+const Agencia = require("../models/Agencia");
+const DispositivoMarca = require("../models/DispositivoMarca");
+const Dispositivo = require("../models/Dispositivo");
+const Marca = require("../models/Marca");
+const Modelo = require("../models/Modelo");
+const { Op } = require("sequelize");
 
-router.post("/traslado", async (req, res) => {
+router.post("/", async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
@@ -62,5 +68,83 @@ router.post("/traslado", async (req, res) => {
     });
   }
 });
+
+router.get("/", async (req, res) => {
+  try {
+    const { fecha } = req.query;
+
+    let whereCondition = {};
+
+    // 📌 Si viene fecha → filtrar por día completo
+    if (fecha) {
+      const inicio = new Date(fecha);
+      inicio.setHours(0, 0, 0, 0);
+
+      const fin = new Date(fecha);
+      fin.setHours(23, 59, 59, 999);
+
+      whereCondition.createdAt = {
+        [Op.between]: [inicio, fin],
+      };
+    }
+
+    const traslados = await Traslado.findAll({
+      attributes: ["id", "estado", "createdAt"],
+      where: whereCondition,
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: Agencia,
+          as: "agenciaOrigen",
+          attributes: ["id", "nombre"],
+        },
+        {
+          model: Agencia,
+          as: "agenciaDestino",
+          attributes: ["id", "nombre"],
+        },
+        {
+          model: DetalleTraslado,
+          as: "detalles",
+          attributes: ["id", "cantidad"],
+          include: [
+            {
+              model: DispositivoMarca,
+              as: "dispositivoMarca",
+              attributes: ["id"],
+              include: [
+                {
+                  model: Dispositivo,
+                  as: "dispositivo",
+                  attributes: ["id", "nombre"],
+                },
+                {
+                  model: Marca,
+                  as: "marca",
+                  attributes: ["id", "nombre"],
+                },
+              ],
+            },
+            {
+              model: Modelo,
+              as: "modelo",
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
+      ],
+      distinct: true,
+    });
+
+    return res.status(200).json(traslados);
+  } catch (error) {
+    console.error("Error en GET traslados:", error);
+    return res.status(500).json({
+      message: "Error al obtener traslados",
+      error: error.message,
+    });
+  }
+});
+
 
 module.exports = router;

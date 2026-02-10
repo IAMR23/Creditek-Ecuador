@@ -69,6 +69,8 @@ import MisEntregasPendientes from "./pages/Logistica/MisEntregasPendientes";
 import MisEntregasRealizadas from "./pages/Logistica/MisEntregasRealizadas";
 import EntregasRepartidores from "./pages/Logistica/EntregasRepartidores";
 import EntregasTotales from "./pages/Logistica/ResumenEntregas";
+import CrearTraslado from "./pages/Vendedores/CrearTraslado";
+import TrasladosList from "./pages/Vendedores/TrasladosList";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -157,7 +159,7 @@ function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="ventas-completas" element={<VentasCompletas />} />
               <Route path="usuarios" element={<Usuarios />} />
-              <Route path="agencias" element={<Agencias />} />
+              <Route path="agencias" element={ <Agencias />} />
               <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
               <Route path="entregas" element={<Entregas />} />
               <Route
@@ -287,6 +289,10 @@ function App() {
             />
 
             <Route path="/seleccionar-modo" element={<SeleccionarModo />} />
+            <Route path="/crear-traslado" element={<CrearTraslado />} />
+            <Route path="/mis-traslados" element={<TrasladosList />} />
+
+            <Route path="*" element={<h1 className="text-center mt-10">404 - Página no encontrada</h1>} />
           </Routes>
         </main>
 

@@ -44,6 +44,11 @@ const Venta = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    semana : {
+      type
+        : DataTypes.INTEGER,
+      allowNull: true,
+    }
   },
   {
     tableName: "ventas",

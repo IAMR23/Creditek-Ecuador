@@ -7,6 +7,24 @@ const { validarCedulaEC } = require("../../middleware/validacionCedula");
 const DispositivoMarca = require("../../models/DispositivoMarca");
 const Modelo = require("../../models/Modelo");
 
+
+// 🔹 Calcular la semana según fecha (jueves-miércoles)
+function calcularSemana(fecha) {
+  const f = new Date(fecha);
+  const yearStart = new Date(f.getFullYear(), 0, 1); // 1 de enero del año
+  const dayOfWeek = yearStart.getDay(); // 0=domingo ... 6=sábado
+  // días hasta primer jueves
+  const diasHastaJueves = (4 - dayOfWeek + 7) % 7;
+  const primerJueves = new Date(yearStart);
+  primerJueves.setDate(yearStart.getDate() + diasHastaJueves);
+
+  // diferencia de días
+  const diffDias = Math.floor((f - primerJueves) / (1000 * 60 * 60 * 24));
+  const semana = Math.floor(diffDias / 7) + 1;
+  return semana;
+}
+
+
 const crearVentaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -60,6 +78,7 @@ const crearVentaCompleta = async (req, res) => {
         origenId: venta.origenId,
         observacion: venta.observacion,
         fecha: venta.fecha,
+        semana: calcularSemana(venta.fecha), 
         validada: true,
         fotoValidacion: fotoUrl,
       },

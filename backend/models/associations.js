@@ -210,6 +210,36 @@ UsuarioAgenciaEntrega.belongsTo(Entrega, {
 
 
 //traslados 
+// Traslado - Detalle
+Traslado.hasMany(DetalleTraslado, {
+  foreignKey: "trasladoId",
+  as: "detalles",
+});
 
-Traslado.hasMany(DetalleTraslado, { foreignKey: "trasladoId" });
-DetalleTraslado.belongsTo(Traslado, { foreignKey: "trasladoId" });
+DetalleTraslado.belongsTo(Traslado, {
+  foreignKey: "trasladoId",
+});
+
+// Traslado - Agencia
+Traslado.belongsTo(Agencia, {
+  foreignKey: "agencia_origen_id",
+  as: "agenciaOrigen",
+});
+
+Traslado.belongsTo(Agencia, {
+  foreignKey: "agencia_destino_id",
+  as: "agenciaDestino",
+});
+
+
+
+// DetalleTraslado relaciones faltantes (IMPORTANTE)
+DetalleTraslado.belongsTo(DispositivoMarca, {
+  foreignKey: "dispositivoMarcaId",
+  as: "dispositivoMarca",
+});
+
+DetalleTraslado.belongsTo(Modelo, {
+  foreignKey: "modeloId",
+  as: "modelo",
+});
