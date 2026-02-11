@@ -471,6 +471,8 @@ ${
               <option value="Fernando">Fernando</option>
               <option value="Mateo">Mateo</option>
               <option value="Raul">Raul</option>
+              <option value="Alexis">Alexis</option>
+              <option value="Steeven Chavez">Steeven Chavez</option>
               <option value="Steeven Furgo">Steeven Furgo</option>
             </select>
           </div>
