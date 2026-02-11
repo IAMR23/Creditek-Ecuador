@@ -96,7 +96,7 @@ const crearVentaCompleta = async (req, res) => {
     }
 
     const dispositivoId = dispositivoMarca.dispositivoId;
-    // 🔹 Calcular cierreCaj  a
+    // 🔹 Calcular cierreCaja
     let cierreCaja = "CONTADO"; // valor por defecto
     if (detalle.formaPagoId === 1) {
       // crédito

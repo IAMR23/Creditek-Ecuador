@@ -120,6 +120,27 @@ const editarVentaCompleta = async (req, res) => {
 
     const margen = Number((precioVendedor + alcance - pvp1).toFixed(2));
 
+    const dispositivoMarca = await DispositivoMarca.findByPk(
+      detalle.dispositivoMarcaId,
+      { transaction: t },
+    );
+
+    if (!dispositivoMarca) {
+      throw new Error("DispositivoMarca no existe");
+    }
+
+    const dispositivoId = dispositivoMarca.dispositivoId;
+
+    let cierreCaja = "CONTADO"; // valor por defecto
+    if (detalle.formaPagoId === 1) {
+      // crédito
+      if (dispositivoId === 1) {
+        cierreCaja = "CREDITV";
+      } else if (dispositivoId === 2) {
+        cierreCaja = "UPHONE";
+      }
+    }
+
     await detalleDB.update(
       {
         cantidad: detalle.cantidad,
@@ -130,6 +151,7 @@ const editarVentaCompleta = async (req, res) => {
         modeloId: detalle.modeloId,
         formaPagoId: detalle.formaPagoId,
         entrada: detalle.entrada,
+        cierreCaja: cierreCaja,
         alcance: detalle.alcance,
         contrato: detalle.contrato,
         observacionDetalle: detalle.observacionDetalle,
