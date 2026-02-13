@@ -323,6 +323,7 @@ export default function EditarGestion() {
               "6408",
               "9815",
               "1048",
+              "3430"
             ].map((ext) => (
               <label
                 key={ext}
