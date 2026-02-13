@@ -27,3 +27,4 @@ const Dispositivo = sequelize.define(
 );
 
 module.exports = Dispositivo;
+  

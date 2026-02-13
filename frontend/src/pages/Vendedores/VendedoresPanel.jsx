@@ -62,14 +62,29 @@ function VendedorPanel() {
       path: "/crear-traslado",
     },
 
-        {
+    {
       label: "Logística",
       title: "Mis Traslados",
       desc: "Consulta tus traslados",
       icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
       path: "/mis-traslados",
     },
+
+        {
+      label: "Call Center",
+      title: "Registrar Prospectos",
+      desc: "Crea gestiones de prospectos",
+      icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
+      path: "/gestion",
+    },
     
+        {
+      label: "Call Center",
+      title: "Mis Gestiones",
+      desc: "Revisar todas mis gestiones",
+      icon: <MdLocalShipping className="w-10 h-10 text-green-600" />,
+      path: "/mis-gestiones",
+    },
   ];
 
   const Card = ({ label, title, desc, icon, path }) => (

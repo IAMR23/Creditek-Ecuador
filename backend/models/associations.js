@@ -24,6 +24,7 @@ const DetalleEntrega = require('./DetalleEntrega');
 const UsuarioAgenciaEntrega = require('./UsuarioAgenciaEntrega');
 const Traslado = require('./Traslado');
 const DetalleTraslado = require('./DetalleTraslado');
+const Gestion = require('./Gestion');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
@@ -242,4 +243,27 @@ DetalleTraslado.belongsTo(DispositivoMarca, {
 DetalleTraslado.belongsTo(Modelo, {
   foreignKey: "modeloId",
   as: "modelo",
+});
+
+
+/* GESTIONES */
+
+Gestion.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+Gestion.belongsTo(Dispositivo, {
+  foreignKey: "dispositivoId",
+  as: "dispositivo",
+});
+
+UsuarioAgencia.hasMany(Gestion, {
+  foreignKey: "usuarioAgenciaId",
+  as: "gestiones",
+});
+
+Dispositivo.hasMany(Gestion, {
+  foreignKey: "dispositivoId",
+  as: "gestiones",
 });

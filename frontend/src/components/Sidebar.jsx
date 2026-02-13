@@ -54,6 +54,11 @@ export default function Sidebar() {
           icon: <BarChart3 size={20} />,
           path: "reporte-entregas",
         },
+                {
+          label: "Revisar Gestiones",
+          icon: <BarChart3 size={20} />,
+          path: "revision-gestiones",
+        },
       ],
     },
 

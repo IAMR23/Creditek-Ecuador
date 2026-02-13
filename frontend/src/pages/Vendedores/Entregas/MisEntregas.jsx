@@ -37,11 +37,6 @@ export default function MisEntregas() {
     }
   }, []);
 
- 
- 
-
-
-  
   // ==============================
   // Fetch principal con paginación
   // ==============================
@@ -62,10 +57,12 @@ export default function MisEntregas() {
       const ventas = data.entrega || [];
       const resultado = ventas.map((entrega) => ({
         id: entrega.id,
-        Fecha: entrega.dia + " " + entrega.fecha ?? "",
-
+        Fecha: `${entrega.dia ?? ""} ${entrega.fecha ?? ""}`,
         Cliente: entrega.cliente ?? "",
-Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? ""}`.toUpperCase().trim(),
+        Dispositivo:
+          `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? ""}`
+            .toUpperCase()
+            .trim(),
         Precio:
           entrega.precioVendedor != null ? `$${entrega.precioVendedor}` : "",
         "Forma Pago": entrega.formaPago ?? "",
@@ -73,8 +70,8 @@ Dispositivo: `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? "
         Alcance: entrega.alcance ?? "",
         Estado: entrega.estado ?? "",
         "Observacion de Logistica": entrega.observacionLogistica ?? "",
-        "Fecha y hora de asignacion" : entrega.fechaHoraAsignacion ?? "",
-        "Horario de entrega" : entrega.horaEstimadaEntrega ?? "",
+        "Fecha y hora de asignacion": entrega.fechaHoraAsignacion ?? "",
+        "Horario de entrega": entrega.horaEstimadaEntrega ?? "",
       }));
 
       setFilas(resultado);

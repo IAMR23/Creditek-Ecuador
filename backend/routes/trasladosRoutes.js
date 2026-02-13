@@ -11,6 +11,7 @@ const Marca = require("../models/Marca");
 const Modelo = require("../models/Modelo");
 const { Op } = require("sequelize");
 
+
 router.post("/", async (req, res) => {
   const t = await sequelize.transaction();
 
@@ -21,6 +22,7 @@ router.post("/", async (req, res) => {
       agencia_destino_id,
       agencia_origen_id,
       detalles,
+      obsequios, // 👈 nuevo
     } = req.body;
 
     // Validación básica
@@ -51,7 +53,20 @@ router.post("/", async (req, res) => {
       transaction: t,
     });
 
-    // 3️⃣ Confirmar
+    // 3️⃣ Crear obsequios (si existen)
+    if (obsequios && Array.isArray(obsequios) && obsequios.length > 0) {
+      const obsequiosConTrasladoId = obsequios.map((item) => ({
+        obsequioId: item.obsequioId,
+        cantidad: item.cantidad || 1,
+        trasladoId: traslado.id,
+      }));
+
+      await TrasladoObsequio.bulkCreate(obsequiosConTrasladoId, {
+        transaction: t,
+      });
+    }
+
+    // 4️⃣ Confirmar transacción
     await t.commit();
 
     return res.status(201).json({
@@ -68,6 +83,7 @@ router.post("/", async (req, res) => {
     });
   }
 });
+
 
 router.get("/", async (req, res) => {
   try {

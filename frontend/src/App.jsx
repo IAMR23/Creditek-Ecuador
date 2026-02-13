@@ -71,6 +71,9 @@ import EntregasRepartidores from "./pages/Logistica/EntregasRepartidores";
 import EntregasTotales from "./pages/Logistica/ResumenEntregas";
 import CrearTraslado from "./pages/Vendedores/CrearTraslado";
 import TrasladosList from "./pages/Vendedores/TrasladosList";
+import Gestion from "./pages/Vendedores/Gestion";
+import MisGestiones from "./pages/Vendedores/MisGestiones";
+import RevisionGestiones from "./pages/Admin/RevisionGestiones";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -162,6 +165,7 @@ function App() {
               <Route path="agencias" element={ <Agencias />} />
               <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
               <Route path="entregas" element={<Entregas />} />
+              <Route path="revision-gestiones" element={<RevisionGestiones />} />
               <Route
                 path="entrega-logistica/:id"
                 element={<DetalleEntrega />}
@@ -291,6 +295,11 @@ function App() {
             <Route path="/seleccionar-modo" element={<SeleccionarModo />} />
             <Route path="/crear-traslado" element={<CrearTraslado />} />
             <Route path="/mis-traslados" element={<TrasladosList />} />
+
+            {/* Call center */}
+            <Route path="/gestion" element={<Gestion />} />
+            <Route path="/mis-gestiones" element={<MisGestiones />} />
+            
 
             <Route path="*" element={<h1 className="text-center mt-10">404 - Página no encontrada</h1>} />
           </Routes>
