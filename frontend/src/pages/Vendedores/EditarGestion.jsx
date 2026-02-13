@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { jwtDecode } from "jwt-decode";
 import { FaPlus, FaSave, FaTrash } from "react-icons/fa";
 import Swal from "sweetalert2";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { jwtDecode } from "jwt-decode";
 
-export default function Gestion() {
+export default function EditarGestion() {
   const navigate = useNavigate();
+  const { id } = useParams();
 
-  const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [dispositivos, setDispositivos] = useState([]);
+  const [usuarioInfo, setUsuarioInfo] = useState(null);
 
   const [form, setForm] = useState({
     usuarioAgenciaId: "",
@@ -25,13 +26,6 @@ export default function Gestion() {
     observacion: "",
   });
 
-  const [otrasCedulas, setOtrasCedulas] = useState([
-    { cedula: "", solicitud: "NINGUNA" },
-  ]);
-
-  /* ==============================
-      DECODIFICAR TOKEN
-  ============================== */
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -50,6 +44,10 @@ export default function Gestion() {
     }
   }, []);
 
+  const [otrasCedulas, setOtrasCedulas] = useState([
+    { cedula: "", solicitud: "APROBADO" },
+  ]);
+
   useEffect(() => {
     const obtenerDispositivos = async () => {
       try {
@@ -64,6 +62,49 @@ export default function Gestion() {
   }, []);
 
   /* ==============================
+      OBTENER GESTION POR ID (GET)
+  ============================== */
+  useEffect(() => {
+    const obtenerGestion = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/gestion/${id}`);
+        const data = res.data;
+
+        setForm({
+          usuarioAgenciaId: data.usuarioAgenciaId || "",
+          celularGestionado: data.celularGestionado || "",
+          cedulaGestionado: data.cedulaGestionado || "",
+          extension: data.extension || "",
+          dispositivoId: data.dispositivoId || "",
+          solicitud: data.solicitud || "",
+          origen: data.origen || "",
+          region: data.region || "",
+          accion: data.accion || "",
+          observacion: data.observacion || "",
+        });
+
+        if (data.accion === "OTRA_CEDULA" && Array.isArray(data.otrasCedulas)) {
+          setOtrasCedulas(
+            data.otrasCedulas.length > 0
+              ? data.otrasCedulas
+              : [{ cedula: "", solicitud: "APROBADO" }],
+          );
+        }
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "No se pudo cargar la gestión",
+        });
+      }
+    };
+
+    if (id) {
+      obtenerGestion();
+    }
+  }, [id]);
+
+  /* ==============================
       MANEJO GENERAL
   ============================== */
   const handleChange = (e) => {
@@ -73,8 +114,28 @@ export default function Gestion() {
     });
   };
 
+  const handleNumericChange = (e) => {
+    const { name, value } = e.target;
+    const numericValue = value.replace(/\D/g, "");
+
+    if (numericValue.length <= 10) {
+      setForm({
+        ...form,
+        [name]: numericValue,
+      });
+    }
+  };
+
+  /* ==============================
+      OTRAS CEDULAS
+  ============================== */
   const handleCedulaChange = (index, field, value) => {
     const nuevas = [...otrasCedulas];
+
+    if (field === "cedula") {
+      value = value.replace(/\D/g, "").slice(0, 10);
+    }
+
     nuevas[index][field] = value;
     setOtrasCedulas(nuevas);
   };
@@ -89,35 +150,35 @@ export default function Gestion() {
   };
 
   /* ==============================
-      SUBMIT
+      SUBMIT (PUT)
   ============================== */
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validación celular (obligatorio)
+    // Validación celular
     if (form.celularGestionado.length !== 10) {
       return Swal.fire({
         icon: "warning",
         title: "Celular inválido",
-        text: "El celular debe tener exactamente 10 dígitos numéricos.",
+        text: "El celular debe tener exactamente 10 dígitos.",
       });
     }
 
-    // Validación cédula (opcional)
+    // Validación cédula opcional
     if (form.cedulaGestionado && form.cedulaGestionado.length !== 10) {
       return Swal.fire({
         icon: "warning",
         title: "Cédula inválida",
-        text: "La cédula debe tener exactamente 10 dígitos numéricos.",
+        text: "La cédula debe tener exactamente 10 dígitos.",
       });
     }
 
+
     const result = await Swal.fire({
-      title: "¿Confirmar gestión?",
-      text: "Se registrará la gestión en el sistema.",
+      title: "¿Actualizar gestión?",
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "Sí, guardar",
+      confirmButtonText: "Sí, actualizar",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#16a34a",
     });
@@ -131,23 +192,21 @@ export default function Gestion() {
         dispositivoId: form.dispositivoId ? Number(form.dispositivoId) : null,
         otrasCedulas:
           form.accion === "OTRA_CEDULA"
-            ? otrasCedulas.filter(
-                (c) => c.cedula.trim() !== "" && c.cedula.length === 10,
-              )
+            ? otrasCedulas.filter((c) => c.cedula && c.cedula.length === 10)
             : null,
       };
 
       Swal.fire({
-        title: "Guardando...",
+        title: "Actualizando...",
         allowOutsideClick: false,
         didOpen: () => Swal.showLoading(),
       });
 
-      await axios.post(`${API_URL}/api/gestion`, payload);
+      await axios.put(`${API_URL}/api/gestion/${id}`, payload);
 
       await Swal.fire({
         icon: "success",
-        title: "Gestión creada",
+        title: "Gestión actualizada",
         confirmButtonColor: "#16a34a",
       });
 
@@ -156,22 +215,7 @@ export default function Gestion() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: error.response?.data?.message || "Ocurrió un error al guardar.",
-      });
-    }
-  };
-
-  const handleNumericChange = (e) => {
-    const { name, value } = e.target;
-
-    // Solo números
-    const numericValue = value.replace(/\D/g, "");
-
-    // Máximo 10 dígitos
-    if (numericValue.length <= 10) {
-      setForm({
-        ...form,
-        [name]: numericValue,
+        text: error.response?.data?.message || "Ocurrió un error.",
       });
     }
   };
@@ -248,6 +292,23 @@ export default function Gestion() {
           </div>
         </div>
 
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-600">Origen *</label>
+          <select
+            name="origen"
+            value={form.origen}
+            onChange={handleChange}
+            required
+            className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
+          >
+            <option value="">Seleccionar</option>
+            <option value="WHATSAPP">WHATSAPP</option>
+            <option value="MESSENGER">MESSENGER</option>
+            <option value="DIFUSIONES">DIFUSIONES</option>
+            <option value="BASE_DE_DATOS">BASE DE DATOS</option>
+          </select>
+        </div>
+
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">
             Extensión
@@ -266,11 +327,11 @@ export default function Gestion() {
               <label
                 key={ext}
                 className={`flex items-center justify-center border rounded-xl px-3 py-2 cursor-pointer transition text-sm font-medium
-          ${
-            form.extension === ext
-              ? "border-green-600 bg-green-50 text-green-700"
-              : "border-gray-300 hover:border-green-400"
-          }`}
+            ${
+              form.extension === ext
+                ? "border-green-600 bg-green-50 text-green-700"
+                : "border-gray-300 hover:border-green-400"
+            }`}
               >
                 <input
                   type="radio"
@@ -332,25 +393,6 @@ export default function Gestion() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
-                Origen *
-              </label>
-              <select
-                name="origen"
-                value={form.origen}
-                onChange={handleChange}
-                required
-                className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
-              >
-                <option value="">Seleccionar</option>
-                <option value="WHATSAPP">WHATSAPP</option>
-                <option value="MESSENGER">MESSENGER</option>
-                <option value="DIFUSIONES">DIFUSIONES</option>
-                <option value="BASE_DE_DATOS">BASE DE DATOS</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-600">
                 Región *
               </label>
               <select
@@ -383,11 +425,11 @@ export default function Gestion() {
                 <label
                   key={op.value}
                   className={`flex items-center gap-2 border rounded-xl px-3 py-2 cursor-pointer transition
-        ${
-          form.accion === op.value
-            ? "border-green-600 bg-green-50"
-            : "border-gray-300"
-        }`}
+          ${
+            form.accion === op.value
+              ? "border-green-600 bg-green-50"
+              : "border-gray-300"
+          }`}
                 >
                   <input
                     type="radio"
@@ -415,11 +457,7 @@ export default function Gestion() {
                   type="text"
                   value={item.cedula}
                   onChange={(e) =>
-                    handleCedulaChange(
-                      index,
-                      "cedula",
-                      e.target.value.replace(/\D/g, ""),
-                    )
+                    handleCedulaChange(index, "cedula", e.target.value)
                   }
                   placeholder="Nueva cédula"
                   maxLength={10}

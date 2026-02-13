@@ -17,12 +17,12 @@ const Gestion = sequelize.define(
 
     celularGestionado: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     cedulaGestionado: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     extension: {
@@ -36,7 +36,7 @@ const Gestion = sequelize.define(
     }, 
 
     solicitud: {
-      type: DataTypes.ENUM("APROBADO", "DENEGADO"),
+      type: DataTypes.ENUM("NINGUNA" , "APROBADO", "DENEGADO"),
       allowNull: false,
     },
 
@@ -51,7 +51,7 @@ const Gestion = sequelize.define(
     },
 
     region: {
-      type: DataTypes.ENUM("COSTA", "SIERRA", "ORIENTE"),
+      type: DataTypes.ENUM("SIN_ESPECIFICAR", "COSTA", "SIERRA", "ORIENTE"),
       allowNull: false,
     },
 
@@ -60,7 +60,7 @@ const Gestion = sequelize.define(
         "VENTA",
         "ENTREGA",
         "VOLVER_A_LLAMAR",
-        "REGESTION",
+        "GESTION",
         "NO_CONTESTA",
         "OTRA_CEDULA"
       ),

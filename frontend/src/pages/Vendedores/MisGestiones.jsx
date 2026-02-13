@@ -4,6 +4,8 @@ import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import { Eye } from "lucide-react";
+import { FaPen } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 
 export default function MisGestiones() {
   const [filas, setFilas] = useState([]);
@@ -15,7 +17,7 @@ export default function MisGestiones() {
 
   const [gestionSeleccionada, setGestionSeleccionada] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
-
+const navigate = useNavigate(); 
   /* ==============================
       DECODIFICAR TOKEN
   ============================== */
@@ -31,18 +33,12 @@ export default function MisGestiones() {
     }
   }, []);
 
-  /* ==============================
-      FECHAS POR DEFECTO (HOY)
-  ============================== */
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFechaInicio(hoyLocal);
     setFechaFin(hoyLocal);
   }, []);
 
-  /* ==============================
-      OBTENER GESTIONES
-  ============================== */
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
@@ -91,9 +87,6 @@ export default function MisGestiones() {
     }
   }, [fechaInicio, fechaFin, usuarioInfo]);
 
-  /* ==============================
-      VER DETALLE
-  ============================== */
   const handleVerGestion = (id) => {
     const gestion = filas.find((f) => f.id === id);
     setGestionSeleccionada(gestion);
@@ -158,6 +151,14 @@ export default function MisGestiones() {
                   >
                     <Eye size={16} />
                   </button>
+
+                              <button
+                    className="bg-blue-600 text-white px-2 py-1 rounded"
+                    onClick={() => navigate(`/mi-gestion/${f.id}`)}
+                  >
+                    <FaPen size={16} />
+                  </button>
+
                 </td>
               </tr>
             ))}

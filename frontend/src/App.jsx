@@ -74,6 +74,7 @@ import TrasladosList from "./pages/Vendedores/TrasladosList";
 import Gestion from "./pages/Vendedores/Gestion";
 import MisGestiones from "./pages/Vendedores/MisGestiones";
 import RevisionGestiones from "./pages/Admin/RevisionGestiones";
+import EditarGestion from "./pages/Vendedores/EditarGestion";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -299,6 +300,7 @@ function App() {
             {/* Call center */}
             <Route path="/gestion" element={<Gestion />} />
             <Route path="/mis-gestiones" element={<MisGestiones />} />
+            <Route path="/mi-gestion/:id" element={<EditarGestion />} />
             
 
             <Route path="*" element={<h1 className="text-center mt-10">404 - Página no encontrada</h1>} />

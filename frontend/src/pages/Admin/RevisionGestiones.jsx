@@ -10,7 +10,9 @@ import {
   FaTimesCircle,
   FaClock,
   FaIdCard,
+  FaFileExcel,
 } from "react-icons/fa";
+import * as XLSX from "xlsx";
 
 const RevisionGestiones = () => {
   const [gestiones, setGestiones] = useState([]);
@@ -20,10 +22,68 @@ const RevisionGestiones = () => {
     obtenerGestiones();
   }, []);
 
+  const descargarExcel = () => {
+  if (!gestiones || gestiones.length === 0) {
+    Swal.fire("Atención", "No hay datos para exportar", "warning");
+    return;
+  }
+
+  // 🔹 1. Detectar máximo número de otras cédulas
+  const maxOtras = Math.max(
+    ...gestiones.map((g) =>
+      Array.isArray(g.otrasCedulas) ? g.otrasCedulas.length : 0
+    )
+  );
+
+  // 🔹 revealing dynamic columns
+  const data = gestiones.map((g) => {
+    const fila = {
+      Fecha: formatDate(g.createdAt),
+      Gestor: g.usuarioAgencia?.usuario?.nombre || "",
+      Extension: g.extension || "",
+      Celular: g.celularGestionado || "",
+      Cedula_Principal: g.cedulaGestionado || "",
+      Agencia: g.usuarioAgencia?.agencia?.nombre || "",
+      Region: g.region || "",
+      Dispositivo: g.dispositivo?.nombre || "",
+      Origen: g.origen || "",
+      Solicitud_Principal: g.solicitud || "",
+      Accion: g.accion?.replaceAll("_", " ") || "",
+      Observacion: g.observacion || "",
+    };
+
+    // 🔹 Crear columnas dinámicas
+    for (let i = 0; i < maxOtras; i++) {
+      const cedulaObj =
+        Array.isArray(g.otrasCedulas) && g.otrasCedulas[i]
+          ? g.otrasCedulas[i]
+          : null;
+
+      fila[`Cedula_${i + 1}`] = cedulaObj?.cedula || "";
+      fila[`Solicitud_${i + 1}`] = cedulaObj?.solicitud || "";
+    }
+
+    return fila;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Gestiones");
+
+  const nombreArchivo = `Reporte_Gestiones_${new Date()
+    .toISOString()
+    .slice(0, 10)}.xlsx`;
+
+  XLSX.writeFile(workbook, nombreArchivo);
+};
+
+
+
   const obtenerGestiones = async () => {
     try {
       const { data } = await axios.get(`${API_URL}/api/gestion`);
       setGestiones(data);
+      console.log(data);
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -69,130 +129,157 @@ const RevisionGestiones = () => {
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center">
-        <div className="text-gray-500 animate-pulse">
-          Cargando gestiones...
-        </div>
+        <div className="text-gray-500 animate-pulse">Cargando gestiones...</div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-
       {/* HEADER */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800">
           Dashboard de Gestiones
         </h1>
-        <p className="text-gray-500">
-          Seguimiento comercial en tiempo real
-        </p>
+        <p className="text-gray-500">Seguimiento comercial en tiempo real</p>
       </div>
+
+      <button
+  onClick={descargarExcel}
+  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+>
+  <FaFileExcel size={18} />
+</button>
+
 
       {/* CONTENEDOR */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 uppercase text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4 text-left">Fecha</th>
-              <th className="px-6 py-4 text-left">Usuario</th>
+              <th className="px-6 py-4 text-left">Gestor</th>
+              <th className="px-6 py-4 text-left">Celular Gestionado</th>
+              <th className="px-6 py-4 text-left">Cedula Gestionada</th>
               <th className="px-6 py-4 text-left">Agencia</th>
               <th className="px-6 py-4 text-left">Dispositivo</th>
               <th className="px-6 py-4 text-left">Solicitud</th>
               <th className="px-6 py-4 text-left">Acción</th>
               <th className="px-6 py-4 text-left">Otras Cédulas</th>
+              <th className="px-6 py-4 text-left">Observacion</th>
             </tr>
           </thead>
 
+          <tbody className="divide-y divide-gray-100">
+            {gestiones.map((g) => (
+              <tr
+                key={g.id}
+                className="hover:bg-gray-50 transition-all duration-200"
+              >
+                {/* FECHA */}
+                <td className="px-6 py-6">
+                  <div className="font-semibold text-gray-800">
+                    {formatDate(g.createdAt)}
+                  </div>
+                </td>
 
-<tbody className="divide-y divide-gray-100">
-  {gestiones.map((g) => (
-    <tr
-      key={g.id}
-      className="hover:bg-gray-50 transition-all duration-200"
-    >
-      {/* FECHA */}
-      <td className="px-6 py-6">
-        <div className="font-semibold text-gray-800">
-          {formatDate(g.createdAt)}
-        </div>
+                {/* USUARIO */}
+                <td className="px-6 py-6">
+                  <div className="font-medium text-gray-800">
+                    {g.usuarioAgencia.usuario.nombre}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Ext: {g.extension}
+                  </div>
+                </td>
+
+                <td className="px-6 py-6">
+                  <div className="font-medium text-gray-800">
+                    {g.celularGestionado}
+                  </div>
+                </td>
+
+                <td className="px-6 py-6">
+                  <div className="font-medium text-gray-800">
+                    {g.cedulaGestionado}
+                  </div>
+                </td>
+
+                {/* AGENCIA */}
+                <td className="px-6 py-6">
+                  <div className="font-medium text-gray-800">
+                    {g.usuarioAgencia.agencia.nombre}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Región: {g.region}
+                  </div>
+                </td>
+
+                {/* DISPOSITIVO */}
+                <td className="px-6 py-6">
+                  <div className="font-medium text-gray-700">
+                    {g.dispositivo.nombre}
+                  </div>
+                  <div className="text-xs text-gray-400">{g.origen}</div>
+                </td>
+
+                {/* SOLICITUD */}
+                <td className="px-6 py-6">
+                  <span
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                      g.solicitud === "APROBADO"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-red-100 text-red-600"
+                    }`}
+                  >
+                    {g.solicitud}
+                  </span>
+                </td>
+
+                {/* ACCION */}
+                <td className="px-6 py-6">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                    {g.accion.replaceAll("_", " ")}
+                  </span>
+                </td>
+
+                {/* OTRAS CEDULAS */}
+                <td className="px-6 py-6">
        
-      </td>
 
-      {/* USUARIO */}
-      <td className="px-6 py-6">
-        <div className="font-medium text-gray-800">
-          {g.usuarioAgencia.usuario.nombre}
-        </div>
-        <div className="text-xs text-gray-400">
-          Ext: {g.extension}
-        </div>
-      </td>
-
-      {/* AGENCIA */}
-      <td className="px-6 py-6">
-        <div className="font-medium text-gray-800">
-          {g.usuarioAgencia.agencia.nombre}
-        </div>
-        <div className="text-xs text-gray-400">
-          Región: {g.region}
-        </div>
-      </td>
-
-      {/* DISPOSITIVO */}
-      <td className="px-6 py-6">
-        <div className="font-medium text-gray-700">
-          {g.dispositivo.nombre}
-        </div>
-        <div className="text-xs text-gray-400">
-          {g.origen}
-        </div>
-      </td>
-
-      {/* SOLICITUD */}
-      <td className="px-6 py-6">
+<td className="px-6 py-6">
+  {Array.isArray(g.otrasCedulas) && g.otrasCedulas.length > 0 ? (
+    <div className="flex flex-wrap gap-2">
+      {g.otrasCedulas.map((c, i) => (
         <span
-          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
-            g.solicitud === "APROBADO"
+          key={i}
+          className={`px-2 py-1 text-xs rounded-md font-medium ${
+            c.solicitud === "APROBADO"
               ? "bg-emerald-100 text-emerald-700"
-              : "bg-red-100 text-red-600"
+              : "bg-red-100 text-red-700"
           }`}
         >
-          {g.solicitud}
+          {c.cedula} - {c.solicitud}
         </span>
-      </td>
+      ))}
+    </div>
+  ) : (
+    <span className="text-gray-300 text-sm">—</span>
+  )}
+</td>
 
-      {/* ACCION */}
-      <td className="px-6 py-6">
-        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-          {g.accion.replaceAll("_", " ")}
-        </span>
-      </td>
 
-      {/* OTRAS CEDULAS */}
-      <td className="px-6 py-6">
-        {g.otrasCedulas?.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {g.otrasCedulas.map((c, i) => (
-              <span
-                key={i}
-                className="px-2 py-1 text-xs rounded-md bg-purple-100 text-purple-700 font-medium"
-              >
-                {c}
-              </span>
+                </td>
+
+                <td className="px-6 py-6">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ">
+                    {g.observacion}
+                  </span>
+                </td>
+              </tr>
             ))}
-          </div>
-        ) : (
-          <span className="text-gray-300 text-sm">—</span>
-        )}
-      </td>
-    </tr>
-  ))}
-</tbody>
-
+          </tbody>
         </table>
-
       </div>
     </div>
   );

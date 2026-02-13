@@ -9,7 +9,6 @@ const Usuario = require("../../models/Usuario");
 const Agencia = require("../../models/Agencia");
 
 
-// 🔹 CREAR GESTION
 router.post("/", async (req, res) => {
   try {
     const {
@@ -21,28 +20,43 @@ router.post("/", async (req, res) => {
       solicitud,
       origen,
       region,
-      accion, 
+      accion,
       observacion,
       otrasCedulas,
     } = req.body;
 
-    // 🔎 Validaciones básicas
-    if (!usuarioAgenciaId || !celularGestionado || !cedulaGestionado) {
+    if (!usuarioAgenciaId || !celularGestionado) {
       return res.status(400).json({
         message: "Campos obligatorios faltantes",
       });
     }
 
-    // 🔥 Validación especial
+    let otrasCedulasValidadas = null;
+
     if (accion === "OTRA_CEDULA") {
-      if (!otrasCedulas || !Array.isArray(otrasCedulas) || otrasCedulas.length === 0) {
+      if (!Array.isArray(otrasCedulas)) {
         return res.status(400).json({
-          message: "Debe ingresar al menos una cédula adicional",
+          message: "otrasCedulas debe ser un arreglo",
         });
       }
+
+      for (const item of otrasCedulas) {
+        if (!item.cedula || !item.solicitud) {
+          return res.status(400).json({
+            message: "Cada cédula debe tener cedula y solicitud",
+          });
+        }
+
+        if (!["APROBADO", "DENEGADO"].includes(item.solicitud)) {
+          return res.status(400).json({
+            message: "La solicitud en otrasCedulas debe ser APROBADO o DENEGADO",
+          });
+        }
+      }
+
+      otrasCedulasValidadas = otrasCedulas;
     }
 
-    // Crear registro
     const nuevaGestion = await Gestion.create({
       usuarioAgenciaId,
       celularGestionado,
@@ -54,7 +68,7 @@ router.post("/", async (req, res) => {
       region,
       accion,
       observacion,
-      otrasCedulas: accion === "OTRA_CEDULA" ? otrasCedulas : null,
+      otrasCedulas: otrasCedulasValidadas,
     });
 
     return res.status(201).json(nuevaGestion);
@@ -164,9 +178,56 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const gestion = await Gestion.findByPk(id, {
+      include: [
+        {
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          include: [
+            {
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+            {
+              model: Agencia,
+              as: "agencia",
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
+        {
+          model: Dispositivo,
+          as: "dispositivo",
+          attributes: ["id", "nombre"],
+        },
+      ],
+    });
+
+    if (!gestion) {
+      return res.status(404).json({
+        message: "Gestión no encontrada",
+      });
+    }
+
+    return res.json(gestion);
+
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error al obtener gestión",
+      error: error.message,
+    });
+  }
+});
 
 
 // 🔹 ACTUALIZAR GESTION
+
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -179,23 +240,30 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    const {
-      accion,
-      otrasCedulas,
-    } = req.body;
+    const { accion, otrasCedulas } = req.body;
 
-    // Validación para OTRA_CEDULA
-    if (accion === "OTRA_CEDULA") {
-      if (!otrasCedulas || !Array.isArray(otrasCedulas) || otrasCedulas.length === 0) {
-        return res.status(400).json({
-          message: "Debe ingresar al menos una cédula adicional",
-        });
-      }
+    let otrasCedulasLimpias = null;
+
+    if (accion === "OTRA_CEDULA" && Array.isArray(otrasCedulas)) {
+      otrasCedulasLimpias = otrasCedulas
+        .filter(
+          (c) =>
+            c &&
+            typeof c.cedula === "string" &&
+            c.cedula.length === 10 &&
+            ["APROBADO", "DENEGADO"].includes(c.solicitud)
+        )
+        .map((c) => ({
+          cedula: c.cedula,
+          solicitud: c.solicitud,
+        }));
+
+
     }
 
     await gestion.update({
       ...req.body,
-      otrasCedulas: accion === "OTRA_CEDULA" ? otrasCedulas : null,
+      otrasCedulas: otrasCedulasLimpias,
     });
 
     return res.json(gestion);
@@ -207,6 +275,7 @@ router.put("/:id", async (req, res) => {
     });
   }
 });
+
 
 
 // 🔹 ELIMINAR GESTION
