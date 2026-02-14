@@ -23,61 +23,65 @@ const RevisionGestiones = () => {
   }, []);
 
   const descargarExcel = () => {
-  if (!gestiones || gestiones.length === 0) {
-    Swal.fire("Atención", "No hay datos para exportar", "warning");
-    return;
-  }
-
-  // 🔹 1. Detectar máximo número de otras cédulas
-  const maxOtras = Math.max(
-    ...gestiones.map((g) =>
-      Array.isArray(g.otrasCedulas) ? g.otrasCedulas.length : 0
-    )
-  );
-
-  // 🔹 revealing dynamic columns
-  const data = gestiones.map((g) => {
-    const fila = {
-      Fecha: formatDate(g.createdAt),
-      Gestor: g.usuarioAgencia?.usuario?.nombre || "",
-      Extension: g.extension || "",
-      Celular: g.celularGestionado || "",
-      Cedula_Principal: g.cedulaGestionado || "",
-      Agencia: g.usuarioAgencia?.agencia?.nombre || "",
-      Region: g.region || "",
-      Dispositivo: g.dispositivo?.nombre || "",
-      Origen: g.origen || "",
-      Solicitud_Principal: g.solicitud || "",
-      Accion: g.accion?.replaceAll("_", " ") || "",
-      Observacion: g.observacion || "",
-    };
-
-    // 🔹 Crear columnas dinámicas
-    for (let i = 0; i < maxOtras; i++) {
-      const cedulaObj =
-        Array.isArray(g.otrasCedulas) && g.otrasCedulas[i]
-          ? g.otrasCedulas[i]
-          : null;
-
-      fila[`Cedula_${i + 1}`] = cedulaObj?.cedula || "";
-      fila[`Solicitud_${i + 1}`] = cedulaObj?.solicitud || "";
+    if (!gestiones || gestiones.length === 0) {
+      Swal.fire("Atención", "No hay datos para exportar", "warning");
+      return;
     }
 
-    return fila;
-  });
+    // 🔹 1. Detectar máximo número de otras cédulas
+    const maxOtras = Math.max(
+      ...gestiones.map((g) =>
+        Array.isArray(g.otrasCedulas) ? g.otrasCedulas.length : 0,
+      ),
+    );
 
-  const worksheet = XLSX.utils.json_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Gestiones");
+    const data = gestiones.map((g) => {
+      const fechaObj = new Date(g.createdAt);
 
-  const nombreArchivo = `Reporte_Gestiones_${new Date()
-    .toISOString()
-    .slice(0, 10)}.xlsx`;
+      const fila = {
+        Fecha: fechaObj.toISOString().split("T")[0], // YYYY-MM-DD
+        Hora: fechaObj.toLocaleTimeString("es-EC", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        Gestor: g.usuarioAgencia?.usuario?.nombre || "",
+        Extension: g.extension || "",
+        Celular: g.celularGestionado || "",
+        Cedula_Principal: g.cedulaGestionado || "",
+        Agencia: g.usuarioAgencia?.agencia?.nombre || "",
+        Region: g.region || "",
+        Dispositivo: g.dispositivo?.nombre || "",
+        Origen: g.origen || "",
+        Solicitud_Principal: g.solicitud || "",
+        Accion: g.accion?.replaceAll("_", " ") || "",
+        Observacion: g.observacion || "",
+      };
 
-  XLSX.writeFile(workbook, nombreArchivo);
-};
+      // 🔹 Columnas dinámicas
+      for (let i = 0; i < maxOtras; i++) {
+        const cedulaObj =
+          Array.isArray(g.otrasCedulas) && g.otrasCedulas[i]
+            ? g.otrasCedulas[i]
+            : null;
 
+        fila[`Cedula_${i + 1}`] = cedulaObj?.cedula || "";
+        fila[`Solicitud_${i + 1}`] = cedulaObj?.solicitud || "";
+      }
 
+      return fila;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte Gestiones");
+
+    const nombreArchivo = `Reporte_Gestiones_${new Date()
+      .toISOString()
+      .slice(0, 10)}.xlsx`;
+
+    XLSX.writeFile(workbook, nombreArchivo);
+  };
 
   const obtenerGestiones = async () => {
     try {
@@ -136,20 +140,23 @@ const RevisionGestiones = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      {/* HEADER */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">
-          Dashboard de Gestiones
-        </h1>
-        <p className="text-gray-500">Seguimiento comercial en tiempo real</p>
-      </div>
+<div className="flex justify-between items-center ">
+  <div className="mb-8">
+    <h1 className="text-3xl font-bold text-gray-800">
+      Dashboard de Gestiones
+    </h1>
+    <p className="text-gray-500">
+      Seguimiento comercial en tiempo real
+    </p>
+  </div>
 
-      <button
-  onClick={descargarExcel}
-  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
->
-  <FaFileExcel size={18} />
-</button>
+  <button
+    onClick={descargarExcel}
+    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-3 rounded"
+  >
+    <FaFileExcel size={25} /> Descargar Excel
+  </button>
+</div>
 
 
       {/* CONTENEDOR */}
@@ -245,30 +252,27 @@ const RevisionGestiones = () => {
 
                 {/* OTRAS CEDULAS */}
                 <td className="px-6 py-6">
-       
-
-<td className="px-6 py-6">
-  {Array.isArray(g.otrasCedulas) && g.otrasCedulas.length > 0 ? (
-    <div className="flex flex-wrap gap-2">
-      {g.otrasCedulas.map((c, i) => (
-        <span
-          key={i}
-          className={`px-2 py-1 text-xs rounded-md font-medium ${
-            c.solicitud === "APROBADO"
-              ? "bg-emerald-100 text-emerald-700"
-              : "bg-red-100 text-red-700"
-          }`}
-        >
-          {c.cedula} - {c.solicitud}
-        </span>
-      ))}
-    </div>
-  ) : (
-    <span className="text-gray-300 text-sm">—</span>
-  )}
-</td>
-
-
+                  <td className="px-6 py-6">
+                    {Array.isArray(g.otrasCedulas) &&
+                    g.otrasCedulas.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {g.otrasCedulas.map((c, i) => (
+                          <span
+                            key={i}
+                            className={`px-2 py-1 text-xs rounded-md font-medium ${
+                              c.solicitud === "APROBADO"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {c.cedula} - {c.solicitud}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-sm">—</span>
+                    )}
+                  </td>
                 </td>
 
                 <td className="px-6 py-6">
