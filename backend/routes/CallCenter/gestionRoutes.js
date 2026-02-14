@@ -57,19 +57,36 @@ router.post("/", async (req, res) => {
       otrasCedulasValidadas = otrasCedulas;
     }
 
-    const nuevaGestion = await Gestion.create({
-      usuarioAgenciaId,
-      celularGestionado,
-      cedulaGestionado,
-      extension,
-      dispositivoId,
-      solicitud,
-      origen,
-      region,
-      accion,
-      observacion,
-      otrasCedulas: otrasCedulasValidadas,
-    });
+
+    // Normalizar region
+let regionNormalizada = "SIN_ESPECIFICAR";
+
+if (region && region.trim() !== "") {
+  regionNormalizada = region.trim();
+}
+
+// Normalizar solicitud
+let solicitudNormalizada = "NINGUNA";
+
+if (solicitud && solicitud.trim() !== "") {
+  solicitudNormalizada = solicitud.trim();
+}
+
+
+const nuevaGestion = await Gestion.create({
+  usuarioAgenciaId,
+  celularGestionado,
+  cedulaGestionado,
+  extension,
+  dispositivoId,
+  solicitud : solicitudNormalizada,
+  origen,
+  region: regionNormalizada,
+  accion,
+  observacion,
+  otrasCedulas: otrasCedulasValidadas,
+});
+
 
     return res.status(201).json(nuevaGestion);
 
@@ -261,10 +278,31 @@ router.put("/:id", async (req, res) => {
 
     }
 
-    await gestion.update({
-      ...req.body,
-      otrasCedulas: otrasCedulasLimpias,
-    });
+
+    let regionNormalizada = "SIN_ESPECIFICAR";
+
+if (req.body.region && req.body.region.trim() !== "") {
+  regionNormalizada = req.body.region.trim();
+}
+
+
+// Normalizar solicitud
+let solicitudNormalizada = "NINGUNA";
+
+if (req.body.solicitud && req.body.solicitud.trim() !== "") {
+  solicitudNormalizada = req.body.solicitud.trim();
+}
+
+
+
+await gestion.update({
+  ...req.body,
+  solicitud : solicitudNormalizada , 
+  region: regionNormalizada,
+  otrasCedulas: otrasCedulasLimpias,
+});
+
+
 
     return res.json(gestion);
 
