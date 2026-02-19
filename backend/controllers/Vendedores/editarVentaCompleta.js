@@ -139,7 +139,7 @@ const editarVentaCompleta = async (req, res) => {
       } else if (dispositivoId === 2) {
         cierreCaja = "UPHONE";
       }
-    }
+    } 
 
     await detalleDB.update(
       {

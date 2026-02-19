@@ -17,7 +17,7 @@ exports.getDashboardEntregas = async (req, res) => {
     // Ajustar fin del día
     fechaFin.setHours(23, 59, 59, 999);
 
-    const estados = ["Pendiente", "Transito", "Revisar", "Entregado", "No entregado"];
+    const estados = ["Pendiente", "Transito", "Revisar", "Entregado", "No Entregado"];
     const counts = {};
 
     for (const estado of estados) {

@@ -4,10 +4,9 @@ const router = express.Router();
 const Gestion = require("../../models/Gestion");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Dispositivo = require("../../models/Dispositivo");
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
 const Usuario = require("../../models/Usuario");
 const Agencia = require("../../models/Agencia");
-
 
 router.post("/", async (req, res) => {
   try {
@@ -49,7 +48,8 @@ router.post("/", async (req, res) => {
 
         if (!["APROBADO", "DENEGADO"].includes(item.solicitud)) {
           return res.status(400).json({
-            message: "La solicitud en otrasCedulas debe ser APROBADO o DENEGADO",
+            message:
+              "La solicitud en otrasCedulas debe ser APROBADO o DENEGADO",
           });
         }
       }
@@ -57,39 +57,35 @@ router.post("/", async (req, res) => {
       otrasCedulasValidadas = otrasCedulas;
     }
 
-
     // Normalizar region
-let regionNormalizada = "SIN_ESPECIFICAR";
+    let regionNormalizada = "SIN_ESPECIFICAR";
 
-if (region && region.trim() !== "") {
-  regionNormalizada = region.trim();
-}
+    if (region && region.trim() !== "") {
+      regionNormalizada = region.trim();
+    }
 
-// Normalizar solicitud
-let solicitudNormalizada = "NINGUNA";
+    // Normalizar solicitud
+    let solicitudNormalizada = "NINGUNA";
 
-if (solicitud && solicitud.trim() !== "") {
-  solicitudNormalizada = solicitud.trim();
-}
+    if (solicitud && solicitud.trim() !== "") {
+      solicitudNormalizada = solicitud.trim();
+    }
 
-
-const nuevaGestion = await Gestion.create({
-  usuarioAgenciaId,
-  celularGestionado,
-  cedulaGestionado,
-  extension,
-  dispositivoId,
-  solicitud : solicitudNormalizada,
-  origen,
-  region: regionNormalizada,
-  accion,
-  observacion,
-  otrasCedulas: otrasCedulasValidadas,
-});
-
+    const nuevaGestion = await Gestion.create({
+      usuarioAgenciaId,
+      celularGestionado,
+      cedulaGestionado,
+      extension,
+      dispositivoId,
+      solicitud: solicitudNormalizada,
+      origen,
+      region: regionNormalizada,
+      accion,
+      observacion,
+      otrasCedulas: otrasCedulasValidadas,
+    });
 
     return res.status(201).json(nuevaGestion);
-
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -98,7 +94,6 @@ const nuevaGestion = await Gestion.create({
     });
   }
 });
-
 
 router.get("/vendedor/:id", async (req, res) => {
   try {
@@ -129,24 +124,21 @@ router.get("/vendedor/:id", async (req, res) => {
         {
           model: Dispositivo,
           as: "dispositivo",
-           attributes: ["id", "nombre"],
+          attributes: ["id", "nombre"],
         },
       ],
       order: [["createdAt", "DESC"]],
     });
-
 
     return res.json({
       ok: true,
       total: gestiones.length,
       gestiones,
     });
-
-
   } catch (error) {
     console.error(error);
     return res.status(500).json({
-      ok: false,  
+      ok: false,
       message: "Error al generar reporte de gestiones",
       error: error.message,
     });
@@ -157,25 +149,68 @@ router.get("/vendedor/:id", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
+    const { fechaInicio, fechaFin, solicitud, origen, region , agenciaId} = req.query;
+    const where = {};
+
+    if (fechaInicio && fechaFin) {
+      const inicio = new Date(fechaInicio);
+      const fin = new Date(fechaFin);
+      fin.setDate(fin.getDate() + 1);
+
+      where.createdAt = {
+        [Op.gte]: inicio,
+        [Op.lt]: fin,
+      };
+    }
+
+    if (solicitud) {
+      where[Op.or] = [
+        {
+          solicitud: solicitud.toUpperCase(),
+        },
+        Sequelize.literal(`
+      EXISTS (
+        SELECT 1
+FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
+        WHERE elem->>'solicitud' = '${solicitud.toUpperCase()}'
+      )
+    `),
+      ];
+    }
+
+    // Filtro por origen
+    if (origen) {
+      where.origen = origen.toUpperCase();
+    }
+
+    // Filtro por región
+    if (region) {
+      where.region = region.toUpperCase();
+    }
+
     const gestiones = await Gestion.findAll({
+      where,
       include: [
         {
-          model: UsuarioAgencia,
-          as: "usuarioAgencia",
-          attributes: ["id"],
-          include: [
-            {
-              model: Usuario,
-              as: "usuario",
-              attributes: ["id", "nombre"], 
-            },
-            {
-              model: Agencia,
-              as: "agencia",
-              attributes: ["id", "nombre"],
-            },
-          ],
-        },
+  model: UsuarioAgencia,
+  as: "usuarioAgencia",
+  attributes: ["id"],
+  required: agenciaId ? true : false,
+  where: agenciaId ? { agenciaId: Number(agenciaId) } : undefined,
+  include: [
+    {
+      model: Usuario,
+      as: "usuario",
+      attributes: ["id", "nombre"],
+    },
+    {
+      model: Agencia,
+      as: "agencia",
+      attributes: ["id", "nombre"],
+    },
+  ],
+}
+,
         {
           model: Dispositivo,
           as: "dispositivo",
@@ -186,7 +221,6 @@ router.get("/", async (req, res) => {
     });
 
     return res.json(gestiones);
-
   } catch (error) {
     return res.status(500).json({
       message: "Error al obtener gestiones",
@@ -233,7 +267,6 @@ router.get("/:id", async (req, res) => {
     }
 
     return res.json(gestion);
-
   } catch (error) {
     return res.status(500).json({
       message: "Error al obtener gestión",
@@ -241,7 +274,6 @@ router.get("/:id", async (req, res) => {
     });
   }
 });
-
 
 // 🔹 ACTUALIZAR GESTION
 
@@ -268,44 +300,35 @@ router.put("/:id", async (req, res) => {
             c &&
             typeof c.cedula === "string" &&
             c.cedula.length === 10 &&
-            ["APROBADO", "DENEGADO"].includes(c.solicitud)
+            ["APROBADO", "DENEGADO"].includes(c.solicitud),
         )
         .map((c) => ({
           cedula: c.cedula,
           solicitud: c.solicitud,
         }));
-
-
     }
-
 
     let regionNormalizada = "SIN_ESPECIFICAR";
 
-if (req.body.region && req.body.region.trim() !== "") {
-  regionNormalizada = req.body.region.trim();
-}
+    if (req.body.region && req.body.region.trim() !== "") {
+      regionNormalizada = req.body.region.trim();
+    }
 
+    // Normalizar solicitud
+    let solicitudNormalizada = "NINGUNA";
 
-// Normalizar solicitud
-let solicitudNormalizada = "NINGUNA";
+    if (req.body.solicitud && req.body.solicitud.trim() !== "") {
+      solicitudNormalizada = req.body.solicitud.trim();
+    }
 
-if (req.body.solicitud && req.body.solicitud.trim() !== "") {
-  solicitudNormalizada = req.body.solicitud.trim();
-}
-
-
-
-await gestion.update({
-  ...req.body,
-  solicitud : solicitudNormalizada , 
-  region: regionNormalizada,
-  otrasCedulas: otrasCedulasLimpias,
-});
-
-
+    await gestion.update({
+      ...req.body,
+      solicitud: solicitudNormalizada,
+      region: regionNormalizada,
+      otrasCedulas: otrasCedulasLimpias,
+    });
 
     return res.json(gestion);
-
   } catch (error) {
     return res.status(500).json({
       message: "Error al actualizar gestión",
@@ -313,8 +336,6 @@ await gestion.update({
     });
   }
 });
-
-
 
 // 🔹 ELIMINAR GESTION
 router.delete("/:id", async (req, res) => {
@@ -334,7 +355,6 @@ router.delete("/:id", async (req, res) => {
     return res.json({
       message: "Gestión eliminada correctamente",
     });
-
   } catch (error) {
     return res.status(500).json({
       message: "Error al eliminar gestión",
@@ -342,6 +362,5 @@ router.delete("/:id", async (req, res) => {
     });
   }
 });
-
 
 module.exports = router;

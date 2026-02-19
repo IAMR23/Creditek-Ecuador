@@ -1,0 +1,95 @@
+[
+  {
+    "id": 536,
+    "usuarioAgenciaId": 36,
+    "celularGestionado": "0981004043",
+    "cedulaGestionado": "0000000000",
+    "extension": "1048",
+    "dispositivoId": 2,
+    "solicitud": "DENEGADO",
+    "origen": "WHATSAPP",
+    "region": "SIERRA",
+    "accion": "GESTION",
+    "observacion": "No quiere mandar el numero de cedula para poderle  ayudar a verificarle lo del credito",
+    "otrasCedulas": null,
+    "createdAt": "2026-02-18T17:05:36.804Z",
+    "updatedAt": "2026-02-18T17:05:36.804Z",
+    "usuarioAgencia": {
+      "id": 36,
+      "usuario": {
+        "id": 11,
+        "nombre": "Raul"
+      },
+      "agencia": {
+        "id": 5,
+        "nombre": "Chillogallo"
+      }
+    },
+    "dispositivo": {
+      "id": 2,
+      "nombre": "Celular"
+    }
+  },
+  {
+    "id": 535,
+    "usuarioAgenciaId": 49,
+    "celularGestionado": "0992828508",
+    "cedulaGestionado": "0850686916",
+    "extension": "1986",
+    "dispositivoId": 2,
+    "solicitud": "DENEGADO",
+    "origen": "WHATSAPP",
+    "region": "COSTA",
+    "accion": "OTRA_CEDULA",
+    "observacion": "",
+    "otrasCedulas": [],
+    "createdAt": "2026-02-18T17:01:50.841Z",
+    "updatedAt": "2026-02-18T17:01:50.841Z",
+    "usuarioAgencia": {
+      "id": 49,
+      "usuario": {
+        "id": 36,
+        "nombre": "Alejandra"
+      },
+      "agencia": {
+        "id": 2,
+        "nombre": "Sangolqui"
+      }
+    },
+    "dispositivo": {
+      "id": 2,
+      "nombre": "Celular"
+    }
+  },
+  {
+    "id": 534,
+    "usuarioAgenciaId": 4,
+    "celularGestionado": "0953042884",
+    "cedulaGestionado": "0967348207",
+    "extension": "6408",
+    "dispositivoId": 2,
+    "solicitud": "DENEGADO",
+    "origen": "WHATSAPP",
+    "region": "COSTA",
+    "accion": "GESTION",
+    "observacion": "APLICA CUPO 380 NO APLICA PARA LA COSTA ",
+    "otrasCedulas": null,
+    "createdAt": "2026-02-18T16:59:36.604Z",
+    "updatedAt": "2026-02-18T16:59:36.604Z",
+    "usuarioAgencia": {
+      "id": 4,
+      "usuario": {
+        "id": 10,
+        "nombre": "Damian"
+      },
+      "agencia": {
+        "id": 5,
+        "nombre": "Chillogallo"
+      }
+    },
+    "dispositivo": {
+      "id": 2,
+      "nombre": "Celular"
+    }
+  }
+]
