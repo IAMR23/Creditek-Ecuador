@@ -165,122 +165,153 @@ router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
 });
 
 router.get("/entregas", async (req, res) => {
-  const { userId, fechaInicio, fechaFin, estado } = req.query;
+  const { userId, fechaInicio, fechaFin, estado, agenciaId } = req.query;
 
   try {
-    const whereUsuario = userId ? { id: userId } : {};
-
-    // Entrega
-    const whereEntrega = {};
-
-    // Filtro por fechas
+const whereEntrega = {
+  estado: { [Op.ne]: "Eliminado" }, // ❌ excluir eliminados
+};
+    // 📅 Filtro por fechas
     if (fechaInicio && fechaFin) {
-      whereEntrega.fecha = {
-        [Op.between]: [fechaInicio, fechaFin],
-      };
+      whereEntrega.fecha = { [Op.between]: [fechaInicio, fechaFin] };
     } else if (fechaInicio) {
-      whereEntrega.fecha = {
-        [Op.gte]: fechaInicio,
-      };
+      whereEntrega.fecha = { [Op.gte]: fechaInicio };
     } else if (fechaFin) {
-      whereEntrega.fecha = {
-        [Op.lte]: fechaFin,
-      };
+      whereEntrega.fecha = { [Op.lte]: fechaFin };
     }
 
-    // Filtro por estado
-    if (estado) {
-      whereEntrega.estado = estado;
-    }
+    // 📦 Estado
+if (estado && estado !== "todos") {
+  whereEntrega.estado = estado;
+}
 
-    /* =========================
-       Query principal
-    ========================= */
-
-    const usuarios = await UsuarioAgencia.findAll({
-      where: whereUsuario,
+    const entregas = await Entrega.findAll({
+      where: whereEntrega,
+      attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega"],
+order: [["createdAt", "DESC"]],
       include: [
+        // 🧑‍💼 VENDEDOR (desde Entrega)
         {
-          model: Entrega,
-          as: "entregas",
-          where: Object.keys(whereEntrega).length ? whereEntrega : undefined,
-          required: false, // 🔥 importante: no romper cuando no hay entregas
-          through: {
-            where: { activo: true },
-            attributes: ["estado", "activo"],
-          },
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          required: !!userId || !!agenciaId,
           include: [
             {
-              model: Cliente,
-              as: "cliente",
-              attributes: [
-                "cliente",
-                "cedula",
-                "telefono",
-                "correo",
-                "direccion",
-              ],
-            },
-            {
-              model: Origen,
-              as: "origen",
+              model: Usuario,
+              as: "usuario",
               attributes: ["id", "nombre"],
+              ...(userId &&
+                userId !== "todos" && {
+                  where: { id: userId },
+                }),
             },
             {
-              model: DetalleEntrega,
-              as: "detalleEntregas",
+              model: Agencia,
+              as: "agencia",
+              attributes: ["id", "nombre"],
+              ...(agenciaId &&
+                agenciaId !== "todas" && {
+                  where: { id: agenciaId },
+                }),
+            },
+          ],
+        },
+
+        // 🏍️ MOTORIZADO
+        {
+          model: UsuarioAgenciaEntrega,
+          as: "UsuarioAgenciaEntrega",
+          required: false,
+          attributes: ["usuario_agencia_id", "estado" ],
+          include: [
+            {
+              model: UsuarioAgencia,
+              as: "usuarioAgencia",
+              attributes: ["id"],
               include: [
                 {
-                  model: Modelo,
-                  as: "modelo",
-                  attributes: ["nombre"],
+                  model: Usuario,
+                  as: "usuario",
+                  attributes: ["id", "nombre"],
                 },
                 {
-                  model: DispositivoMarca,
-                  as: "dispositivoMarca",
-                  include: [
-                    {
-                      model: Dispositivo,
-                      as: "dispositivo",
-                      attributes: ["nombre"],
-                    },
-                    {
-                      model: Marca,
-                      as: "marca",
-                      attributes: ["nombre"],
-                    },
-                  ],
+                  model: Agencia,
+                  as: "agencia",
+                  attributes: ["id", "nombre"],
                 },
+              ],
+            },
+          ],
+        },
+
+        // 👤 Cliente
+        {
+          model: Cliente,
+          as: "cliente",
+          attributes: ["cliente", "cedula"],
+        },
+
+        // 📦 Detalles
+        {
+          model: DetalleEntrega,
+          as: "detalleEntregas",
+          attributes: ["precioUnitario", "entrada", "alcance"],
+          include: [
+            {
+              model: Modelo,
+              as: "modelo",
+              attributes: ["nombre"],
+            },
+            {
+              model: DispositivoMarca,
+              as: "dispositivoMarca",
+              include: [
                 {
-                  model: FormaPago,
-                  as: "formaPago",
+                  model: Dispositivo,
+                  as: "dispositivo",
                   attributes: ["nombre"],
                 },
               ],
             },
             {
-              model: EntregaObsequio,
-              as: "obsequiosEntrega",
-              include: [
-                {
-                  model: Obsequio,
-                  as: "obsequio",
-                  attributes: ["nombre"],
-                },
-              ],
+              model: FormaPago,
+              as: "formaPago",
+              attributes: ["nombre"],
+            },
+          ],
+        },
+
+        // 🎁 Obsequios
+        {
+          model: EntregaObsequio,
+          as: "obsequiosEntrega",
+          attributes: ["cantidad"],
+          include: [
+            {
+              model: Obsequio,
+              as: "obsequio",
+              attributes: ["nombre"],
             },
           ],
         },
       ],
     });
 
-    /* =========================
-       Aplanar entregas
-    ========================= */
+    // 🧠 Flatten correcto
+    const resultado = entregas.map((e) => ({
+      ...e.toJSON(),
 
-    const entregas = usuarios.flatMap((u) => u.entregas ?? []);
+      vendedor: e.usuarioAgencia?.usuario?.nombre ?? null,
+      agenciaVendedor: e.usuarioAgencia?.agencia?.nombre ?? null,
 
-    res.json(entregas);
+      motorizado:
+        e.UsuarioAgenciaEntrega?.usuarioAgencia?.usuario?.nombre ?? null,
+      agenciaMotorizado:
+        e.UsuarioAgenciaEntrega?.usuarioAgencia?.agencia?.nombre ?? null,
+    }));
+
+    res.json(resultado);
   } catch (error) {
     console.error(error);
     res.status(500).json({

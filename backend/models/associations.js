@@ -292,3 +292,9 @@ MovimientoCaja.belongsTo(CierreCaja, {
 
 MovimientoCaja.belongsTo(Agencia, { foreignKey: "agenciaId" });
 CierreCaja.belongsTo(Agencia, { foreignKey: "agenciaId" });
+
+
+Entrega.hasOne(UsuarioAgenciaEntrega, {
+  foreignKey: "entrega_id",
+  as: "UsuarioAgenciaEntrega",
+});

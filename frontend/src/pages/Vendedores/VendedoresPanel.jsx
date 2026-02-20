@@ -25,6 +25,8 @@ function VendedorPanel() {
         console.error("Error al decodificar token", error);
         localStorage.removeItem("token");
       }
+    }else {
+      navigate("/login");
     }
   }, []);
 
@@ -102,7 +104,7 @@ function VendedorPanel() {
         },
       ],
     },
-    {
+/*     {
       category: "Caja",
       color: "orange",
       items: [
@@ -113,7 +115,7 @@ function VendedorPanel() {
           path: "/caja",
         },
       ],
-    },
+    }, */
   ];
 
   const Card = ({ title, desc, icon, path, color }) => (
@@ -129,7 +131,7 @@ function VendedorPanel() {
     >
       {/* Icono */}
       <div
-        className={`w-16 h-16 flex items-center justify-center rounded-xl mb-4 text-3xl 
+        className={`flex items-center justify-center rounded-xl mb-4 text-3xl 
         transition-all duration-300 ease-in-out 
         group-hover:rotate-6 group-hover:scale-110
         ${colorMap[color]}`}

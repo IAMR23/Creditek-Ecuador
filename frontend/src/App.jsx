@@ -76,12 +76,13 @@ import MisGestiones from "./pages/Vendedores/MisGestiones";
 import RevisionGestiones from "./pages/Admin/RevisionGestiones";
 import EditarGestion from "./pages/Vendedores/EditarGestion";
 import Caja from "./pages/Vendedores/Caja";
+import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
     rol: null,
-    permisos : null , 
+    permisos: null,
   });
 
   // 🔹 Validar token y rol al cargar la app
@@ -160,21 +161,31 @@ function App() {
                 </ProtectedRoute>
               }
             >
+
+
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="ventas-completas" element={<VentasCompletas />} />
               <Route path="usuarios" element={<Usuarios />} />
-              <Route path="agencias" element={ <Agencias />} />
+              <Route path="agencias" element={<Agencias />} />
               <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
               <Route path="entregas" element={<Entregas />} />
-              <Route path="revision-gestiones" element={<RevisionGestiones />} />
+              <Route
+                path="revision-gestiones"
+                element={<RevisionGestiones />}
+              />
               <Route
                 path="entrega-logistica/:id"
                 element={<DetalleEntrega />}
               />
-                            <Route
+              <Route
                 path="entregas-repartidores"
                 element={<EntregasRepartidores />}
+              />
+
+              <Route
+                path="entregas-repartidores-tabla"
+                element={<EntregasRepartidoresTabla />}
               />
 
               <Route path="rol" element={<AdminUsuariosRoles />} />
@@ -275,8 +286,14 @@ function App() {
               element={<FotoFechaHoraEntrega />}
             />
             <Route path="/mis-entregas" element={<MisEntregas />} />
-              <Route path="/mis-entregas-pendientes" element={<MisEntregasPendientes />} />
-              <Route path="/mis-entregas-realizadas" element={<MisEntregasRealizadas   />} />
+            <Route
+              path="/mis-entregas-pendientes"
+              element={<MisEntregasPendientes />}
+            />
+            <Route
+              path="/mis-entregas-realizadas"
+              element={<MisEntregasRealizadas />}
+            />
 
             {/* EXPERIMENTAL */}
             <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
@@ -306,10 +323,14 @@ function App() {
             {/* Cierre de caja */}
             <Route path="/caja" element={<Caja />} />
 
-
-            
-
-            <Route path="*" element={<h1 className="text-center mt-10">404 - Página no encontrada</h1>} />
+            <Route
+              path="*"
+              element={
+                <h1 className="text-center mt-10">
+                  404 - Página no encontrada
+                </h1>
+              }
+            />
           </Routes>
         </main>
 

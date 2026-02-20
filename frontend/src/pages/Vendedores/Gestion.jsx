@@ -347,6 +347,8 @@ export default function Gestion() {
                 <option value="MESSENGER">MESSENGER</option>
                 <option value="DIFUSIONES">DIFUSIONES</option>
                 <option value="BASE_DE_DATOS">BASE DE DATOS</option>
+                <option value="REDES_UPHONE">REDES UPHONE</option>
+                <option value="PAUTA">PAUTA</option>
               </select>
             </div>
 

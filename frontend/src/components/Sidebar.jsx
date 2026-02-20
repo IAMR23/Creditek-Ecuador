@@ -54,7 +54,7 @@ export default function Sidebar() {
           icon: <BarChart3 size={20} />,
           path: "reporte-entregas",
         },
-                {
+        {
           label: "Revisar Gestiones",
           icon: <BarChart3 size={20} />,
           path: "revision-gestiones",
@@ -87,12 +87,17 @@ export default function Sidebar() {
           path: "entregas-pendientes",
         },
 
-                {
+        {
           label: "Entregas Repartidores",
           icon: <PackageCheck size={20} />,
           path: "entregas-repartidores",
         },
 
+        {
+          label: "Informe de Entregas",
+          icon: <PackageCheck size={20} />,
+          path: "entregas-repartidores-tabla",
+        },
       ],
     },
 
@@ -244,9 +249,11 @@ export default function Sidebar() {
                       to={item.path}
                       title={collapsed ? item.label : ""}
                       className={`flex items-center gap-3 p-3 rounded-lg transition
-                        ${active
-                          ? "bg-green-600 text-black"
-                          : "hover:bg-neutral-800"}
+                        ${
+                          active
+                            ? "bg-green-600 text-black"
+                            : "hover:bg-neutral-800"
+                        }
                         ${collapsed ? "justify-center" : ""}
                       `}
                     >

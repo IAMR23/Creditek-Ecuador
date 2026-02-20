@@ -46,15 +46,59 @@
       }
     ],
     "UsuarioAgenciaEntrega": {
-      "id": 1,
-      "usuario_agencia_id": 1,
-      "entrega_id": 128,
       "estado": "Asignada",
-      "fecha_asignacion": "2026-02-04T23:00:18.104Z",
-      "fecha_finalizacion": null,
-      "activo": true,
-      "createdAt": "2026-02-04T23:00:18.104Z",
-      "updatedAt": "2026-02-04T23:00:18.104Z"
+      "activo": true
+    }
+  },
+  {
+    "id": 140,
+    "fecha": "2026-02-05T00:00:00.000Z",
+    "observacion": "REDES",
+    "estado": "No Entregado",
+    "usuarioAgencia": {
+      "id": 4,
+      "usuario": {
+        "id": 10,
+        "nombre": "Damian"
+      },
+      "agencia": {
+        "nombre": "Chillogallo"
+      }
+    },
+    "cliente": {
+      "cliente": "DANIELA BELEN ",
+      "cedula": "PAEZ CUSIN "
+    },
+    "detalleEntregas": [
+      {
+        "precioUnitario": "324.00",
+        "entrada": "28.80",
+        "alcance": "0.00",
+        "modelo": {
+          "nombre": "TV INNOVA LED 43"
+        },
+        "formaPago": {
+          "nombre": "Credito"
+        }
+      }
+    ],
+    "obsequiosEntrega": [
+      {
+        "cantidad": 1,
+        "obsequio": {
+          "nombre": "Soporte"
+        }
+      },
+      {
+        "cantidad": 1,
+        "obsequio": {
+          "nombre": "Cerveza"
+        }
+      }
+    ],
+    "UsuarioAgenciaEntrega": {
+      "estado": "Asignada",
+      "activo": true
     }
   }
 ]

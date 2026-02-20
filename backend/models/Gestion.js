@@ -45,7 +45,9 @@ const Gestion = sequelize.define(
         "WHATSAPP",
         "MESSENGER",
         "DIFUSIONES",
-        "BASE_DE_DATOS"
+        "BASE_DE_DATOS", 
+        "REDES_UPHONE", 
+        "PAUTA"
       ),
       allowNull: false,
     },

@@ -64,6 +64,11 @@ const Entrega = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+        sectorEntrega: { 
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     observacionEntrega: {
       type: DataTypes.STRING,
       allowNull: true,

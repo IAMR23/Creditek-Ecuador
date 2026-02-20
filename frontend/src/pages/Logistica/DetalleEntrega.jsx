@@ -15,13 +15,13 @@ export default function DetalleEntrega() {
   const [loadingRepartidores, setLoadingRepartidores] = useState(false);
   const [fechaHoraAsignacion, setFechaHoraAsignacion] = useState("");
   const [horaEstimadaEntrega, setHoraEstimadaEntrega] = useState("");
-
+  const [sectorEntrega, setSectorEntrega] = useState("");
   const rangosHorarios = [
     "7 - 9",
     "9 - 11",
     "11 - 13",
     "13 - 15",
-    "15 - 17",
+    "15 - 17", 
     "17 - 19",
     "19 - 21",
     "21 - 22",
@@ -80,6 +80,7 @@ export default function DetalleEntrega() {
       await axios.put(`${API_URL}/entregas/${id}`, {
         fechaHoraAsignacion,
         horaEstimadaEntrega,
+        sectorEntrega,
       });
       Swal.fire({
         icon: "success",
@@ -103,13 +104,13 @@ export default function DetalleEntrega() {
         if (result.isConfirmed) {
           await axios.post(`${API_URL}/entregas/${id}/asignar-repartidor`, {
             usuarioAgenciaId: repartidorSeleccionado,
-
             forzarReasignacion: true,
           });
 
           await axios.put(`${API_URL}/entregas/${id}`, {
             fechaHoraAsignacion,
             horaEstimadaEntrega,
+            sectorEntrega,
           });
 
           Swal.fire({
@@ -514,6 +515,22 @@ export default function DetalleEntrega() {
               ))}
             </div>
           </div>
+
+                    <div className="flex flex-col space-y-2">
+            <label className="text-sm font-semibold text-gray-700">
+              Sector de la entrega
+            </label>
+
+            <input
+              type="text"
+              value={sectorEntrega}
+              onChange={(e) => setSectorEntrega(e.target.value)}
+              className="w-full p-3 border border-green-300 rounded-xl"
+            />
+          </div>
+
+
+          
 
           <div>
             <h3 className="text-lg font-semibold text-gray-800">

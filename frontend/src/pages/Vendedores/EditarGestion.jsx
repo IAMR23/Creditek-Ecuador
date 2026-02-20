@@ -173,7 +173,6 @@ export default function EditarGestion() {
       });
     }
 
-
     const result = await Swal.fire({
       title: "¿Actualizar gestión?",
       icon: "question",
@@ -247,7 +246,7 @@ export default function EditarGestion() {
         onSubmit={handleSubmit}
         className="space-y-8 bg-white p-8 rounded-2xl shadow-lg border border-gray-100"
       >
-        <h1 className="text-2xl font-bold">Crear Gestión</h1>
+        <h1 className="text-2xl font-bold">Editar Gestión</h1>
 
         <div className="space-y-6">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">
@@ -292,22 +291,7 @@ export default function EditarGestion() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-600">Origen *</label>
-          <select
-            name="origen"
-            value={form.origen}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
-          >
-            <option value="">Seleccionar</option>
-            <option value="WHATSAPP">WHATSAPP</option>
-            <option value="MESSENGER">MESSENGER</option>
-            <option value="DIFUSIONES">DIFUSIONES</option>
-            <option value="BASE_DE_DATOS">BASE DE DATOS</option>
-          </select>
-        </div>
+
 
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">
@@ -323,7 +307,7 @@ export default function EditarGestion() {
               "6408",
               "9815",
               "1048",
-              "3430"
+              "3430",
             ].map((ext) => (
               <label
                 key={ext}
@@ -355,6 +339,26 @@ export default function EditarGestion() {
           </h2>
 
           <div className="grid md:grid-cols-2 gap-6">
+
+                    <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-600">Origen *</label>
+          <select
+            name="origen"
+            value={form.origen}
+            onChange={handleChange}
+            required
+            className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
+          >
+            <option value="">Seleccionar</option>
+            <option value="WHATSAPP">WHATSAPP</option>
+            <option value="MESSENGER">MESSENGER</option>
+            <option value="DIFUSIONES">DIFUSIONES</option>
+            <option value="BASE_DE_DATOS">BASE DE DATOS</option>
+            <option value="REDES_UPHONE">REDES UPHONE</option>
+            <option value="PAUTA">PAUTA</option>
+          </select>
+        </div>
+        
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
                 Dispositivo *
