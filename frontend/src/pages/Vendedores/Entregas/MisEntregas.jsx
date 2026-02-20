@@ -76,7 +76,6 @@ export default function MisEntregas() {
 
       setFilas(resultado);
     } catch (error) {
-      console.log(error);
       setError("Error al cargar las entregas");
     } finally {
       setLoading(false);

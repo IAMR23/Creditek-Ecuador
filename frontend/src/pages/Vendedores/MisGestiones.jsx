@@ -74,7 +74,6 @@ const navigate = useNavigate();
 
       setFilas(resultado);
     } catch (error) {
-      console.log(error);
       Swal.fire("Error", "No se pudieron cargar las gestiones", "error");
     } finally {
       setLoading(false);

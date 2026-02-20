@@ -465,7 +465,6 @@ const handleSubmit = async (e) => {
       obsequios,
     });
 
-    console.log(texto);
 
     await navigator.clipboard.writeText(texto);
 

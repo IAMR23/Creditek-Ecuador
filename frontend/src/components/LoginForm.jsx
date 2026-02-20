@@ -68,11 +68,9 @@ function LoginForm({ setAuth }) {
     });
 
     const puedeRepartir = permisos.includes("Repartir");
-    console.log(rol)
 
     if (rol === "Repartidor") {
       navigate("/logistica-panel");
-      console.log("llegue aca")
       return;
     } else if (rol === "admin") {
       navigate("/dashboard");

@@ -299,7 +299,6 @@ const CrearEntregaCompleta = () => {
         usuarioInfo,
         obsequios,
       });
-      console.log(texto);
 
       await navigator.clipboard.writeText(texto);
       Swal.fire(

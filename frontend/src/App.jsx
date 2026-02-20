@@ -75,6 +75,7 @@ import Gestion from "./pages/Vendedores/Gestion";
 import MisGestiones from "./pages/Vendedores/MisGestiones";
 import RevisionGestiones from "./pages/Admin/RevisionGestiones";
 import EditarGestion from "./pages/Vendedores/EditarGestion";
+import Caja from "./pages/Vendedores/Caja";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -301,6 +302,11 @@ function App() {
             <Route path="/gestion" element={<Gestion />} />
             <Route path="/mis-gestiones" element={<MisGestiones />} />
             <Route path="/mi-gestion/:id" element={<EditarGestion />} />
+
+            {/* Cierre de caja */}
+            <Route path="/caja" element={<Caja />} />
+
+
             
 
             <Route path="*" element={<h1 className="text-center mt-10">404 - Página no encontrada</h1>} />

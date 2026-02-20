@@ -38,7 +38,6 @@ function LogisticaPanel() {
     },
   ];
 
-  console.log(user)
 
   const Card = ({ label, title, desc, icon, path }) => (
     <div
