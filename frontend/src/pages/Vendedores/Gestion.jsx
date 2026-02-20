@@ -263,6 +263,7 @@ export default function Gestion() {
               "9815",
               "1048",
               "3430",
+              "REFERIDO",
             ].map((ext) => (
               <label
                 key={ext}

@@ -308,6 +308,7 @@ export default function EditarGestion() {
               "9815",
               "1048",
               "3430",
+              "REFERIDO",
             ].map((ext) => (
               <label
                 key={ext}
@@ -358,7 +359,7 @@ export default function EditarGestion() {
             <option value="PAUTA">PAUTA</option>
           </select>
         </div>
-        
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
                 Dispositivo *
