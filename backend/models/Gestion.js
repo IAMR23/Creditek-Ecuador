@@ -55,11 +55,11 @@ const Gestion = sequelize.define(
     region: {
       type: DataTypes.ENUM("SIN_ESPECIFICAR", "COSTA", "SIERRA", "ORIENTE"),
       allowNull: false,
-    },
+    }, 
 
     accion: {
       type: DataTypes.ENUM(
-        "VENTA",
+        "VENTA", 
         "ENTREGA",
         "VOLVER_A_LLAMAR",
         "GESTION",

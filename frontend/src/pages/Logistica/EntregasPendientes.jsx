@@ -34,7 +34,9 @@ export default function EntregasPendientes() {
     setError("");
 
     try {
-      const { data } = await axios.get(`${API_URL}/alertas/entregas-pendientes`);
+      const { data } = await axios.get(
+        `${API_URL}/alertas/entregas-pendientes`,
+      );
       setFilas(data || []);
     } catch (err) {
       console.error(err);
@@ -66,7 +68,9 @@ export default function EntregasPendientes() {
 
     const interval = setInterval(async () => {
       try {
-        const { data } = await axios.get(`${API_URL}/alertas/entregas-pendientes`);
+        const { data } = await axios.get(
+          `${API_URL}/alertas/entregas-pendientes`,
+        );
         setFilas(data);
         verificarAlertas(data);
       } catch (err) {
@@ -119,11 +123,11 @@ export default function EntregasPendientes() {
               <th className="p-2 border">Caso #</th>
               <th className="p-2 border">Cliente</th>
               <th className="p-2 border">Telefono</th>
-                            <th className="p-2 border">Fecha llamada</th>
+              <th className="p-2 border">Fecha llamada</th>
 
               <th className="p-2 border">Tiempo restante</th>
               <th className="p-2 border">Fecha límite</th>
-                            <th className="p-2 border">Estado</th>
+              <th className="p-2 border">Estado</th>
 
               <th className="p-2 border">Observación</th>
               <th className="p-2 border">Acciones</th>
@@ -144,25 +148,21 @@ export default function EntregasPendientes() {
                   <td className="p-2 border">{f.cliente.nombre}</td>
                   <td className="p-2 border">{f.cliente.telefono}</td>
 
-                  
                   <td className="p-2 border">
                     {formatFecha(f.FechaHoraLlamada)}
                   </td>
 
-
-                
-
-                  
-
-                  <td className="p-2 border">{f.horasRestantes ?? 0} Horas {f.minutosRestantes ?? 0} Minutos </td>
-           
+                  <td className="p-2 border">
+                    {f.horasRestantes ?? 0} Horas {f.minutosRestantes ?? 0}{" "}
+                    Minutos{" "}
+                  </td>
 
                   <td className="p-2 border">{formatFecha(f.fechaLimite)}</td>
 
-  <td className="p-2 border">
+                  <td className="p-2 border">
                     <span
                       className={`px-2 py-1 rounded font-semibold ${estadoColor(
-                        f.estado
+                        f.estado,
                       )}`}
                     >
                       {f.estado}

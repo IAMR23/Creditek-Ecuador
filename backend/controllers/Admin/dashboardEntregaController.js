@@ -7,8 +7,11 @@ exports.getDashboardEntregas = async (req, res) => {
   try {
     let { fechaInicio, fechaFin, userId } = req.query;
 
-    const whereBase = {};
-
+    const whereBase = {
+      estado: {
+        [Op.ne]: "Eliminado",
+      },
+    };
     // 📅 Fechas opcionales
     if (fechaInicio || fechaFin) {
       const rango = {};

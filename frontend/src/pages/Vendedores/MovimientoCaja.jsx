@@ -90,7 +90,7 @@ export default function MovimientoCaja() {
   };
 
 
-
+ 
   return (
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4">Movimiento de Caja</h2>

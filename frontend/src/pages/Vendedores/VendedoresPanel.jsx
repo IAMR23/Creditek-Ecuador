@@ -104,7 +104,7 @@ function VendedorPanel() {
         },
       ],
     },
-/*     {
+    {
       category: "Caja",
       color: "orange",
       items: [
@@ -115,7 +115,7 @@ function VendedorPanel() {
           path: "/caja",
         },
       ],
-    }, */
+    },
   ];
 
   const Card = ({ title, desc, icon, path, color }) => (
