@@ -8,7 +8,7 @@ const Dispositivo = require("../models/Dispositivo");
 
 router.post("/", async (req, res) => {
   try {
-    const { nombre, descripcion, activo, dispositivoMarcaId } = req.body;
+    const { nombre, descripcion, activo, dispositivoMarcaId , PVP1 } = req.body;
 
     const existeDM = await DispositivoMarca.findByPk(dispositivoMarcaId);
     if (!existeDM) {
