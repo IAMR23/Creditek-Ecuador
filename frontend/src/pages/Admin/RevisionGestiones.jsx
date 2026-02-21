@@ -11,6 +11,7 @@ import {
   FaClock,
   FaIdCard,
   FaFileExcel,
+  FaBeer,
 } from "react-icons/fa";
 import * as XLSX from "xlsx";
 
@@ -21,21 +22,19 @@ const RevisionGestiones = () => {
   const [solicitud, setSolicitud] = useState("");
   const [origen, setOrigen] = useState("");
   const [region, setRegion] = useState("");
-    const [agenciaId, setAgenciaId] = useState("");
+  const [agenciaId, setAgenciaId] = useState("");
   const [agencias, setAgencias] = useState([]);
 
   const today = new Date().toISOString().split("T")[0];
 
-const [fechaInicio, setFechaInicio] = useState(today);
-const [fechaFin, setFechaFin] = useState(today);
-
+  const [fechaInicio, setFechaInicio] = useState(today);
+  const [fechaFin, setFechaFin] = useState(today);
 
   useEffect(() => {
     obtenerGestiones();
   }, []);
 
-
-    const cargarAgencias = async () => {
+  const cargarAgencias = async () => {
     try {
       const res = await axios.get(`${API_URL}/agencias`);
       setAgencias(res.data || []);
@@ -52,11 +51,10 @@ const [fechaFin, setFechaFin] = useState(today);
     }
   };
 
-
-    useEffect(() => {
+  useEffect(() => {
     cargarAgencias();
   }, []);
- 
+
   const descargarExcel = () => {
     if (!gestiones || gestiones.length === 0) {
       Swal.fire("Atención", "No hay datos para exportar", "warning");
@@ -227,9 +225,13 @@ const [fechaFin, setFechaFin] = useState(today);
             >
               <option value="">Todas Regiones</option>
               <option value="SIN_ESPECIFICAR">SIN ESPECIFICAR</option>
+              <option value="COSTA">COSTA </option>
+              <option value="COSTA_APLICA">COSTA ✅</option>
+              <option value="COSTA_NO_APLICA">COSTA ❌</option>
               <option value="SIERRA">SIERRA</option>
-              <option value="COSTA">COSTA</option>
               <option value="ORIENTE">ORIENTE</option>
+              <option value="ORIENTE_APLICA">ORIENTE ✅</option>
+              <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
             </select>
 
             <select
@@ -238,24 +240,28 @@ const [fechaFin, setFechaFin] = useState(today);
               className="border px-3 py-2 rounded"
             >
               <option value="">Todos Orígenes</option>
-              <option value="WHATSAPP">WHATSAPP</option>
+              <option value="WHATSAPP_ANUNCIOS">WHATSAPP ANUNCIOS</option>
+              <option value="REFERIDO">REFERIDO</option>
+              <option value="REGESTION">REGESTION</option>
               <option value="MESSENGER">MESSENGER</option>
               <option value="DIFUSIONES">DIFUSIONES</option>
               <option value="BASE_DE_DATOS">BASE DE DATOS</option>
+              <option value="REDES_UPHONE">REDES UPHONE</option>
+              <option value="PAUTA">PAUTA</option>
             </select>
 
-          <select
-            className="border px-2 py-1 rounded"
-            value={agenciaId}
-            onChange={(e) => setAgenciaId(e.target.value)}
-          >
-            <option value="">Todas las agencias</option>
-            {agencias.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-              </option>
-            ))}
-          </select>
+            <select
+              className="border px-2 py-1 rounded"
+              value={agenciaId}
+              onChange={(e) => setAgenciaId(e.target.value)}
+            >
+              <option value="">Todas las agencias</option>
+              {agencias.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre}
+                </option>
+              ))}
+            </select>
 
             <button
               onClick={obtenerGestiones}
@@ -264,7 +270,6 @@ const [fechaFin, setFechaFin] = useState(today);
               Filtrar
             </button>
           </div>
-
         </div>
 
         <button

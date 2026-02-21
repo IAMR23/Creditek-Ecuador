@@ -33,38 +33,51 @@ const Gestion = sequelize.define(
     dispositivoId: {
       type: DataTypes.INTEGER,
       allowNull: true,
-    }, 
+    },
 
     solicitud: {
-      type: DataTypes.ENUM("NINGUNA" , "APROBADO", "DENEGADO"),
+      type: DataTypes.ENUM("NINGUNA", "APROBADO", "DENEGADO"),
       allowNull: false,
     },
 
     origen: {
       type: DataTypes.ENUM(
-        "WHATSAPP",
+        "REFERIDO",
+        "REGESTION",
+        "WHATSAPP", 
+        "WHATSAPP_ANUNCIOS",
         "MESSENGER",
         "DIFUSIONES",
-        "BASE_DE_DATOS", 
-        "REDES_UPHONE", 
-        "PAUTA"
+        "BASE_DE_DATOS",
+        "REDES_UPHONE",
+        "PAUTA",
       ),
       allowNull: false,
     },
 
     region: {
-      type: DataTypes.ENUM("SIN_ESPECIFICAR", "COSTA", "SIERRA", "ORIENTE"),
+      type: DataTypes.ENUM(
+        "SIN_ESPECIFICAR",
+        "COSTA",
+        "COSTA_APLICA",
+        "COSTA_NO_APLICA",
+        "SIERRA",
+        "ORIENTE",
+        "ORIENTE_APLICA",
+        "ORIENTE_NO_APLICA",
+        
+      ),
       allowNull: false,
-    }, 
+    },
 
     accion: {
       type: DataTypes.ENUM(
-        "VENTA", 
+        "VENTA",
         "ENTREGA",
         "VOLVER_A_LLAMAR",
         "GESTION",
         "NO_CONTESTA",
-        "OTRA_CEDULA"
+        "OTRA_CEDULA",
       ),
       allowNull: false,
     },
@@ -83,7 +96,7 @@ const Gestion = sequelize.define(
   {
     timestamps: true,
     tableName: "gestiones",
-  }
+  },
 );
 
 module.exports = Gestion;

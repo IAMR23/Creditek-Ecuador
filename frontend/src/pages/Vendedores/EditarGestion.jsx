@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { FaPlus, FaSave, FaTrash } from "react-icons/fa";
+import { FaBeer, FaPlus, FaSave, FaTimes, FaTrash } from "react-icons/fa";
 import Swal from "sweetalert2";
 import { useNavigate, useParams } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
@@ -291,8 +291,6 @@ export default function EditarGestion() {
           </div>
         </div>
 
-
-
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">
             Extensión
@@ -308,7 +306,6 @@ export default function EditarGestion() {
               "9815",
               "1048",
               "3430",
-              "REFERIDO",
             ].map((ext) => (
               <label
                 key={ext}
@@ -340,25 +337,28 @@ export default function EditarGestion() {
           </h2>
 
           <div className="grid md:grid-cols-2 gap-6">
-
-                    <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-600">Origen *</label>
-          <select
-            name="origen"
-            value={form.origen}
-            onChange={handleChange}
-            required
-            className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
-          >
-            <option value="">Seleccionar</option>
-            <option value="WHATSAPP">WHATSAPP</option>
-            <option value="MESSENGER">MESSENGER</option>
-            <option value="DIFUSIONES">DIFUSIONES</option>
-            <option value="BASE_DE_DATOS">BASE DE DATOS</option>
-            <option value="REDES_UPHONE">REDES UPHONE</option>
-            <option value="PAUTA">PAUTA</option>
-          </select>
-        </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-600">
+                Origen *
+              </label>
+              <select
+                name="origen"
+                value={form.origen}
+                onChange={handleChange}
+                required
+                className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
+              >
+                <option value="">Seleccionar</option>
+                <option value="WHATSAPP_ANUNCIOS">WHATSAPP ANUNCIOS</option>
+                <option value="REFERIDO">REFERIDO</option>
+                <option value="REGESTION">REGESTION</option>
+                <option value="MESSENGER">MESSENGER</option>
+                <option value="DIFUSIONES">DIFUSIONES</option>
+                <option value="BASE_DE_DATOS">BASE DE DATOS</option>
+                <option value="REDES_UPHONE">REDES UPHONE</option>
+                <option value="PAUTA">PAUTA</option>
+              </select>
+            </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
@@ -409,9 +409,11 @@ export default function EditarGestion() {
                 className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
               >
                 <option value="SIN_ESPECIFICAR">SIN ESPECIFICAR</option>
-                <option value="COSTA">COSTA</option>
+                <option value="COSTA_APLICA">COSTA ✅</option>
+                <option value="COSTA_NO_APLICA">COSTA ❌</option>
                 <option value="SIERRA">SIERRA</option>
-                <option value="ORIENTE">ORIENTE</option>
+                <option value="ORIENTE_APLICA">ORIENTE ✅</option>
+                <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
               </select>
             </div>
           </div>
