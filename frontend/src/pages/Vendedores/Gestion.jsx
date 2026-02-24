@@ -263,6 +263,9 @@ export default function Gestion() {
               "9815",
               "1048",
               "3430",
+              "5314",
+              "1314",
+              "9750",
             ].map((ext) => (
               <label
                 key={ext}
@@ -351,6 +354,7 @@ export default function Gestion() {
                 <option value="BASE_DE_DATOS">BASE DE DATOS</option>
                 <option value="REDES_UPHONE">REDES UPHONE</option>
                 <option value="PAUTA">PAUTA</option>
+                <option value="TIKTOK">TIKTOK</option>
               </select>
             </div>
 
@@ -366,11 +370,11 @@ export default function Gestion() {
                 className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
               >
                 <option value="SIN_ESPECIFICAR">SIN ESPECIFICAR</option>
-              <option value="COSTA_APLICA">COSTA ✅</option>
-              <option value="COSTA_NO_APLICA">COSTA ❌</option>
-              <option value="SIERRA">SIERRA</option>
-              <option value="ORIENTE_APLICA">ORIENTE ✅</option>
-              <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
+                <option value="COSTA_APLICA">COSTA ✅</option>
+                <option value="COSTA_NO_APLICA">COSTA ❌</option>
+                <option value="SIERRA">SIERRA</option>
+                <option value="ORIENTE_APLICA">ORIENTE ✅</option>
+                <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
               </select>
             </div>
           </div>

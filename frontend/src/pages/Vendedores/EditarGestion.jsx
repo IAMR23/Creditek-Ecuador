@@ -306,6 +306,9 @@ export default function EditarGestion() {
               "9815",
               "1048",
               "3430",
+              "5314" , 
+              "1314" , 
+              "9750"
             ].map((ext) => (
               <label
                 key={ext}
@@ -357,6 +360,7 @@ export default function EditarGestion() {
                 <option value="BASE_DE_DATOS">BASE DE DATOS</option>
                 <option value="REDES_UPHONE">REDES UPHONE</option>
                 <option value="PAUTA">PAUTA</option>
+                <option value="TIKTOK">TIKTOK</option>
               </select>
             </div>
 

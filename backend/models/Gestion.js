@@ -51,6 +51,7 @@ const Gestion = sequelize.define(
         "BASE_DE_DATOS",
         "REDES_UPHONE",
         "PAUTA",
+        "TIKTOK"
       ),
       allowNull: false,
     },

@@ -382,6 +382,7 @@ ${
     "Ing Gaby", 
     "Steeven Furgo",
     "Javier",
+    "Joel"
   ];
 
   return (
