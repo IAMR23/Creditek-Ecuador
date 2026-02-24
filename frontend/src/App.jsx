@@ -77,6 +77,7 @@ import RevisionGestiones from "./pages/Admin/RevisionGestiones";
 import EditarGestion from "./pages/Vendedores/EditarGestion";
 import Caja from "./pages/Vendedores/Caja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
+import BDDVentas from "./pages/Admin/BDDVentas";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -173,6 +174,10 @@ function App() {
               <Route
                 path="revision-gestiones"
                 element={<RevisionGestiones />}
+              />
+                      <Route
+                path="bdd-ventas"
+                element={<BDDVentas />}
               />
               <Route
                 path="entrega-logistica/:id"

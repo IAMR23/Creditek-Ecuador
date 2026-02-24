@@ -103,6 +103,8 @@ connectDB()
     app.use("/api/gestion", require("./routes/CallCenter/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/MovimientoRoutes"));
+    app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
+
 
     console.log(
       "Carpeta uploads que Express está usando:",
