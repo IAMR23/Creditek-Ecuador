@@ -23,6 +23,8 @@ const CrearVentaCompleta = () => {
   const [dispositivoMarcaSeleccionado, setDispositivoMarcaSeleccionado] =
     useState(null);
 
+  const [textoVenta, setTextoVenta] = useState("");
+
   const [modeloSeleccionado, setModeloSeleccionado] = useState(null);
   const navigate = useNavigate();
   // 👉 Capturar foto o archivo
@@ -274,18 +276,88 @@ const CrearVentaCompleta = () => {
         obsequios,
       });
 
-      await navigator.clipboard.writeText(texto);
-      Swal.fire(
-        "Venta registrada",
-        "La información fue copiada al portapapeles",
-        "success",
-      );
+      // ⚠️ NO uses textoVenta aquí, usa texto directo
 
-      Swal.fire(
-        "Éxito",
-        "📄 Venta creada y copiada al portapapeles",
-        "success",
-      );
+      Swal.fire({
+        title: "Venta creada",
+        text: "¿Quieres copiar la información?",
+        icon: "success",
+        showCancelButton: true,
+        confirmButtonText: "Copiar",
+        cancelButtonText: "No",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          copiarTexto(texto); // ✅ gesto válido
+        }
+
+        // 🔄 reset y navegación después de interacción
+        setFoto(null);
+        setPreview(null);
+        setObsequios([]);
+        setCliente({
+          cliente: "",
+          cedula: "",
+          telefono: "",
+          correo: "",
+          direccion: "",
+        });
+        setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
+
+        navigate("/");
+      });
+
+      setTextoVenta(texto);
+      //  await navigator.clipboard.writeText(texto);
+
+      Swal.fire({
+        title: "✅ Venta registrada",
+        html: `
+  <div class="text-left space-y-4">
+
+    <!-- Header -->
+    <div class="flex items-start gap-3">
+      <div class="bg-green-100 text-green-600 p-2 rounded-lg">
+        ✓
+      </div>
+      <div>
+        <h3 class="text-lg font-semibold text-gray-800">
+          Venta registrada
+        </h3>
+        <p class="text-sm text-gray-500">
+          La información fue guardada correctamente. Puedes copiar los datos para compartirlos.
+        </p>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="border-t border-gray-200"></div>
+
+    <!-- Action -->
+    <button 
+      id="btnCopiar"
+      class="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
+    >
+      <span>📋</span>
+      <span>Copiar información</span>
+    </button>
+
+  </div>
+`,
+        showConfirmButton: false,
+        width: 500,
+        didOpen: () => {
+          const btn = document.getElementById("btnCopiar");
+
+          btn.addEventListener("click", async () => {
+            await copiarTexto(texto);
+
+            // feedback visual inmediato
+            btn.innerText = "✅ Copiado";
+            btn.classList.remove("bg-blue-600");
+            btn.classList.add("bg-green-600");
+          });
+        },
+      });
 
       // 🔄 Reset
       setFoto(null);
@@ -311,6 +383,49 @@ const CrearVentaCompleta = () => {
       setLoading(false);
     }
   };
+
+const copiarTexto = async (texto) => {
+  try {
+    if (!texto) throw new Error("Texto vacío");
+
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(texto);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = texto;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy"); // fallback legacy
+      document.body.removeChild(textarea);
+    }
+
+    // Toast tipo SaaS (no bloquea UI)
+    Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: "success",
+      title: "Copiado al portapapeles",
+      showConfirmButton: false,
+      timer: 1800,
+      timerProgressBar: true,
+    });
+
+  } catch (err) {
+    console.error("Error al copiar:", err);
+
+    Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: "error",
+      title: "No se pudo copiar",
+      showConfirmButton: false,
+      timer: 2000,
+    });
+  }
+};
 
   const buildVentaText = ({
     cliente = {},
@@ -377,12 +492,12 @@ ${
     "Fernando",
     "Mateo",
     "Raul",
-    "Steeven Chavez", 
-    "Jeje Alexis" ,
-    "Ing Gaby", 
+    "Steeven Chavez",
+    "Jeje Alexis",
+    "Ing Gaby",
     "Steeven Furgo",
     "Javier",
-    "Joel"
+    "Joel",
   ];
 
   return (
