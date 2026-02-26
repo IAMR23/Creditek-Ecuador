@@ -53,9 +53,12 @@ const Gestion = sequelize.define(
         "PAUTA",
         "TIKTOK"
       ),
-      allowNull: false,
+      allowNull: true,
     },
-
+    origenCallCenter : {
+      type: DataTypes.STRING,
+      allowNull: true,
+    } , 
     region: {
       type: DataTypes.ENUM(
         "SIN_ESPECIFICAR",

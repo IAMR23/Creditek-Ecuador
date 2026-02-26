@@ -6,7 +6,11 @@ const { sequelize } = require("../../config/db");
 const { validarCedulaEC } = require("../../middleware/validacionCedula");
 const DispositivoMarca = require("../../models/DispositivoMarca");
 const Modelo = require("../../models/Modelo");
-
+const {
+  buscarClienteContifico,
+  actualizarClienteContifico,
+  crearClienteContifico,
+} = require("../Contifico/personaController");
 
 // 🔹 Calcular la semana según fecha (jueves-miércoles)
 function calcularSemana(fecha) {
@@ -23,7 +27,6 @@ function calcularSemana(fecha) {
   const semana = Math.floor(diffDias / 7) + 1;
   return semana;
 }
-
 
 const crearVentaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
@@ -47,7 +50,7 @@ const crearVentaCompleta = async (req, res) => {
       where: { cedula: cliente.cedula },
       transaction: t,
     });
-  
+
     if (!clienteDB) {
       clienteDB = await Cliente.create(
         {
@@ -64,7 +67,7 @@ const crearVentaCompleta = async (req, res) => {
         {
           telefono: cliente.telefono,
           correo: cliente.correo,
-          direccion: cliente.direccion ,
+          direccion: cliente.direccion,
         },
         { transaction: t },
       );
@@ -78,7 +81,7 @@ const crearVentaCompleta = async (req, res) => {
         origenId: venta.origenId,
         observacion: venta.observacion,
         fecha: venta.fecha,
-        semana: calcularSemana(venta.fecha), 
+        semana: calcularSemana(venta.fecha),
         validada: true,
         fotoValidacion: fotoUrl,
       },
@@ -124,7 +127,7 @@ const crearVentaCompleta = async (req, res) => {
     const margen = Number((precioVendedor + alcance - pvp1).toFixed(2));
 
     // 3️⃣ Detalle
-    const detalleDB = await DetalleVenta.create(  
+    const detalleDB = await DetalleVenta.create(
       {
         ventaId: ventaDB.id,
         cantidad: detalle.cantidad,
@@ -159,7 +162,7 @@ const crearVentaCompleta = async (req, res) => {
 
     await t.commit();
 
-    res.status(201).json({
+        res.status(201).json({
       ok: true,
       message: "Venta creada y validada correctamente",
       cliente: clienteDB,
@@ -167,6 +170,37 @@ const crearVentaCompleta = async (req, res) => {
       detalle: detalleDB,
       obsequios,
     });
+
+
+
+    setImmediate(async () => {
+  try {
+    if (clienteDB.cedula) {
+      let clienteContifico = null;
+
+      if (clienteDB.clienteContifico) {
+     //   await actualizarClienteContifico(clienteDB);
+      } else {
+        clienteContifico = await buscarClienteContifico(clienteDB.cedula);
+        if (clienteContifico) {
+          clienteDB.clienteContifico = clienteContifico.id;
+          await clienteDB.save();
+
+         // await actualizarClienteContifico(clienteDB);
+        } else {
+          const nuevo = await crearClienteContifico(clienteDB);
+
+          clienteDB.clienteContifico = nuevo.id;
+          await clienteDB.save();
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error sincronizando con Contifico:", error.message);
+  }
+});
+
+
   } catch (error) {
     await t.rollback();
     console.error(error);

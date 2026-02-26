@@ -333,7 +333,6 @@ export default function EditarGestion() {
           </div>
         </div>
 
-        {/* ================== CONFIGURACIÓN ================== */}
         <div className="space-y-6">
           <h2 className="text-lg font-semibold text-gray-700 border-b pb-2">
             Configuración

@@ -7,6 +7,7 @@ const Dispositivo = require("../../models/Dispositivo");
 const { Op, Sequelize } = require("sequelize");
 const Usuario = require("../../models/Usuario");
 const Agencia = require("../../models/Agencia");
+const OrigenCallCenter = require("../../models/CallCenter/origenes");
 
 router.post("/", async (req, res) => {
   try {
@@ -21,6 +22,7 @@ router.post("/", async (req, res) => {
       region,
       accion,
       observacion,
+      origenCallCenter , 
       otrasCedulas,
     } = req.body;
 
@@ -82,6 +84,7 @@ router.post("/", async (req, res) => {
       region: regionNormalizada,
       accion,
       observacion,
+      origenCallCenter , 
       otrasCedulas: otrasCedulasValidadas,
     });
 
@@ -94,6 +97,48 @@ router.post("/", async (req, res) => {
     });
   }
 });
+
+router.post("/origen-callcenter", async (req, res) => {
+  try {
+    const { nombre, activa } = req.body;
+
+    // Validación básica
+    if (!nombre) {
+      return res.status(400).json({
+        message: "Nombre es obligatorio",
+      });
+    }
+
+    const nuevoOrigen = await OrigenCallCenter.create({
+      nombre,
+      activa: activa ?? true,
+    });
+
+    res.status(201).json(nuevoOrigen);
+  } catch (error) {
+    console.error("Error al crear origen:", error);
+    res.status(500).json({
+      message: "Error al crear origen",
+    });
+  }
+});
+
+// ✅ GET - listar todos
+router.get("/origen-callcenter", async (req, res) => {
+  try {
+    const origenes = await OrigenCallCenter.findAll({
+      order: [["id", "DESC"]],
+    });
+
+    res.json(origenes);
+  } catch (error) {
+    console.error("Error al obtener origenes:", error);
+    res.status(500).json({
+      message: "Error al obtener origenes",
+    });
+  }
+});
+
 
 router.get("/vendedor/:id", async (req, res) => {
   try {
@@ -145,7 +190,7 @@ router.get("/vendedor/:id", async (req, res) => {
   }
 });
 
-// 🔹 LISTAR TODAS LAS GESTIONES
+
 
 router.get("/", async (req, res) => {
   try {
@@ -275,8 +320,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// 🔹 ACTUALIZAR GESTION
-
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -295,7 +338,7 @@ router.put("/:id", async (req, res) => {
 
     if (accion === "OTRA_CEDULA" && Array.isArray(otrasCedulas)) {
       otrasCedulasLimpias = otrasCedulas
-        .filter(
+        .filter( 
           (c) =>
             c &&
             typeof c.cedula === "string" &&
@@ -332,32 +375,6 @@ router.put("/:id", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Error al actualizar gestión",
-      error: error.message,
-    });
-  }
-});
-
-// 🔹 ELIMINAR GESTION
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const gestion = await Gestion.findByPk(id);
-
-    if (!gestion) {
-      return res.status(404).json({
-        message: "Gestión no encontrada",
-      });
-    }
-
-    await gestion.destroy();
-
-    return res.json({
-      message: "Gestión eliminada correctamente",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: "Error al eliminar gestión",
       error: error.message,
     });
   }

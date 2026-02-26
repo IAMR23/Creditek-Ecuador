@@ -223,120 +223,169 @@ const CrearEntregaCompleta = () => {
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (!foto) {
-      Swal.fire("Atención", "Debes subir una foto", "warning");
-      return;
-    }
+  if (!foto) {
+    Swal.fire("Atención", "Debes subir una foto", "warning");
+    return;
+  }
 
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-      // 🔥 Construir FormData
-      const formData = new FormData();
+    const formData = new FormData();
 
-      formData.append(
-        "data",
-        JSON.stringify({
-          cliente,
-          entrega: {
-            ...entrega,
-            usuarioAgenciaId: Number(entrega.usuarioAgenciaId),
-            origenId: Number(entrega.origenId),
-          },
-          detalle: {
-            ...detalle,
-            dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
-            modeloId: Number(detalle.modeloId),
-            formaPagoId: Number(detalle.formaPagoId),
-            cantidad: Number(detalle.cantidad),
-            precioVendedor: Number(detalle.precioVendedor),
-            entrada: detalle.entrada ? Number(detalle.entrada) : 0,
-            alcance: detalle.alcance ? Number(detalle.alcance) : 0,
-            ubicacionDispositivo: detalle.ubicacionDispositivo,
-            ubicacion: detalle.ubicacion,
-          },
-          obsequios,
-        }),
-      );
-
-      const options = {
-        maxSizeMB: 0.4, // ~400 KB
-        maxWidthOrHeight: 1280, // resolución máxima
-        useWebWorker: true,
-      };
-
-      const imagenComprimida = await imageCompression(foto, options);
-
-      // Agregar imagen comprimida
-      formData.append("foto", imagenComprimida);
-
-      const response = await axios.post(
-        `${API_URL}/registrar2/entrega-completa`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
-
-      const entregaData = response.data;
-      const texto = buildEntregaText({
+    formData.append(
+      "data",
+      JSON.stringify({
         cliente,
-        origen: origenSeleccionado,
-        dispositivoMarca: dispositivoMarcaSeleccionado,
-        formaPago: formaPagoSeleccionada,
-        modelo: modeloSeleccionado,
         entrega: {
           ...entrega,
-          id: entregaData.entrega.id,
-          fecha: entregaData.entrega.fecha,
+          usuarioAgenciaId: Number(entrega.usuarioAgenciaId),
+          origenId: Number(entrega.origenId),
         },
-        detalle,
-        usuarioInfo,
+        detalle: {
+          ...detalle,
+          dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
+          modeloId: Number(detalle.modeloId),
+          formaPagoId: Number(detalle.formaPagoId),
+          cantidad: Number(detalle.cantidad),
+          precioVendedor: Number(detalle.precioVendedor),
+          entrada: detalle.entrada ? Number(detalle.entrada) : 0,
+          alcance: detalle.alcance ? Number(detalle.alcance) : 0,
+          ubicacionDispositivo: detalle.ubicacionDispositivo,
+          ubicacion: detalle.ubicacion,
+        },
         obsequios,
-      });
+      })
+    );
 
-      await navigator.clipboard.writeText(texto);
-      Swal.fire(
-        "Entrega registrada",
-        "La información fue copiada al portapapeles",
-        "success",
-      );
+    const options = {
+      maxSizeMB: 0.4,
+      maxWidthOrHeight: 1280,
+      useWebWorker: true,
+    };
 
-      Swal.fire(
-        "Éxito",
-        "📄 Entrega creada y copiada al portapapeles",
-        "success",
-      );
+    const imagenComprimida = await imageCompression(foto, options);
+    formData.append("foto", imagenComprimida);
 
-      // 🔄 Reset
-       setFoto(null);
-      setPreview(null);
-      setObsequios([]);
-      setCliente({
-        cliente: "",
-        cedula: "",
-        telefono: "",
-        correo: "",
-        direccion: "",
-      });
-      setEntrega((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/"); 
-    } catch (error) {
-      console.error(error);
+    const response = await axios.post(
+      `${API_URL}/registrar2/entrega-completa`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
 
-      const mensaje =
-        error.response?.data?.message || "No se pudo crear la entrega";
+    const entregaData = response.data;
 
-      Swal.fire("Error", mensaje, "error");
-    } finally {
-      setLoading(false);
+    const texto = buildEntregaText({
+      cliente,
+      origen: origenSeleccionado,
+      dispositivoMarca: dispositivoMarcaSeleccionado,
+      formaPago: formaPagoSeleccionada,
+      modelo: modeloSeleccionado,
+      entrega: {
+        ...entrega,
+        id: entregaData.entrega.id,
+        fecha: entregaData.entrega.fecha,
+      },
+      detalle,
+      usuarioInfo,
+      obsequios,
+    });
+
+    // ✅ Modal con gesto de usuario
+    const result = await Swal.fire({
+      title: "Entrega registrada",
+      text: "¿Quieres copiar la información?",
+      icon: "success",
+      showCancelButton: true,
+      confirmButtonText: "Copiar",
+      cancelButtonText: "No",
+    });
+
+    if (result.isConfirmed) {
+      await copiarTexto(texto); // ⚠️ importante usar tu helper
     }
-  };
+
+    // 🔄 Reset UNA SOLA VEZ
+    setFoto(null);
+    setPreview(null);
+    setObsequios([]);
+    setCliente({
+      cliente: "",
+      cedula: "",
+      telefono: "",
+      correo: "",
+      direccion: "",
+    });
+    setEntrega((prev) => ({
+      ...prev,
+      origenId: "",
+      observacion: "",
+    }));
+
+    navigate("/");
+  } catch (error) {
+    console.error(error);
+
+    const mensaje =
+      error.response?.data?.message || "No se pudo crear la entrega";
+
+    Swal.fire("Error", mensaje, "error");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+const copiarTexto = async (texto) => {
+  try {
+    if (!texto) throw new Error("Texto vacío");
+
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(texto);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = texto;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand("copy"); // fallback legacy
+      document.body.removeChild(textarea);
+    }
+
+    // Toast tipo SaaS (no bloquea UI)
+    Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: "success",
+      title: "Copiado al portapapeles",
+      showConfirmButton: false,
+      timer: 1800,
+      timerProgressBar: true,
+    });
+
+  } catch (err) {
+    console.error("Error al copiar:", err);
+
+    Swal.fire({
+      toast: true,
+      position: "top-end",
+      icon: "error",
+      title: "No se pudo copiar",
+      showConfirmButton: false,
+      timer: 2000,
+    });
+  }
+};
 
   const buildEntregaText = ({
     cliente = {},

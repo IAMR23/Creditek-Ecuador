@@ -31,13 +31,14 @@ const Cliente = sequelize.define(
     },
     direccion: {
       type: DataTypes.STRING,
-      allowNull: true,  
+      allowNull: true,
     },
+    clienteContifico: { type: DataTypes.STRING, allowNull: true },
   },
   {
     timestamps: true,
     tableName: "clientes",
-  }
+  },
 );
 
 module.exports = Cliente;

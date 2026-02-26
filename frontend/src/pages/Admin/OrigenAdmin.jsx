@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
+import CrearOrigen from "./CrearOrigen";
 
 export default function OrigenAdmin() {
   const [origenes, setOrigenes] = useState([]);
@@ -16,6 +17,8 @@ export default function OrigenAdmin() {
   const cargarOrigenes = async () => {
     try {
       const res = await axios.get(`${API_URL}/origen`);
+
+      
       setOrigenes(res.data);
     } catch (error) {
       console.error(error);
@@ -163,12 +166,7 @@ export default function OrigenAdmin() {
                   >
                     Editar
                   </button>
-                  <button
-                    onClick={() => handleDelete(o.id)}
-                    className="bg-red-600 hover:bg-red-700 text-white py-1 px-3 rounded-md"
-                  >
-                    Eliminar
-                  </button>
+
                 </td>
               </tr>
             ))}
@@ -180,6 +178,8 @@ export default function OrigenAdmin() {
           </tbody>
         </table>
       </div>
+
+      <CrearOrigen/>
     </div>
   );
 }

@@ -201,188 +201,128 @@ const CrearVentaCompleta = () => {
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
 
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (!foto) {
-      Swal.fire("Atención", "Debes subir una foto", "warning");
-      return;
-    }
+  if (!foto) {
+    Swal.fire("Atención", "Debes subir una foto", "warning");
+    return;
+  }
 
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
 
-      // 🔥 Construir FormData
-      const formData = new FormData();
+    // 🔥 Construir FormData
+    const formData = new FormData();
 
-      formData.append(
-        "data",
-        JSON.stringify({
-          cliente,
-          venta: {
-            ...venta,
-            usuarioAgenciaId: Number(venta.usuarioAgenciaId),
-            origenId: Number(venta.origenId),
-          },
-          detalle: {
-            ...detalle,
-            dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
-            modeloId: Number(detalle.modeloId),
-            formaPagoId: Number(detalle.formaPagoId),
-            cantidad: Number(detalle.cantidad),
-            precioVendedor: Number(detalle.precioVendedor),
-            entrada: detalle.entrada ? Number(detalle.entrada) : 0,
-            alcance: detalle.alcance ? Number(detalle.alcance) : 0,
-          },
-          obsequios,
-        }),
-      );
-
-      const options = {
-        maxSizeMB: 0.4, // ~400 KB
-        maxWidthOrHeight: 1280, // resolución máxima
-        useWebWorker: true,
-      };
-
-      const imagenComprimida = await imageCompression(foto, options);
-
-      // Agregar imagen comprimida
-      formData.append("foto", imagenComprimida);
-
-      const response = await axios.post(
-        `${API_URL}/registrar/ventas-completas`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
-
-      const ventaData = response.data;
-      const texto = buildVentaText({
+    formData.append(
+      "data",
+      JSON.stringify({
         cliente,
-        origen: origenSeleccionado,
-        dispositivoMarca: dispositivoMarcaSeleccionado,
-        formaPago: formaPagoSeleccionada,
-        modelo: modeloSeleccionado,
         venta: {
           ...venta,
-          id: ventaData.venta.id,
-          fecha: ventaData.venta.fecha,
+          usuarioAgenciaId: Number(venta.usuarioAgenciaId),
+          origenId: Number(venta.origenId),
         },
-        detalle,
-        usuarioInfo,
+        detalle: {
+          ...detalle,
+          dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
+          modeloId: Number(detalle.modeloId),
+          formaPagoId: Number(detalle.formaPagoId),
+          cantidad: Number(detalle.cantidad),
+          precioVendedor: Number(detalle.precioVendedor),
+          entrada: detalle.entrada ? Number(detalle.entrada) : 0,
+          alcance: detalle.alcance ? Number(detalle.alcance) : 0,
+        },
         obsequios,
-      });
+      })
+    );
 
-      // ⚠️ NO uses textoVenta aquí, usa texto directo
+    // 🔽 Comprimir imagen
+    const options = {
+      maxSizeMB: 0.4,
+      maxWidthOrHeight: 1280,
+      useWebWorker: true,
+    };
 
-      Swal.fire({
-        title: "Venta creada",
-        text: "¿Quieres copiar la información?",
-        icon: "success",
-        showCancelButton: true,
-        confirmButtonText: "Copiar",
-        cancelButtonText: "No",
-      }).then((result) => {
-        if (result.isConfirmed) {
-          copiarTexto(texto); // ✅ gesto válido
-        }
+    const imagenComprimida = await imageCompression(foto, options);
+    formData.append("foto", imagenComprimida);
 
-        // 🔄 reset y navegación después de interacción
-        setFoto(null);
-        setPreview(null);
-        setObsequios([]);
-        setCliente({
-          cliente: "",
-          cedula: "",
-          telefono: "",
-          correo: "",
-          direccion: "",
-        });
-        setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
-
-        navigate("/");
-      });
-
-      setTextoVenta(texto);
-      //  await navigator.clipboard.writeText(texto);
-
-      Swal.fire({
-        title: "✅ Venta registrada",
-        html: `
-  <div class="text-left space-y-4">
-
-    <!-- Header -->
-    <div class="flex items-start gap-3">
-      <div class="bg-green-100 text-green-600 p-2 rounded-lg">
-        ✓
-      </div>
-      <div>
-        <h3 class="text-lg font-semibold text-gray-800">
-          Venta registrada
-        </h3>
-        <p class="text-sm text-gray-500">
-          La información fue guardada correctamente. Puedes copiar los datos para compartirlos.
-        </p>
-      </div>
-    </div>
-
-    <!-- Divider -->
-    <div class="border-t border-gray-200"></div>
-
-    <!-- Action -->
-    <button 
-      id="btnCopiar"
-      class="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-    >
-      <span>📋</span>
-      <span>Copiar información</span>
-    </button>
-
-  </div>
-`,
-        showConfirmButton: false,
-        width: 500,
-        didOpen: () => {
-          const btn = document.getElementById("btnCopiar");
-
-          btn.addEventListener("click", async () => {
-            await copiarTexto(texto);
-
-            // feedback visual inmediato
-            btn.innerText = "✅ Copiado";
-            btn.classList.remove("bg-blue-600");
-            btn.classList.add("bg-green-600");
-          });
+    // 🚀 Enviar request
+    const response = await axios.post(
+      `${API_URL}/registrar/ventas-completas`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-      });
+      }
+    );
 
-      // 🔄 Reset
-      setFoto(null);
-      setPreview(null);
-      setObsequios([]);
-      setCliente({
-        cliente: "",
-        cedula: "",
-        telefono: "",
-        correo: "",
-        direccion: "",
-      });
-      setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/");
-    } catch (error) {
-      console.error(error);
+    const ventaData = response.data;
 
-      const mensaje =
-        error.response?.data?.message || "No se pudo crear la venta";
+    // 🧾 Construir texto
+    const texto = buildVentaText({
+      cliente,
+      origen: origenSeleccionado,
+      dispositivoMarca: dispositivoMarcaSeleccionado,
+      formaPago: formaPagoSeleccionada,
+      modelo: modeloSeleccionado,
+      venta: {
+        ...venta,
+        id: ventaData.venta.id,
+        fecha: ventaData.venta.fecha,
+      },
+      detalle,
+      usuarioInfo,
+      obsequios,
+    });
 
-      Swal.fire("Error", mensaje, "error");
-    } finally {
-      setLoading(false);
+    // ✅ Modal único
+    const result = await Swal.fire({
+      title: "Venta registrada",
+      text: "¿Quieres copiar la información?",
+      icon: "success",
+      showCancelButton: true,
+      confirmButtonText: "Copiar",
+      cancelButtonText: "No",
+    });
+
+    if (result.isConfirmed) {
+      await copiarTexto(texto);
     }
-  };
+
+    // 🔄 Reset UNA SOLA VEZ
+    setFoto(null);
+    setPreview(null);
+    setObsequios([]);
+    setCliente({
+      cliente: "",
+      cedula: "",
+      telefono: "",
+      correo: "",
+      direccion: "",
+    });
+    setVenta((prev) => ({
+      ...prev,
+      origenId: "",
+      observacion: "",
+    }));
+
+    navigate("/");
+  } catch (error) {
+    console.error(error);
+
+    const mensaje =
+      error.response?.data?.message || "No se pudo crear la venta";
+
+    Swal.fire("Error", mensaje, "error");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
 const copiarTexto = async (texto) => {
   try {
