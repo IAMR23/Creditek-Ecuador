@@ -40,7 +40,7 @@ const Gestion = sequelize.define(
       allowNull: false,
     },
 
-    origen: {
+/*     origen: {
       type: DataTypes.ENUM(
         "REFERIDO",
         "REGESTION",
@@ -54,11 +54,16 @@ const Gestion = sequelize.define(
         "TIKTOK"
       ),
       allowNull: true,
-    },
-    origenCallCenter : {
+    }, */
+/*     origenCallCenter : {
       type: DataTypes.STRING,
       allowNull: true,
-    } , 
+    } ,  */
+
+    origen : {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    }, 
     region: {
       type: DataTypes.ENUM(
         "SIN_ESPECIFICAR",
