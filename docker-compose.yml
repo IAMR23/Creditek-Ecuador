@@ -61,6 +61,9 @@ services:
       - internal
     depends_on:
       - postgres
+    dns : 
+      - 8.8.8.8
+      - 1.1.1.1
 
   # ------------------------------
   # 4. FRONTEND (VITE, SERVIDO POR NGINX)

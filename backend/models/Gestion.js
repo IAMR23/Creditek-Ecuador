@@ -49,7 +49,6 @@ const Gestion = sequelize.define(
         "MESSENGER",
         "DIFUSIONES",
         "BASE_DE_DATOS",
-        "REDES_UPHONE",
         "PAUTA",
         "TIKTOK"
       ),
