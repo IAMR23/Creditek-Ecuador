@@ -181,6 +181,7 @@ const crearVentaCompleta = async (req, res) => {
       if (clienteDB.clienteContifico) {
      //   await actualizarClienteContifico(clienteDB);
       } else {
+        console.log("Buscando cliente en Contifico con cédula:", clienteDB.cedula);
         clienteContifico = await buscarClienteContifico(clienteDB.cedula);
         if (clienteContifico) {
           clienteDB.clienteContifico = clienteContifico.id;
@@ -188,6 +189,7 @@ const crearVentaCompleta = async (req, res) => {
 
          // await actualizarClienteContifico(clienteDB);
         } else {
+          console.log("Cliente no encontrado en Contifico, creando nuevo cliente con cédula:", clienteDB.cedula);
           const nuevo = await crearClienteContifico(clienteDB);
 
           clienteDB.clienteContifico = nuevo.id;

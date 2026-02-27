@@ -45,7 +45,7 @@ const Gestion = sequelize.define(
         "REFERIDO",
         "REGESTION",
         "WHATSAPP", 
-        "WHATSAPP_ANUNCIOS",
+        "WHATSAPP ANUNCIOS",
         "MESSENGER",
         "DIFUSIONES",
         "BASE_DE_DATOS",
