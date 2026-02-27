@@ -223,10 +223,12 @@ FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
       ];
     }
 
-    // Filtro por origen
+
     if (origen) {
-      where.origen = origen.toUpperCase();
-    }
+  where.origen = {
+    [Op.iLike]: `%${origen.toUpperCase()}%`,
+  };
+}
 
     // Filtro por región
     if (region) {

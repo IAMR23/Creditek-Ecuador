@@ -112,6 +112,7 @@ function LoginForm({ setAuth }) {
             <input
               type="email"
               name="email"
+              autoComplete="username"
               value={credentials.email}
               onChange={handleChange}
               className="w-full border border-[#7F6DF2] rounded-lg p-3 focus:ring-2 focus:ring-[#9D1DF2] outline-none"
@@ -131,6 +132,7 @@ function LoginForm({ setAuth }) {
       type={showPassword ? "text" : "password"}
       name="password"
       value={credentials.password}
+      autoComplete="current-password"
       onChange={handleChange}
       className="w-full border border-[#7F6DF2] rounded-lg p-3 focus:ring-2 focus:ring-[#9D1DF2] outline-none pr-12"
       required

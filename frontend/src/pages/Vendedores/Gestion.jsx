@@ -20,7 +20,6 @@ export default function Gestion() {
     dispositivoId: "",
     solicitud: "",
     origen: "",
-    origenCallCenter:"",
     region: "",
     accion: "",
     observacion: "",
@@ -376,8 +375,8 @@ export default function Gestion() {
               </label>
 
               <select
-                name="origenCallCenter"
-                value={form.origenCallCenter}
+                name="origen"
+                value={form.origen}
                 onChange={handleChange}
                 required
                 className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"

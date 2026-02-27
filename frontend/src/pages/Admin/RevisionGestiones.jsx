@@ -30,6 +30,23 @@ const RevisionGestiones = () => {
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
 
+   const [origenes, setOrigenes] = useState([]);
+  
+    // 🔽 Obtener lista
+    const obtenerOrigenes = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
+        setOrigenes(res.data);
+      } catch (error) {
+        console.error(error);
+        Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
+      }
+    };
+  
+    useEffect(() => {
+      obtenerOrigenes();
+    }, []);
+
   useEffect(() => {
     obtenerGestiones();
   }, []);
@@ -185,7 +202,7 @@ const RevisionGestiones = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="bg-gray-50 p-2">
       <div className="flex justify-between items-center ">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-800">
@@ -234,21 +251,23 @@ const RevisionGestiones = () => {
               <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
             </select>
 
-            <select
-              value={origen}
-              onChange={(e) => setOrigen(e.target.value)}
-              className="border px-3 py-2 rounded"
-            >
-              <option value="">Todos Orígenes</option>
-              <option value="WHATSAPP_ANUNCIOS">WHATSAPP ANUNCIOS</option>
-              <option value="REFERIDO">REFERIDO</option>
-              <option value="REGESTION">REGESTION</option>
-              <option value="MESSENGER">MESSENGER</option>
-              <option value="DIFUSIONES">DIFUSIONES</option>
-              <option value="BASE_DE_DATOS">BASE DE DATOS</option>
-              <option value="REDES_UPHONE">REDES UPHONE</option>
-              <option value="PAUTA">PAUTA</option>
-            </select>
+    
+    
+              <select
+                name="origen"
+                value={origen}
+                onChange={(e) => setOrigen(e.target.value)}
+                required
+                className="border px-3 py-2 rounded"
+              >
+                <option value="">Todos los Origenes</option>
+
+                {origenes.map((o) => (
+                  <option key={o.id} value={o.nombre}>
+                    {o.nombre}
+                  </option>
+                ))}
+              </select>
 
             <select
               className="border px-2 py-1 rounded"
@@ -269,15 +288,18 @@ const RevisionGestiones = () => {
             >
               Filtrar
             </button>
-          </div>
-        </div>
 
-        <button
+
+                    <button
           onClick={descargarExcel}
           className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-3 rounded"
         >
-          <FaFileExcel size={25} /> Descargar Excel
+          <FaFileExcel size={25} /> 
         </button>
+          </div>
+        </div>
+
+
       </div>
 
       {/* CONTENEDOR */}

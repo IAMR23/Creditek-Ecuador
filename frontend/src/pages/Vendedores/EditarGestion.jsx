@@ -13,6 +13,23 @@ export default function EditarGestion() {
   const [dispositivos, setDispositivos] = useState([]);
   const [usuarioInfo, setUsuarioInfo] = useState(null);
 
+    const [origenes, setOrigenes] = useState([]);
+  
+    // 🔽 Obtener lista
+    const obtenerOrigenes = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
+        setOrigenes(res.data);
+      } catch (error) {
+        console.error(error);
+        Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
+      }
+    };
+  
+    useEffect(() => {
+      obtenerOrigenes();
+    }, []);
+
   const [form, setForm] = useState({
     usuarioAgenciaId: "",
     celularGestionado: "",
@@ -339,10 +356,12 @@ export default function EditarGestion() {
           </h2>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <div className="space-y-2">
+       
+                 <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
                 Origen *
               </label>
+
               <select
                 name="origen"
                 value={form.origen}
@@ -351,15 +370,12 @@ export default function EditarGestion() {
                 className="w-full border border-gray-300 focus:border-green-600 focus:ring-1 focus:ring-green-600 rounded-xl px-4 py-2 outline-none transition"
               >
                 <option value="">Seleccionar</option>
-                <option value="WHATSAPP_ANUNCIOS">WHATSAPP ANUNCIOS</option>
-                <option value="REFERIDO">REFERIDO</option>
-                <option value="REGESTION">REGESTION</option>
-                <option value="MESSENGER">MESSENGER</option>
-                <option value="DIFUSIONES">DIFUSIONES</option>
-                <option value="BASE_DE_DATOS">BASE DE DATOS</option>
-                <option value="REDES_UPHONE">REDES UPHONE</option>
-                <option value="PAUTA">PAUTA</option>
-                <option value="TIKTOK">TIKTOK</option>
+
+                {origenes.map((o) => (
+                  <option key={o.id} value={o.nombre}>
+                    {o.nombre}
+                  </option>
+                ))}
               </select>
             </div>
 

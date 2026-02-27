@@ -65,7 +65,7 @@ const actualizarClienteContifico = async (cliente) => {
       error.response?.data || error.message,
     );
     throw error;
-  }
+  } 
 };
 
 module.exports = {

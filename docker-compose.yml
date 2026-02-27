@@ -51,6 +51,9 @@ services:
       DB_PORT: ${DB_PORT}
       WEB_CORS: ${WEB_CORS}
       JWT_SECRET: ${JWT_SECRET}
+      API_CONTIFICO: ${API_CONTIFICO}
+      API_KEY: ${API_KEY}
+      API_TOKEN: ${API_TOKEN}
       DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}
     volumes:
       - ./backend/uploads:/app/uploads
