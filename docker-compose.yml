@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # ------------------------------
   # 1. REVERSE PROXY
@@ -37,7 +39,6 @@ services:
   # ------------------------------
   # 3. BACKEND (NODE)
   # ------------------------------
-
   backend:
     build: ./backend
     restart: always
@@ -58,10 +59,11 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
     networks:
-      - internal
+      - internal          # para comunicarse con DB y otros servicios internos
+      - public-internet   # para poder salir a Internet
     depends_on:
       - postgres
-    dns : 
+    dns:
       - 8.8.8.8
       - 1.1.1.1
 
@@ -98,4 +100,6 @@ volumes:
 networks:
   public:
   internal:
-    internal: true
+    internal: true      # base de datos y servicios internos siguen aislados
+  public-internet:
+    driver: bridge       # backend puede salir a Internet
