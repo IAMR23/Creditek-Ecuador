@@ -99,12 +99,12 @@ export default function VentasAuditoria() {
         Agencia: venta.local ?? "",
         Vendedor: venta.vendedor ?? "",
         Origen: venta.origen ?? "",
-        Observacion : venta.observaciones ?? "",  
-        Dispositivo: venta.tipo ?? "",
-        Marca: venta.marca ?? "",
-        Modelo: venta.modelo ?? "",
-        "Precio Sistema": venta.precioSistema ?? "",
-        "Precio Vendedor": venta.precioVendedor ?? "",
+        Observacion: venta.observaciones ?? "",
+Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),        Precio: venta.precioVendedor ?? "",
+        "Precio Unitario":
+          venta.precioVendedor != null
+            ? Number((venta.precioVendedor / 1.15).toFixed(2))
+            : "",
         "Forma Pago": venta.formaPago ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
@@ -127,7 +127,7 @@ export default function VentasAuditoria() {
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaInicio("2026-01-01");
+    setFechaInicio(hoyLocal);
     setFechaFin(hoyLocal);
   }, []);
   return (

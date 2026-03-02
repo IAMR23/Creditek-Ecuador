@@ -4,7 +4,9 @@ import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
 import imageCompression from "browser-image-compression";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { Eye } from "lucide-react";
+import { FaPen } from "react-icons/fa";
 
 const CrearVentaCompleta = () => {
   const [loading, setLoading] = useState(false);
@@ -192,8 +194,20 @@ const CrearVentaCompleta = () => {
     }
   };
 
-  const handleClienteChange = (e) =>
-    setCliente({ ...cliente, [e.target.name]: e.target.value });
+const handleClienteChange = (e) => {
+  const { name, value } = e.target;
+
+  // Solo números para cédula y teléfono
+  if (name === "cedula" || name === "telefono") {
+    const soloNumeros = value.replace(/\D/g, ""); // elimina letras
+    if (soloNumeros.length <= 10) {
+      setCliente({ ...cliente, [name]: soloNumeros });
+    }
+    return;
+  }
+
+  setCliente({ ...cliente, [name]: value });
+};
 
   const handleVentaChange = (e) =>
     setVenta({ ...venta, [e.target.name]: e.target.value });
@@ -201,171 +215,366 @@ const CrearVentaCompleta = () => {
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
 
-
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!foto) {
-    Swal.fire("Atención", "Debes subir una foto", "warning");
+    if (!foto) {
+      Swal.fire("Atención", "Debes subir una foto", "warning");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // 🔥 Construir FormData
+      const formData = new FormData();
+
+      // Validar cédula
+if (!/^\d{10}$/.test(cliente.cedula)) {
+  Swal.fire("Error", "La cédula debe tener exactamente 10 dígitos", "error");
+  return;
+}
+
+// Validar teléfono
+if (!/^\d{10}$/.test(cliente.telefono)) {
+  Swal.fire("Error", "El teléfono debe tener exactamente 10 dígitos", "error");
+  return;
+}
+
+      formData.append(
+        "data",
+        JSON.stringify({
+          cliente,
+          venta: {
+            ...venta,
+            usuarioAgenciaId: Number(venta.usuarioAgenciaId),
+            origenId: Number(venta.origenId),
+          },
+          detalle: {
+            ...detalle,
+            dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
+            modeloId: Number(detalle.modeloId),
+            formaPagoId: Number(detalle.formaPagoId),
+            cantidad: Number(detalle.cantidad),
+            precioVendedor: Number(detalle.precioVendedor),
+            entrada: detalle.entrada ? Number(detalle.entrada) : 0,
+            alcance: detalle.alcance ? Number(detalle.alcance) : 0,
+          },
+          obsequios,
+        }),
+      );
+
+      // 🔽 Comprimir imagen
+      const options = {
+        maxSizeMB: 0.4,
+        maxWidthOrHeight: 1280,
+        useWebWorker: true,
+      };
+
+      const imagenComprimida = await imageCompression(foto, options);
+      formData.append("foto", imagenComprimida);
+
+      // 🚀 Enviar request
+      const response = await axios.post(
+        `${API_URL}/registrar/ventas-completas`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        },
+      );
+
+      const ventaData = response.data;
+
+      // 🧾 Construir texto
+      const texto = buildVentaText({
+        cliente,
+        origen: origenSeleccionado,
+        dispositivoMarca: dispositivoMarcaSeleccionado,
+        formaPago: formaPagoSeleccionada,
+        modelo: modeloSeleccionado,
+        venta: {
+          ...venta,
+          id: ventaData.venta.id,
+          fecha: ventaData.venta.fecha,
+        },
+        detalle,
+        usuarioInfo,
+        obsequios,
+      });
+
+      // ✅ Modal único
+      const result = await Swal.fire({
+        title: "Venta registrada",
+        text: "¿Quieres copiar la información?",
+        icon: "success",
+        showCancelButton: true,
+        confirmButtonText: "Copiar",
+        cancelButtonText: "No",
+      });
+
+      if (result.isConfirmed) {
+        await copiarTexto(texto);
+      }
+
+      // 🔄 Reset UNA SOLA VEZ
+      setFoto(null);
+      setPreview(null);
+      setObsequios([]);
+      setCliente({
+        cliente: "",
+        cedula: "",
+        telefono: "",
+        correo: "",
+        direccion: "",
+      });
+      setVenta((prev) => ({
+        ...prev,
+        origenId: "",
+        observacion: "",
+      }));
+
+      navigate("/");
+    } catch (error) {
+      console.error(error);
+
+      const mensaje =
+        error.response?.data?.message || "No se pudo crear la venta";
+
+      Swal.fire("Error", mensaje, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [id, setId] = useState(null);
+  const [entregaIdInput, setEntregaIdInput] = useState("");
+
+  const [showModal, setShowModal] = useState(false);
+  const [entregas, setEntregas] = useState([]);
+  const [loadingEntregas, setLoadingEntregas] = useState(false);
+  const [page, setPage] = useState(1);
+  const limit = 10;
+  const [totalPages, setTotalPages] = useState(1);
+  const [error, setError] = useState("");
+  const [filas, setFilas] = useState([]);
+
+  const cargarEntregas = async () => {
+    if (!usuarioInfo?.id) return;
+
+    setLoadingEntregas(true);
+    setError("");
+
+    try {
+      const url = `${API_URL}/vendedor/entrega/${usuarioInfo.id}?page=${page}&limit=${limit}`;
+      const { data } = await axios.get(url);
+
+      if (!data.ok) return;
+
+      setTotalPages(data.totalPages || 1);
+      const ventas = data.entrega || [];
+      const resultado = ventas.map((entrega) => ({
+        id: entrega.id,
+        Fecha: `${entrega.dia ?? ""} ${entrega.fecha ?? ""}`,
+        Cliente: entrega.cliente ?? "",
+        Dispositivo:
+          `${entrega.tipo ?? ""} ${entrega.marca ?? ""} ${entrega.modelo ?? ""}`
+            .toUpperCase()
+            .trim(),
+        Precio:
+          entrega.precioVendedor != null ? `$${entrega.precioVendedor}` : "",
+        "Forma Pago": entrega.formaPago ?? "",
+        Entrada: entrega.entrada ?? "",
+        Alcance: entrega.alcance ?? "",
+        Estado: entrega.estado ?? "",
+      }));
+
+      setFilas(resultado);
+    } catch (error) {
+      setError("Error al cargar las entregas");
+    } finally {
+      setLoadingEntregas(false);
+    }
+  };
+
+  useEffect(() => {
+    if (showModal && usuarioInfo?.id) {
+      cargarEntregas();
+    }
+  }, [showModal, usuarioInfo, page]);
+
+  const seleccionarEntrega = async (id) => {
+    setShowModal(false);
+    await cargarEntregaPorId(id); // reutiliza tu lógica actual
+  };
+
+
+  const cargarEntregaPorId = async (id) => {
+  if (!id) {
+    Swal.fire("Atención", "ID de entrega no válido", "warning");
     return;
   }
 
   try {
-    setLoading(true);
-
-    // 🔥 Construir FormData
-    const formData = new FormData();
-
-    formData.append(
-      "data",
-      JSON.stringify({
-        cliente,
-        venta: {
-          ...venta,
-          usuarioAgenciaId: Number(venta.usuarioAgenciaId),
-          origenId: Number(venta.origenId),
-        },
-        detalle: {
-          ...detalle,
-          dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
-          modeloId: Number(detalle.modeloId),
-          formaPagoId: Number(detalle.formaPagoId),
-          cantidad: Number(detalle.cantidad),
-          precioVendedor: Number(detalle.precioVendedor),
-          entrada: detalle.entrada ? Number(detalle.entrada) : 0,
-          alcance: detalle.alcance ? Number(detalle.alcance) : 0,
-        },
-        obsequios,
-      })
+    const res = await axios.get(
+      `${API_URL}/registrar2/entrega-completa/${id}`,
     );
 
-    // 🔽 Comprimir imagen
-    const options = {
-      maxSizeMB: 0.4,
-      maxWidthOrHeight: 1280,
-      useWebWorker: true,
-    };
+    const {
+      cliente: clienteDB,
+      entrega: entregaDB,
+      detalle: detalleDB,
+      obsequios: obsequiosDB,
+    } = res.data;
 
-    const imagenComprimida = await imageCompression(foto, options);
-    formData.append("foto", imagenComprimida);
+    const fechaFormateada = entregaDB?.fecha
+      ? entregaDB.fecha.split("T")[0]
+      : "";
 
-    // 🚀 Enviar request
-    const response = await axios.post(
-      `${API_URL}/registrar/ventas-completas`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
+    // =========================
+    // CLIENTE
+    // =========================
+    setCliente({
+      cliente: clienteDB?.cliente || "",
+      cedula: clienteDB?.cedula || "",
+      telefono: clienteDB?.telefono || "",
+      correo: clienteDB?.correo || "",
+      direccion: clienteDB?.direccion || "",
+    });
+
+    // =========================
+    // VENTA
+    // =========================
+    setVenta({
+      usuarioAgenciaId: entregaDB?.usuarioAgenciaId ?? null,
+      origenId: Number(entregaDB?.origenId) || "",
+      observacion: entregaDB?.observacion || "",
+      fecha: fechaFormateada,
+    });
+
+    const origenEncontrado = origenes.find(
+      (o) => o.id === Number(entregaDB?.origenId),
     );
 
-    const ventaData = response.data;
+    setOrigenSeleccionado(origenEncontrado || null);
 
-    // 🧾 Construir texto
-    const texto = buildVentaText({
-      cliente,
-      origen: origenSeleccionado,
-      dispositivoMarca: dispositivoMarcaSeleccionado,
-      formaPago: formaPagoSeleccionada,
-      modelo: modeloSeleccionado,
-      venta: {
-        ...venta,
-        id: ventaData.venta.id,
-        fecha: ventaData.venta.fecha,
-      },
-      detalle,
-      usuarioInfo,
-      obsequios,
+    // =========================
+    // DETALLE (IDs)
+    // =========================
+    const dispositivoMarcaId = Number(detalleDB?.dispositivoMarcaId) || "";
+    const modeloId = Number(detalleDB?.modeloId) || "";
+    const formaPagoId = Number(detalleDB?.formaPagoId) || "";
+
+    setDetalle({
+      ...detalleDB,
+      dispositivoMarcaId: String(dispositivoMarcaId),
+      modeloId,
+      formaPagoId,
+      cantidad: Number(detalleDB?.cantidad) || 1,
+      precioUnitario: detalleDB?.precioUnitario?.toString() || "",
+      precioVendedor: detalleDB?.precioVendedor?.toString() || "",
+      entrada: detalleDB?.entrada?.toString() || "",
+      alcance: detalleDB?.alcance?.toString() || "",
     });
 
-    // ✅ Modal único
-    const result = await Swal.fire({
-      title: "Venta registrada",
-      text: "¿Quieres copiar la información?",
-      icon: "success",
-      showCancelButton: true,
-      confirmButtonText: "Copiar",
-      cancelButtonText: "No",
-    });
+    // =========================
+    // ESTADOS DERIVADOS 🔥
+    // =========================
 
-    if (result.isConfirmed) {
-      await copiarTexto(texto);
+    // Dispositivo + Marca
+    const dispositivo = dispositivoMarcas.find(
+      (dm) => dm.id === dispositivoMarcaId
+    );
+    setDispositivoMarcaSeleccionado(dispositivo || null);
+
+    // Forma de pago
+    const forma = formasPago.find(
+      (f) => f.id === formaPagoId
+    );
+    setFormaPagoSeleccionada(forma || null);
+
+    // =========================
+    // OBSEQUIOS
+    // =========================
+    setObsequios(
+      obsequiosDB?.map((o) => ({
+        obsequioId: o.obsequioId,
+        cantidad: o.cantidad,
+      })) || [],
+    );
+
+    // =========================
+    // MODELOS + MODELO SELECCIONADO
+    // =========================
+    if (dispositivoMarcaId) {
+      const resModelos = await axios.get(
+        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`,
+      );
+
+      const modelosData = resModelos.data || [];
+      setModelos(modelosData);
+
+      const modelo = modelosData.find(
+        (m) => m.id === modeloId
+      );
+
+      setModeloSeleccionado(modelo || null);
+    } else {
+      setModelos([]);
+      setModeloSeleccionado(null);
     }
 
-    // 🔄 Reset UNA SOLA VEZ
-    setFoto(null);
-    setPreview(null);
-    setObsequios([]);
-    setCliente({
-      cliente: "",
-      cedula: "",
-      telefono: "",
-      correo: "",
-      direccion: "",
-    });
-    setVenta((prev) => ({
-      ...prev,
-      origenId: "",
-      observacion: "",
-    }));
+    Swal.fire("OK", "Entrega cargada correctamente", "success");
 
-    navigate("/");
   } catch (error) {
     console.error(error);
-
-    const mensaje =
-      error.response?.data?.message || "No se pudo crear la venta";
-
-    Swal.fire("Error", mensaje, "error");
-  } finally {
-    setLoading(false);
+    Swal.fire("Error", "No se encontró la entrega", "error");
   }
 };
 
 
-const copiarTexto = async (texto) => {
-  try {
-    if (!texto) throw new Error("Texto vacío");
+  const copiarTexto = async (texto) => {
+    try {
+      if (!texto) throw new Error("Texto vacío");
 
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(texto);
-    } else {
-      const textarea = document.createElement("textarea");
-      textarea.value = texto;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      document.execCommand("copy"); // fallback legacy
-      document.body.removeChild(textarea);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(texto);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = texto;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand("copy"); // fallback legacy
+        document.body.removeChild(textarea);
+      }
+
+      // Toast tipo SaaS (no bloquea UI)
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "Copiado al portapapeles",
+        showConfirmButton: false,
+        timer: 1800,
+        timerProgressBar: true,
+      });
+    } catch (err) {
+      console.error("Error al copiar:", err);
+
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "error",
+        title: "No se pudo copiar",
+        showConfirmButton: false,
+        timer: 2000,
+      });
     }
-
-    // Toast tipo SaaS (no bloquea UI)
-    Swal.fire({
-      toast: true,
-      position: "top-end",
-      icon: "success",
-      title: "Copiado al portapapeles",
-      showConfirmButton: false,
-      timer: 1800,
-      timerProgressBar: true,
-    });
-
-  } catch (err) {
-    console.error("Error al copiar:", err);
-
-    Swal.fire({
-      toast: true,
-      position: "top-end",
-      icon: "error",
-      title: "No se pudo copiar",
-      showConfirmButton: false,
-      timer: 2000,
-    });
-  }
-};
+  };
 
   const buildVentaText = ({
     cliente = {},
@@ -465,6 +674,14 @@ ${
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <h4 className="font-bold">Datos del Cliente</h4>
+
+        <button
+          type="button"
+          onClick={() => setShowModal(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded mb-4"
+        >
+          Buscar entrega
+        </button>
 
         <div className="space-y-4">
           {/* Nombre del cliente */}
@@ -1006,6 +1223,89 @@ ${
           {loading ? "Guardando..." : "Guardar Venta"}
         </button>
       </form>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white w-[95%] max-w-5xl rounded-lg p-4 shadow-lg">
+            <h3 className="text-lg font-bold mb-4">Seleccionar Entrega</h3>
+
+            {loadingEntregas ? (
+              <p>Cargando...</p>
+            ) : error ? (
+              <p className="text-red-500">{error}</p>
+            ) : (
+              <>
+                <div className="max-h-[400px] overflow-auto border rounded">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-100 sticky top-0">
+                      <tr>
+                        <th className="p-2">Fecha</th>
+                        <th className="p-2">Cliente</th>
+                        <th className="p-2">Dispositivo</th>
+                        <th className="p-2">Precio</th>
+                        <th className="p-2">Estado</th>
+                        <th className="p-2">Acción</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {filas.map((f) => (
+                        <tr key={f.id} className="border-t hover:bg-gray-50">
+                          <td className="p-2">{f.Fecha}</td>
+                          <td className="p-2">{f.Cliente}</td>
+                          <td className="p-2">{f.Dispositivo}</td>
+                          <td className="p-2">{f.Precio}</td>
+                          <td className="p-2">{f.Estado}</td>
+                          <td className="p-2">
+                            <button
+                              onClick={() => seleccionarEntrega(f.id)}
+                              className="bg-green-600 text-white px-2 py-1 rounded"
+                            >
+                              Usar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* PAGINACIÓN */}
+                <div className="flex justify-between items-center mt-4">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    className="px-3 py-1 border rounded disabled:opacity-50"
+                  >
+                    Anterior
+                  </button>
+
+                  <span className="text-sm">
+                    Página {page} de {totalPages}
+                  </span>
+
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="px-3 py-1 border rounded disabled:opacity-50"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-gray-300 rounded"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

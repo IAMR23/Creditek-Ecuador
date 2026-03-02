@@ -30,22 +30,22 @@ const RevisionGestiones = () => {
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
 
-   const [origenes, setOrigenes] = useState([]);
-  
-    // 🔽 Obtener lista
-    const obtenerOrigenes = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
-        setOrigenes(res.data);
-      } catch (error) {
-        console.error(error);
-        Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
-      }
-    };
-  
-    useEffect(() => {
-      obtenerOrigenes();
-    }, []);
+  const [origenes, setOrigenes] = useState([]);
+
+  // 🔽 Obtener lista
+  const obtenerOrigenes = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
+      setOrigenes(res.data);
+    } catch (error) {
+      console.error(error);
+      Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
+    }
+  };
+
+  useEffect(() => {
+    obtenerOrigenes();
+  }, []);
 
   useEffect(() => {
     obtenerGestiones();
@@ -89,8 +89,11 @@ const RevisionGestiones = () => {
       const fechaObj = new Date(g.createdAt);
 
       const fila = {
-        Fecha: fechaObj.toISOString().split("T")[0], // YYYY-MM-DD
+        Fecha: fechaObj.toLocaleDateString("es-EC", {
+          timeZone: "America/Guayaquil",
+        }),
         Hora: fechaObj.toLocaleTimeString("es-EC", {
+          timeZone: "America/Guayaquil",
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
@@ -251,23 +254,21 @@ const RevisionGestiones = () => {
               <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
             </select>
 
-    
-    
-              <select
-                name="origen"
-                value={origen}
-                onChange={(e) => setOrigen(e.target.value)}
-                required
-                className="border px-3 py-2 rounded"
-              >
-                <option value="">Todos los Origenes</option>
+            <select
+              name="origen"
+              value={origen}
+              onChange={(e) => setOrigen(e.target.value)}
+              required
+              className="border px-3 py-2 rounded"
+            >
+              <option value="">Todos los Origenes</option>
 
-                {origenes.map((o) => (
-                  <option key={o.id} value={o.nombre}>
-                    {o.nombre}
-                  </option>
-                ))}
-              </select>
+              {origenes.map((o) => (
+                <option key={o.id} value={o.nombre}>
+                  {o.nombre}
+                </option>
+              ))}
+            </select>
 
             <select
               className="border px-2 py-1 rounded"
@@ -289,17 +290,14 @@ const RevisionGestiones = () => {
               Filtrar
             </button>
 
-
-                    <button
-          onClick={descargarExcel}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-3 rounded"
-        >
-          <FaFileExcel size={25} /> 
-        </button>
+            <button
+              onClick={descargarExcel}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-3 rounded"
+            >
+              <FaFileExcel size={25} />
+            </button>
           </div>
         </div>
-
-
       </div>
 
       {/* CONTENEDOR */}

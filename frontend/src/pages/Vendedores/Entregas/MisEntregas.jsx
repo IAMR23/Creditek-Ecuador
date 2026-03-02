@@ -37,9 +37,6 @@ export default function MisEntregas() {
     }
   }, []);
 
-  // ==============================
-  // Fetch principal con paginación
-  // ==============================
   const fetchData = async () => {
     if (!usuarioInfo?.id) return;
 

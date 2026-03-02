@@ -198,14 +198,14 @@ router.get("/", async (req, res) => {
     const where = {};
 
     if (fechaInicio && fechaFin) {
-      const inicio = new Date(fechaInicio);
-      const fin = new Date(fechaFin);
-      fin.setDate(fin.getDate() + 1);
+const inicio = new Date(`${fechaInicio}T00:00:00-05:00`);
+const fin = new Date(`${fechaFin}T00:00:00-05:00`);
+fin.setDate(fin.getDate() + 1);
 
       where.createdAt = {
         [Op.gte]: inicio,
         [Op.lt]: fin,
-      };
+      }; 
     }
 
     if (solicitud) {

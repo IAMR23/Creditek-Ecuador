@@ -72,7 +72,7 @@ function VendedorPanel() {
           icon: <MdList />,
           path: "/mis-entregas",
         },
-        {
+     /*    {
           title: "Crear Traslado",
           desc: "Traslados entre agencias",
           icon: <MdSwapHoriz />,
@@ -83,7 +83,7 @@ function VendedorPanel() {
           desc: "Historial de traslados",
           icon: <MdAssignment />,
           path: "/mis-traslados",
-        },
+        }, */
       ],
     },
     {
@@ -121,8 +121,8 @@ function VendedorPanel() {
   const Card = ({ title, desc, icon, path, color }) => (
     <div
       onClick={() => navigate(path)}
-      className="group aspect-square bg-white rounded-2xl 
-                 shadow-sm border border-gray-100 
+      className="group aspect-square  rounded-2xl 
+                 shadow-sm border border-gray-300 
                  flex flex-col items-center justify-center text-center p-6
                  cursor-pointer
                  transition-all duration-300 ease-in-out
@@ -155,11 +155,8 @@ function VendedorPanel() {
       {/* Header */}
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-gray-900">
-          Panel de Vendedor
-        </h1>
-        <p className="text-gray-500 mt-1">
           Bienvenido {user?.usuario?.nombre || "Vendedor"}
-        </p>
+        </h1>     
       </div>
 
       {/* Secciones */}

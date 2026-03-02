@@ -49,11 +49,11 @@ export default function MisMetas() {
         Día: venta.dia ?? "",
         Cliente: venta.nombre,
         Origen: venta.origen ?? "",
-        "Observaciones de Origen": venta.observaciones ?? "",
-        Dispositivo: venta.tipo ?? "",
-        Marca: venta.marca ?? "",
-        Modelo: venta.modelo ?? "",
-        Precio: venta.pvp ?? venta.valorCorregido ?? "",
+        "": venta.observaciones ?? "",
+        Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`,
+        Precio: venta.pvp ?? "",
+        "Precio Unitario":
+          venta.pvp != null ? Number((venta.pvp / 1.15).toFixed(2)) : "",
         "Forma Pago": venta.formaPago ?? "",
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
@@ -201,12 +201,12 @@ export default function MisMetas() {
                   >
                     <Eye size={18} />
                   </button>
-                    <Link
-                      className="bg-blue-500 text-white px-2 py-1 rounded"
-                      to={`/editar-venta/${f.id}`}
-                    >
-                      <FaPen size={18} />
-                    </Link>
+                  <Link
+                    className="bg-blue-500 text-white px-2 py-1 rounded"
+                    to={`/editar-venta/${f.id}`}
+                  >
+                    <FaPen size={18} />
+                  </Link>
                 </td>
               </tr>
             ))}

@@ -61,7 +61,7 @@ const Gestion = sequelize.define(
 
     origen : {
       type: DataTypes.TEXT,
-      allowNull: true,
+      allowNull: true, 
     }, 
     region: {
       type: DataTypes.ENUM(

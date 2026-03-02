@@ -1,25 +1,65 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { Link } from "react-router-dom"; // para navegar a otro componente
+import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import DashboardGraficas from "./DashboardGraficas";
+import MetasDiarias from "./MetasDiaras";
+
+const STORAGE_KEY = "dashboard_filtros";
 
 export default function Dashboard() {
+  // 🔥 Cargar filtros desde localStorage UNA SOLA VEZ
+  const filtrosGuardados =
+    JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
-  const [fechaFin, setFechaFin] = useState("");
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
-  const [agenciaId, setAgenciaId] = useState("");
   const [usuarios, setUsuarios] = useState([]);
-  const [vendedorId, setVendedorId] = useState("");
-  const [cierreCajaTipo, setCierreCajaTipo] = useState("");
-
   const [estadisticas, setEstadisticas] = useState(null);
 
+  // ✅ Estados persistentes
+  const [fechaInicio, setFechaInicio] = useState(
+    filtrosGuardados.fechaInicio || "2026-01-01"
+  );
+
+  const [fechaFin, setFechaFin] = useState(
+    filtrosGuardados.fechaFin ||
+      new Date().toLocaleDateString("en-CA")
+  );
+
+  const [agenciaId, setAgenciaId] = useState(
+    filtrosGuardados.agenciaId || ""
+  );
+
+  const [vendedorId, setVendedorId] = useState(
+    filtrosGuardados.vendedorId || ""
+  );
+
+  const [cierreCajaTipo, setCierreCajaTipo] = useState(
+    filtrosGuardados.cierreCajaTipo || ""
+  );
+
+  // 🔥 Guardar en localStorage AUTOMÁTICO
+  useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        fechaInicio,
+        fechaFin,
+        agenciaId,
+        vendedorId,
+        cierreCajaTipo,
+      })
+    );
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo]);
+
+  // -----------------------------
+  // CARGAS INICIALES
+  // -----------------------------
   const cargarUsuarios = async () => {
     try {
       const res = await axios.get(`${API_URL}/usuarios`);
@@ -36,13 +76,6 @@ export default function Dashboard() {
       setAgencias(res.data || []);
     } catch (error) {
       console.error("Error cargando agencias:", error);
-
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "No se pudieron cargar las agencias.",
-      });
-
       setAgencias([]);
     }
   };
@@ -64,6 +97,9 @@ export default function Dashboard() {
     }
   }, []);
 
+  // -----------------------------
+  // FETCH DATA
+  // -----------------------------
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
@@ -79,23 +115,15 @@ export default function Dashboard() {
         fechaFin,
       });
 
-      if (agenciaId && agenciaId !== "todas") {
-        params.append("agenciaId", agenciaId);
-      }
-
-      if (vendedorId && vendedorId !== "todos") {
-        params.append("vendedorId", vendedorId);
-      }
-
-      if (cierreCajaTipo && cierreCajaTipo !== "todos") {
-  params.append("cierreCaja", cierreCajaTipo);
-}
-
+      if (agenciaId) params.append("agenciaId", agenciaId);
+      if (vendedorId) params.append("vendedorId", vendedorId);
+      if (cierreCajaTipo) params.append("cierreCaja", cierreCajaTipo);
 
       const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
+
       setEstadisticas(data.estadisticas);
 
       const ventas = data.ventas || [];
@@ -129,16 +157,16 @@ export default function Dashboard() {
     }
   };
 
+  // 🔥 Se ejecuta cuando cambian filtros
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo]);
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo, usuarioInfo]);
 
-  useEffect(() => {
-    const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaFin(hoyLocal);
-  }, []);
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Dashboard</h1>
@@ -196,23 +224,21 @@ export default function Dashboard() {
           </select>
         </div>
 
-<div>
-  <label className="block text-sm font-medium">
-    Tipo de cierre de caja
-  </label>
-  <select
-    className="border px-2 py-1 rounded"
-    value={cierreCajaTipo}
-    onChange={(e) => setCierreCajaTipo(e.target.value)}
-  >
-    <option value="">Todos</option>
-    <option value="CONTADO">Contado</option>
-    <option value="CREDITV">CrediTV</option>
-    <option value="UPHONE">Uphone</option>
-  </select>
-</div>
-
-
+        <div>
+          <label className="block text-sm font-medium">
+            Tipo de cierre de caja
+          </label>
+          <select
+            className="border px-2 py-1 rounded"
+            value={cierreCajaTipo}
+            onChange={(e) => setCierreCajaTipo(e.target.value)}
+          >
+            <option value="">Todos</option>
+            <option value="CONTADO">Contado</option>
+            <option value="CREDITV">CrediTV</option>
+            <option value="UPHONE">Uphone</option>
+          </select>
+        </div>
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
@@ -220,7 +246,10 @@ export default function Dashboard() {
       {loading ? (
         <p>Cargando...</p>
       ) : (
-        <DashboardGraficas estadisticas={estadisticas} />
+        <>
+          <DashboardGraficas estadisticas={estadisticas} />
+          <MetasDiarias data={estadisticas} />
+        </>
       )}
     </div>
   );
