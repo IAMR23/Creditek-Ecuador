@@ -13,22 +13,22 @@ export default function EditarGestion() {
   const [dispositivos, setDispositivos] = useState([]);
   const [usuarioInfo, setUsuarioInfo] = useState(null);
 
-    const [origenes, setOrigenes] = useState([]);
-  
-    // 🔽 Obtener lista
-    const obtenerOrigenes = async () => {
-      try {
-        const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
-        setOrigenes(res.data);
-      } catch (error) {
-        console.error(error);
-        Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
-      }
-    };
-  
-    useEffect(() => {
-      obtenerOrigenes();
-    }, []);
+  const [origenes, setOrigenes] = useState([]);
+
+  // 🔽 Obtener lista
+  const obtenerOrigenes = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
+      setOrigenes(res.data);
+    } catch (error) {
+      console.error(error);
+      Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
+    }
+  };
+
+  useEffect(() => {
+    obtenerOrigenes();
+  }, []);
 
   const [form, setForm] = useState({
     usuarioAgenciaId: "",
@@ -323,9 +323,10 @@ export default function EditarGestion() {
               "9815",
               "1048",
               "3430",
-              "5314" , 
-              "1314" , 
-              "9750"
+              "5314",
+              "1314",
+              "9750",
+              "5314",
             ].map((ext) => (
               <label
                 key={ext}
@@ -356,8 +357,7 @@ export default function EditarGestion() {
           </h2>
 
           <div className="grid md:grid-cols-2 gap-6">
-       
-                 <div className="space-y-2">
+            <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
                 Origen *
               </label>

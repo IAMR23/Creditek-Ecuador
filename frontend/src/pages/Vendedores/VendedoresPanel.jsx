@@ -104,7 +104,7 @@ function VendedorPanel() {
         },
       ],
     },
- /*    {
+   /*  {
       category: "Caja",
       color: "orange",
       items: [

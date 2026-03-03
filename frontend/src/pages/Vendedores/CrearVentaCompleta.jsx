@@ -443,15 +443,11 @@ if (!/^\d{10}$/.test(cliente.telefono)) {
       direccion: clienteDB?.direccion || "",
     });
 
-    // =========================
-    // VENTA
-    // =========================
-    setVenta({
-      usuarioAgenciaId: entregaDB?.usuarioAgenciaId ?? null,
-      origenId: Number(entregaDB?.origenId) || "",
-      observacion: entregaDB?.observacion || "",
-      fecha: fechaFormateada,
-    });
+    setVenta((prev) => ({
+  ...prev, // mantiene fecha y observacion actuales
+  usuarioAgenciaId: entregaDB?.usuarioAgenciaId ?? null,
+  origenId: Number(entregaDB?.origenId) || "",
+}));
 
     const origenEncontrado = origenes.find(
       (o) => o.id === Number(entregaDB?.origenId),

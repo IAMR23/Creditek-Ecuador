@@ -51,7 +51,7 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
           { model: Agencia, as: "agencia", attributes: ["nombre"] },
         ],
       },
-      { model: Cliente, as: "cliente", attributes: ["cliente"] },
+      { model: Cliente, as: "cliente", attributes: ["cliente", "cedula"] },
       { model: Origen, as: "origen", attributes: ["nombre"] },
       {
         model: DetalleVenta,
@@ -79,7 +79,7 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
 
   return ventas;
 };
-
+ 
 
 const obtenerDiaSemana = (fecha) => {
   const dias = [
@@ -113,6 +113,7 @@ const fechaISO = entrega.fecha
         semana: null,
         dia: obtenerDiaSemana(entrega.fecha),
         valorAcumulado: null,
+        cedula : entrega.cliente?.cedula || "",
 
         fecha: fechaISO,
 

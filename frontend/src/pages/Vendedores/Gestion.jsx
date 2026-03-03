@@ -41,7 +41,6 @@ export default function Gestion() {
   useEffect(() => {
     obtenerOrigenes();
   }, []);
-  console.log(origenes);
 
   const [otrasCedulas, setOtrasCedulas] = useState([
     { cedula: "", solicitud: "NINGUNA" },
@@ -278,6 +277,7 @@ export default function Gestion() {
               "5314",
               "1314",
               "9750",
+              "5314",
             ].map((ext) => (
               <label
                 key={ext}

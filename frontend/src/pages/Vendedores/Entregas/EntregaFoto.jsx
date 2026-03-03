@@ -131,7 +131,6 @@ export default function EntregaFoto() {
     try {
       const url = `${API_URL}/vendedor/entrega-logistica/${id}`;
       const { data } = await axios.get(url);
-      console.log(data);
 
       if (data.ok) {
         const texto = generarTextoEntrega(data.entrega);

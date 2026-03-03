@@ -40,16 +40,16 @@ export default function MisMetas() {
     try {
       const url = `${API_URL}/vendedor/${usuarioInfo.id}?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
       const { data } = await axios.get(url);
-
       if (!data.ok) return;
       const ventas = data.ventas || [];
       const resultado = ventas.map((venta) => ({
         id: venta.id, // guardamos el id para el botón
         Fecha: venta.fecha ?? "",
         Día: venta.dia ?? "",
+        Cedula: venta.cedula ?? "",
         Cliente: venta.nombre,
         Origen: venta.origen ?? "",
-        "": venta.observaciones ?? "",
+        "Observacion": venta.observaciones ?? "",
         Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`,
         Precio: venta.pvp ?? "",
         "Precio Unitario":
@@ -85,7 +85,6 @@ export default function MisMetas() {
       const { data } = await axios.get(`${API_URL}/vendedor/venta/${id}`);
       if (data.ok) {
         setVentaSeleccionada(data.venta);
-        console.log(data.venta);
         setModalAbierto(true); // abrimos modal
       }
     } catch (error) {
@@ -261,7 +260,7 @@ export default function MisMetas() {
                   <b>Modelo:</b> {item.modelo.nombre}
                 </p>
                 <p>
-                  <b>Precio:</b> {item.precioUnitario}
+                  <b>Precio:</b> {item.precioVendedor}
                 </p>
                 <p>
                   <b>Forma Pago:</b> {item.formaPago.nombre}

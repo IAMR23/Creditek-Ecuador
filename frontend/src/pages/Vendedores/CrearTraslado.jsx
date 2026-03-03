@@ -166,7 +166,6 @@ export default function CrearTraslado() {
         confirmButtonColor: "#16a34a",
       });
 
-      console.log(res.data);
       navigate("/vendedor-panel");
     } catch (error) {
       console.error(error);
