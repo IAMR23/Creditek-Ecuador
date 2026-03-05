@@ -231,10 +231,28 @@ const handleSubmit = async (e) => {
     return;
   }
 
+
+  
   try {
     setLoading(true);
 
     const formData = new FormData();
+
+    const cedula = String(cliente.cedula || "").trim();
+const telefono = String(cliente.telefono || "").trim();
+
+// Validar cédula
+if (!/^\d{10}$/.test(cedula)) {
+  Swal.fire("Error", "La cédula debe tener exactamente 10 dígitos numéricos", "error");
+  return;
+}
+
+// Validar teléfono
+if (!/^\d{10}$/.test(telefono)) {
+  Swal.fire("Error", "El teléfono debe tener exactamente 10 dígitos numéricos", "error");
+  return;
+}
+
 
     formData.append(
       "data",
@@ -498,6 +516,7 @@ ${
               type="text"
               name="cedula"
               placeholder="Ej: 0102030405"
+               maxLength={10}
               value={cliente.cedula}
               onChange={handleClienteChange}
               required

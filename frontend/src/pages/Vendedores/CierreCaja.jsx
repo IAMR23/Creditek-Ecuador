@@ -19,6 +19,13 @@ export default function CierreCaja() {
     }))
   );
 
+
+
+    useEffect(() => {
+    const hoyLocal = new Date().toLocaleDateString("en-CA");
+    setFecha(hoyLocal);
+  }, []);
+
   const [totalFisico, setTotalFisico] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -80,7 +87,7 @@ export default function CierreCaja() {
       <h2 className="text-2xl font-bold mb-4">Cierre de Caja</h2>
 
       {/* FORM */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className=" gap-4 mb-6">
         <input
           type="date"
           className="border p-2 rounded"
@@ -88,21 +95,7 @@ export default function CierreCaja() {
           onChange={(e) => setFecha(e.target.value)}
         />
 
-        <input
-          type="text"
-          placeholder="Usuario"
-          className="border p-2 rounded"
-          value={usuario}
-          onChange={(e) => setUsuario(e.target.value)}
-        />
 
-        <input
-          type="text"
-          placeholder="Observación"
-          className="border p-2 rounded"
-          value={observacion}
-          onChange={(e) => setObservacion(e.target.value)}
-        />
       </div>
 
       {/* TABLA */}

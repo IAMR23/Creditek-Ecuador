@@ -5,10 +5,9 @@ import { API_URL } from "../../../config";
 const filaVacia = {
   responsable: "",
   detalle: "",
-  entidad: "",
   valor: "",
-  formaPago: "EFECTIVO",
-  nroRecibo: "",
+  formaPago: "",
+  recibo: "",
   observacion: "",
 };
 
@@ -22,6 +21,60 @@ export default function MovimientoCaja() {
     setFecha(hoyLocal);
   }, []);
 
+
+  const cerrarCaja = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("Sesión expirada");
+      return;
+    }
+
+    setLoading(true);
+
+    const retirosLimpios = retiros.map((r) => ({
+      monto: Number(r.monto),
+      motivo: r.motivo,
+      autorizadoPor: r.autorizadoPor,
+    }));
+
+    const denominaciones = []; // luego lo conectas
+
+    const payload = {
+      cierre: {
+        fecha,
+        observacion: "Cierre desde sistema",
+      },
+      denominaciones,
+      retiros: retirosLimpios,
+    };
+
+    const res = await axios.post(
+      `${API_URL}/api/contabilidad/cierre-caja`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    alert("Cierre realizado correctamente");
+
+    // 🔄 reset UI
+    setRows([{ ...filaVacia }]);
+    setRetiros([]);
+
+  } catch (error) {
+    console.error(error?.response?.data || error);
+    alert(error?.response?.data?.message || "Error al cerrar caja");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   const handleChange = (index, field, value) => {
     setRows((prev) => {
       const newRows = [...prev];
@@ -30,54 +83,92 @@ export default function MovimientoCaja() {
     });
   };
 
-  const agregarFila = async () => {
+  useEffect(() => {
+  const cargarMovimientos = async () => {
     try {
-      const ultimaFila = rows[rows.length - 1];
-
       const token = localStorage.getItem("token");
 
-      if (!token) {
-        alert("Sesión expirada");
-        return;
-      }
-
-      setLoading(true);
-
-      // 💾 Guardar la fila actual en backend
-      await axios.post(
-        `${API_URL}/api/movimientos`,
-        {
-          ...ultimaFila,
-          valor: Number(ultimaFila.valor),
-          nroRecibo: ultimaFila.nroRecibo ? Number(ultimaFila.nroRecibo) : null,
-          // ❌ fecha se asigna en backend
+      const res = await axios.get(`${API_URL}/api/movimientos`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      });
 
-      // ➕ Nueva fila vacía
-      const nuevaFila = {
-        ...filaVacia,
-        responsable: ultimaFila.responsable || "", // mantiene responsable
-        nroRecibo: ultimaFila.nroRecibo
-          ? Number(ultimaFila.nroRecibo) + 1
-          : null, // incrementa recibo si existe
-      };
+const data = res.data.data;
 
-      setRows((prev) => [...prev, nuevaFila]);
+if (!data || data.length === 0) {
+  setRows([{ ...filaVacia }]);
+} else {
+  const mapped = data.map((item) => ({
+    ...item,
+    recibo: item.recibo || "", // 🔥 map correcto
+  }));
+
+  setRows(mapped);
+}
+
     } catch (error) {
-      console.error(error?.response?.data || error);
-      alert(error?.response?.data?.msg || "Error al guardar");
-    } finally {
-      setLoading(false);
+      console.error(error);
     }
   };
 
-  // ❌ eliminar fila (solo frontend)
+  cargarMovimientos();
+}, []);
+
+
+/* TEMPORAL */
+
+const agregarFila = async () => {
+  try {
+    const ultimaFila = rows[rows.length - 1];
+
+    // 🔴 Validación
+    if (!ultimaFila.formaPago && !ultimaFila.observacion) {
+      alert("Debe seleccionar forma de pago o escribir una observación");
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("Sesión expirada");
+      return;
+    }
+
+    setLoading(true);
+
+    await axios.post(
+      `${API_URL}/api/movimientos`,
+      {
+        ...ultimaFila,
+        valor: Number(ultimaFila.valor),
+        recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) : null,
+        formaPago: ultimaFila.formaPago || null,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const nuevaFila = {
+      ...filaVacia,
+      responsable: ultimaFila.responsable || "",
+      recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) + 1 : null,
+    };
+
+    setRows((prev) => [...prev, nuevaFila]);
+
+  } catch (error) {
+    console.error(error?.response?.data || error);
+    alert(error?.response?.data?.msg || "Error al guardar");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
   const eliminarFila = (index) => {
     const nuevas = rows.filter((_, i) => i !== index);
     setRows(nuevas);
@@ -87,11 +178,14 @@ export default function MovimientoCaja() {
     (acc, row) => {
       const valor = Number(row.valor) || 0;
 
-      if (row.formaPago === "EFECTIVO") {
+      const forma = row.formaPago || "NINGUNO";
+
+    
+      if (forma === "EFECTIVO") {
         acc.efectivo += valor;
-      } else if (row.formaPago === "TRANSFERENCIA") {
+      } else if (forma === "TRANSFERENCIA") {
         acc.transferencia += valor;
-      } else if (row.formaPago === "PENDIENTE") {
+      } else if (forma === "PENDIENTE") {
         acc.pendiente += valor;
       }
 
@@ -119,8 +213,6 @@ export default function MovimientoCaja() {
 
     return acc;
   }, {});
-
-  
 
   const resumenArray = [
     {
@@ -170,19 +262,18 @@ export default function MovimientoCaja() {
     },
   ];
 
-
   const retiroVacio = {
-  monto: "",
-  motivo: "",
-  autorizadoPor: "",
-};
+    monto: "",
+    motivo: "",
+    autorizadoPor: "",
+  };
 
-const [retiros, setRetiros] = useState([]);
+  const [retiros, setRetiros] = useState([]);
 
-const totalRetiros = retiros.reduce(
-  (acc, r) => acc + (Number(r.monto) || 0),
-  0
-);
+  const totalRetiros = retiros.reduce(
+    (acc, r) => acc + (Number(r.monto) || 0),
+    0,
+  );
 
   return (
     <div className="p-4">
@@ -233,7 +324,6 @@ const totalRetiros = retiros.reduce(
               <th>Item</th>
               <th>Responsable</th>
               <th>Detalle</th>
-              <th>Entidad</th>
               <th>Valor</th>
               <th>Forma Pago</th>
               <th>Recibo</th>
@@ -279,14 +369,6 @@ const totalRetiros = retiros.reduce(
 
                 <td>
                   <input
-                    value={row.entidad}
-                    onChange={(e) => handleChange(i, "entidad", e.target.value)}
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <input
                     type="number"
                     value={row.valor}
                     onChange={(e) => handleChange(i, "valor", e.target.value)}
@@ -302,6 +384,7 @@ const totalRetiros = retiros.reduce(
                     }
                     className="w-full p-1"
                   >
+                    <option value="">-- Seleccionar --</option>
                     <option value="EFECTIVO">EFECTIVO</option>
                     <option value="TRANSFERENCIA">TRANSFERENCIA</option>
                     <option value="PENDIENTE">PENDIENTE</option>
@@ -311,9 +394,9 @@ const totalRetiros = retiros.reduce(
                 <td>
                   <input
                     type="number"
-                    value={row.nroRecibo}
+                    value={row.recibo}
                     onChange={(e) =>
-                      handleChange(i, "nroRecibo", e.target.value)
+                      handleChange(i, "recibo", e.target.value)
                     }
                     className="w-full p-1"
                   />
@@ -341,8 +424,6 @@ const totalRetiros = retiros.reduce(
             ))}
           </tbody>
         </table>
-
-        
       </div>
 
       {/* ACCIONES */}
@@ -357,88 +438,97 @@ const totalRetiros = retiros.reduce(
       </div>
 
       <div className="mt-4 border p-3 bg-red-50">
-  <h3 className="font-bold mb-2"> Retiros de Caja - Total: ${totalRetiros.toFixed(2)}</h3>
+        <h3 className="font-bold mb-2">
+          {" "}
+          Retiros de Caja - Total: ${totalRetiros.toFixed(2)}
+        </h3>
 
-  <table className="w-full text-sm">
-    <thead className="bg-red-200">
-      <tr>
-        <th>#</th>
-        <th>Monto</th>
-        <th>Motivo</th>
-        <th>Autorizado por</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {retiros.map((r, i) => (
-        <tr key={i} className="border-t">
-          <td>{i + 1}</td>
+        <table className="w-full text-sm">
+          <thead className="bg-red-200">
+            <tr>
+              <th>#</th>
+              <th>Monto</th>
+              <th>Motivo</th>
+              <th>Autorizado por</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {retiros.map((r, i) => (
+              <tr key={i} className="border-t">
+                <td>{i + 1}</td>
 
-          <td>
-            <input
-              type="number"
-              value={r.monto}
-              onChange={(e) => {
-                const newData = [...retiros];
-                newData[i].monto = e.target.value;
-                setRetiros(newData);
-              }}
-              className="w-full p-1"
-            />
-          </td>
+                <td>
+                  <input
+                    type="number"
+                    value={r.monto}
+                    onChange={(e) => {
+                      const newData = [...retiros];
+                      newData[i].monto = e.target.value;
+                      setRetiros(newData);
+                    }}
+                    className="w-full p-1"
+                  />
+                </td>
 
-          <td>
-            <input
-              value={r.motivo}
-              onChange={(e) => {
-                const newData = [...retiros];
-                newData[i].motivo = e.target.value;
-                setRetiros(newData);
-              }}
-              className="w-full p-1"
-            />
-          </td>
+                <td>
+                  <input
+                    value={r.motivo}
+                    onChange={(e) => {
+                      const newData = [...retiros];
+                      newData[i].motivo = e.target.value;
+                      setRetiros(newData);
+                    }}
+                    className="w-full p-1"
+                  />
+                </td>
 
-          <td>
-            <input
-              value={r.autorizadoPor}
-              onChange={(e) => {
-                const newData = [...retiros];
-                newData[i].autorizadoPor = e.target.value;
-                setRetiros(newData);
-              }}
-              className="w-full p-1"
-            />
-          </td>
+                <td>
+                  <input
+                    value={r.autorizadoPor}
+                    onChange={(e) => {
+                      const newData = [...retiros];
+                      newData[i].autorizadoPor = e.target.value;
+                      setRetiros(newData);
+                    }}
+                    className="w-full p-1"
+                  />
+                </td>
 
-          <td>
-            <button
-              onClick={() =>
-                setRetiros(retiros.filter((_, index) => index !== i))
-              }
-              className="text-red-500"
-            >
-              X
-            </button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
+                <td>
+                  <button
+                    onClick={() =>
+                      setRetiros(retiros.filter((_, index) => index !== i))
+                    }
+                    className="text-red-500"
+                  >
+                    X
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
+        <button
+          onClick={() =>
+            setRetiros([
+              ...retiros,
+              { monto: "", motivo: "", autorizadoPor: "" },
+            ])
+          }
+          className="mt-2 bg-red-500 text-white px-3 py-1"
+        >
+          + Retiro
+        </button>
+      </div>
 
-
-  </table>
-
-  <button
-    onClick={() =>
-      setRetiros([...retiros, { monto: "", motivo: "", autorizadoPor: "" }])
-    }
-    className="mt-2 bg-red-500 text-white px-3 py-1"
-  >
-    + Retiro
-  </button>
-</div>
-
+      <button
+        onClick={cerrarCaja}
+        className="bg-blue-600 text-white px-6 py-2 mt-4"
+      >
+        Cerrar Caja
+      </button>
     </div>
   );
 }

@@ -50,12 +50,12 @@ export default function MisMetas() {
         Cliente: venta.nombre,
         Origen: venta.origen ?? "",
         "Observacion": venta.observaciones ?? "",
-        Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`,
-        Precio: venta.pvp ?? "",
+        Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}.`,
+        Precio: venta.precioVendedor ?? "",
         "Precio Unitario":
-          venta.pvp != null ? Number((venta.pvp / 1.15).toFixed(2)) : "",
+          venta.precioVendedor != null ? Number((venta.precioVendedor / 1.15).toFixed(2)) : "",
         "Forma Pago": venta.formaPago ?? "",
-        Entrada: venta.entrada ?? "",
+        Entrada: venta.entrada ?? "", 
         Alcance: venta.alcance ?? "",
       }));
 

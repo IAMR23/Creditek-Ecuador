@@ -1,3 +1,4 @@
+// models/CierreCaja/CierreCaja.js
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../config/db");
 
@@ -9,61 +10,62 @@ const CierreCaja = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
-    agenciaId: {
-  type: DataTypes.INTEGER,
-  allowNull: false,
-},
-
 
     fecha: {
       type: DataTypes.DATEONLY,
       allowNull: false,
     },
 
-    totalEfectivoSistema: {
-      type: DataTypes.DECIMAL(10, 2),
+    usuarioId: {
+      type: DataTypes.INTEGER,
       allowNull: false,
-      defaultValue: 0,
     },
 
-    totalTransferenciaSistema: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: false,
-      defaultValue: 0,
+    observacion: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
 
-    totalGeneralSistema: {
+    totalFisico: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
-      defaultValue: 0,
     },
 
-    totalEfectivoFisico: {
+    totalEfectivo: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
-      defaultValue: 0,
+    },
+
+    totalTransferencia: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+    },
+
+    totalPendiente: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+    },
+
+    totalSistema: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
     },
 
     diferencia: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
-      defaultValue: 0,
     },
 
-    observacion: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
-
-    usuarioCreacion: {
-      type: DataTypes.STRING,
+    estado: {
+      type: DataTypes.ENUM("CUADRADO", "DESCUADRADO"),
       allowNull: false,
+      defaultValue: "CUADRADO",
     },
   },
   {
-    timestamps: true,
     tableName: "cierre_caja",
-  }
+    timestamps: true,
+  },
 );
 
 module.exports = CierreCaja;

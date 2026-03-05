@@ -13,19 +13,17 @@ const authenticate = async (req, res, next) => {
 
     req.user = {
       id: decoded.usuario.id,
-      agenciaId: decoded.usuario.agenciaPrincipal?.agenciaId
+      agenciaId: decoded.usuario.agenciaPrincipal?.agenciaId  , 
+      usuarioAgenciaId: decoded.usuario.agenciaPrincipal?.usuarioAgenciaId , 
     };
-
     if (!req.user.agenciaId) {
       return res.status(400).json({ message: "Usuario sin agencia asignada" });
     }
 
-    next();
+    next(); 
   } catch (error) {
     return res.status(401).json({ message: "Token inválido" });
   }
 };
-
-
 
 module.exports = { authenticate };

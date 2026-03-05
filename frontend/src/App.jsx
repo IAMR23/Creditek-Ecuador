@@ -78,6 +78,7 @@ import EditarGestion from "./pages/Vendedores/EditarGestion";
 import Caja from "./pages/Vendedores/Caja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 import BDDVentas from "./pages/Admin/BDDVentas";
+import Bonos from "./pages/Admin/Bonos";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -162,8 +163,6 @@ function App() {
                 </ProtectedRoute>
               }
             >
-
-
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="ventas-completas" element={<VentasCompletas />} />
@@ -175,10 +174,8 @@ function App() {
                 path="revision-gestiones"
                 element={<RevisionGestiones />}
               />
-                      <Route
-                path="bdd-ventas"
-                element={<BDDVentas />}
-              />
+              <Route path="bdd-ventas" element={<BDDVentas />} />
+              <Route path="bonos" element={<Bonos />} />
               <Route
                 path="entrega-logistica/:id"
                 element={<DetalleEntrega />}

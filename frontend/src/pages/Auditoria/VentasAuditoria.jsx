@@ -3,7 +3,8 @@ import axios from "axios";
 import { API_URL } from "../../../config";
 import { Link } from "react-router-dom"; // para navegar a otro componente
 import { jwtDecode } from "jwt-decode";
-import { Eye } from "lucide-react";
+import { Eye, Trash } from "lucide-react";
+import Swal from "sweetalert2";
 
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
@@ -100,7 +101,9 @@ export default function VentasAuditoria() {
         Vendedor: venta.vendedor ?? "",
         Origen: venta.origen ?? "",
         Observacion: venta.observaciones ?? "",
-Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),        Precio: venta.precioVendedor ?? "",
+        Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
+        Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
+        Precio: venta.precioVendedor ?? "",
         "Precio Unitario":
           venta.precioVendedor != null
             ? Number((venta.precioVendedor / 1.15).toFixed(2))
@@ -130,6 +133,36 @@ Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`.to
     setFechaInicio(hoyLocal);
     setFechaFin(hoyLocal);
   }, []);
+
+
+  const desactivarVenta = async (id) => {
+
+  const confirm = await Swal.fire({
+    title: "¿Desactivar venta?",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sí, desactivar",
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  try {
+    await axios.put(`${API_URL}/ventas/${id}`, {
+      activo: false,
+    });
+
+    setFilas((prev) =>
+      prev.map((fila) =>
+        fila.id === id ? { ...fila, Estado: "Desactivada" } : fila
+      )
+    );
+
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Ventas Auditoria</h1>
@@ -246,13 +279,22 @@ Dispositivo: `${venta.tipo ?? ""} ${venta.marca ?? ""} ${venta.modelo ?? ""}`.to
                   );
                 })}
 
-                <td className="p-2 border">
-                  <Link
-                    to={`/ventas-auditoria/${f.id}`}
-                    className="text-green-600 hover:underline font-semibold"
-                  >
-                    <Eye size={18} />
-                  </Link>
+                <td className="text-center">
+                  <div className="flex justify-center items-center gap-1">
+                    <Link
+                      to={`/ventas-auditoria/${f.id}`}
+                      className="text-white hover:underline font-semibold p-2 bg-green-700 rounded-xl"
+                    >
+                      <Eye size={18} />
+                    </Link>
+
+                    <button
+                      onClick={() => desactivarVenta(f.id)}
+                      className="text-white hover:underline font-semibold p-2 bg-red-700 rounded-xl"
+                    >
+                      <Trash size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

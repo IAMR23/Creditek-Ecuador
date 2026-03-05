@@ -26,15 +26,16 @@ const Traslado = require('./Traslado');
 const DetalleTraslado = require('./DetalleTraslado');
 const Gestion = require('./Gestion');
 const CierreCaja = require('./CierreCaja/CierreCaja');
-const CierreCajaDetalle = require('./CierreCaja/CierreCajaDetalle');
 const MovimientoCaja = require('./CierreCaja/MovimientoCaja');
+const Denominacion = require('./CierreCaja/Denominacion');
+const RetiroCaja = require('./CierreCaja/RetiroCaja');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
 
 // Agencia ↔ Usuario (muchos a muchos)
 Usuario.belongsToMany(Agencia, {
-  through: UsuarioAgencia,
+  through: UsuarioAgencia, 
   foreignKey: "usuarioId",
   as: "agencias",
 });
@@ -273,28 +274,11 @@ Dispositivo.hasMany(Gestion, {
 
 /* CIERRE DE CAJA */
 
+CierreCaja.hasMany(Denominacion, { foreignKey: "cierreId" });
+Denominacion.belongsTo(CierreCaja, { foreignKey: "cierreId" });
 
-CierreCaja.hasMany(CierreCajaDetalle, {
-  foreignKey: "cierreCajaId",
-});
+CierreCaja.hasMany(MovimientoCaja, { foreignKey: "cierreId" });
+MovimientoCaja.belongsTo(CierreCaja, { foreignKey: "cierreId" });
 
-CierreCajaDetalle.belongsTo(CierreCaja, {
-  foreignKey: "cierreCajaId",
-});
-
-CierreCaja.hasMany(MovimientoCaja, {
-  foreignKey: "cierreCajaId",
-});
-
-MovimientoCaja.belongsTo(CierreCaja, {
-  foreignKey: "cierreCajaId",
-});
-
-MovimientoCaja.belongsTo(Agencia, { foreignKey: "agenciaId" });
-CierreCaja.belongsTo(Agencia, { foreignKey: "agenciaId" });
-
-
-Entrega.hasOne(UsuarioAgenciaEntrega, {
-  foreignKey: "entrega_id",
-  as: "UsuarioAgenciaEntrega",
-});
+CierreCaja.hasMany(RetiroCaja, { foreignKey: "cierreId" });
+RetiroCaja.belongsTo(CierreCaja, { foreignKey: "cierreId" });

@@ -168,9 +168,9 @@ router.get("/entregas", async (req, res) => {
   const { userId, fechaInicio, fechaFin, estado, agenciaId } = req.query;
 
   try {
-const whereEntrega = {
-  estado: { [Op.ne]: "Eliminado" }, // ❌ excluir eliminados
-};
+    const whereEntrega = {
+      estado: { [Op.ne]: "Eliminado" }, // ❌ excluir eliminados
+    };
     // 📅 Filtro por fechas
     if (fechaInicio && fechaFin) {
       whereEntrega.fecha = { [Op.between]: [fechaInicio, fechaFin] };
@@ -181,14 +181,14 @@ const whereEntrega = {
     }
 
     // 📦 Estado
-if (estado && estado !== "todos") {
-  whereEntrega.estado = estado;
-}
+    if (estado && estado !== "todos") {
+      whereEntrega.estado = estado;
+    }
 
     const entregas = await Entrega.findAll({
       where: whereEntrega,
       attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega"],
-order: [["createdAt", "DESC"]],
+      order: [["createdAt", "DESC"]],
       include: [
         // 🧑‍💼 VENDEDOR (desde Entrega)
         {
@@ -218,29 +218,23 @@ order: [["createdAt", "DESC"]],
           ],
         },
 
-        // 🏍️ MOTORIZADO
         {
-          model: UsuarioAgenciaEntrega,
-          as: "UsuarioAgenciaEntrega",
-          required: false,
-          attributes: ["usuario_agencia_id", "estado" ],
+          model: UsuarioAgencia,
+          as: "repartidores",
+          attributes: ["id"],
+          through: {
+            attributes: ["estado"],
+          },
           include: [
             {
-              model: UsuarioAgencia,
-              as: "usuarioAgencia",
-              attributes: ["id"],
-              include: [
-                {
-                  model: Usuario,
-                  as: "usuario",
-                  attributes: ["id", "nombre"],
-                },
-                {
-                  model: Agencia,
-                  as: "agencia",
-                  attributes: ["id", "nombre"],
-                },
-              ],
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+            {
+              model: Agencia,
+              as: "agencia",
+              attributes: ["id", "nombre"],
             },
           ],
         },

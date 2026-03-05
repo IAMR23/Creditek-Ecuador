@@ -16,6 +16,7 @@ import {
   Gift,
   ShieldCheck,
   FileText,
+  LucideTicketPercent,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 
@@ -59,10 +60,16 @@ export default function Sidebar() {
           icon: <BarChart3 size={20} />,
           path: "revision-gestiones",
         },
-            {
+        {
           label: "Base de Datos Ventas",
           icon: <BarChart3 size={20} />,
           path: "BDD-ventas",
+        },
+
+        {
+          label: "Bonos",
+          icon: <LucideTicketPercent size={20} />,
+          path: "bonos",
         },
       ],
     },

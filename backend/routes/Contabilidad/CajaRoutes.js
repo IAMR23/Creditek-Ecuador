@@ -1,18 +1,21 @@
 const express = require("express");
 const router = express.Router();
 const { sequelize } = require("../../config/db");
+
 const CierreCaja = require("../../models/CierreCaja/CierreCaja");
 const MovimientoCaja = require("../../models/CierreCaja/MovimientoCaja");
-const CierreCajaDetalle = require("../../models/CierreCaja/CierreCajaDetalle");
+const MovimientoCajaTemp = require("../../models/CierreCaja/MovimientoCajaTemp");
+const Denominacion = require("../../models/CierreCaja/Denominacion");
+const RetiroCaja = require("../../models/CierreCaja/RetiroCaja");
 
 router.post("/cierre-caja", async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
-    const { cierre, denominaciones, movimientos, retiros } = req.body;
+    const { cierre, denominaciones, retiros } = req.body;
 
-    // 🔎 Validaciones básicas
-    if (!cierre || !denominaciones || !movimientos) {
+
+    if (!cierre || !denominaciones) {
       await t.rollback();
       return res.status(400).json({
         ok: false,
@@ -20,31 +23,54 @@ router.post("/cierre-caja", async (req, res) => {
       });
     }
 
+    const usuarioId = cierre.usuarioId;
+
     // ============================
-    // 1. Calcular TOTAL FÍSICO
+    // 📥 Obtener movimientos TEMP
+    // ============================
+    const movimientosTemp = await MovimientoCajaTemp.findAll({
+      where: {
+        usuarioId,
+        estado: "ACTIVO",
+      },
+      transaction: t,
+    });
+
+    if (!movimientosTemp.length) {
+      await t.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "No hay movimientos para cerrar",
+      });
+    }
+
+    // ============================
+    // 1. TOTAL FÍSICO
     // ============================
     let totalFisico = 0;
 
-    denominaciones.forEach((d) => {
+    for (const d of denominaciones) {
       totalFisico += Number(d.valor) * Number(d.cantidad);
-    });
+    }
 
     // ============================
-    // 2. Calcular TOTALES SISTEMA
+    // 2. TOTAL SISTEMA
     // ============================
     let totalEfectivo = 0;
     let totalTransferencia = 0;
     let totalPendiente = 0;
 
-    movimientos.forEach((m) => {
+    for (const m of movimientosTemp) {
       const valor = Number(m.valor);
 
       if (m.formaPago === "EFECTIVO") totalEfectivo += valor;
-      else if (m.formaPago === "TRANSFERENCIA") totalTransferencia += valor;
+      else if (m.formaPago === "TRANSFERENCIA")
+        totalTransferencia += valor;
       else totalPendiente += valor;
-    });
+    }
 
-    const totalSistema = totalEfectivo + totalTransferencia + totalPendiente;
+    const totalSistema =
+      totalEfectivo + totalTransferencia + totalPendiente;
 
     const diferencia = totalFisico - totalSistema;
 
@@ -54,7 +80,7 @@ router.post("/cierre-caja", async (req, res) => {
     const nuevoCierre = await CierreCaja.create(
       {
         fecha: cierre.fecha,
-        usuarioId: cierre.usuarioId,
+        usuarioId,
         observacion: cierre.observacion,
 
         totalFisico,
@@ -64,7 +90,7 @@ router.post("/cierre-caja", async (req, res) => {
         totalSistema,
         diferencia,
       },
-      { transaction: t },
+      { transaction: t }
     );
 
     // ============================
@@ -77,31 +103,44 @@ router.post("/cierre-caja", async (req, res) => {
           valor: d.valor,
           cantidad: d.cantidad,
         },
-        { transaction: t },
+        { transaction: t }
       );
     }
 
     // ============================
-    // 5. Guardar movimientos
+    // 5. Pasar TEMP → DEFINITIVO
     // ============================
-    for (const m of movimientos) {
+    for (const m of movimientosTemp) {
       await MovimientoCaja.create(
         {
           cierreId: nuevoCierre.id,
           responsable: m.responsable,
           detalle: m.detalle,
-          entidad: m.entidad,
           valor: m.valor,
           formaPago: m.formaPago,
           recibo: m.recibo,
           observacion: m.observacion,
         },
-        { transaction: t },
+        { transaction: t }
       );
     }
 
     // ============================
-    // 6. Guardar retiros (opcional)
+    // 6. Cerrar movimientos TEMP
+    // ============================
+    await MovimientoCajaTemp.update(
+      { estado: "CERRADO" },
+      {
+        where: {
+          usuarioId,
+          estado: "ACTIVO",
+        },
+        transaction: t,
+      }
+    );
+
+    // ============================
+    // 7. Guardar retiros
     // ============================
     if (retiros && retiros.length > 0) {
       for (const r of retiros) {
@@ -112,11 +151,14 @@ router.post("/cierre-caja", async (req, res) => {
             motivo: r.motivo,
             autorizadoPor: r.autorizadoPor,
           },
-          { transaction: t },
+          { transaction: t }
         );
       }
     }
 
+    // ============================
+    // ✅ Commit
+    // ============================
     await t.commit();
 
     return res.json({
@@ -135,4 +177,5 @@ router.post("/cierre-caja", async (req, res) => {
     });
   }
 });
+
 module.exports = router;

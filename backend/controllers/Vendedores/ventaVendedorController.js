@@ -127,9 +127,8 @@ const fechaISO = entrega.fecha
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
         formaPago: detalle.formaPago?.nombre || "",
-        valorCorregido: detalle.precioUnitario || "",
-        pvp: detalle.precioUnitario || "",
-        
+        precioUnitario: detalle.precioUnitario || "0",
+        precioVendedor : detalle.precioVendedor || "0",
         margen: null,
 
         cierreCaja: entrega.validada || "",

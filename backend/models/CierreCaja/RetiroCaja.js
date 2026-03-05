@@ -1,8 +1,9 @@
+// models/CierreCaja/RetiroCaja.js
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../../config/db");
 
-const CierreCajaDetalle = sequelize.define(
-  "CierreCajaDetalle",
+const RetiroCaja = sequelize.define(
+  "RetiroCaja",
   {
     id: {
       type: DataTypes.INTEGER,
@@ -10,30 +11,30 @@ const CierreCajaDetalle = sequelize.define(
       autoIncrement: true,
     },
 
-    cierreCajaId: {
+    cierreId: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
 
-    denominacion: {
+    monto: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
     },
 
-    cantidad: {
-      type: DataTypes.INTEGER,
+    motivo: {
+      type: DataTypes.STRING,
       allowNull: false,
     },
 
-    total: {
-      type: DataTypes.DECIMAL(10, 2),
+    autorizadoPor: {
+      type: DataTypes.STRING,
       allowNull: false,
     },
   },
   {
+    tableName: "retiros_caja",
     timestamps: false,
-    tableName: "cierre_caja_detalle",
-  }
+  },
 );
 
-module.exports = CierreCajaDetalle;
+module.exports = RetiroCaja;
