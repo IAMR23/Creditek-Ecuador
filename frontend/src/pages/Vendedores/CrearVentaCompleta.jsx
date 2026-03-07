@@ -194,20 +194,20 @@ const CrearVentaCompleta = () => {
     }
   };
 
-const handleClienteChange = (e) => {
-  const { name, value } = e.target;
+  const handleClienteChange = (e) => {
+    const { name, value } = e.target;
 
-  // Solo números para cédula y teléfono
-  if (name === "cedula" || name === "telefono") {
-    const soloNumeros = value.replace(/\D/g, ""); // elimina letras
-    if (soloNumeros.length <= 10) {
-      setCliente({ ...cliente, [name]: soloNumeros });
+    // Solo números para cédula y teléfono
+    if (name === "cedula" || name === "telefono") {
+      const soloNumeros = value.replace(/\D/g, ""); // elimina letras
+      if (soloNumeros.length <= 10) {
+        setCliente({ ...cliente, [name]: soloNumeros });
+      }
+      return;
     }
-    return;
-  }
 
-  setCliente({ ...cliente, [name]: value });
-};
+    setCliente({ ...cliente, [name]: value });
+  };
 
   const handleVentaChange = (e) =>
     setVenta({ ...venta, [e.target.name]: e.target.value });
@@ -229,22 +229,28 @@ const handleClienteChange = (e) => {
       // 🔥 Construir FormData
       const formData = new FormData();
 
-
       const cedula = String(cliente.cedula || "").trim();
-const telefono = String(cliente.telefono || "").trim();
+      const telefono = String(cliente.telefono || "").trim();
 
-// Validar cédula
-if (!/^\d{10}$/.test(cedula)) {
-  Swal.fire("Error", "La cédula debe tener exactamente 10 dígitos numéricos", "error");
-  return;
-}
+      // Validar cédula
+      if (!/^\d{10}$/.test(cedula)) {
+        Swal.fire(
+          "Error",
+          "La cédula debe tener exactamente 10 dígitos numéricos",
+          "error",
+        );
+        return;
+      }
 
-// Validar teléfono
-if (!/^\d{10}$/.test(telefono)) {
-  Swal.fire("Error", "El teléfono debe tener exactamente 10 dígitos numéricos", "error");
-  return;
-}
-
+      // Validar teléfono
+      if (!/^\d{10}$/.test(telefono)) {
+        Swal.fire(
+          "Error",
+          "El teléfono debe tener exactamente 10 dígitos numéricos",
+          "error",
+        );
+        return;
+      }
 
       formData.append(
         "data",
@@ -280,12 +286,16 @@ if (!/^\d{10}$/.test(telefono)) {
       formData.append("foto", imagenComprimida);
 
       // 🚀 Enviar request
+
+      const token = localStorage.getItem("token");
+
       const response = await axios.post(
         `${API_URL}/registrar/ventas-completas`,
         formData,
         {
           headers: {
             "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`,
           },
         },
       );
@@ -414,126 +424,119 @@ if (!/^\d{10}$/.test(telefono)) {
     await cargarEntregaPorId(id); // reutiliza tu lógica actual
   };
 
-
   const cargarEntregaPorId = async (id) => {
-  if (!id) {
-    Swal.fire("Atención", "ID de entrega no válido", "warning");
-    return;
-  }
-
-  try {
-    const res = await axios.get(
-      `${API_URL}/registrar2/entrega-completa/${id}`,
-    );
-
-    const {
-      cliente: clienteDB,
-      entrega: entregaDB,
-      detalle: detalleDB,
-      obsequios: obsequiosDB,
-    } = res.data;
-
-    const fechaFormateada = entregaDB?.fecha
-      ? entregaDB.fecha.split("T")[0]
-      : "";
-
-    // =========================
-    // CLIENTE
-    // =========================
-    setCliente({
-      cliente: clienteDB?.cliente || "",
-      cedula: clienteDB?.cedula || "",
-      telefono: clienteDB?.telefono || "",
-      correo: clienteDB?.correo || "",
-      direccion: clienteDB?.direccion || "",
-    });
-
-    setVenta((prev) => ({
-  ...prev, // mantiene fecha y observacion actuales
-  usuarioAgenciaId: entregaDB?.usuarioAgenciaId ?? null,
-  origenId: Number(entregaDB?.origenId) || "",
-}));
-
-    const origenEncontrado = origenes.find(
-      (o) => o.id === Number(entregaDB?.origenId),
-    );
-
-    setOrigenSeleccionado(origenEncontrado || null);
-
-    // =========================
-    // DETALLE (IDs)
-    // =========================
-    const dispositivoMarcaId = Number(detalleDB?.dispositivoMarcaId) || "";
-    const modeloId = Number(detalleDB?.modeloId) || "";
-    const formaPagoId = Number(detalleDB?.formaPagoId) || "";
-
-    setDetalle({
-      ...detalleDB,
-      dispositivoMarcaId: String(dispositivoMarcaId),
-      modeloId,
-      formaPagoId,
-      cantidad: Number(detalleDB?.cantidad) || 1,
-      precioUnitario: detalleDB?.precioUnitario?.toString() || "",
-      precioVendedor: detalleDB?.precioVendedor?.toString() || "",
-      entrada: detalleDB?.entrada?.toString() || "",
-      alcance: detalleDB?.alcance?.toString() || "",
-    });
-
-    // =========================
-    // ESTADOS DERIVADOS 🔥
-    // =========================
-
-    // Dispositivo + Marca
-    const dispositivo = dispositivoMarcas.find(
-      (dm) => dm.id === dispositivoMarcaId
-    );
-    setDispositivoMarcaSeleccionado(dispositivo || null);
-
-    // Forma de pago
-    const forma = formasPago.find(
-      (f) => f.id === formaPagoId
-    );
-    setFormaPagoSeleccionada(forma || null);
-
-    // =========================
-    // OBSEQUIOS
-    // =========================
-    setObsequios(
-      obsequiosDB?.map((o) => ({
-        obsequioId: o.obsequioId,
-        cantidad: o.cantidad,
-      })) || [],
-    );
-
-    // =========================
-    // MODELOS + MODELO SELECCIONADO
-    // =========================
-    if (dispositivoMarcaId) {
-      const resModelos = await axios.get(
-        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`,
-      );
-
-      const modelosData = resModelos.data || [];
-      setModelos(modelosData);
-
-      const modelo = modelosData.find(
-        (m) => m.id === modeloId
-      );
-
-      setModeloSeleccionado(modelo || null);
-    } else {
-      setModelos([]);
-      setModeloSeleccionado(null);
+    if (!id) {
+      Swal.fire("Atención", "ID de entrega no válido", "warning");
+      return;
     }
 
-    Swal.fire("OK", "Entrega cargada correctamente", "success");
+    try {
+      const res = await axios.get(
+        `${API_URL}/registrar2/entrega-completa/${id}`,
+      );
 
-  } catch (error) {
-    console.error(error);
-    Swal.fire("Error", "No se encontró la entrega", "error");
-  }
-};
+      const {
+        cliente: clienteDB,
+        entrega: entregaDB,
+        detalle: detalleDB,
+        obsequios: obsequiosDB,
+      } = res.data;
 
+      const fechaFormateada = entregaDB?.fecha
+        ? entregaDB.fecha.split("T")[0]
+        : "";
+
+      // =========================
+      // CLIENTE
+      // =========================
+      setCliente({
+        cliente: clienteDB?.cliente || "",
+        cedula: clienteDB?.cedula || "",
+        telefono: clienteDB?.telefono || "",
+        correo: clienteDB?.correo || "",
+        direccion: clienteDB?.direccion || "",
+      });
+
+      setVenta((prev) => ({
+        ...prev, // mantiene fecha y observacion actuales
+        usuarioAgenciaId: entregaDB?.usuarioAgenciaId ?? null,
+        origenId: Number(entregaDB?.origenId) || "",
+      }));
+
+      const origenEncontrado = origenes.find(
+        (o) => o.id === Number(entregaDB?.origenId),
+      );
+
+      setOrigenSeleccionado(origenEncontrado || null);
+
+      // =========================
+      // DETALLE (IDs)
+      // =========================
+      const dispositivoMarcaId = Number(detalleDB?.dispositivoMarcaId) || "";
+      const modeloId = Number(detalleDB?.modeloId) || "";
+      const formaPagoId = Number(detalleDB?.formaPagoId) || "";
+
+      setDetalle({
+        ...detalleDB,
+        dispositivoMarcaId: String(dispositivoMarcaId),
+        modeloId,
+        formaPagoId,
+        cantidad: Number(detalleDB?.cantidad) || 1,
+        precioUnitario: detalleDB?.precioUnitario?.toString() || "",
+        precioVendedor: detalleDB?.precioVendedor?.toString() || "",
+        entrada: detalleDB?.entrada?.toString() || "",
+        alcance: detalleDB?.alcance?.toString() || "",
+      });
+
+      // =========================
+      // ESTADOS DERIVADOS 🔥
+      // =========================
+
+      // Dispositivo + Marca
+      const dispositivo = dispositivoMarcas.find(
+        (dm) => dm.id === dispositivoMarcaId,
+      );
+      setDispositivoMarcaSeleccionado(dispositivo || null);
+
+      // Forma de pago
+      const forma = formasPago.find((f) => f.id === formaPagoId);
+      setFormaPagoSeleccionada(forma || null);
+
+      // =========================
+      // OBSEQUIOS
+      // =========================
+      setObsequios(
+        obsequiosDB?.map((o) => ({
+          obsequioId: o.obsequioId,
+          cantidad: o.cantidad,
+        })) || [],
+      );
+
+      // =========================
+      // MODELOS + MODELO SELECCIONADO
+      // =========================
+      if (dispositivoMarcaId) {
+        const resModelos = await axios.get(
+          `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`,
+        );
+
+        const modelosData = resModelos.data || [];
+        setModelos(modelosData);
+
+        const modelo = modelosData.find((m) => m.id === modeloId);
+
+        setModeloSeleccionado(modelo || null);
+      } else {
+        setModelos([]);
+        setModeloSeleccionado(null);
+      }
+
+      Swal.fire("OK", "Entrega cargada correctamente", "success");
+    } catch (error) {
+      console.error(error);
+      Swal.fire("Error", "No se encontró la entrega", "error");
+    }
+  };
 
   const copiarTexto = async (texto) => {
     try {
