@@ -33,6 +33,15 @@ const crearVentaCompleta = async (req, res) => {
   try {
     // 🔥 JSON viene stringeado
     const { cliente, venta, detalle, obsequios } = JSON.parse(req.body.data);
+ 
+        const usuarioAgenciaId = req.user?.usuarioAgenciaId ; 
+    if (!usuarioAgenciaId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Usuario no identificado",
+      }); 
+    }
+
 
     /*     if (!validarCedulaEC(cliente.cedula)) {
       await t.rollback();
@@ -74,9 +83,9 @@ const crearVentaCompleta = async (req, res) => {
     }
 
     // 2️⃣ Venta
-    const ventaDB = await Venta.create(
+    const ventaDB = await Venta.create( 
       {
-        usuarioAgenciaId: venta.usuarioAgenciaId,
+        usuarioAgenciaId: usuarioAgenciaId,
         clienteId: clienteDB.id,
         origenId: venta.origenId,
         observacion: venta.observacion,

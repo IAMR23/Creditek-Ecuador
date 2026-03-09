@@ -3,11 +3,13 @@ const { crearVentaCompleta } = require("../../controllers/Vendedores/crearVentaC
 const { default: upload } = require("../../middleware/multer.js");
 const { editarVentaCompleta, obtenerVentaCompleta } = require("../../controllers/Vendedores/editarVentaCompleta.js");
 const { getVentasCompletas } = require("../../controllers/Admin/dashboardVentasVentas.js");
+const { authenticate } = require("../../middleware/authMiddleware.js");
 
 const router = express.Router();
 
 router.post(
   "/ventas-completas",
+  authenticate , 
   upload.single("foto"),
   crearVentaCompleta
 );
