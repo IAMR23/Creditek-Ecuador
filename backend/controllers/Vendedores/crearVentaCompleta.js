@@ -11,6 +11,7 @@ const {
   actualizarClienteContifico,
   crearClienteContifico,
 } = require("../Contifico/personaController");
+const { normalizarCorreo } = require("../../utils/normalizarCorreo");
 
 // 🔹 Calcular la semana según fecha (jueves-miércoles)
 function calcularSemana(fecha) {
@@ -34,6 +35,8 @@ const crearVentaCompleta = async (req, res) => {
     // 🔥 JSON viene stringeado
     const { cliente, venta, detalle, obsequios } = JSON.parse(req.body.data);
  
+    cliente.correo = normalizarCorreo(cliente.correo);
+
         const usuarioAgenciaId = req.user?.usuarioAgenciaId ; 
     if (!usuarioAgenciaId) {
       return res.status(400).json({
