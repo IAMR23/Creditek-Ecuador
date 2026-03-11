@@ -215,67 +215,63 @@ const CrearVentaCompleta = () => {
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
 
-    if (!foto) {
-      Swal.fire("Atención", "Debes subir una foto", "warning");
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  try {
+    setLoading(true);
+
+    const formData = new FormData();
+
+    const cedula = String(cliente.cedula || "").trim();
+    const telefono = String(cliente.telefono || "").trim();
+
+    // Validar cédula
+    if (!/^\d{10}$/.test(cedula)) {
+      Swal.fire(
+        "Error",
+        "La cédula debe tener exactamente 10 dígitos numéricos",
+        "error"
+      );
       return;
     }
 
-    try {
-      setLoading(true);
-
-      // 🔥 Construir FormData
-      const formData = new FormData();
-
-      const cedula = String(cliente.cedula || "").trim();
-      const telefono = String(cliente.telefono || "").trim();
-
-      // Validar cédula
-      if (!/^\d{10}$/.test(cedula)) {
-        Swal.fire(
-          "Error",
-          "La cédula debe tener exactamente 10 dígitos numéricos",
-          "error",
-        );
-        return;
-      }
-
-      // Validar teléfono
-      if (!/^\d{10}$/.test(telefono)) {
-        Swal.fire(
-          "Error",
-          "El teléfono debe tener exactamente 10 dígitos numéricos",
-          "error",
-        );
-        return;
-      }
-
-      formData.append(
-        "data",
-        JSON.stringify({
-          cliente,
-          venta: {
-            ...venta,
-            usuarioAgenciaId: Number(venta.usuarioAgenciaId),
-            origenId: Number(venta.origenId),
-          },
-          detalle: {
-            ...detalle,
-            dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
-            modeloId: Number(detalle.modeloId),
-            formaPagoId: Number(detalle.formaPagoId),
-            cantidad: Number(detalle.cantidad),
-            precioVendedor: Number(detalle.precioVendedor),
-            entrada: detalle.entrada ? Number(detalle.entrada) : 0,
-            alcance: detalle.alcance ? Number(detalle.alcance) : 0,
-          },
-          obsequios,
-        }),
+    // Validar teléfono
+    if (!/^\d{10}$/.test(telefono)) {
+      Swal.fire(
+        "Error",
+        "El teléfono debe tener exactamente 10 dígitos numéricos",
+        "error"
       );
+      return;
+    }
 
-      // 🔽 Comprimir imagen
+    formData.append(
+      "data",
+      JSON.stringify({
+        cliente,
+        venta: {
+          ...venta,
+          usuarioAgenciaId: Number(venta.usuarioAgenciaId),
+          origenId: Number(venta.origenId),
+        },
+        detalle: {
+          ...detalle,
+          dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
+          modeloId: Number(detalle.modeloId),
+          formaPagoId: Number(detalle.formaPagoId),
+          cantidad: Number(detalle.cantidad),
+          precioVendedor: Number(detalle.precioVendedor),
+          entrada: detalle.entrada ? Number(detalle.entrada) : 0,
+          alcance: detalle.alcance ? Number(detalle.alcance) : 0,
+        },
+        obsequios,
+      })
+    );
+
+    // 🔹 Solo si existe foto
+    if (foto) {
       const options = {
         maxSizeMB: 0.4,
         maxWidthOrHeight: 1280,
@@ -284,84 +280,85 @@ const CrearVentaCompleta = () => {
 
       const imagenComprimida = await imageCompression(foto, options);
       formData.append("foto", imagenComprimida);
-
-      // 🚀 Enviar request
-
-      const token = localStorage.getItem("token");
-
-      const response = await axios.post(
-        `${API_URL}/registrar/ventas-completas`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-
-      const ventaData = response.data;
-
-      // 🧾 Construir texto
-      const texto = buildVentaText({
-        cliente,
-        origen: origenSeleccionado,
-        dispositivoMarca: dispositivoMarcaSeleccionado,
-        formaPago: formaPagoSeleccionada,
-        modelo: modeloSeleccionado,
-        venta: {
-          ...venta,
-          id: ventaData.venta.id,
-          fecha: ventaData.venta.fecha,
-        },
-        detalle,
-        usuarioInfo,
-        obsequios,
-      });
-
-      // ✅ Modal único
-      const result = await Swal.fire({
-        title: "Venta registrada",
-        text: "¿Quieres copiar la información?",
-        icon: "success",
-        showCancelButton: true,
-        confirmButtonText: "Copiar",
-        cancelButtonText: "No",
-      });
-
-      if (result.isConfirmed) {
-        await copiarTexto(texto);
-      }
-
-      // 🔄 Reset UNA SOLA VEZ
-      setFoto(null);
-      setPreview(null);
-      setObsequios([]);
-      setCliente({
-        cliente: "",
-        cedula: "",
-        telefono: "",
-        correo: "",
-        direccion: "",
-      });
-      setVenta((prev) => ({
-        ...prev,
-        origenId: "",
-        observacion: "",
-      }));
-
-      navigate("/");
-    } catch (error) {
-      console.error(error);
-
-      const mensaje =
-        error.response?.data?.message || "No se pudo crear la venta";
-
-      Swal.fire("Error", mensaje, "error");
-    } finally {
-      setLoading(false);
     }
-  };
+
+    const token = localStorage.getItem("token");
+
+    const response = await axios.post(
+      `${API_URL}/registrar/ventas-completas`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const ventaData = response.data;
+
+    const texto = buildVentaText({
+      cliente,
+      origen: origenSeleccionado,
+      dispositivoMarca: dispositivoMarcaSeleccionado,
+      formaPago: formaPagoSeleccionada,
+      modelo: modeloSeleccionado,
+      venta: {
+        ...venta,
+        id: ventaData.venta.id,
+        fecha: ventaData.venta.fecha,
+      },
+      detalle,
+      usuarioInfo,
+      obsequios,
+    });
+
+    const result = await Swal.fire({
+      title: "Venta registrada",
+      text: "¿Quieres copiar la información?",
+      icon: "success",
+      showCancelButton: true,
+      confirmButtonText: "Copiar",
+      cancelButtonText: "No",
+    });
+
+    if (result.isConfirmed) {
+      await copiarTexto(texto);
+    }
+
+    // Reset
+    setFoto(null);
+    setPreview(null);
+    setObsequios([]);
+    setCliente({
+      cliente: "",
+      cedula: "",
+      telefono: "",
+      correo: "",
+      direccion: "",
+    });
+
+    setVenta((prev) => ({
+      ...prev,
+      origenId: "",
+      observacion: "",
+    }));
+
+    navigate("/");
+
+  } catch (error) {
+    console.error(error);
+
+    const mensaje =
+      error.response?.data?.message || "No se pudo crear la venta";
+
+    Swal.fire("Error", mensaje, "error");
+
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const [id, setId] = useState(null);
   const [entregaIdInput, setEntregaIdInput] = useState("");

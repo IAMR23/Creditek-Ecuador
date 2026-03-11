@@ -199,118 +199,114 @@ const CrearVentaCompleta = () => {
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (!foto) {
-      Swal.fire("Atención", "Debes subir una foto", "warning");
-      return;
-    }
+  try {
+    setLoading(true);
 
-    try {
-      setLoading(true);
+    const formData = new FormData();
 
-      // 🔥 Construir FormData
-      const formData = new FormData();
+    formData.append(
+      "data",
+      JSON.stringify({
+        cliente,
+        venta: {
+          ...venta,
+          usuarioAgenciaId: Number(venta.usuarioAgenciaId),
+          origenId: Number(venta.origenId),
+        },
+        detalle: {
+          ...detalle,
+          dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
+          modeloId: Number(detalle.modeloId),
+          formaPagoId: Number(detalle.formaPagoId),
+          cantidad: Number(detalle.cantidad),
+          precioVendedor: Number(detalle.precioVendedor),
+          entrada: detalle.entrada ? Number(detalle.entrada) : 0,
+          alcance: detalle.alcance ? Number(detalle.alcance) : 0,
+        },
+        obsequios,
+      })
+    );
 
-      formData.append(
-        "data",
-        JSON.stringify({
-          cliente,
-          venta: {
-            ...venta,
-            usuarioAgenciaId: Number(venta.usuarioAgenciaId),
-            origenId: Number(venta.origenId),
-          },
-          detalle: {
-            ...detalle,
-            dispositivoMarcaId: Number(detalle.dispositivoMarcaId),
-            modeloId: Number(detalle.modeloId),
-            formaPagoId: Number(detalle.formaPagoId),
-            cantidad: Number(detalle.cantidad),
-            precioVendedor: Number(detalle.precioVendedor),
-            entrada: detalle.entrada ? Number(detalle.entrada) : 0,
-            alcance: detalle.alcance ? Number(detalle.alcance) : 0,
-          },
-          obsequios,
-        }),
-      );
-
+    // 🔹 SOLO SI EXISTE FOTO
+    if (foto) {
       const options = {
-        maxSizeMB: 0.4, // ~400 KB
-        maxWidthOrHeight: 1280, // resolución máxima
+        maxSizeMB: 0.4,
+        maxWidthOrHeight: 1280,
         useWebWorker: true,
       };
 
       const imagenComprimida = await imageCompression(foto, options);
 
-      // Agregar imagen comprimida
       formData.append("foto", imagenComprimida);
-
-      const response = await axios.post(
-        `${API_URL}/registrar/ventas-completas`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
-      );
-
-      const ventaData = response.data;
-      const texto = buildVentaText({
-        cliente,
-        origen: origenSeleccionado,
-        dispositivoMarca: dispositivoMarcaSeleccionado,
-        formaPago: formaPagoSeleccionada,
-        modelo: modeloSeleccionado,
-        venta: {
-          ...venta,
-          id: ventaData.venta.id,
-          fecha: ventaData.venta.fecha,
-        },
-        detalle,
-        usuarioInfo,
-        obsequios,
-      });
-
-      await navigator.clipboard.writeText(texto);
-      Swal.fire(
-        "Venta registrada",
-        "La información fue copiada al portapapeles",
-        "success",
-      );
-
-      Swal.fire(
-        "Éxito",
-        "📄 Venta creada y copiada al portapapeles",
-        "success",
-      );
-
-      // 🔄 Reset
-      setFoto(null);
-      setPreview(null);
-      setObsequios([]);
-      setCliente({
-        cliente: "",
-        cedula: "",
-        telefono: "",
-        correo: "",
-        direccion: "",
-      });
-      setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
-      navigate("/");
-    } catch (error) {
-      console.error(error);
-
-      const mensaje =
-        error.response?.data?.message || "No se pudo crear la venta";
-
-      Swal.fire("Error", mensaje, "error");
-    } finally {
-      setLoading(false);
     }
-  };
+
+    const response = await axios.post(
+      `${API_URL}/registrar/ventas-completas`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    const ventaData = response.data;
+
+    const texto = buildVentaText({
+      cliente,
+      origen: origenSeleccionado,
+      dispositivoMarca: dispositivoMarcaSeleccionado,
+      formaPago: formaPagoSeleccionada,
+      modelo: modeloSeleccionado,
+      venta: {
+        ...venta,
+        id: ventaData.venta.id,
+        fecha: ventaData.venta.fecha,
+      },
+      detalle,
+      usuarioInfo,
+      obsequios,
+    });
+
+    await navigator.clipboard.writeText(texto);
+
+    Swal.fire(
+      "Venta registrada",
+      "La información fue copiada al portapapeles",
+      "success"
+    );
+
+    // Reset
+    setFoto(null);
+    setPreview(null);
+    setObsequios([]);
+    setCliente({
+      cliente: "",
+      cedula: "",
+      telefono: "",
+      correo: "",
+      direccion: "",
+    });
+
+    setVenta((prev) => ({ ...prev, origenId: "", observacion: "" }));
+
+    navigate("/");
+
+  } catch (error) {
+    console.error(error);
+
+    const mensaje =
+      error.response?.data?.message || "No se pudo crear la venta";
+
+    Swal.fire("Error", mensaje, "error");
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   const buildVentaText = ({
     cliente = {},
