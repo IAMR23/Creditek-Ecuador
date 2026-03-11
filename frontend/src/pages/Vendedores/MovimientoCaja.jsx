@@ -15,6 +15,32 @@ export default function MovimientoCaja() {
   const [rows, setRows] = useState([{ ...filaVacia }]);
   const [fecha, setFecha] = useState("");
   const [loading, setLoading] = useState(false);
+const denominacionesBase = [
+  { denominacion: 100, cantidad: 0, total: 0 },
+  { denominacion: 50, cantidad: 0, total: 0 },
+  { denominacion: 20, cantidad: 0, total: 0 },
+  { denominacion: 10, cantidad: 0, total: 0 },
+  { denominacion: 5, cantidad: 0, total: 0 },
+  { denominacion: 1, cantidad: 0, total: 0 },
+  { denominacion: 0.5, cantidad: 0, total: 0 },
+  { denominacion: 0.25, cantidad: 0, total: 0 },
+  { denominacion: 0.1, cantidad: 0, total: 0 },
+];
+
+const [detalles, setDetalles] = useState(denominacionesBase);
+
+
+const handleCantidadChange = (index, cantidad) => {
+  const newDetalles = [...detalles];
+
+  const cant = Number(cantidad) || 0;
+  const denom = newDetalles[index].denominacion;
+
+  newDetalles[index].cantidad = cant;
+  newDetalles[index].total = cant * denom;
+
+  setDetalles(newDetalles);
+};
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
@@ -39,7 +65,15 @@ export default function MovimientoCaja() {
       autorizadoPor: r.autorizadoPor,
     }));
 
-    const denominaciones = []; // luego lo conectas
+  
+    const denominaciones = detalles
+  .filter((d) => d.cantidad > 0)
+  .map((d) => ({
+    denominacion: d.denominacion,
+    cantidad: Number(d.cantidad),
+    total: Number(d.total),
+  }));
+
 
     const payload = {
       cierre: {
@@ -198,11 +232,16 @@ const agregarFila = async () => {
     },
   );
 
+  const totalDenominaciones = detalles.reduce(
+  (acc, d) => acc + d.total,
+  0
+);
+
   // Totales combinados
   const totalET = totales.efectivo + totales.transferencia;
   const totalGeneral = totalET + totales.pendiente;
 
-  const resumenDetalle = rows.reduce((acc, row) => {
+  const resumenDetalle = rows.reduce((acc, row) => {  
     const valor = Number(row.valor) || 0;
 
     if (!row.detalle || !row.formaPago) return acc;
@@ -277,6 +316,49 @@ const agregarFila = async () => {
 
   return (
     <div className="p-4">
+
+      <div className="mt-4 border p-3 bg-gray-50">
+  <h3 className="font-bold mb-2">
+    Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
+  </h3>
+
+  <div className="border rounded overflow-hidden">
+    <table className="w-full text-sm">
+      <thead className="bg-gray-200">
+        <tr>
+          <th className="p-2 text-left">Denominación</th>
+          <th className="p-2 text-left">Cantidad</th>
+          <th className="p-2 text-left">Total</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {detalles.map((d, i) => (
+          <tr key={i} className="border-t">
+            <td className="p-2">${d.denominacion}</td>
+
+            <td className="p-2">
+              <input
+                type="number"
+                min="0"
+                className="border p-1 w-full"
+                value={d.cantidad}
+                onChange={(e) =>
+                  handleCantidadChange(i, e.target.value)
+                }
+              />
+            </td>
+
+            <td className="p-2 font-semibold">
+              ${d.total.toFixed(2)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
       <h2 className="text-xl font-bold mb-4">Movimiento de Caja</h2>
 
       <div className="mt-4 border p-3 w-fit bg-gray-100">

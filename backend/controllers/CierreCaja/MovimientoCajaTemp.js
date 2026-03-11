@@ -11,7 +11,7 @@ const crearMovimientoTemp = async (req, res) => {
         ok: false,
         message: "Usuario no identificado",
       }); 
-    }
+    } 
 
     const { responsable, detalle, valor, formaPago, recibo, observacion } = req.body;
 

@@ -16,7 +16,7 @@ const CierreCaja = sequelize.define(
       allowNull: false,
     },
 
-    usuarioId: {
+    usuarioAgenciaId: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },

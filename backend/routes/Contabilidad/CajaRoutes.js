@@ -2,13 +2,10 @@ const express = require("express");
 const router = express.Router();
 const { sequelize } = require("../../config/db");
 
-const CierreCaja = require("../../models/CierreCaja/CierreCaja");
-const MovimientoCaja = require("../../models/CierreCaja/MovimientoCaja");
-const MovimientoCajaTemp = require("../../models/CierreCaja/MovimientoCajaTemp");
-const Denominacion = require("../../models/CierreCaja/Denominacion");
-const RetiroCaja = require("../../models/CierreCaja/RetiroCaja");
+const { authenticate } = require("../../middleware/authMiddleware");
+const { cerrarCaja } = require("../../controllers/CierreCaja/cierreCaja");
 
-router.post("/cierre-caja", async (req, res) => {
+/* router.post("/cierre-caja", async (req, res) => {
   const t = await sequelize.transaction();
 
   try {
@@ -176,6 +173,12 @@ router.post("/cierre-caja", async (req, res) => {
       error: error.message,
     });
   }
-});
+}); */
+
+
+router.post("/cierre-caja", authenticate, cerrarCaja);
+
+
+
 
 module.exports = router;

@@ -5,7 +5,6 @@ import CierreCaja from "./CierreCaja";
 export default function Caja() {
   return (
     <div className="flex justify-center items-center">
-      <CierreCaja />
       <MovimientoCaja />
     </div>
   );
