@@ -31,23 +31,16 @@ exports.getDashboardEntregas = async (req, res) => {
       whereBase.fecha = rango;
     }
 
-    // 🔗 INCLUDE MOTORIZADO (clave)
-    const includeMotorizado = {
-      model: UsuarioAgenciaEntrega,
-      as: "UsuarioAgenciaEntrega",
-      attributes: [],
-      required: !!userId, // INNER JOIN si hay filtro
-      include: [
-        {
-          model: UsuarioAgencia,
-          as: "usuarioAgencia",
-          attributes: [],
-          ...(userId && {
-            where: { id: userId },
-          }),
-        },
-      ],
-    };
+const includeMotorizado = {
+  model: UsuarioAgencia,
+  as: "repartidores",
+  attributes: [],
+  through: { attributes: [] },
+  required: !!userId,
+  ...(userId && {
+    where: { id: userId },
+  }),
+};
 
     const estados = [
       "Pendiente",
