@@ -292,18 +292,20 @@ router.get("/entregas", async (req, res) => {
       ],
     });
 
-    // 🧠 Flatten correcto
-    const resultado = entregas.map((e) => ({
-      ...e.toJSON(),
+    const resultado = entregas.map((e) => {
+  const motorizado = e.repartidores?.[0];
 
-      vendedor: e.usuarioAgencia?.usuario?.nombre ?? null,
-      agenciaVendedor: e.usuarioAgencia?.agencia?.nombre ?? null,
+  return {
+    ...e.toJSON(),
 
-      motorizado:
-        e.UsuarioAgenciaEntrega?.usuarioAgencia?.usuario?.nombre ?? null,
-      agenciaMotorizado:
-        e.UsuarioAgenciaEntrega?.usuarioAgencia?.agencia?.nombre ?? null,
-    }));
+    vendedor: e.usuarioAgencia?.usuario?.nombre ?? null,
+    agenciaVendedor: e.usuarioAgencia?.agencia?.nombre ?? null,
+
+    motorizado: motorizado?.usuario?.nombre ?? null,
+    agenciaMotorizado: motorizado?.agencia?.nombre ?? null,
+  };
+});
+
 
     res.json(resultado);
   } catch (error) {

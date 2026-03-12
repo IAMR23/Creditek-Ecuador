@@ -154,7 +154,7 @@ export default function EntregasRepartidoresTabla() {
             <option value="">Todos</option>
             <option value="Entregado">Entregado</option>
             <option value="Pendiente">Pendiente</option>
-            <option value="No entregado">No entregado</option>
+            <option value="No Entregado">No Entregado</option>
             <option value="Transito">En tránsito</option>
           </select>
         </div>
@@ -283,8 +283,7 @@ export default function EntregasRepartidoresTabla() {
 
                         {/* FORMA DE ENTREGA */}
                         <td className="px-4 py-2">
-                          {entrega.UsuarioAgenciaEntrega?.estado ?? "—"}
-                        </td>
+{entrega.repartidores?.[0]?.UsuarioAgenciaEntrega?.estado ?? "—"}                        </td>
 
                         {/* ENTRADA */}
                         <td className="px-4 py-2">${d.entrada ?? "0.00"}</td>
