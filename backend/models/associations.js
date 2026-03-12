@@ -274,11 +274,45 @@ Dispositivo.hasMany(Gestion, {
 
 /* CIERRE DE CAJA */
 
-CierreCaja.hasMany(Denominacion, { foreignKey: "cierreId" });
-Denominacion.belongsTo(CierreCaja, { foreignKey: "cierreId" });
+CierreCaja.hasMany(Denominacion, {
+  foreignKey: "cierreId",
+  as: "denominaciones",
+});
 
-CierreCaja.hasMany(MovimientoCaja, { foreignKey: "cierreId" });
-MovimientoCaja.belongsTo(CierreCaja, { foreignKey: "cierreId" });
+Denominacion.belongsTo(CierreCaja, {
+  foreignKey: "cierreId",
+  as: "cierre",
+});
 
-CierreCaja.hasMany(RetiroCaja, { foreignKey: "cierreId" });
-RetiroCaja.belongsTo(CierreCaja, { foreignKey: "cierreId" });
+
+CierreCaja.hasMany(MovimientoCaja, {
+  foreignKey: "cierreId",
+  as: "movimientos",
+});
+
+MovimientoCaja.belongsTo(CierreCaja, {
+  foreignKey: "cierreId",
+  as: "cierre",
+});
+
+
+CierreCaja.hasMany(RetiroCaja, {
+  foreignKey: "cierreId",
+  as: "retiros",
+});
+
+RetiroCaja.belongsTo(CierreCaja, {
+  foreignKey: "cierreId",
+  as: "cierre",
+});
+
+
+CierreCaja.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+UsuarioAgencia.hasMany(CierreCaja, {
+  foreignKey: "usuarioAgenciaId",
+  as: "cierresCaja",
+});

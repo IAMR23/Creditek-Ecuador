@@ -22,7 +22,7 @@ const CierreCaja = sequelize.define(
     },
 
     observacion: {
-      type: DataTypes.STRING,
+      type: DataTypes.STRING, 
       allowNull: true,
     },
 

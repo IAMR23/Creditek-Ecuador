@@ -4,181 +4,101 @@ const { sequelize } = require("../../config/db");
 
 const { authenticate } = require("../../middleware/authMiddleware");
 const { cerrarCaja } = require("../../controllers/CierreCaja/cierreCaja");
-
-/* router.post("/cierre-caja", async (req, res) => {
-  const t = await sequelize.transaction();
-
-  try {
-    const { cierre, denominaciones, retiros } = req.body;
-
-
-    if (!cierre || !denominaciones) {
-      await t.rollback();
-      return res.status(400).json({
-        ok: false,
-        message: "Datos incompletos",
-      });
-    }
-
-    const usuarioId = cierre.usuarioId;
-
-    // ============================
-    // 📥 Obtener movimientos TEMP
-    // ============================
-    const movimientosTemp = await MovimientoCajaTemp.findAll({
-      where: {
-        usuarioId,
-        estado: "ACTIVO",
-      },
-      transaction: t,
-    });
-
-    if (!movimientosTemp.length) {
-      await t.rollback();
-      return res.status(400).json({
-        ok: false,
-        message: "No hay movimientos para cerrar",
-      });
-    }
-
-    // ============================
-    // 1. TOTAL FÍSICO
-    // ============================
-    let totalFisico = 0;
-
-    for (const d of denominaciones) {
-      totalFisico += Number(d.valor) * Number(d.cantidad);
-    }
-
-    // ============================
-    // 2. TOTAL SISTEMA
-    // ============================
-    let totalEfectivo = 0;
-    let totalTransferencia = 0;
-    let totalPendiente = 0;
-
-    for (const m of movimientosTemp) {
-      const valor = Number(m.valor);
-
-      if (m.formaPago === "EFECTIVO") totalEfectivo += valor;
-      else if (m.formaPago === "TRANSFERENCIA")
-        totalTransferencia += valor;
-      else totalPendiente += valor;
-    }
-
-    const totalSistema =
-      totalEfectivo + totalTransferencia + totalPendiente;
-
-    const diferencia = totalFisico - totalSistema;
-
-    // ============================
-    // 3. Crear cierre
-    // ============================
-    const nuevoCierre = await CierreCaja.create(
-      {
-        fecha: cierre.fecha,
-        usuarioId,
-        observacion: cierre.observacion,
-
-        totalFisico,
-        totalEfectivo,
-        totalTransferencia,
-        totalPendiente,
-        totalSistema,
-        diferencia,
-      },
-      { transaction: t }
-    );
-
-    // ============================
-    // 4. Guardar denominaciones
-    // ============================
-    for (const d of denominaciones) {
-      await Denominacion.create(
-        {
-          cierreId: nuevoCierre.id,
-          valor: d.valor,
-          cantidad: d.cantidad,
-        },
-        { transaction: t }
-      );
-    }
-
-    // ============================
-    // 5. Pasar TEMP → DEFINITIVO
-    // ============================
-    for (const m of movimientosTemp) {
-      await MovimientoCaja.create(
-        {
-          cierreId: nuevoCierre.id,
-          responsable: m.responsable,
-          detalle: m.detalle,
-          valor: m.valor,
-          formaPago: m.formaPago,
-          recibo: m.recibo,
-          observacion: m.observacion,
-        },
-        { transaction: t }
-      );
-    }
-
-    // ============================
-    // 6. Cerrar movimientos TEMP
-    // ============================
-    await MovimientoCajaTemp.update(
-      { estado: "CERRADO" },
-      {
-        where: {
-          usuarioId,
-          estado: "ACTIVO",
-        },
-        transaction: t,
-      }
-    );
-
-    // ============================
-    // 7. Guardar retiros
-    // ============================
-    if (retiros && retiros.length > 0) {
-      for (const r of retiros) {
-        await RetiroCaja.create(
-          {
-            cierreId: nuevoCierre.id,
-            monto: r.monto,
-            motivo: r.motivo,
-            autorizadoPor: r.autorizadoPor,
-          },
-          { transaction: t }
-        );
-      }
-    }
-
-    // ============================
-    // ✅ Commit
-    // ============================
-    await t.commit();
-
-    return res.json({
-      ok: true,
-      message: "Cierre de caja registrado correctamente",
-      data: nuevoCierre,
-    });
-  } catch (error) {
-    await t.rollback();
-    console.error(error);
-
-    return res.status(500).json({
-      ok: false,
-      message: "Error al crear cierre de caja",
-      error: error.message,
-    });
-  }
-}); */
-
+const CierreCaja = require("../../models/CierreCaja/CierreCaja");
+const UsuarioAgencia = require("../../models/UsuarioAgencia");
+const Usuario = require("../../models/Usuario");
+const Agencia = require("../../models/Agencia");
+const Denominacion = require("../../models/CierreCaja/Denominacion");
+const RetiroCaja = require("../../models/CierreCaja/RetiroCaja");
+const MovimientoCaja = require("../../models/CierreCaja/MovimientoCaja");
+const { Op } = require("sequelize");
 
 router.post("/cierre-caja", authenticate, cerrarCaja);
 
+router.get("/cierres-caja", async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, agenciaId } = req.query;
+    console.log(agenciaId)
+    const where = {};
 
+    // 🔹 Filtro por fecha
+    if (fechaInicio && fechaFin) {
+      where.fecha = {
+        [Op.between]: [
+          new Date(`${fechaInicio}T00:00:00`),
+          new Date(`${fechaFin}T23:59:59`),
+        ],
+      };
+    } else if (fechaInicio) {
+      where.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
+    } else if (fechaFin) {
+      where.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+    }
 
+    const cierres = await CierreCaja.findAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          required: !!agenciaId,
+          include: [
+            {
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+            {
+              model: Agencia,
+              as: "agencia",
+              attributes: ["id", "nombre"],
+              ...(agenciaId &&
+                agenciaId !== "todas" && {
+                  where: { id: agenciaId },
+                }),
+            },
+          ],
+        },
+
+        {
+          model: Denominacion,
+          as: "denominaciones",
+          attributes: ["valor", "cantidad"],
+        },
+
+        {
+          model: RetiroCaja,
+          as: "retiros",
+          attributes: ["monto", "motivo", "autorizadoPor"],
+        },
+
+        {
+          model: MovimientoCaja,
+          as: "movimientos",
+          attributes: [
+            "responsable",
+            "detalle",
+            "entidad",
+            "valor",
+            "formaPago",
+            "recibo",
+            "observacion",
+          ],
+        },
+      ],
+    });
+
+    res.json(cierres);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Error al obtener cierres de caja",
+      error: error.message,
+    });
+  }
+});
 
 module.exports = router;

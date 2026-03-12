@@ -113,6 +113,20 @@ export default function Sidebar() {
       ],
     },
 
+    
+    contabilidad: {
+      title: "Contabilidad",
+      items: [
+        {
+          label: "Cierres de Caja",
+          icon: <PackageCheck size={20} />,
+          path: "revisar-cajas",
+        },
+
+  
+      ],
+    },
+
     Auditoria: {
       title: "Auditoría",
       items: [

@@ -169,8 +169,9 @@ router.get("/entregas", async (req, res) => {
 
   try {
     const whereEntrega = {
-      estado: { [Op.ne]: "Eliminado" }, // ❌ excluir eliminados
+      estado: { [Op.ne]: "Eliminado" },
     };
+
     // 📅 Filtro por fechas
     if (fechaInicio && fechaFin) {
       whereEntrega.fecha = { [Op.between]: [fechaInicio, fechaFin] };
@@ -180,7 +181,7 @@ router.get("/entregas", async (req, res) => {
       whereEntrega.fecha = { [Op.lte]: fechaFin };
     }
 
-    // 📦 Estado
+    // 📦 Filtro por estado
     if (estado && estado !== "todos") {
       whereEntrega.estado = estado;
     }
@@ -189,22 +190,18 @@ router.get("/entregas", async (req, res) => {
       where: whereEntrega,
       attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega"],
       order: [["createdAt", "DESC"]],
+
       include: [
-        // 🧑‍💼 VENDEDOR (desde Entrega)
+        // 👨‍💼 VENDEDOR
         {
           model: UsuarioAgencia,
           as: "usuarioAgencia",
           attributes: ["id"],
-          required: !!userId || !!agenciaId,
           include: [
             {
               model: Usuario,
               as: "usuario",
               attributes: ["id", "nombre"],
-              ...(userId &&
-                userId !== "todos" && {
-                  where: { id: userId },
-                }),
             },
             {
               model: Agencia,
@@ -218,12 +215,18 @@ router.get("/entregas", async (req, res) => {
           ],
         },
 
+        // 🏍 REPARTIDORES (TABLA INTERMEDIA)
         {
           model: UsuarioAgencia,
           as: "repartidores",
           attributes: ["id"],
+          required: userId && userId !== "todos", // fuerza INNER JOIN si hay filtro
           through: {
             attributes: ["estado"],
+            ...(userId &&
+              userId !== "todos" && {
+                where: { usuario_agencia_id: Number(userId) },
+              }),
           },
           include: [
             {
@@ -239,14 +242,14 @@ router.get("/entregas", async (req, res) => {
           ],
         },
 
-        // 👤 Cliente
+        // 👤 CLIENTE
         {
           model: Cliente,
           as: "cliente",
           attributes: ["cliente", "cedula"],
         },
 
-        // 📦 Detalles
+        // 📦 DETALLE DE ENTREGA
         {
           model: DetalleEntrega,
           as: "detalleEntregas",
@@ -276,7 +279,7 @@ router.get("/entregas", async (req, res) => {
           ],
         },
 
-        // 🎁 Obsequios
+        // 🎁 OBSEQUIOS
         {
           model: EntregaObsequio,
           as: "obsequiosEntrega",
@@ -292,20 +295,20 @@ router.get("/entregas", async (req, res) => {
       ],
     });
 
+    // 🔄 Transformar resultado
     const resultado = entregas.map((e) => {
-  const motorizado = e.repartidores?.[0];
+      const motorizado = e.repartidores?.[0];
 
-  return {
-    ...e.toJSON(),
+      return {
+        ...e.toJSON(),
 
-    vendedor: e.usuarioAgencia?.usuario?.nombre ?? null,
-    agenciaVendedor: e.usuarioAgencia?.agencia?.nombre ?? null,
+        vendedor: e.usuarioAgencia?.usuario?.nombre ?? null,
+        agenciaVendedor: e.usuarioAgencia?.agencia?.nombre ?? null,
 
-    motorizado: motorizado?.usuario?.nombre ?? null,
-    agenciaMotorizado: motorizado?.agencia?.nombre ?? null,
-  };
-});
-
+        motorizado: motorizado?.usuario?.nombre ?? null,
+        agenciaMotorizado: motorizado?.agencia?.nombre ?? null,
+      };
+    });
 
     res.json(resultado);
   } catch (error) {
