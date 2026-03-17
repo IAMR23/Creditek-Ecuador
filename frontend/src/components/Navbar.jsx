@@ -36,7 +36,12 @@ function Navbar({ auth, setAuth }) {
       case "admin":
         if (auth.rol === "admin" && permiso === "REPARTO") {
           navigate("/logistica-panel");
-        } else {
+        } 
+          else if (auth.rol === "admin" && permiso === "VENTAS") 
+         {
+          navigate("/vendedor-panel");
+         }
+         else {
           navigate("/dashboard");
         }
         break;

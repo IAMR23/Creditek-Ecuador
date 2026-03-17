@@ -12,6 +12,7 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     porTipo: {},
     porCierreCaja: {},
     porObservacion: {},
+    porTipoModelo: {}
   };
 
   ventas.forEach((v) => {
@@ -19,6 +20,13 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     if (v.vendedor) {
       stats.porVendedor[v.vendedor] = (stats.porVendedor[v.vendedor] || 0) + 1;
     }
+
+        if (v.tipo && v.modelo) {
+      const key = `${v.tipo}||${v.modelo}`; // separador seguro
+      stats.porTipoModelo[key] = (stats.porTipoModelo[key] || 0) + 1;
+    }
+
+
 
     // 🏢 Agencia / Local
     if (v.local) {

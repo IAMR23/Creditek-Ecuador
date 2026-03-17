@@ -67,21 +67,7 @@ function LoginForm({ setAuth }) {
       permisos,
     });
 
-    const puedeRepartir = permisos.includes("Repartir");
 
-    if (rol === "Repartidor") {
-      navigate("/logistica-panel");
-      return;
-    } else if (rol === "admin") {
-      navigate("/dashboard");
-      return;
-    }
-    // 🔥 DECISIÓN DE FLUJO
-/*     if (puedeRepartir && rol !== "Repartidor" ) {
-      navigate("/seleccionar-modo");
-    } */ /* else {
-      navigate("/dashboard");
-    }  */
 
   } catch (error) {
     setError(error.response?.data?.message || "Error al iniciar sesión.");

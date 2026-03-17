@@ -5,13 +5,13 @@ import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import DashboardGraficas from "./DashboardGraficas";
 import MetasDiarias from "./MetasDiaras";
+import * as XLSX from "xlsx";
 
 const STORAGE_KEY = "dashboard_filtros";
 
 export default function Dashboard() {
   // 🔥 Cargar filtros desde localStorage UNA SOLA VEZ
-  const filtrosGuardados =
-    JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  const filtrosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -23,25 +23,38 @@ export default function Dashboard() {
 
   // ✅ Estados persistentes
   const [fechaInicio, setFechaInicio] = useState(
-    filtrosGuardados.fechaInicio || "2026-01-01"
+    filtrosGuardados.fechaInicio || "2026-01-01",
   );
 
   const [fechaFin, setFechaFin] = useState(
-    filtrosGuardados.fechaFin ||
-      new Date().toLocaleDateString("en-CA")
+    filtrosGuardados.fechaFin || new Date().toLocaleDateString("en-CA"),
   );
 
-  const [agenciaId, setAgenciaId] = useState(
-    filtrosGuardados.agenciaId || ""
-  );
+  const [agenciaId, setAgenciaId] = useState(filtrosGuardados.agenciaId || "");
 
   const [vendedorId, setVendedorId] = useState(
-    filtrosGuardados.vendedorId || ""
+    filtrosGuardados.vendedorId || "",
   );
 
   const [cierreCajaTipo, setCierreCajaTipo] = useState(
-    filtrosGuardados.cierreCajaTipo || ""
+    filtrosGuardados.cierreCajaTipo || "",
   );
+
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        setUser(jwtDecode(token));
+      } catch (error) {
+        console.error("Error al decodificar token", error);
+        localStorage.removeItem("token");
+      }
+    } else {
+      navigate("/login");
+    }
+  }, []);
 
   // 🔥 Guardar en localStorage AUTOMÁTICO
   useEffect(() => {
@@ -53,7 +66,7 @@ export default function Dashboard() {
         agenciaId,
         vendedorId,
         cierreCajaTipo,
-      })
+      }),
     );
   }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo]);
 
@@ -162,14 +175,91 @@ export default function Dashboard() {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo, usuarioInfo]);
+  }, [
+    fechaInicio,
+    fechaFin,
+    agenciaId,
+    vendedorId,
+    cierreCajaTipo,
+    usuarioInfo,
+  ]);
 
-  // -----------------------------
-  // UI
-  // -----------------------------
+
+
+  const generarDataExcel = (porTipoModelo) => {
+  return Object.entries(porTipoModelo)
+    .map(([key, venta]) => {
+      const [tipo, modelo] = key.split("||");
+
+      return {
+        tipo: tipo.toLowerCase(),
+        modelo: modelo.trim(),
+        venta: venta,
+        stock: "",
+        proyeccion: "",
+        pedido: "",
+        costo: "",
+        total: "",
+        forma_pago: "contado"
+      };
+    })
+    .sort((a, b) => b.venta - a.venta); // 🔥 ORDEN DESC
+};
+
+
+
+const exportarExcel = (porTipoModelo) => {
+  const data = generarDataExcel(porTipoModelo);
+
+  const wsData = [
+    [
+      "Tipo",
+      "Modelo",
+      "Venta",
+      "Stock",
+      "Proyeccion",
+      "Pedido",
+      "Costo",
+      "Total",
+      "Forma De Pago"
+    ]
+  ];
+
+  data.forEach((row, index) => {
+    const excelRow = index + 2;
+
+    wsData.push([
+      row.tipo,
+      row.modelo,
+      row.venta,
+      row.stock,
+      row.proyeccion,
+      row.pedido,
+      row.costo,
+      { f: `F${excelRow}*G${excelRow}` },
+      row.forma_pago
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+
+  // 🔥 AQUÍ EL CAMBIO
+  const nombreArchivo = `Comite de compras_${fechaInicio}_a_${fechaFin}.xlsx`;
+
+  XLSX.writeFile(wb, nombreArchivo);
+};
+
+
   return (
     <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Dashboard</h1>
+      <div className="mb-10">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Bienvenido {user?.usuario?.nombre || "Admin"}
+        </h1>
+      </div>
 
       <div className="flex gap-4 mb-4 items-end">
         <div>
@@ -247,6 +337,12 @@ export default function Dashboard() {
         <p>Cargando...</p>
       ) : (
         <>
+        <button
+  onClick={() => exportarExcel(estadisticas.porTipoModelo)}
+  className="bg-green-600 text-white px-4 py-2 rounded-xl"
+>
+  Descargar Excel
+</button>
           <DashboardGraficas estadisticas={estadisticas} />
           <MetasDiarias data={estadisticas} />
         </>

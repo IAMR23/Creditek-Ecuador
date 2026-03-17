@@ -8,6 +8,7 @@ function SeleccionarModo() {
 
     if (modo === "ADMIN") navigate("/dashboard");
     if (modo === "REPARTO") navigate("/logistica-panel");
+    if (modo === "VENTAS") navigate("/vendedor-panel");
   };
 
   return (
@@ -20,16 +21,22 @@ function SeleccionarModo() {
         <div className="flex flex-col gap-4">
           <button
             onClick={() => seleccionarModo("ADMIN")}
-            className="bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-500"
+            className="bg-green-600 text-white py-3 rounded-lg hover:bg-green-500"
           >
             Administración
           </button>
 
           <button
             onClick={() => seleccionarModo("REPARTO")}
-            className="bg-green-600 text-white py-3 rounded-lg hover:bg-green-500"
+            className="bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-500"
           >
             Repartos
+          </button>
+            <button
+            onClick={() => seleccionarModo("VENTAS")}
+            className="bg-green-600 text-white py-3 rounded-lg hover:bg-green-500"
+          >
+            Ventas
           </button>
         </div>
       </div>

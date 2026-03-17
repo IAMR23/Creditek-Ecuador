@@ -623,6 +623,7 @@ export default function RevisarCaja() {
         </div>
       )}
 
+
     </div>
   );
 }

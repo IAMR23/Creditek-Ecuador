@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const auditoriaVentasController = require("../../controllers/Auditoria/auditoriaVentasController");
-const { calcularEstadisticasVentas } = require("../../utils/calcularEstadisticasVentas");
+const { calcularEstadisticasVentas, comiteCompras } = require("../../utils/calcularEstadisticasVentas");
 
 router.get("/ventas", async (req, res) => {
   try {
