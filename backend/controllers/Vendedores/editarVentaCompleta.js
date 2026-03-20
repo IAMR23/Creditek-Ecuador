@@ -10,6 +10,7 @@ const Marca = require("../../models/Marca");
 const FormaPago = require("../../models/FormaPago");
 const Obsequio = require("../../models/Obsequio");
 const Origen = require("../../models/Origen");
+const CostoHistorico = require("../../models/CostoHistorico");
 
 const editarVentaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
@@ -114,11 +115,26 @@ const editarVentaCompleta = async (req, res) => {
       throw new Error("Modelo no existe");
     }
 
+
+      const costoDB = await CostoHistorico.findOne({
+      where: {
+        modeloId: detalle.modeloId,
+      },
+      order: [["fechaCompra", "DESC"]], // el más reciente global
+      transaction: t,
+    });
+
+    if (!costoDB) {
+      throw new Error(
+        "No existe costo histórico para este modelo, comunicate con Sistemas",
+      );
+    }
+
     const precioVendedor = Number(detalle.precioVendedor) || 0;
     const alcance = Number(detalle.alcance) || 0;
-    const pvp1 = Number(modeloDB.PVP1) || 0;
+    const costo = Number(costoDB.costo) || 0;
 
-    const margen = Number((precioVendedor + alcance - pvp1).toFixed(2));
+    const margen = Number((precioVendedor + alcance - costo).toFixed(2));
 
     const dispositivoMarca = await DispositivoMarca.findByPk(
       detalle.dispositivoMarcaId,
@@ -147,6 +163,7 @@ const editarVentaCompleta = async (req, res) => {
         precioUnitario: detalle.precioUnitario,
         precioVendedor: detalle.precioVendedor,
         margen: margen,
+        costo: costoDB.costo , 
         dispositivoMarcaId: detalle.dispositivoMarcaId,
         modeloId: detalle.modeloId,
         formaPagoId: detalle.formaPagoId,

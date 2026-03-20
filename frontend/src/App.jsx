@@ -140,7 +140,7 @@ function App() {
           <Routes>
             {/* LOGIN */}
             <Route
-              path="/login"
+              path="login"
               element={
                 <PublicRoute
                   isAuthenticated={auth.isAuthenticated}
@@ -153,7 +153,7 @@ function App() {
 
             {/* ADMIN */}
             <Route
-              path="/"
+              path=""
               element={
                 <ProtectedRoute
                   isAuthenticated={auth.isAuthenticated}
@@ -229,104 +229,104 @@ function App() {
               />
               <Route path="ventas-auditoria" element={<VentasAuditoria />} />
               <Route
-                path="/ventas-auditoria/:id"
+                path="ventas-auditoria/:id"
                 element={<EditarVentaCompletaAuditoria />}
               />
-              <Route path="/postulaciones" element={<Postulaciones />} />
-              <Route path="/permisos" element={<Permisos />} />
-              <Route path="/asignar-permisos" element={<AsignarPermisos />} />
+              <Route path="postulaciones" element={<Postulaciones />} />
+              <Route path="permisos" element={<Permisos />} />
+              <Route path="asignar-permisos" element={<AsignarPermisos />} />
               <Route
-                path="/asignar-permisos-usuario-agencia"
+                path="asignar-permisos-usuario-agencia"
                 element={<AsignarPermisosUsuarioAgencia />}
               />
               <Route
-                path="/usuarios-permisos"
+                path="usuarios-permisos"
                 element={<UsuariosConPermisos />}
               />
 
-              <Route path="/revisar-cajas" element={<RevisarCaja />} />
+              <Route path="revisar-cajas" element={<RevisarCaja />} />
             </Route>
 
             {/* REPARTIDORES */}
-            <Route path="/logistica-panel" element={<LogisticaPanel />} />
-            <Route path="/vendedor-panel" element={<VendedorPanel />} />
+            <Route path="logistica-panel" element={<LogisticaPanel />} />
+            <Route path="vendedor-panel" element={<VendedorPanel />} />
 
-            <Route path="/mis-ventas" element={<MisVentas />} />
+            <Route path="mis-ventas" element={<MisVentas />} />
             <Route
-              path="/registrar-clientes-venta"
+              path="registrar-clientes-venta"
               element={<FormularioClienteVenta />}
             />
-            <Route path="/crear-venta" element={<CrearVenta />} />
-            <Route path="/ventas/:id/detalles" element={<DetalleVenta />} />
+            <Route path="crear-venta" element={<CrearVenta />} />
+            <Route path="ventas/:id/detalles" element={<DetalleVenta />} />
             <Route
-              path="/ventas/:id/obsequios"
+              path="ventas/:id/obsequios"
               element={<VentaObsequioPage />}
             />
             <Route
-              path="/ventas/:id/validacion"
+              path="ventas/:id/validacion"
               element={<VentaFoto Unitario aFoto />}
             />
 
             {/* ENTREGAS */}
 
             <Route
-              path="/registrar-clientes-entrega"
+              path="registrar-clientes-entrega"
               element={<FormularioClienteEntrega />}
             />
-            <Route path="/crear-entrega" element={<CrearEntrega />} />
+            <Route path="crear-entrega" element={<CrearEntrega />} />
             <Route
-              path="/entregas/:id/detalles"
+              path="entregas/:id/detalles"
               element={<DetalleEntregaVendedores />}
             />
             <Route
-              path="/entregas/:id/obsequios"
+              path="entregas/:id/obsequios"
               element={<EntregaObsequioPage />}
             />
             <Route
-              path="/entregas/:id/pre-aprobacion"
+              path="entregas/:id/pre-aprobacion"
               element={<EntregaFoto />}
             />
             <Route
-              path="/entregas/:id/fecha-llamada"
+              path="entregas/:id/fecha-llamada"
               element={<FotoFechaHoraEntrega />}
             />
-            <Route path="/mis-entregas" element={<MisEntregas />} />
+            <Route path="mis-entregas" element={<MisEntregas />} />
             <Route
-              path="/mis-entregas-pendientes"
+              path="mis-entregas-pendientes"
               element={<MisEntregasPendientes />}
             />
             <Route
-              path="/mis-entregas-realizadas"
+              path="mis-entregas-realizadas"
               element={<MisEntregasRealizadas />}
             />
 
             {/* EXPERIMENTAL */}
-            <Route path="/ventacompleta" element={<CrearVentaCompleta />} />
+            <Route path="ventacompleta" element={<CrearVentaCompleta />} />
             <Route
-              path="/editar-venta/:id"
+              path="editar-venta/:id"
               element={<EditarVentaCompletaVendedores />}
             />
 
             <Route
-              path="/crear-entrega-completa"
+              path="crear-entrega-completa"
               element={<CrearEntregaCompleta />}
             />
             <Route
-              path="/editar-entrega/:id"
+              path="editar-entrega/:id"
               element={<EditarEntregaCompleta />}
             />
 
-            <Route path="/seleccionar-modo" element={<SeleccionarModo />} />
-            <Route path="/crear-traslado" element={<CrearTraslado />} />
-            <Route path="/mis-traslados" element={<TrasladosList />} />
+            <Route path="seleccionar-modo" element={<SeleccionarModo />} />
+            <Route path="crear-traslado" element={<CrearTraslado />} />
+            <Route path="mis-traslados" element={<TrasladosList />} />
 
             {/* Call center */}
-            <Route path="/gestion" element={<Gestion />} />
-            <Route path="/mis-gestiones" element={<MisGestiones />} />
-            <Route path="/mi-gestion/:id" element={<EditarGestion />} />
+            <Route path="gestion" element={<Gestion />} />
+            <Route path="mis-gestiones" element={<MisGestiones />} />
+            <Route path="mi-gestion/:id" element={<EditarGestion />} />
 
             {/* Cierre de caja */}
-            <Route path="/caja" element={<Caja />} />
+            <Route path="caja" element={<Caja />} />
 
             <Route
               path="*"

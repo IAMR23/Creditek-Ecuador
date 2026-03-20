@@ -56,6 +56,38 @@ router.get("/", async (req, res) => {
   }
 });
 
+
+
+router.get("/activos", async (req, res) => {
+  try {
+    const modelos = await Modelo.findAll({
+      where: {
+        activo: true, // ✅ filtro correcto
+      },
+      include: [
+        {
+          model: DispositivoMarca,
+          as: "dispositivoMarca",
+          include: [
+            { model: Marca, as: "marca", attributes: ["id", "nombre"] },
+            { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+          ],
+        },
+      ],
+    });
+
+    if (!modelos || modelos.length === 0) {
+      return res.status(404).json({ message: "No hay modelos activos" });
+    }
+
+    res.json(modelos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener los modelos", error });
+  }
+});
+
+
 // =========================
 // 📌 Obtener modelo por ID
 // =========================

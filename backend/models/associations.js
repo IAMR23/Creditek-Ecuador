@@ -76,8 +76,6 @@ Marca.hasMany(DispositivoMarca, { foreignKey: "marcaId", as: "marcasDispositivos
 
 CostoHistorico.belongsTo(Modelo, { foreignKey: "modeloId", as: "modelo" });
 Modelo.hasMany(CostoHistorico, { foreignKey: "modeloId", as: "costosHistoricos" });
-CostoHistorico.belongsTo(formaPago, { foreignKey: "formaPagoId", as: "formaPago" });
-formaPago.hasMany(CostoHistorico, { foreignKey: "formaPagoId", as: "costosHistoricos" });
 
 // -------------------- Venta --------------------
 Venta.belongsTo(Cliente, { foreignKey: 'clienteId', as: 'cliente' });

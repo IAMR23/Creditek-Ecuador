@@ -12,6 +12,8 @@ const {
   crearClienteContifico,
 } = require("../Contifico/personaController");
 const { normalizarCorreo } = require("../../utils/normalizarCorreo");
+const CostoHistorico = require("../../models/CostoHistorico");
+const { Op } = require("sequelize");
 
 // 🔹 Calcular la semana según fecha (jueves-miércoles)
 function calcularSemana(fecha) {
@@ -34,17 +36,16 @@ const crearVentaCompleta = async (req, res) => {
   try {
     // 🔥 JSON viene stringeado
     const { cliente, venta, detalle, obsequios } = JSON.parse(req.body.data);
- 
+
     cliente.correo = normalizarCorreo(cliente.correo);
 
-        const usuarioAgenciaId = req.user?.usuarioAgenciaId ; 
+    const usuarioAgenciaId = req.user?.usuarioAgenciaId;
     if (!usuarioAgenciaId) {
       return res.status(400).json({
         ok: false,
         message: "Usuario no identificado",
-      }); 
+      });
     }
-
 
     /*     if (!validarCedulaEC(cliente.cedula)) {
       await t.rollback();
@@ -86,7 +87,7 @@ const crearVentaCompleta = async (req, res) => {
     }
 
     // 2️⃣ Venta
-    const ventaDB = await Venta.create( 
+    const ventaDB = await Venta.create(
       {
         usuarioAgenciaId: usuarioAgenciaId,
         clienteId: clienteDB.id,
@@ -128,6 +129,21 @@ const crearVentaCompleta = async (req, res) => {
       transaction: t,
     });
 
+    const costoDB = await CostoHistorico.findOne({
+      where: {
+        modeloId: detalle.modeloId,
+      },
+      order: [["fechaCompra", "DESC"]], // el más reciente global
+      transaction: t,
+    });
+
+
+    if (!costoDB) {
+      throw new Error(
+        "No existe costo histórico para este modelo, comunicate con Sistemas",
+      );
+    }
+
     if (!modeloDB) {
       throw new Error("Modelo no existe");
     }
@@ -135,8 +151,9 @@ const crearVentaCompleta = async (req, res) => {
     const precioVendedor = Number(detalle.precioVendedor) || 0;
     const alcance = Number(detalle.alcance) || 0;
     const pvp1 = Number(modeloDB.PVP1) || 0;
+    const costo = Number(costoDB.costo) || 0;
 
-    const margen = Number((precioVendedor + alcance - pvp1).toFixed(2));
+    const margen = Number((precioVendedor + alcance - costo).toFixed(2));
 
     // 3️⃣ Detalle
     const detalleDB = await DetalleVenta.create(
@@ -146,6 +163,7 @@ const crearVentaCompleta = async (req, res) => {
         precioUnitario: detalle.precioUnitario,
         precioVendedor: detalle.precioVendedor,
         margen: margen,
+        costo: costoDB.costo,
         dispositivoMarcaId: detalle.dispositivoMarcaId,
         modeloId: detalle.modeloId,
         formaPagoId: detalle.formaPagoId,
@@ -174,7 +192,7 @@ const crearVentaCompleta = async (req, res) => {
 
     await t.commit();
 
-        res.status(201).json({
+    res.status(201).json({
       ok: true,
       message: "Venta creada y validada correctamente",
       cliente: clienteDB,
@@ -183,38 +201,40 @@ const crearVentaCompleta = async (req, res) => {
       obsequios,
     });
 
-
-
     setImmediate(async () => {
-  try {
-    if (clienteDB.cedula) {
-      let clienteContifico = null;
+      try {
+        if (clienteDB.cedula) {
+          let clienteContifico = null;
 
-      if (clienteDB.clienteContifico) {
-     //   await actualizarClienteContifico(clienteDB);
-      } else {
-        console.log("Buscando cliente en Contifico con cédula:", clienteDB.cedula);
-        clienteContifico = await buscarClienteContifico(clienteDB.cedula);
-        if (clienteContifico) {
-          clienteDB.clienteContifico = clienteContifico.id;
-          await clienteDB.save();
+          if (clienteDB.clienteContifico) {
+            //   await actualizarClienteContifico(clienteDB);
+          } else {
+            console.log(
+              "Buscando cliente en Contifico con cédula:",
+              clienteDB.cedula,
+            );
+            clienteContifico = await buscarClienteContifico(clienteDB.cedula);
+            if (clienteContifico) {
+              clienteDB.clienteContifico = clienteContifico.id;
+              await clienteDB.save();
 
-         // await actualizarClienteContifico(clienteDB);
-        } else {
-          console.log("Cliente no encontrado en Contifico, creando nuevo cliente con cédula:", clienteDB.cedula);
-          const nuevo = await crearClienteContifico(clienteDB);
+              // await actualizarClienteContifico(clienteDB);
+            } else {
+              console.log(
+                "Cliente no encontrado en Contifico, creando nuevo cliente con cédula:",
+                clienteDB.cedula,
+              );
+              const nuevo = await crearClienteContifico(clienteDB);
 
-          clienteDB.clienteContifico = nuevo.id;
-          await clienteDB.save();
+              clienteDB.clienteContifico = nuevo.id;
+              await clienteDB.save();
+            }
+          }
         }
+      } catch (error) {
+        console.error("Error sincronizando con Contifico:", error.message);
       }
-    }
-  } catch (error) {
-    console.error("Error sincronizando con Contifico:", error.message);
-  }
-});
-
-
+    });
   } catch (error) {
     await t.rollback();
     console.error(error);

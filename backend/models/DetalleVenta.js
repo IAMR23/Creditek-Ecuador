@@ -34,15 +34,18 @@ const DetalleVenta = sequelize.define(
       onUpdate: "CASCADE",
       onDelete: "RESTRICT",
     },
-
     margen: {
       type: DataTypes.DOUBLE,
       allowNull: false,
       defaultValue: 0,
     },
-
+    costo: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+      defaultValue: 0,
+    },
     modeloId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER,  
       allowNull: false,
       references: { model: Modelo, key: "id" },
       onUpdate: "CASCADE",
