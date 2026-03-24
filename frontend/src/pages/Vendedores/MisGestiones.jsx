@@ -17,10 +17,31 @@ export default function MisGestiones() {
 
   const [gestionSeleccionada, setGestionSeleccionada] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);
-const navigate = useNavigate(); 
-  /* ==============================
-      DECODIFICAR TOKEN
-  ============================== */
+  const navigate = useNavigate();
+
+  const [solicitud, setSolicitud] = useState("");
+const [origen, setOrigen] = useState("");
+const [region, setRegion] = useState("");
+
+
+
+  const [origenes, setOrigenes] = useState([]);
+
+  // 🔽 Obtener lista
+  const obtenerOrigenes = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/gestion/origen-callcenter`);
+      setOrigenes(res.data);
+    } catch (error) {
+      console.error(error);
+      Swal.fire("Error", "No se pudieron cargar los orígenes", "error");
+    }
+  };
+
+  useEffect(() => {
+    obtenerOrigenes();
+  }, []);
+  
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -49,7 +70,8 @@ const navigate = useNavigate();
     setLoading(true);
 
     try {
-      const url = `${API_URL}/api/gestion/vendedor/${usuarioInfo.agenciaPrincipal.usuarioAgenciaId}?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`;
+   
+   const url = `${API_URL}/api/gestion/vendedor/${usuarioInfo.agenciaPrincipal.usuarioAgenciaId}?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}&solicitud=${solicitud}&origen=${origen}&region=${region}`;
       const { data } = await axios.get(url);
 
       if (!data.ok) return;
@@ -80,11 +102,17 @@ const navigate = useNavigate();
     }
   };
 
+
   useEffect(() => {
-    if (fechaInicio && fechaFin && usuarioInfo?.agenciaPrincipal?.usuarioAgenciaId) {
-      fetchData();
-    }
-  }, [fechaInicio, fechaFin, usuarioInfo]);
+  if (
+    fechaInicio &&
+    fechaFin &&
+    usuarioInfo?.agenciaPrincipal?.usuarioAgenciaId
+  ) {
+    fetchData();
+  }
+}, [fechaInicio, fechaFin, usuarioInfo, solicitud, origen, region]);
+
 
   const handleVerGestion = (id) => {
     const gestion = filas.find((f) => f.id === id);
@@ -117,6 +145,54 @@ const navigate = useNavigate();
             onChange={(e) => setFechaFin(e.target.value)}
           />
         </div>
+
+        <div>
+  <label className="block text-sm font-medium">Solicitud</label>
+  <select
+    className="border px-2 py-1 rounded"
+    value={solicitud}
+    onChange={(e) => setSolicitud(e.target.value)}
+  >
+    <option value="">Todas</option>
+    <option value="APROBADO">APROBADO</option>
+    <option value="DENEGADO">DENEGADO</option>
+    <option value="NINGUNA">NINGUNA</option>
+  </select>
+</div>
+
+<div>
+  <label className="block text-sm font-medium">Origen</label>
+  <select
+    className="border px-2 py-1 rounded"
+    value={origen}
+    onChange={(e) => setOrigen(e.target.value)}
+  >
+    <option value="">Todos</option>
+    {origenes.map((o) => (
+      <option key={o.id} value={o.nombre}>
+        {o.nombre}
+      </option>
+    ))}
+  </select>
+</div>
+
+<div>
+  <label className="block text-sm font-medium">Región</label>
+  <select
+    className="border px-2 py-1 rounded"
+    value={region}
+    onChange={(e) => setRegion(e.target.value)}
+  >
+    <option value="">Todas</option>
+    <option value="COSTA_APLICA">COSTA ✅</option>
+    <option value="COSTA_NO_APLICA">COSTA ❌</option>
+    <option value="SIERRA">SIERRA</option>
+    <option value="ORIENTE_APLICA">ORIENTE ✅</option>
+    <option value="ORIENTE_NO_APLICA">ORIENTE ❌</option>
+    <option value="SIN_ESPECIFICAR">SIN ESPECIFICAR</option>
+  </select>
+</div>
+
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
@@ -143,21 +219,20 @@ const navigate = useNavigate();
                     {val}
                   </td>
                 ))}
-                <td className="text-center p-2">
+                <td className="text-center p-2  border ">
                   <button
-                    className="bg-green-600 text-white px-2 py-1 rounded"
+                    className="bg-green-600 text-white px-2 py-1 rounded m-2"
                     onClick={() => handleVerGestion(f.id)}
                   >
                     <Eye size={16} />
                   </button>
 
-                              <button
+                  <button
                     className="bg-blue-600 text-white px-2 py-1 rounded"
                     onClick={() => navigate(`/mi-gestion/${f.id}`)}
                   >
                     <FaPen size={16} />
                   </button>
-
                 </td>
               </tr>
             ))}
@@ -186,7 +261,7 @@ const navigate = useNavigate();
               Cerrar
             </button>
           </div>
-        </div> 
+        </div>
       )}
     </div>
   );

@@ -109,7 +109,7 @@ const crearVentaCompleta = async (req, res) => {
 
     if (!dispositivoMarca) {
       throw new Error("DispositivoMarca no existe");
-    }
+    }   
 
     const dispositivoId = dispositivoMarca.dispositivoId;
     // 🔹 Calcular cierreCaja

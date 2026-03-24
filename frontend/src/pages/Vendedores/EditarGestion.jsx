@@ -528,6 +528,7 @@ export default function EditarGestion() {
         <textarea
           name="observacion"
           placeholder="Observación"
+          value={form.observacion}
           onChange={handleChange}
           className="w-full border rounded-xl px-4 py-2"
         />

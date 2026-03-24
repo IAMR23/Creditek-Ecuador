@@ -22,7 +22,7 @@ router.post("/", async (req, res) => {
       region,
       accion,
       observacion,
-      origenCallCenter , 
+      origenCallCenter,
       otrasCedulas,
     } = req.body;
 
@@ -84,7 +84,7 @@ router.post("/", async (req, res) => {
       region: regionNormalizada,
       accion,
       observacion,
-      origenCallCenter , 
+      origenCallCenter,
       otrasCedulas: otrasCedulasValidadas,
     });
 
@@ -139,8 +139,7 @@ router.get("/origen-callcenter", async (req, res) => {
   }
 });
 
-
-router.get("/vendedor/:id", async (req, res) => {
+/* router.get("/vendedor/:id", async (req, res) => {
   try {
     const { fechaInicio, fechaFin } = req.query;
     const { id } = req.params;
@@ -189,23 +188,115 @@ router.get("/vendedor/:id", async (req, res) => {
     });
   }
 });
+ */
 
-
-
-router.get("/", async (req, res) => {
+router.get("/vendedor/:id", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, solicitud, origen, region , agenciaId} = req.query;
-    const where = {};
+    const { id } = req.params;
+    const { fechaInicio, fechaFin, solicitud, origen, region } = req.query;
 
+    const where = {
+      usuarioAgenciaId: id,
+    };
+
+    // 📅 Filtro por fechas
     if (fechaInicio && fechaFin) {
-const inicio = new Date(`${fechaInicio}T00:00:00-05:00`);
-const fin = new Date(`${fechaFin}T00:00:00-05:00`);
-fin.setDate(fin.getDate() + 1);
+      const inicio = new Date(`${fechaInicio}T00:00:00-05:00`);
+      const fin = new Date(`${fechaFin}T00:00:00-05:00`);
+      fin.setDate(fin.getDate() + 1);
 
       where.createdAt = {
         [Op.gte]: inicio,
         [Op.lt]: fin,
-      }; 
+      };
+    }
+
+    // 📄 Filtro por solicitud (incluye JSON otrasCedulas)
+    if (solicitud) {
+      where[Op.or] = [
+        {
+          solicitud: solicitud.toUpperCase(),
+        },
+        Sequelize.literal(`
+          EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
+            WHERE elem->>'solicitud' = '${solicitud.toUpperCase()}'
+          )
+        `),
+      ];
+    }
+
+    // 🌍 Filtro por origen
+    if (origen) {
+      where.origen = {
+        [Op.iLike]: `%${origen.toUpperCase()}%`,
+      };
+    }
+
+    // 🗺 Filtro por región
+    if (region) {
+      where.region = region.toUpperCase();
+    }
+
+    const gestiones = await Gestion.findAll({
+      where,
+      include: [
+        {
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          include: [
+            {
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+            {
+              model: Agencia,
+              as: "agencia",
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
+        {
+          model: Dispositivo,
+          as: "dispositivo",
+          attributes: ["id", "nombre"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.json({
+      ok: true,
+      total: gestiones.length,
+      gestiones,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener gestiones por vendedor",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/", async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, solicitud, origen, region, agenciaId } =
+      req.query;
+    const where = {};
+
+    if (fechaInicio && fechaFin) {
+      const inicio = new Date(`${fechaInicio}T00:00:00-05:00`);
+      const fin = new Date(`${fechaFin}T00:00:00-05:00`);
+      fin.setDate(fin.getDate() + 1);
+
+      where.createdAt = {
+        [Op.gte]: inicio,
+        [Op.lt]: fin,
+      };
     }
 
     if (solicitud) {
@@ -223,12 +314,11 @@ FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
       ];
     }
 
-
     if (origen) {
-  where.origen = {
-    [Op.iLike]: `%${origen.toUpperCase()}%`,
-  };
-}
+      where.origen = {
+        [Op.iLike]: `%${origen.toUpperCase()}%`,
+      };
+    }
 
     // Filtro por región
     if (region) {
@@ -239,25 +329,24 @@ FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
       where,
       include: [
         {
-  model: UsuarioAgencia,
-  as: "usuarioAgencia",
-  attributes: ["id"],
-  required: agenciaId ? true : false,
-  where: agenciaId ? { agenciaId: Number(agenciaId) } : undefined,
-  include: [
-    {
-      model: Usuario,
-      as: "usuario",
-      attributes: ["id", "nombre"],
-    },
-    {
-      model: Agencia,
-      as: "agencia",
-      attributes: ["id", "nombre"],
-    },
-  ],
-}
-,
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          required: agenciaId ? true : false,
+          where: agenciaId ? { agenciaId: Number(agenciaId) } : undefined,
+          include: [
+            {
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+            {
+              model: Agencia,
+              as: "agencia",
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
         {
           model: Dispositivo,
           as: "dispositivo",
@@ -340,7 +429,7 @@ router.put("/:id", async (req, res) => {
 
     if (accion === "OTRA_CEDULA" && Array.isArray(otrasCedulas)) {
       otrasCedulasLimpias = otrasCedulas
-        .filter( 
+        .filter(
           (c) =>
             c &&
             typeof c.cedula === "string" &&
