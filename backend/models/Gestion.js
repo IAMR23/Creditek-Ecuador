@@ -63,7 +63,11 @@ const Gestion = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true, 
     }, 
-    region: {
+        region : {
+      type: DataTypes.TEXT,
+      allowNull: true, 
+    }, 
+/*     region: {
       type: DataTypes.ENUM(
         "SIN_ESPECIFICAR",
         "COSTA",
@@ -76,7 +80,7 @@ const Gestion = sequelize.define(
         
       ),
       allowNull: false,
-    },
+    }, */
 
     accion: {
       type: DataTypes.ENUM(

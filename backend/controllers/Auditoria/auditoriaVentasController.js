@@ -215,6 +215,7 @@ exports.obtenerReporte = async ({
           "precioVendedor",
           "entrada",
           "margen",
+          "costo" ,
           "alcance",
           "contrato",
           "cierreCaja",
@@ -429,6 +430,7 @@ exports.formatearReporte = (ventas) => {
         precioSistema: detalle.precioUnitario || "",
         precioVendedor: detalle.precioVendedor || "",
         margen: detalle.margen || "",
+        costo : detalle.costo || "" , 
 
         cierreCaja: detalle.cierreCaja || "",
 

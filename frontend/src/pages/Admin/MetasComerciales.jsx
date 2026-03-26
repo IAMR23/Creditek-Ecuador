@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { Link } from "react-router-dom"; // para navegar a otro componente
 import { jwtDecode } from "jwt-decode";
 import { FaFileExcel } from "react-icons/fa";
 
@@ -136,6 +135,7 @@ export default function MetasComerciales() {
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
         Margen: venta.margen ?? "",
+        // Costo : venta.costo ?? "", 
       }));
 
       setFilas(resultado);

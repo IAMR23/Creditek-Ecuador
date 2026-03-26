@@ -7,7 +7,7 @@ const Dispositivo = require("../../models/Dispositivo");
 const { Op, Sequelize } = require("sequelize");
 const Usuario = require("../../models/Usuario");
 const Agencia = require("../../models/Agencia");
-const OrigenCallCenter = require("../../models/CallCenter/origenes");
+const OrigenCallCenter = require("../../models/CallCenter/origenes"); 
 
 router.post("/", async (req, res) => {
   try {

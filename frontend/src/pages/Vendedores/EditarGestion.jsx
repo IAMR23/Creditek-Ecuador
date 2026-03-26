@@ -226,7 +226,7 @@ export default function EditarGestion() {
         confirmButtonColor: "#16a34a",
       });
 
-      navigate("/vendedor-panel");
+      navigate("/mis-gestiones");
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -448,6 +448,9 @@ export default function EditarGestion() {
                 { value: "GESTION", label: "GESTIÓN" },
                 { value: "NO_CONTESTA", label: "NO CONTESTA" },
                 { value: "OTRA_CEDULA", label: "OTRA CÉDULA" },
+                { value: "NO_APLICA_ENVIO", label: "NO APLICA ENVIO" },
+                { value: "CONTADO", label: "CONTADO" },
+                { value: "NO_INTERESADO", label: "NO INTERESADO" },
               ].map((op) => (
                 <label
                   key={op.value}
