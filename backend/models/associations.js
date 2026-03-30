@@ -29,6 +29,7 @@ const CierreCaja = require('./CierreCaja/CierreCaja');
 const MovimientoCaja = require('./CierreCaja/MovimientoCaja');
 const Denominacion = require('./CierreCaja/Denominacion');
 const RetiroCaja = require('./CierreCaja/RetiroCaja');
+const Task = require('./Task');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
@@ -314,3 +315,11 @@ UsuarioAgencia.hasMany(CierreCaja, {
   foreignKey: "usuarioAgenciaId",
   as: "cierresCaja",
 });
+
+
+/* GESTOR DE TAREAS */
+UsuarioAgencia.hasMany(Task, { foreignKey: "createdBy", as: "createdTasks" });
+UsuarioAgencia.hasMany(Task, { foreignKey: "assignedTo", as: "assignedTasks" });
+
+Task.belongsTo(UsuarioAgencia, { foreignKey: "createdBy", as: "creator" });
+Task.belongsTo(UsuarioAgencia, { foreignKey: "assignedTo", as: "assignee" });

@@ -23,7 +23,8 @@ const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
 
 const postulacionesRouter = require("./routes/DesarrolloOrganizacional/postulacionesRouter");
-
+require("./jobs/reminder");
+ 
 const path = require("path");
 
 const app = express();
@@ -103,6 +104,7 @@ connectDB()
     app.use("/api/gestion", require("./routes/CallCenter/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
+    app.use("/tasks", require("./routes/taskRoutes"));
   
 
     /* Cierre de caja */

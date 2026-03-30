@@ -19,6 +19,7 @@ import {
   LucideTicketPercent,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
+import { FaTasks } from "react-icons/fa";
 
 export default function Sidebar() {
   const location = useLocation();
@@ -71,6 +72,13 @@ export default function Sidebar() {
           icon: <LucideTicketPercent size={20} />,
           path: "bonos",
         },
+        
+        {
+          label: "Tareas",
+          icon: <FaTasks size={20} />,
+          path: "tasks",
+        },
+
       ],
     },
 

@@ -80,6 +80,7 @@ import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTab
 import BDDVentas from "./pages/Admin/BDDVentas";
 import Bonos from "./pages/Admin/Bonos";
 import RevisarCaja from "./pages/Vendedores/RevisarCaja";
+import TasksPage from "./pages/Tareas/TaskPage";
 
 function App() {
   const [auth, setAuth] = useState({
@@ -245,6 +246,7 @@ function App() {
               />
 
               <Route path="revisar-cajas" element={<RevisarCaja />} />
+              <Route path="tasks" element={<TasksPage />} />
             </Route>
 
             {/* REPARTIDORES */}
