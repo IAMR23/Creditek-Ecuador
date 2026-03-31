@@ -754,7 +754,7 @@ ${
             </label>
             <input
               id="correo"
-              type="text"
+              type="email"
               name="correo"
               placeholder="Ej: soycreditek@gmail.com"
               value={cliente.correo}

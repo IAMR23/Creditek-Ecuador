@@ -8,7 +8,7 @@ exports.getDashboardEntregas = async (req, res) => {
     let { fechaInicio, fechaFin, userId } = req.query;
 
     const whereBase = {
-      estado: {
+      estado: {  
         [Op.ne]: "Eliminado",
       },
     };
