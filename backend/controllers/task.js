@@ -97,8 +97,6 @@ exports.getTasks = async (req, res) => {
       order: [["createdAt", "DESC"]]
     });
 
-    console.log(tasks)
-
     res.json(tasks);
   } catch (error) {
     console.error(error);
