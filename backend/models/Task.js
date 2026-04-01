@@ -4,9 +4,10 @@ const { sequelize } = require("../config/db");
 const Task = sequelize.define("Task", {
   id: {
     type: DataTypes.INTEGER,
-    primaryKey: true
+    primaryKey: true , 
+      autoIncrement: true,
   },
-
+ 
   title: {
     type: DataTypes.STRING,
     allowNull: false
@@ -22,13 +23,11 @@ const Task = sequelize.define("Task", {
     defaultValue: "pendiente"
   },
 
-  // Usuario que crea la tarea
   createdBy: {
     type: DataTypes.INTEGER,
     allowNull: false
   },
 
-  // Usuario asignado
   assignedTo: {
     type: DataTypes.INTEGER,
     allowNull: false
@@ -44,26 +43,48 @@ const Task = sequelize.define("Task", {
     allowNull: true
   },
 
-  // Para evitar duplicar notificaciones
   notified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
-  }, 
+  },
 
   priority: {
-  type: DataTypes.ENUM("baja", "media", "alta"),
-  defaultValue: "media"
-}
+    type: DataTypes.ENUM("baja", "media", "alta"),
+    defaultValue: "media"
+  },
 
+  // 🔁 Tipo de repetición
+  repeat: {
+    type: DataTypes.ENUM("none", "daily"),
+    defaultValue: "none"
+  },
+
+  // 🔁 Intervalo de repetición (en días)
+  repeatInterval: {
+    type: DataTypes.INTEGER,
+    defaultValue: 1
+  },
+
+  reminderTime: {
+  type: DataTypes.TIME, // "14:30:00"
+  allowNull: true
+},
+
+  // 🔁 Último recordatorio enviado 
+  lastReminderSent: {
+    type: DataTypes.DATE,
+    allowNull: true
+  }
 
 }, {
   tableName: "tasks",
   timestamps: true,
-  paranoid: true, // soft delete (deletedAt)
+  paranoid: true,
   indexes: [
     { fields: ["assignedTo"] },
-    { fields: ["reminderAt"] }
+    { fields: ["reminderAt"] },
+    { fields: ["repeat"] }
   ]
 });
 
-module.exports = Task;
+module.exports = Task; 

@@ -23,13 +23,19 @@ const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
 
 const postulacionesRouter = require("./routes/DesarrolloOrganizacional/postulacionesRouter");
-require("./jobs/reminder");
+const { startTaskCron } = require("./services/taskCron");
+ 
  
 const path = require("path");
+const startTaskReminderJob = require("./jobs/taskReminder");
 
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5020;
+
+/* startTaskCron();
+startTaskReminderJob();
+ */
 
 // Permitir localhost y dominio de producción
 const allowedOrigins = [

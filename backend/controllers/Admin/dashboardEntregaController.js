@@ -12,24 +12,20 @@ exports.getDashboardEntregas = async (req, res) => {
         [Op.ne]: "Eliminado",
       },
     };
-    // 📅 Fechas opcionales
+
     if (fechaInicio || fechaFin) {
-      const rango = {};
+  const rango = {};
 
-      if (fechaInicio) {
-        const inicio = new Date(fechaInicio);
-        inicio.setHours(0, 0, 0, 0);
-        rango[Op.gte] = inicio;
-      }
+  if (fechaInicio) {
+    rango[Op.gte] = fechaInicio; // "2026-04-01"
+  }
 
-      if (fechaFin) {
-        const fin = new Date(fechaFin);
-        fin.setHours(23, 59, 59, 999);
-        rango[Op.lte] = fin;
-      }
+  if (fechaFin) {
+    rango[Op.lte] = fechaFin; // "2026-04-10"
+  }
 
-      whereBase.fecha = rango;
-    }
+  whereBase.fecha = rango;
+}
 
 const includeMotorizado = {
   model: UsuarioAgencia,
