@@ -5,12 +5,15 @@ import { jwtDecode } from "jwt-decode";
 import { FaFileExcel } from "react-icons/fa";
 import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
+import { getHoyLocal } from "../../utils/dateUtils";
+import SelectUsuarios from "../../components/common/SelectUsuarios";
+
 
 export default function BDDVentas() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
-  const [fechaFin, setFechaFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState(getHoyLocal());
+  const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
@@ -21,15 +24,6 @@ export default function BDDVentas() {
   const [origen, setOrigen] = useState([]);
   const [origenId, setOrigenId] = useState("");
 
-  const cargarUsuarios = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/usuarios`);
-      setUsuarios(res.data || []);
-    } catch (error) {
-      console.error("Error cargando usuarios:", error);
-      setUsuarios([]);
-    }
-  };
 
   const cargarAgencias = async () => {
     try {
@@ -68,7 +62,6 @@ export default function BDDVentas() {
   useEffect(() => {
     cargarOrigenes();
     cargarAgencias();
-    cargarUsuarios();
   }, []);
 
   useEffect(() => {
@@ -176,10 +169,6 @@ export default function BDDVentas() {
     }
   }, [fechaInicio, fechaFin, agenciaId, vendedorId, observacion, origenId]);
 
-  useEffect(() => {
-    const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaFin(hoyLocal);
-  }, []);
 
   return (
     <div className="p-4">
@@ -222,21 +211,13 @@ export default function BDDVentas() {
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium">Vendedor</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={vendedorId}
-            onChange={(e) => setVendedorId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
+   
+   <SelectUsuarios
+  label="Vendedor"
+  value={vendedorId}
+  onChange={setVendedorId}
+/>
+
 
         <div>
           <label className="block text-sm font-medium">Origen</label>

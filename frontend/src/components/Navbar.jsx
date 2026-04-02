@@ -1,9 +1,35 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { jwtDecode } from "jwt-decode";
-
+import { FaBell } from "react-icons/fa";
+import NotificacionesModal from "./NotificacionesModal";
+import Swal from "sweetalert2";
 function Navbar({ auth, setAuth }) {
   const navigate = useNavigate();
+  const [openNotificaciones, setOpenNotificaciones] = useState(false);
+
+  const token = localStorage.getItem("token");
+  const user = token ? jwtDecode(token) : null;
+
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setLoading(true);
+        const res = await axios.get(`${API_URL}/tasks/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setTasks(res.data.data);
+      } catch (error) {
+        Swal.fire("Error", "No se pudieron cargar las tareas", "error");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTasks();
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -36,12 +62,9 @@ function Navbar({ auth, setAuth }) {
       case "admin":
         if (auth.rol === "admin" && permiso === "REPARTO") {
           navigate("/logistica-panel");
-        } 
-          else if (auth.rol === "admin" && permiso === "VENTAS") 
-         {
+        } else if (auth.rol === "admin" && permiso === "VENTAS") {
           navigate("/vendedor-panel");
-         }
-         else {
+        } else {
           navigate("/dashboard");
         }
         break;
@@ -83,6 +106,18 @@ function Navbar({ auth, setAuth }) {
 
         {/* Links y botones */}
         <div className="flex items-center space-x-4">
+          <button
+            onClick={() => setOpenNotificaciones(true)}
+            className="relative text-green-200 hover:text-green-400 transition"
+          >
+            <FaBell size={20} />
+
+            {/* Badge opcional */}
+            <span className="absolute -top-1 -right-2 bg-red-500 text-xs px-1 rounded-full">
+              {tasks.length > 0 ? tasks.length : "3"}
+            </span>
+          </button>
+
           {auth.isAuthenticated && auth.role === "admin" && (
             <Link
               to="/admin"
@@ -121,6 +156,13 @@ function Navbar({ auth, setAuth }) {
           )}
         </div>
       </div>
+
+      {openNotificaciones && (
+        <NotificacionesModal
+          tasks={tasks}
+          onClose={() => setOpenNotificaciones(false)}
+        />
+      )}
     </nav>
   );
 }

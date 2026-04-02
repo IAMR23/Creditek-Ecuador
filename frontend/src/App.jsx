@@ -81,8 +81,17 @@ import BDDVentas from "./pages/Admin/BDDVentas";
 import Bonos from "./pages/Admin/Bonos";
 import RevisarCaja from "./pages/Vendedores/RevisarCaja";
 import TasksPage from "./pages/Tareas/TaskPage";
+import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
 function App() {
+
+
+// Registrar SW al arrancar
+registerSW().then(() => {
+  // Enviar token al SW una vez registrado
+  initSWWithToken();
+});
+
   const [auth, setAuth] = useState({
     isAuthenticated: false,
     rol: null,

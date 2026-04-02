@@ -15,5 +15,6 @@ export const observaciones = [
   "Mateo",
   "Raul",
   "Steeven Furgo",
+  "Michael"
 ];
  

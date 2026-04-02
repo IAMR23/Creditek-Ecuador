@@ -5,6 +5,7 @@ import { jwtDecode } from "jwt-decode";
 import { FaPlus, FaCheck, FaClock, FaSpinner } from "react-icons/fa";
 import { API_URL } from "../../../config";
 import TaskList from "./TaskList";
+import SelectUsuarios from "../../components/common/SelectUsuarios";
 
 const TasksPage = () => {
   const [tasks, setTasks] = useState([]);
@@ -17,7 +18,7 @@ const TasksPage = () => {
     priority: "media",
     repeat: "none",
     repeatInterval: 1,
-    reminderTime: "" , 
+    reminderTime: "",
   });
 
   const token = localStorage.getItem("token");
@@ -26,23 +27,21 @@ const TasksPage = () => {
   // =========================
   // 📥 Obtener tareas
   // =========================
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      const res = await axios.get(`${API_URL}/tasks/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTasks(res.data.data);
-    } catch (error) {
-      Swal.fire("Error", "No se pudieron cargar las tareas", "error");
-    } finally {
-      setLoading(false);
-    } 
-  };
-
-  console.log(tasks)
 
   useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        setLoading(true);
+        const res = await axios.get(`${API_URL}/tasks/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setTasks(res.data.data);
+      } catch (error) {
+        Swal.fire("Error", "No se pudieron cargar las tareas", "error");
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchTasks();
   }, []);
 
@@ -57,11 +56,11 @@ const TasksPage = () => {
 
       const payload = {
         ...form,
-        createdBy: user?.id
+        createdBy: user?.id,
       };
 
       await axios.post(`${API_URL}/tasks`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       Swal.fire("OK", "Tarea creada", "success");
@@ -73,7 +72,7 @@ const TasksPage = () => {
         priority: "media",
         repeat: "none",
         repeatInterval: 1,
-        reminderTime: ""
+        reminderTime: "",
       });
 
       fetchTasks();
@@ -87,9 +86,13 @@ const TasksPage = () => {
   // =========================
   const completeTask = async (id) => {
     try {
-      await axios.put(`${API_URL}/tasks/${id}/complete`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.put(
+        `${API_URL}/tasks/${id}/complete`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       fetchTasks();
     } catch (error) {
@@ -118,7 +121,6 @@ const TasksPage = () => {
   // =========================
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-
       <h1 className="text-2xl font-bold mb-6">Gestión de Tareas</h1>
 
       {/* ========================= */}
@@ -128,7 +130,6 @@ const TasksPage = () => {
         <h2 className="font-semibold mb-4">Nueva tarea</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
           <input
             type="text"
             placeholder="Título"
@@ -137,12 +138,10 @@ const TasksPage = () => {
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
 
-          <input
-            type="number"
-            placeholder="Asignado a (ID)"
-            className="border p-2 rounded"
+          <SelectUsuarios
+            label="Vendedor"
             value={form.assignedTo}
-            onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
+            onChange={(value) => setForm({ ...form, assignedTo: value })}
           />
 
           <textarea
@@ -207,7 +206,6 @@ const TasksPage = () => {
       {/* 📋 LISTADO */}
       {/* ========================= */}
       <div className="bg-white rounded-2xl shadow p-4">
-
         {loading ? (
           <p>Cargando...</p>
         ) : tasks.length === 0 ? (
@@ -225,9 +223,7 @@ const TasksPage = () => {
                     <h3 className="font-semibold">{task.title}</h3>
                   </div>
 
-                  <p className="text-sm text-gray-500">
-                    {task.description}
-                  </p>
+                  <p className="text-sm text-gray-500">{task.description}</p>
 
                   <div className="text-xs text-gray-400 mt-1">
                     Prioridad: {task.priority} | Repetición: {task.repeat}
@@ -249,7 +245,6 @@ const TasksPage = () => {
       </div>
 
       <TaskList />
-
     </div>
   );
 };

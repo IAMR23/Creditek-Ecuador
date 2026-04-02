@@ -7,12 +7,13 @@ import { FaFileExcel } from "react-icons/fa";
 import { DataGrid } from "@mui/x-data-grid";
 import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
+import { getHoyLocal } from "../../utils/dateUtils";
 
 export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("2026-01-01");
-  const [fechaFin, setFechaFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState(getHoyLocal());
+  const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
