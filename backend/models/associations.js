@@ -318,8 +318,8 @@ UsuarioAgencia.hasMany(CierreCaja, {
 
 
 /* GESTOR DE TAREAS */
-UsuarioAgencia.hasMany(Task, { foreignKey: "createdBy", as: "createdTasks" });
-UsuarioAgencia.hasMany(Task, { foreignKey: "assignedTo", as: "assignedTasks" });
+Usuario.hasMany(Task, { foreignKey: "createdBy", as: "createdTasks" });
+Usuario.hasMany(Task, { foreignKey: "assignedTo", as: "assignedTasks" });
 
-Task.belongsTo(UsuarioAgencia, { foreignKey: "createdBy", as: "creator" });
-Task.belongsTo(UsuarioAgencia, { foreignKey: "assignedTo", as: "assignee" });
+Task.belongsTo(Usuario, { foreignKey: "createdBy", as: "creator" });
+Task.belongsTo(Usuario, { foreignKey: "assignedTo", as: "assignee" });

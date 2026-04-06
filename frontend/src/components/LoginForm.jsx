@@ -20,32 +20,6 @@ function LoginForm({ setAuth }) {
     setCredentials((prev) => ({ ...prev, [name]: value }));
   };
 
-/*   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await loginUser(credentials);
-      localStorage.setItem("token", response.token);
-
-      const decodedToken = jwtDecode(response.token);
-      const userRole = decodedToken.usuario?.rol.nombre;
-
-      setAuth({ isAuthenticated: true, rol: userRole });
-
-      if (userRole === "Vendedor") navigate("/vendedor-panel");
-      if (userRole === "admin") navigate("/dashboard");
-      if (userRole === "Repartidor") navigate("/logistica-panel");
-    } catch (error) {
-      setError(error.response?.data?.message || "Error al iniciar sesión.");
-    } finally {
-      setLoading(false);
-    }
-  };
- */
-  
-  
 
   const handleSubmit = async (e) => {
   e.preventDefault();
@@ -65,6 +39,7 @@ function LoginForm({ setAuth }) {
       isAuthenticated: true,
       rol,
       permisos,
+      usuario: decodedToken.usuario || null,
     });
 
 

@@ -24,6 +24,8 @@ const RevisionGestiones = () => {
   const [region, setRegion] = useState("");
   const [agenciaId, setAgenciaId] = useState("");
   const [agencias, setAgencias] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [vendedorId, setVendedorId] = useState("");
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -43,7 +45,20 @@ const RevisionGestiones = () => {
     }
   };
 
+    const cargarUsuarios = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/usuarios`);
+      setUsuarios(res.data || []);
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
+      setUsuarios([]);
+    }
+  };
+
+
+
   useEffect(() => {
+    cargarUsuarios();
     obtenerOrigenes();
   }, []);
 
@@ -148,6 +163,7 @@ const RevisionGestiones = () => {
       if (origen) params.origen = origen;
       if (region) params.region = region;
       if (agenciaId) params.agenciaId = agenciaId;
+      if (vendedorId) params.vendedorId = vendedorId;
 
       const { data } = await axios.get(`${API_URL}/api/gestion`, {
         params,
@@ -282,6 +298,21 @@ const RevisionGestiones = () => {
                 </option>
               ))}
             </select>
+
+
+          <select
+            className="border px-2 py-1 rounded"
+            value={vendedorId}
+            onChange={(e) => setVendedorId(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {usuarios.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+
 
             <button
               onClick={obtenerGestiones}

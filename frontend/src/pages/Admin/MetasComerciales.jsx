@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
-import { FaFileExcel } from "react-icons/fa";
+import { FaFileExcel, FaTrash } from "react-icons/fa";
 
 import { DataGrid } from "@mui/x-data-grid";
 import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
 import { getHoyLocal } from "../../utils/dateUtils";
+
+const STORAGE_KEY = "metasComercialesFiltros";
 
 export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
@@ -21,6 +23,26 @@ export default function MetasComerciales() {
   const [usuarios, setUsuarios] = useState([]);
   const [vendedorId, setVendedorId] = useState("");
   const [observacion, setObservacion] = useState("");
+  const [filtrosCargados, setFiltrosCargados] = useState(false);
+
+  const observaciones = [
+    "Luis",
+    "Uphone",
+    "Creditv",
+    "Anais",
+    "Bryan",
+    "Andres",
+    "Damian",
+    "Elizeth",
+    "Oscar",
+    "Alejandra",
+    "Damaris",
+    "Mirka",
+    "Fernando",
+    "Mateo",
+    "Raul",
+    "Steeven Furgo",
+  ];
 
   const cargarUsuarios = async () => {
     try {
@@ -54,25 +76,6 @@ export default function MetasComerciales() {
     cargarUsuarios();
   }, []);
 
-  const observaciones = [
-    "Luis",
-    "Uphone",
-    "Creditv",
-    "Anais",
-    "Bryan",
-    "Andres",
-    "Damian",
-    "Elizeth",
-    "Oscar",
-    "Alejandra",
-    "Damaris",
-    "Mirka",
-    "Fernando",
-    "Mateo",
-    "Raul",
-    "Steeven Furgo",
-  ];
-
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -84,6 +87,42 @@ export default function MetasComerciales() {
       }
     }
   }, []);
+
+  // 🔹 Cargar filtros guardados al iniciar
+  useEffect(() => {
+    try {
+      const filtrosGuardados = localStorage.getItem(STORAGE_KEY);
+
+      if (filtrosGuardados) {
+        const filtros = JSON.parse(filtrosGuardados);
+
+        setFechaInicio(filtros.fechaInicio || getHoyLocal());
+        setFechaFin(filtros.fechaFin || getHoyLocal());
+        setAgenciaId(filtros.agenciaId || "");
+        setVendedorId(filtros.vendedorId || "");
+        setObservacion(filtros.observacion || "");
+      }
+    } catch (error) {
+      console.error("Error cargando filtros desde localStorage:", error);
+    } finally {
+      setFiltrosCargados(true);
+    }
+  }, []);
+
+  // 🔹 Guardar filtros cada vez que cambien
+  useEffect(() => {
+    if (!filtrosCargados) return;
+
+    const filtros = {
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      observacion,
+    };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtros));
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId, observacion, filtrosCargados]);
 
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
@@ -136,7 +175,7 @@ export default function MetasComerciales() {
         Entrada: venta.entrada ?? "",
         Alcance: venta.alcance ?? "",
         Margen: venta.margen ?? "",
-        // Costo : venta.costo ?? "", 
+        Costo: venta.costo ?? "",
       }));
 
       setFilas(resultado);
@@ -173,40 +212,40 @@ export default function MetasComerciales() {
       return;
     }
 
-    // 🔹 Quitar el id interno
     const data = filas.map(({ id, ...rest }) => rest);
-
-    // 🔹 Crear hoja
     const worksheet = XLSX.utils.json_to_sheet(data);
-
-    // 🔹 Crear libro
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Metas Comerciales");
 
-    // 🔹 Nombre dinámico
     const nombreArchivo = `Metas_Comerciales_${fechaInicio}_a_${fechaFin}.xlsx`;
-
-    // 🔹 Descargar
     XLSX.writeFile(workbook, nombreArchivo);
   };
 
-useEffect(() => {
-  if (fechaInicio && fechaFin && usuarioInfo?.id) {
-    fetchData();
-  }
-}, [fechaInicio, fechaFin, agenciaId, vendedorId, observacion]);
-
-
   useEffect(() => {
-    const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaFin(hoyLocal);
-  }, []);
+    if (
+      filtrosCargados &&
+      fechaInicio &&
+      fechaFin &&
+      usuarioInfo?.id
+    ) {
+      fetchData();
+    }
+  }, [filtrosCargados, fechaInicio, fechaFin, agenciaId, vendedorId, observacion, usuarioInfo]);
+
+  const limpiarFiltros = () => {
+    setFechaInicio(getHoyLocal());
+    setFechaFin(getHoyLocal());
+    setAgenciaId("");
+    setVendedorId("");
+    setObservacion("");
+    localStorage.removeItem(STORAGE_KEY);
+  };
 
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Metas Comerciales</h1>
 
-      <div className="flex gap-4 mb-4 items-end">
+      <div className="flex gap-4 mb-4 items-end flex-wrap">
         <div>
           <label className="block text-sm font-medium">Fecha Inicio</label>
           <input
@@ -282,6 +321,13 @@ useEffect(() => {
         >
           <FaFileExcel size={18} />
         </button>
+
+        <button
+          onClick={limpiarFiltros}
+          className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+        >
+          <FaTrash size={18}/>
+        </button>
       </div>
 
       {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
@@ -293,7 +339,7 @@ useEffect(() => {
           rows={filas.map((f, i) => ({ id: f.id ?? i, ...f }))}
           columns={columnas}
           autoHeight
-          pageSizeOptions={[10, 25, 50]}
+          pageSizeOptions={[10, 25, 50 , 100]}
           sx={{
             "& .precio-rojo": { color: "red", fontWeight: "bold" },
             "& .precio-verde": { color: "green", fontWeight: "bold" },
@@ -304,6 +350,7 @@ useEffect(() => {
               const pv = Number(params.value) || 0;
               return pv < ps ? "precio-rojo" : "precio-verde";
             }
+            return "";
           }}
         />
       )}

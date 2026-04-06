@@ -4,52 +4,65 @@ import { jwtDecode } from "jwt-decode";
 import { FaBell } from "react-icons/fa";
 import NotificacionesModal from "./NotificacionesModal";
 import Swal from "sweetalert2";
+import axios from "axios";
+import { API_URL } from "../../config";
+
+
 function Navbar({ auth, setAuth }) {
   const navigate = useNavigate();
+
   const [openNotificaciones, setOpenNotificaciones] = useState(false);
-
-  const token = localStorage.getItem("token");
-  const user = token ? jwtDecode(token) : null;
-
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
+  // ✅ Validar expiración del token
+  const isTokenValid = (token) => {
+    try {
+      const decoded = jwtDecode(token);
+      return decoded.exp * 1000 > Date.now();
+    } catch {
+      return false;
+    }
+  };
+
+  // ✅ Obtener tareas SOLO si está autenticado correctamente
   useEffect(() => {
+    if (isAuthLoading || !auth.isAuthenticated) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
     const fetchTasks = async () => {
       try {
         setLoading(true);
+
         const res = await axios.get(`${API_URL}/tasks/me`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
+
         setTasks(res.data.data);
       } catch (error) {
-        Swal.fire("Error", "No se pudieron cargar las tareas", "error");
+        console.error(error);
+
+        // ❗ Evita alertas innecesarias en errores de auth
+        if (error.response?.status !== 401) {
+          Swal.fire("Error", "No se pudieron cargar las tareas", "error");
+        } else {
+          // Token inválido → cerrar sesión
+          handleLogout();
+        }
       } finally {
         setLoading(false);
       }
     };
+
     fetchTasks();
-  }, []);
+  }, [auth.isAuthenticated, isAuthLoading]);
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    if (token) {
-      try {
-        const decodedToken = jwtDecode(token);
-        setAuth({
-          isAuthenticated: true,
-          role: decodedToken.role,
-          permisos: decodedToken.usuario?.permisosAsignados || [],
-        });
-      } catch (error) {
-        console.error("Error al decodificar el token", error);
-        localStorage.removeItem("token");
-        setAuth({ isAuthenticated: false, role: null });
-      }
-    }
-  }, [setAuth]);
-
+  // ✅ Navegación por rol
   const handleLogoClick = () => {
     if (!auth.isAuthenticated) {
       navigate("/login");
@@ -60,20 +73,21 @@ function Navbar({ auth, setAuth }) {
 
     switch (auth.rol) {
       case "admin":
-        if (auth.rol === "admin" && permiso === "REPARTO") {
+        if (permiso === "REPARTO") {
           navigate("/logistica-panel");
-        } else if (auth.rol === "admin" && permiso === "VENTAS") {
+        } else if (permiso === "VENTAS") {
           navigate("/vendedor-panel");
         } else {
           navigate("/dashboard");
         }
         break;
+
       case "vendedor":
         navigate("/vendedor-panel");
         break;
 
       case "repartidor":
-        navigate("/logistica-panel"); // Ajusta si tu ruta es distinta
+        navigate("/logistica-panel");
         break;
 
       default:
@@ -81,18 +95,21 @@ function Navbar({ auth, setAuth }) {
     }
   };
 
+  // ✅ Logout limpio
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("rol");
     localStorage.removeItem("usuario");
     localStorage.removeItem("activeMode");
-    setAuth({ isAuthenticated: false, role: null });
-    navigate("/");
+
+    setAuth({ isAuthenticated: false, rol: null });
+    navigate("/login");
   };
 
   return (
     <nav className="bg-gray-900 text-white shadow-lg sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center px-6 py-4">
+        
         {/* Logo */}
         <div className="flex justify-center">
           <button
@@ -100,25 +117,26 @@ function Navbar({ auth, setAuth }) {
             className="flex items-center space-x-2 text-3xl font-extrabold text-green-500 hover:text-green-400 transition duration-300"
           >
             <span className="animate-pulse">RVE</span>
-            <img src="./logo.png" alt="" width={112} />
+            <img src="./logo.png" alt="logo" width={112} />
           </button>
         </div>
 
-        {/* Links y botones */}
+        {/* Acciones */}
         <div className="flex items-center space-x-4">
+
           <button
             onClick={() => setOpenNotificaciones(true)}
             className="relative text-green-200 hover:text-green-400 transition"
           >
             <FaBell size={20} />
 
-            {/* Badge opcional */}
             <span className="absolute -top-1 -right-2 bg-red-500 text-xs px-1 rounded-full">
-              {tasks.length > 0 ? tasks.length : "3"}
+              {tasks.length}
             </span>
           </button>
 
-          {auth.isAuthenticated && auth.role === "admin" && (
+          {/* Admin */}
+          {auth.isAuthenticated && auth.rol === "admin" && (
             <Link
               to="/admin"
               className="text-green-200 hover:text-green-400 font-semibold transition duration-300"
@@ -127,36 +145,29 @@ function Navbar({ auth, setAuth }) {
             </Link>
           )}
 
+          {/* No autenticado */}
           {!auth.isAuthenticated && (
-            <>
-              <Link
-                to="/login"
-                className="text-green-200 hover:text-green-400 font-semibold transition duration-300"
-              >
-                Login
-              </Link>
-              {/* 
-              <Link 
-                to="/registro" 
-                className="text-green-200 hover:text-green-400 font-semibold transition duration-300"
-              >
-                Registro
-              </Link> 
-              */}
-            </>
+            <Link
+              to="/login"
+              className="text-green-200 hover:text-green-400 font-semibold transition duration-300"
+            >
+              Login
+            </Link>
           )}
 
+          {/* Logout */}
           {auth.isAuthenticated && (
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white font-semibold px-4 py-2 rounded-lg shadow-md transition duration-300 transform hover:-translate-y-0.5 hover:scale-105"
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white font-semibold px-4 py-2 rounded-lg shadow-md transition duration-300"
             >
-              <span>Cerrar sesión</span>
+              Cerrar sesión
             </button>
           )}
         </div>
       </div>
 
+      {/* Modal */}
       {openNotificaciones && (
         <NotificacionesModal
           tasks={tasks}

@@ -29,12 +29,16 @@ router.post("/", async (req, res) => {
 
     // Validar rolId
     if (!rolId) {
-      return res.status(400).json({ message: "El campo rolId es obligatorio." });
+      return res
+        .status(400)
+        .json({ message: "El campo rolId es obligatorio." });
     }
 
     const existeRol = await Rol.findByPk(rolId);
     if (!existeRol) {
-      return res.status(400).json({ message: "El rol especificado no existe." });
+      return res
+        .status(400)
+        .json({ message: "El rol especificado no existe." });
     }
 
     // Hash password
@@ -63,8 +67,10 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const usuarios = await Usuario.findAll({
+      where: { activo: true },
       attributes: { exclude: ["password"] },
-      include: [{ model: Rol , as: "rol", attributes: ["id", "nombre"] }],
+      include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+      order: [["nombre", "ASC"]],
     });
     res.json(usuarios);
   } catch (error) {
@@ -128,7 +134,9 @@ router.put("/:id", async (req, res) => {
     if (rolId !== undefined) {
       const existeRol = await Rol.findByPk(rolId);
       if (!existeRol) {
-        return res.status(400).json({ message: "El rol especificado no existe." });
+        return res
+          .status(400)
+          .json({ message: "El rol especificado no existe." });
       }
       usuario.rolId = rolId;
     }

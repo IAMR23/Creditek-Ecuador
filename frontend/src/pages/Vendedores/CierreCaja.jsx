@@ -72,7 +72,6 @@ export default function CierreCaja() {
       const res = await axios.post(`${API_URL}/cierre-caja`, payload);
 
       alert("✅ Cierre realizado correctamente");
-      console.log(res.data);
 
     } catch (error) {
       console.error(error);

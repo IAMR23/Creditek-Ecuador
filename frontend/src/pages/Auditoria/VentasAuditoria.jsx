@@ -229,7 +229,7 @@ export default function VentasAuditoria() {
         <table className="w-full border mt-4 text-sm">
           <thead className="bg-gray-200">
             <tr>
-              <th className="p-2 border">#</th> {/* contador */}
+              <th className="p-2 border">#</th> 
               {Object.keys(filas[0] || {}).map((key) => (
                 <th key={key} className="p-2 border">
                   {key}

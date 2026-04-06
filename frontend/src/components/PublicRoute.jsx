@@ -13,17 +13,36 @@ function PublicRoute({ isAuthenticated, children, rol }) {
   const puedeRepartir = permisos.includes("Repartir");
   const activeMode = localStorage.getItem("activeMode");
 
+  // 1. Si ya eligió modo, respetarlo
+  if (activeMode === "ADMIN") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  if (activeMode === "REPARTO") {
+    return <Navigate to="/logistica-panel" replace />;
+  }
+
+  if (activeMode === "VENTAS") {
+    return <Navigate to="/vendedor-panel" replace />;
+  }
+
+
   if (rol === "admin" && puedeRepartir) {
     return <Navigate to="/seleccionar-modo" replace />;
   }
 
-  if (rol === "Repartidor") {
+  // 3. Si solo es admin
+  if (rol === "admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // 4. Si es repartidor
+  if (rol === "repartidor") {
     return <Navigate to="/logistica-panel" replace />;
   }
 
-
-  // Default
-  return <Navigate to="/dashboard" replace />;
+  // 5. Default: ventas
+  return <Navigate to="/vendedor-panel" replace />;
 }
 
 export default PublicRoute;

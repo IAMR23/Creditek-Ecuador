@@ -17,7 +17,7 @@ export const initSWWithToken = async () => {
 
   const token = localStorage.getItem("token");
   if (!token) {
-    console.warn("❌ No hay token en localStorage");
+    // console.warn("❌ No hay token en localStorage");
     return;
   }
 

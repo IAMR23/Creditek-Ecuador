@@ -24,7 +24,6 @@ import AdminCostoHistorico from "./pages/Admin/AdminCostoHistorico";
 import FormasPago from "./pages/Admin/FormasPago";
 import OrigenAdmin from "./pages/Admin/OrigenAdmin";
 import AdminObsequios from "./pages/Admin/AdminObsequios";
-
 import MetasComerciales from "./pages/Admin/MetasComerciales";
 
 /* VENDEDORES */
@@ -43,7 +42,6 @@ import DetalleEntregaVendedores from "./pages/Vendedores/Entregas/DetalleEntrega
 import EstadoEntrega from "./pages/Admin/EstadoEntrega";
 import MisVentas from "./pages/Vendedores/Ventas/MisVentas";
 import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
-
 import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
 import VentasCompletas from "./pages/Admin/VentasCompletas";
@@ -68,7 +66,6 @@ import SeleccionarModo from "./pages/SeleccionarModo";
 import MisEntregasPendientes from "./pages/Logistica/MisEntregasPendientes";
 import MisEntregasRealizadas from "./pages/Logistica/MisEntregasRealizadas";
 import EntregasRepartidores from "./pages/Logistica/EntregasRepartidores";
-import EntregasTotales from "./pages/Logistica/ResumenEntregas";
 import CrearTraslado from "./pages/Vendedores/CrearTraslado";
 import TrasladosList from "./pages/Vendedores/TrasladosList";
 import Gestion from "./pages/Vendedores/Gestion";
@@ -84,62 +81,95 @@ import TasksPage from "./pages/Tareas/TaskPage";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
 function App() {
-
-
-// Registrar SW al arrancar
-registerSW().then(() => {
-  // Enviar token al SW una vez registrado
-  initSWWithToken();
-});
-
   const [auth, setAuth] = useState({
     isAuthenticated: false,
     rol: null,
     permisos: null,
+    usuario: null,
   });
 
-  // 🔹 Validar token y rol al cargar la app
+  const [authLoading, setAuthLoading] = useState(true);
+
   const validateToken = () => {
+    
     const token = localStorage.getItem("token");
+
     if (!token) {
-      setAuth({ isAuthenticated: false, rol: null });
+      setAuth({
+        isAuthenticated: false,
+        rol: null,
+        permisos: null,
+        usuario: null,
+      });
+      setAuthLoading(false);
       return;
     }
 
     try {
       const decodedToken = jwtDecode(token);
-
-      // 🔥 Validar expiración del token
       const now = Date.now() / 1000;
+
       if (decodedToken.exp < now) {
-        console.warn("Token expirado");
         localStorage.removeItem("token");
-        setAuth({ isAuthenticated: false, rol: null, usuario: null });
+        localStorage.removeItem("activeMode");
+
+
+        setAuth({
+          isAuthenticated: false,
+          rol: null,
+          permisos: null,
+          usuario: null,
+        });
+        setAuthLoading(false);
         return;
       }
 
       setAuth({
         isAuthenticated: true,
-        rol: decodedToken.usuario?.rol?.nombre || null, // admin / vendedor / etc.
-        usuario: decodedToken.usuario,
+        rol: decodedToken.usuario?.rol?.nombre?.toLowerCase() || null,
+        permisos: decodedToken.usuario?.permisos || null,
+        usuario: decodedToken.usuario || null,
       });
     } catch (error) {
       console.error("Token inválido", error);
       localStorage.removeItem("token");
-      setAuth({ isAuthenticated: false, rol: null });
+      localStorage.removeItem("activeMode");
+
+      setAuth({
+        isAuthenticated: false,
+        rol: null,
+        permisos: null,
+        usuario: null,
+      });
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   useEffect(() => {
     validateToken();
 
-    // 🔹 Escuchar cambios entre pestañas
     window.addEventListener("storage", validateToken);
 
     return () => {
       window.removeEventListener("storage", validateToken);
     };
   }, []);
+
+  useEffect(() => {
+    registerSW().then(() => {
+      initSWWithToken();
+    });
+  }, []);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Validando sesión...</p>
+      </div>
+    );
+  }
+
 
   return (
     <BrowserRouter>
@@ -148,7 +178,6 @@ registerSW().then(() => {
 
         <main className="flex-grow w-full">
           <Routes>
-            {/* LOGIN */}
             <Route
               path="login"
               element={
@@ -161,9 +190,8 @@ registerSW().then(() => {
               }
             />
 
-            {/* ADMIN */}
             <Route
-              path=""
+              path="/"
               element={
                 <ProtectedRoute
                   isAuthenticated={auth.isAuthenticated}
@@ -195,12 +223,10 @@ registerSW().then(() => {
                 path="entregas-repartidores"
                 element={<EntregasRepartidores />}
               />
-
               <Route
                 path="entregas-repartidores-tabla"
                 element={<EntregasRepartidoresTabla />}
               />
-
               <Route path="rol" element={<AdminUsuariosRoles />} />
               <Route path="dispositivos" element={<Dispositivos />} />
               <Route path="marcas" element={<MarcasAdmin />} />
@@ -214,21 +240,17 @@ registerSW().then(() => {
               <Route path="origen" element={<OrigenAdmin />} />
               <Route path="obsequios" element={<AdminObsequios />} />
               <Route path="metas-comerciales" element={<MetasComerciales />} />
-
               <Route
                 path="entregas-pendientes"
                 element={<EntregasPendientes />}
               />
               <Route path="estado-entrega" element={<EstadoEntrega />} />
               <Route path="reporte-entregas" element={<ReporteEntregas />} />
-
-              {/* MARKETING */}
               <Route
                 path="copa-creditek"
                 element={<MarketingVentasAgencia />}
               />
               <Route path="goleadores" element={<Goleadores />} />
-              {/* AUDITORIAS */}
               <Route
                 path="entregas-auditoria"
                 element={<EntregasAuditoria />}
@@ -253,12 +275,10 @@ registerSW().then(() => {
                 path="usuarios-permisos"
                 element={<UsuariosConPermisos />}
               />
-
               <Route path="revisar-cajas" element={<RevisarCaja />} />
               <Route path="tasks" element={<TasksPage />} />
             </Route>
 
-            {/* REPARTIDORES */}
             <Route path="logistica-panel" element={<LogisticaPanel />} />
             <Route path="vendedor-panel" element={<VendedorPanel />} />
 
@@ -273,12 +293,7 @@ registerSW().then(() => {
               path="ventas/:id/obsequios"
               element={<VentaObsequioPage />}
             />
-            <Route
-              path="ventas/:id/validacion"
-              element={<VentaFoto Unitario aFoto />}
-            />
-
-            {/* ENTREGAS */}
+            <Route path="ventas/:id/validacion" element={<VentaFoto />} />
 
             <Route
               path="registrar-clientes-entrega"
@@ -311,7 +326,6 @@ registerSW().then(() => {
               element={<MisEntregasRealizadas />}
             />
 
-            {/* EXPERIMENTAL */}
             <Route path="ventacompleta" element={<CrearVentaCompleta />} />
             <Route
               path="editar-venta/:id"
@@ -330,13 +344,9 @@ registerSW().then(() => {
             <Route path="seleccionar-modo" element={<SeleccionarModo />} />
             <Route path="crear-traslado" element={<CrearTraslado />} />
             <Route path="mis-traslados" element={<TrasladosList />} />
-
-            {/* Call center */}
             <Route path="gestion" element={<Gestion />} />
             <Route path="mis-gestiones" element={<MisGestiones />} />
             <Route path="mi-gestion/:id" element={<EditarGestion />} />
-
-            {/* Cierre de caja */}
             <Route path="caja" element={<Caja />} />
 
             <Route

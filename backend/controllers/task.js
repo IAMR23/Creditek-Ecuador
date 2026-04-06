@@ -1,14 +1,16 @@
 const { Op } = require("sequelize");
 const Task = require("../models/Task");
+const Usuario = require("../models/Usuario");
 
 
 exports.createTask = async (req, res) => {
   try {
     const data = req.body;
 
-    const usuarioAgenciaId = req.user?.usuarioAgenciaId;
-
-    if (!usuarioAgenciaId) {
+    const usuarioId = req.user?.id;
+  
+    
+    if (!usuarioId) {
       return res.status(400).json({
         ok: false,
         message: "Usuario no identificado",
@@ -18,7 +20,7 @@ exports.createTask = async (req, res) => {
     const task = await Task.create({
       ...data,
       assignedTo: parseInt(data.assignedTo),
-      createdBy: usuarioAgenciaId,
+      createdBy: usuarioId,
 
       // 🔥 FIX CLAVE
       reminderTime: data.reminderTime || null
@@ -35,19 +37,32 @@ exports.createTask = async (req, res) => {
 
 exports.getMyTasks = async (req, res) => {
   try {
-    const usuarioAgenciaId = req.user?.usuarioAgenciaId;
+    const usuarioId = req.user?.id;
 
-    if (!usuarioAgenciaId) {
+    if (!usuarioId) {
       return res.status(400).json({
         ok: false,
         message: "Usuario no identificado",
       });
     }
-
+ 
     const tasks = await Task.findAll({
       where: {
-        assignedTo: usuarioAgenciaId,
+        assignedTo: usuarioId,
+        status: { [Op.ne]: "completada" }
       },
+        include: [
+        {
+          model: Usuario,
+          as: "creator",
+          attributes: ["id", "nombre", "email"]
+        },
+        {
+          model: Usuario,
+          as: "assignee",
+          attributes: ["id", "nombre", "email"]
+        }
+      ],
       order: [["createdAt", "DESC"]],
     });
 
@@ -66,26 +81,34 @@ exports.getMyTasks = async (req, res) => {
 };
 
 
-// ✅ Obtener todas las tareas (con filtros)
 exports.getTasks = async (req, res) => {
   try {
+    const usuarioId = req.user?.id;
+
+    if (!usuarioId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Usuario no identificado",
+      });
+    }
+
     const {
       status,
-      assignedTo,
-      createdBy,
       fechaInicio,
       fechaFin,
       priority
     } = req.query;
 
-    const where = {};
+    const where = {
+      [Op.or]: [
+        { createdBy: usuarioId },
+        { assignedTo: usuarioId }
+      ]
+    };
 
     if (status) where.status = status;
-    if (assignedTo) where.assignedTo = assignedTo;
-    if (createdBy) where.createdBy = createdBy;
     if (priority) where.priority = priority;
 
-    // 📅 Filtro por fechas (dueDate)
     if (fechaInicio && fechaFin) {
       where.dueDate = {
         [Op.between]: [new Date(fechaInicio), new Date(fechaFin)]
@@ -94,10 +117,23 @@ exports.getTasks = async (req, res) => {
 
     const tasks = await Task.findAll({
       where,
-      order: [["createdAt", "DESC"]]
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: Usuario,
+          as: "creator",
+          attributes: ["id", "nombre", "email"]
+        },
+        {
+          model: Usuario,
+          as: "assignee",
+          attributes: ["id", "nombre", "email"]
+        }
+      ]
     });
 
     res.json(tasks);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al obtener tareas" });

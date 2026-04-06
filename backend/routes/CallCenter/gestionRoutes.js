@@ -284,8 +284,16 @@ router.get("/vendedor/:id", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, solicitud, origen, region, agenciaId } =
-      req.query;
+    const {
+      fechaInicio,
+      fechaFin,
+      solicitud,
+      origen,
+      region,
+      agenciaId,
+      vendedorId,
+    } = req.query;
+
     const where = {};
 
     if (fechaInicio && fechaFin) {
@@ -301,16 +309,14 @@ router.get("/", async (req, res) => {
 
     if (solicitud) {
       where[Op.or] = [
-        {
-          solicitud: solicitud.toUpperCase(),
-        },
+        { solicitud: solicitud.toUpperCase() },
         Sequelize.literal(`
-      EXISTS (
-        SELECT 1
-FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
-        WHERE elem->>'solicitud' = '${solicitud.toUpperCase()}'
-      )
-    `),
+          EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
+            WHERE elem->>'solicitud' = '${solicitud.toUpperCase()}'
+          )
+        `),
       ];
     }
 
@@ -320,7 +326,6 @@ FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
       };
     }
 
-    // Filtro por región
     if (region) {
       where.region = region.toUpperCase();
     }
@@ -331,19 +336,30 @@ FROM jsonb_array_elements("Gestion"."otrasCedulas"::jsonb) AS elem
         {
           model: UsuarioAgencia,
           as: "usuarioAgencia",
-          attributes: ["id"],
-          required: agenciaId ? true : false,
-          where: agenciaId ? { agenciaId: Number(agenciaId) } : undefined,
+          attributes: ["id", "agenciaId", "usuarioId"],
+          required:
+            (agenciaId && agenciaId !== "todas") ||
+            (vendedorId && vendedorId !== "todos"),
           include: [
             {
               model: Usuario,
               as: "usuario",
               attributes: ["id", "nombre"],
+              required: !!(vendedorId && vendedorId !== "todos"),
+              ...(vendedorId &&
+                vendedorId !== "todos" && {
+                  where: { id: Number(vendedorId) },
+                }),
             },
             {
               model: Agencia,
               as: "agencia",
               attributes: ["id", "nombre"],
+              required: !!(agenciaId && agenciaId !== "todas"),
+              ...(agenciaId &&
+                agenciaId !== "todas" && {
+                  where: { id: Number(agenciaId) },
+                }),
             },
           ],
         },

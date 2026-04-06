@@ -38,8 +38,6 @@ exports.obtenerReporteAuditoria = async ({
     whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
   }
 
-  // 🔹 include dinámico de agencia
-
   const includeUsuarioAgencia = {
     model: UsuarioAgencia,
     as: "usuarioAgencia",
