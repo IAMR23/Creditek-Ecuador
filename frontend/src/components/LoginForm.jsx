@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/userServices";
 import { jwtDecode } from "jwt-decode";
 import { AiFillEye, AiFillEyeInvisible } from "react-icons/ai";
+import { useTaskNotifications } from "../context/TaskNotificationContext";
 
 function LoginForm({ setAuth }) {
   const [credentials, setCredentials] = useState({
@@ -14,7 +15,7 @@ function LoginForm({ setAuth }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
-
+const { reloadPendingTasks } = useTaskNotifications();
   const handleChange = (e) => {
     const { name, value } = e.target;
     setCredentials((prev) => ({ ...prev, [name]: value }));
@@ -29,7 +30,7 @@ function LoginForm({ setAuth }) {
   try {
     const response = await loginUser(credentials);
     localStorage.setItem("token", response.token);
-
+reloadPendingTasks();
     const decodedToken = jwtDecode(response.token);
 
     const permisos = decodedToken.usuario?.permisosAsignados || [];

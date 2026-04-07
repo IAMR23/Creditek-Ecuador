@@ -80,6 +80,8 @@ import RevisarCaja from "./pages/Vendedores/RevisarCaja";
 import TasksPage from "./pages/Tareas/TaskPage";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
+import { TaskNotificationProvider } from "./context/TaskNotificationContext";
+import { socket } from "./socket/socket";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -90,11 +92,33 @@ function App() {
 
   const [authLoading, setAuthLoading] = useState(true);
 
-  const validateToken = () => {
-    
-    const token = localStorage.getItem("token");
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
 
-    if (!token) {
+
+  const validateToken = () => {
+  const token = localStorage.getItem("token");
+
+  if (!token) {
+    setAuth({
+      isAuthenticated: false,
+      rol: null,
+      permisos: null,
+      usuario: null,
+    });
+    setAuthLoading(false);
+    return;
+  }
+
+  try {
+    const decodedToken = jwtDecode(token);
+    const now = Date.now() / 1000;
+
+    if (decodedToken.exp < now) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("activeMode");
+
       setAuth({
         isAuthenticated: false,
         rol: null,
@@ -105,46 +129,43 @@ function App() {
       return;
     }
 
-    try {
-      const decodedToken = jwtDecode(token);
-      const now = Date.now() / 1000;
+    setAuth({
+      isAuthenticated: true,
+      rol: decodedToken.usuario?.rol?.nombre?.toLowerCase() || null,
+      permisos: decodedToken.usuario?.permisos || null,
+      usuario: decodedToken.usuario || null,
+    });
+  } catch (error) {
+    console.error("Token inválido", error);
 
-      if (decodedToken.exp < now) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("activeMode");
+    localStorage.removeItem("token");
+    localStorage.removeItem("activeMode");
 
+    setAuth({
+      isAuthenticated: false,
+      rol: null,
+      permisos: null,
+      usuario: null,
+    });
+  } finally {
+    setAuthLoading(false);
+  }
+};
 
-        setAuth({
-          isAuthenticated: false,
-          rol: null,
-          permisos: null,
-          usuario: null,
-        });
-        setAuthLoading(false);
-        return;
-      }
+useEffect(() => {
+  const token = localStorage.getItem("token");
 
-      setAuth({
-        isAuthenticated: true,
-        rol: decodedToken.usuario?.rol?.nombre?.toLowerCase() || null,
-        permisos: decodedToken.usuario?.permisos || null,
-        usuario: decodedToken.usuario || null,
-      });
-    } catch (error) {
-      console.error("Token inválido", error);
-      localStorage.removeItem("token");
-      localStorage.removeItem("activeMode");
+  if (auth.isAuthenticated && token) {
+    socket.auth = { token };
 
-      setAuth({
-        isAuthenticated: false,
-        rol: null,
-        permisos: null,
-        usuario: null,
-      });
-    } finally {
-      setAuthLoading(false);
+    if (!socket.connected) {
+      socket.connect();
     }
-  };
+  } else {
+    socket.disconnect();
+  }
+}, [auth.isAuthenticated]);
+
 
   useEffect(() => {
     validateToken();
@@ -170,199 +191,209 @@ function App() {
     );
   }
 
-
   return (
-    <BrowserRouter>
-      <div className="flex flex-col min-h-screen">
-        <Navbar auth={auth} setAuth={setAuth} />
+    <TaskNotificationProvider>
+      <BrowserRouter>
+        <div className="flex flex-col min-h-screen">
+          <Navbar auth={auth} setAuth={setAuth} />
 
-        <main className="flex-grow w-full">
-          <Routes>
-            <Route
-              path="login"
-              element={
-                <PublicRoute
-                  isAuthenticated={auth.isAuthenticated}
-                  rol={auth.rol}
-                >
-                  <LoginForm setAuth={setAuth} />
-                </PublicRoute>
-              }
-            />
+          <main className="flex-grow w-full">
+            <Routes>
+              <Route
+                path="login"
+                element={
+                  <PublicRoute
+                    isAuthenticated={auth.isAuthenticated}
+                    rol={auth.rol}
+                  >
+                    <LoginForm setAuth={setAuth} />
+                  </PublicRoute>
+                }
+              />
 
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute
-                  isAuthenticated={auth.isAuthenticated}
-                  rol={auth.rol}
-                  allowedRoles={["admin"]}
-                >
-                  <SidebarLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="ventas-completas" element={<VentasCompletas />} />
-              <Route path="usuarios" element={<Usuarios />} />
-              <Route path="agencias" element={<Agencias />} />
-              <Route path="usuarios-agencias" element={<UsuariosAgencias />} />
-              <Route path="entregas" element={<Entregas />} />
               <Route
-                path="revision-gestiones"
-                element={<RevisionGestiones />}
-              />
-              <Route path="bdd-ventas" element={<BDDVentas />} />
-              <Route path="bonos" element={<Bonos />} />
-              <Route
-                path="entrega-logistica/:id"
-                element={<DetalleEntrega />}
-              />
-              <Route
-                path="entregas-repartidores"
-                element={<EntregasRepartidores />}
-              />
-              <Route
-                path="entregas-repartidores-tabla"
-                element={<EntregasRepartidoresTabla />}
-              />
-              <Route path="rol" element={<AdminUsuariosRoles />} />
-              <Route path="dispositivos" element={<Dispositivos />} />
-              <Route path="marcas" element={<MarcasAdmin />} />
-              <Route path="modelos" element={<ModelosAdmin />} />
-              <Route
-                path="dispositivosMarcas"
-                element={<AdminDispositivoMarca />}
-              />
-              <Route path="costoHistorico" element={<AdminCostoHistorico />} />
-              <Route path="formas-pago" element={<FormasPago />} />
-              <Route path="origen" element={<OrigenAdmin />} />
-              <Route path="obsequios" element={<AdminObsequios />} />
-              <Route path="metas-comerciales" element={<MetasComerciales />} />
-              <Route
-                path="entregas-pendientes"
-                element={<EntregasPendientes />}
-              />
-              <Route path="estado-entrega" element={<EstadoEntrega />} />
-              <Route path="reporte-entregas" element={<ReporteEntregas />} />
-              <Route
-                path="copa-creditek"
-                element={<MarketingVentasAgencia />}
-              />
-              <Route path="goleadores" element={<Goleadores />} />
-              <Route
-                path="entregas-auditoria"
-                element={<EntregasAuditoria />}
-              />
-              <Route
-                path="entregas-auditoria/:id"
-                element={<EntregaAuditoria />}
-              />
-              <Route path="ventas-auditoria" element={<VentasAuditoria />} />
-              <Route
-                path="ventas-auditoria/:id"
-                element={<EditarVentaCompletaAuditoria />}
-              />
-              <Route path="postulaciones" element={<Postulaciones />} />
-              <Route path="permisos" element={<Permisos />} />
-              <Route path="asignar-permisos" element={<AsignarPermisos />} />
-              <Route
-                path="asignar-permisos-usuario-agencia"
-                element={<AsignarPermisosUsuarioAgencia />}
-              />
-              <Route
-                path="usuarios-permisos"
-                element={<UsuariosConPermisos />}
-              />
-              <Route path="revisar-cajas" element={<RevisarCaja />} />
-              <Route path="tasks" element={<TasksPage />} />
-            </Route>
+                path="/"
+                element={
+                  <ProtectedRoute
+                    isAuthenticated={auth.isAuthenticated}
+                    rol={auth.rol}
+                    allowedRoles={["admin"]}
+                  >
+                    <SidebarLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="ventas-completas" element={<VentasCompletas />} />
+                <Route path="usuarios" element={<Usuarios />} />
+                <Route path="agencias" element={<Agencias />} />
+                <Route
+                  path="usuarios-agencias"
+                  element={<UsuariosAgencias />}
+                />
+                <Route path="entregas" element={<Entregas />} />
+                <Route
+                  path="revision-gestiones"
+                  element={<RevisionGestiones />}
+                />
+                <Route path="bdd-ventas" element={<BDDVentas />} />
+                <Route path="bonos" element={<Bonos />} />
+                <Route
+                  path="entrega-logistica/:id"
+                  element={<DetalleEntrega />}
+                />
+                <Route
+                  path="entregas-repartidores"
+                  element={<EntregasRepartidores />}
+                />
+                <Route
+                  path="entregas-repartidores-tabla"
+                  element={<EntregasRepartidoresTabla />}
+                />
+                <Route path="rol" element={<AdminUsuariosRoles />} />
+                <Route path="dispositivos" element={<Dispositivos />} />
+                <Route path="marcas" element={<MarcasAdmin />} />
+                <Route path="modelos" element={<ModelosAdmin />} />
+                <Route
+                  path="dispositivosMarcas"
+                  element={<AdminDispositivoMarca />}
+                />
+                <Route
+                  path="costoHistorico"
+                  element={<AdminCostoHistorico />}
+                />
+                <Route path="formas-pago" element={<FormasPago />} />
+                <Route path="origen" element={<OrigenAdmin />} />
+                <Route path="obsequios" element={<AdminObsequios />} />
+                <Route
+                  path="metas-comerciales"
+                  element={<MetasComerciales />}
+                />
+                <Route
+                  path="entregas-pendientes"
+                  element={<EntregasPendientes />}
+                />
+                <Route path="estado-entrega" element={<EstadoEntrega />} />
+                <Route path="reporte-entregas" element={<ReporteEntregas />} />
+                <Route
+                  path="copa-creditek"
+                  element={<MarketingVentasAgencia />}
+                />
+                <Route path="goleadores" element={<Goleadores />} />
+                <Route
+                  path="entregas-auditoria"
+                  element={<EntregasAuditoria />}
+                />
+                <Route
+                  path="entregas-auditoria/:id"
+                  element={<EntregaAuditoria />}
+                />
+                <Route path="ventas-auditoria" element={<VentasAuditoria />} />
+                <Route
+                  path="ventas-auditoria/:id"
+                  element={<EditarVentaCompletaAuditoria />}
+                />
+                <Route path="postulaciones" element={<Postulaciones />} />
+                <Route path="permisos" element={<Permisos />} />
+                <Route path="asignar-permisos" element={<AsignarPermisos />} />
+                <Route
+                  path="asignar-permisos-usuario-agencia"
+                  element={<AsignarPermisosUsuarioAgencia />}
+                />
+                <Route
+                  path="usuarios-permisos"
+                  element={<UsuariosConPermisos />}
+                />
+                <Route path="revisar-cajas" element={<RevisarCaja />} />
+                <Route path="tasks" element={<TasksPage />} />
+              </Route>
 
-            <Route path="logistica-panel" element={<LogisticaPanel />} />
-            <Route path="vendedor-panel" element={<VendedorPanel />} />
+              <Route path="logistica-panel" element={<LogisticaPanel />} />
+              <Route path="vendedor-panel" element={<VendedorPanel />} />
 
-            <Route path="mis-ventas" element={<MisVentas />} />
-            <Route
-              path="registrar-clientes-venta"
-              element={<FormularioClienteVenta />}
-            />
-            <Route path="crear-venta" element={<CrearVenta />} />
-            <Route path="ventas/:id/detalles" element={<DetalleVenta />} />
-            <Route
-              path="ventas/:id/obsequios"
-              element={<VentaObsequioPage />}
-            />
-            <Route path="ventas/:id/validacion" element={<VentaFoto />} />
+              <Route path="mis-ventas" element={<MisVentas />} />
+              <Route
+                path="registrar-clientes-venta"
+                element={<FormularioClienteVenta />}
+              />
+              <Route path="crear-venta" element={<CrearVenta />} />
+              <Route path="ventas/:id/detalles" element={<DetalleVenta />} />
+              <Route
+                path="ventas/:id/obsequios"
+                element={<VentaObsequioPage />}
+              />
+              <Route path="ventas/:id/validacion" element={<VentaFoto />} />
 
-            <Route
-              path="registrar-clientes-entrega"
-              element={<FormularioClienteEntrega />}
-            />
-            <Route path="crear-entrega" element={<CrearEntrega />} />
-            <Route
-              path="entregas/:id/detalles"
-              element={<DetalleEntregaVendedores />}
-            />
-            <Route
-              path="entregas/:id/obsequios"
-              element={<EntregaObsequioPage />}
-            />
-            <Route
-              path="entregas/:id/pre-aprobacion"
-              element={<EntregaFoto />}
-            />
-            <Route
-              path="entregas/:id/fecha-llamada"
-              element={<FotoFechaHoraEntrega />}
-            />
-            <Route path="mis-entregas" element={<MisEntregas />} />
-            <Route
-              path="mis-entregas-pendientes"
-              element={<MisEntregasPendientes />}
-            />
-            <Route
-              path="mis-entregas-realizadas"
-              element={<MisEntregasRealizadas />}
-            />
+              <Route
+                path="registrar-clientes-entrega"
+                element={<FormularioClienteEntrega />}
+              />
+              <Route path="crear-entrega" element={<CrearEntrega />} />
+              <Route
+                path="entregas/:id/detalles"
+                element={<DetalleEntregaVendedores />}
+              />
+              <Route
+                path="entregas/:id/obsequios"
+                element={<EntregaObsequioPage />}
+              />
+              <Route
+                path="entregas/:id/pre-aprobacion"
+                element={<EntregaFoto />}
+              />
+              <Route
+                path="entregas/:id/fecha-llamada"
+                element={<FotoFechaHoraEntrega />}
+              />
+              <Route path="mis-entregas" element={<MisEntregas />} />
+              <Route
+                path="mis-entregas-pendientes"
+                element={<MisEntregasPendientes />}
+              />
+              <Route
+                path="mis-entregas-realizadas"
+                element={<MisEntregasRealizadas />}
+              />
 
-            <Route path="ventacompleta" element={<CrearVentaCompleta />} />
-            <Route
-              path="editar-venta/:id"
-              element={<EditarVentaCompletaVendedores />}
-            />
+              <Route path="ventacompleta" element={<CrearVentaCompleta />} />
+              <Route
+                path="editar-venta/:id"
+                element={<EditarVentaCompletaVendedores />}
+              />
 
-            <Route
-              path="crear-entrega-completa"
-              element={<CrearEntregaCompleta />}
-            />
-            <Route
-              path="editar-entrega/:id"
-              element={<EditarEntregaCompleta />}
-            />
+              <Route
+                path="crear-entrega-completa"
+                element={<CrearEntregaCompleta />}
+              />
+              <Route
+                path="editar-entrega/:id"
+                element={<EditarEntregaCompleta />}
+              />
 
-            <Route path="seleccionar-modo" element={<SeleccionarModo />} />
-            <Route path="crear-traslado" element={<CrearTraslado />} />
-            <Route path="mis-traslados" element={<TrasladosList />} />
-            <Route path="gestion" element={<Gestion />} />
-            <Route path="mis-gestiones" element={<MisGestiones />} />
-            <Route path="mi-gestion/:id" element={<EditarGestion />} />
-            <Route path="caja" element={<Caja />} />
+              <Route path="seleccionar-modo" element={<SeleccionarModo />} />
+              <Route path="crear-traslado" element={<CrearTraslado />} />
+              <Route path="mis-traslados" element={<TrasladosList />} />
+              <Route path="gestion" element={<Gestion />} />
+              <Route path="mis-gestiones" element={<MisGestiones />} />
+              <Route path="mi-gestion/:id" element={<EditarGestion />} />
+              <Route path="caja" element={<Caja />} />
 
-            <Route
-              path="*"
-              element={
-                <h1 className="text-center mt-10">
-                  404 - Página no encontrada
-                </h1>
-              }
-            />
-          </Routes>
-        </main>
+              <Route
+                path="*"
+                element={
+                  <h1 className="text-center mt-10">
+                    404 - Página no encontrada
+                  </h1>
+                }
+              />
+            </Routes>
+          </main>
 
-        <Footer />
-      </div>
-    </BrowserRouter>
+          <Footer />
+        </div>
+      </BrowserRouter>
+    </TaskNotificationProvider>
   );
 }
 

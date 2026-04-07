@@ -2,14 +2,11 @@ const { Op } = require("sequelize");
 const Task = require("../models/Task");
 const Usuario = require("../models/Usuario");
 
-
 exports.createTask = async (req, res) => {
   try {
     const data = req.body;
-
     const usuarioId = req.user?.id;
-  
-    
+
     if (!usuarioId) {
       return res.status(400).json({
         ok: false,
@@ -21,19 +18,37 @@ exports.createTask = async (req, res) => {
       ...data,
       assignedTo: parseInt(data.assignedTo),
       createdBy: usuarioId,
-
-      // 🔥 FIX CLAVE
-      reminderTime: data.reminderTime || null
+      reminderTime: data.reminderTime || null,
     });
 
-    res.status(201).json(task);
+    const fullTask = await Task.findByPk(task.id, {
+      include: [
+        {
+          model: Usuario,
+          as: "creator",
+          attributes: ["id", "nombre", "email"],
+        },
+        {
+          model: Usuario,
+          as: "assignee",
+          attributes: ["id", "nombre", "email"],
+        },
+      ],
+    });
 
+    const io = req.app.get("io");
+
+    io.to(`user_${task.assignedTo}`).emit("task:sync", {
+      type: "created",
+      task: fullTask,
+    });
+
+    res.status(201).json(fullTask);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear la tarea" });
   }
 };
-
 
 exports.getMyTasks = async (req, res) => {
   try {
@@ -203,7 +218,6 @@ exports.deleteTask = async (req, res) => {
 };
 
 
-// ✅ Marcar como completada
 exports.completeTask = async (req, res) => {
   try {
     const { id } = req.params;
@@ -215,10 +229,35 @@ exports.completeTask = async (req, res) => {
     }
 
     await task.update({
-      status: "completada"
+      status: "completada",
     });
 
-    res.json({ message: "Tarea completada", task });
+    const updatedTask = await Task.findByPk(id, {
+      include: [
+        {
+          model: Usuario,
+          as: "creator",
+          attributes: ["id", "nombre", "email"],
+        },
+        {
+          model: Usuario,
+          as: "assignee",
+          attributes: ["id", "nombre", "email"],
+        },
+      ],
+    });
+
+    const io = req.app.get("io");
+
+    io.to(`user_${task.assignedTo}`).emit("task:sync", {
+      type: "completed",
+      task: updatedTask,
+    });
+
+    res.json({
+      message: "Tarea completada",
+      task: updatedTask,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al completar tarea" });

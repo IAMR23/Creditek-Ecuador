@@ -1,10 +1,13 @@
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
+const { Server } = require("socket.io");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const { connectDB } = require("./config/db");
-require("./models/associations");      
-// Rutas  
+require("./models/associations");
+
+// Rutas
 const authRoutes = require("./routes/authRoutes");
 const agencia = require("./routes/AgenciaRoutes");
 const usuario_agencia = require("./routes/UsuarioAgenciaRoutes");
@@ -21,11 +24,8 @@ const OrigenRoutes = require("./routes/origenRoutes");
 const VentaRoutes = require("./routes/ventasroutes");
 const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
-
 const postulacionesRouter = require("./routes/DesarrolloOrganizacional/postulacionesRouter");
 const { startTaskCron } = require("./services/taskCron");
- 
- 
 const path = require("path");
 const startTaskReminderJob = require("./jobs/taskReminder");
 
@@ -40,15 +40,15 @@ startTaskReminderJob();
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
   "http://192.168.1.123:5173",
-  /^https?:\/\/localhost:\d+$/, // cualquier puerto en localhost
-  /^https?:\/\/(www\.)?creditek-ecuador\.com$/, // producción
-  /^https?:\/\/(www\.)?rve.creditek-ecuador\.com$/, // producción
+  /^https?:\/\/localhost:\d+$/,
+  /^https?:\/\/(www\.)?creditek-ecuador\.com$/,
+  /^https?:\/\/(www\.)?rve.creditek-ecuador\.com$/,
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // Postman, curl, etc.
+      if (!origin) return callback(null, true);
       const allowed = allowedOrigins.some((o) =>
         typeof o === "string" ? o === origin : o.test(origin)
       );
@@ -61,17 +61,78 @@ app.use(
   })
 );
 
-// Manejar preflight
 app.options("*", cors());
 
-// --- Middleware ---
+// Middleware
 app.use(express.json());
 
-// --- Conexión DB y rutas ---
+/* =========================
+   SOCKET.IO
+========================= */
+const io = new Server(server, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+
+      const allowed = allowedOrigins.some((o) =>
+        typeof o === "string" ? o === origin : o.test(origin)
+      );
+
+      if (allowed) return callback(null, true);
+      return callback(new Error("Socket CORS no permitido: " + origin), false);
+    },
+    credentials: true,
+    methods: ["GET", "POST"],
+  },
+});
+
+// Guardar instancia para usarla en controladores
+app.set("io", io);
+
+// Middleware de autenticación para sockets
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+
+    if (!token) {
+      return next(new Error("No autorizado: token no enviado"));
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = {
+      id: decoded.usuario?.id,
+      email: decoded.email,
+      rol: decoded.rol,
+    };
+  
+    next();
+  } catch (error) {
+    console.error("Error autenticando socket:", error.message);
+    next(new Error("Token inválido"));
+  }
+});
+
+// Conexión de sockets
+io.on("connection", (socket) => {
+  const userId = socket.user.id;
+
+  // Room individual por usuario
+  socket.join(`user_${userId}`);
+
+  console.log(`Usuario conectado por socket: ${userId}`);
+
+  socket.on("disconnect", () => {
+    console.log(`Usuario desconectado del socket: ${userId}`);
+  });
+});
+
+/* =========================
+   DB + RUTAS
+========================= */
 connectDB()
   .then(() => {
     console.log("Base de datos conectada");
- 
+
     app.use("/agencias", agencia);
     app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));
     app.use("/auth", authRoutes);
@@ -87,7 +148,7 @@ connectDB()
     app.use("/formaPago", FormaPago);
     app.use("/origen", OrigenRoutes);
     app.use("/ventas", VentaRoutes);
-    app.use("/detalle-venta", DetalleVentaRoutes); 
+    app.use("/detalle-venta", DetalleVentaRoutes);
     app.use("/precio", precioDispositivoRoutes);
     app.use("/obsequios", require("./routes/obsequioRoutes"));
     app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));
@@ -103,7 +164,7 @@ connectDB()
     app.use("/auditoria", require("./routes/Auditoria/auditoriaRoutes"));
     app.use("/registrar", require("./routes/Vendedor/crearVentaCompletaRoute"));
     app.use("/registrar2", require("./routes/Vendedor/crearEntregaCompletaRoute"));
-    app.use("/api/postulaciones", postulacionesRouter  )
+    app.use("/api/postulaciones", postulacionesRouter);
     app.use("/api/permisos-catalogo", require("./routes/permisoRoutes"));
     app.use("/api/usuario-agencia-permisos", require("./routes/usuarioAgenciaPermisoRoutes"));
     app.use("/api/traslados", require("./routes/trasladosRoutes"));
@@ -111,9 +172,6 @@ connectDB()
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
-  
-
-    /* Cierre de caja */
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
 
     console.log(
