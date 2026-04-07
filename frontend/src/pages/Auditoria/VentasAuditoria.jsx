@@ -226,7 +226,7 @@ export default function VentasAuditoria() {
       {loading ? (
         <p>Cargando...</p>
       ) : (
-        <table className="w-full border mt-4 text-sm">
+        <table className="min-w-[1100px] border border-gray-300">
           <thead className="bg-gray-200">
             <tr>
               <th className="p-2 border">#</th> 

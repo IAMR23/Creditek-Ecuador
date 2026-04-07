@@ -1,7 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X,
   Users,
   Building2,
   UserPlus,
@@ -24,283 +28,220 @@ import { FaTasks } from "react-icons/fa";
 export default function Sidebar() {
   const location = useLocation();
 
-  // Estado del sidebar (expandido / colapsado)
+  // Desktop
   const [collapsed, setCollapsed] = useState(false);
 
-  // Estado de acordeones
+  // Mobile drawer
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Acordeones
   const [open, setOpen] = useState({
     comercial: true,
     Marketing: false,
     logistica: false,
+    contabilidad: false,
     Auditoria: false,
     admin: false,
     catalogos: false,
   });
 
-  const toggle = (key) => {
-    if (collapsed) return;
+  const toggleSection = (key) => {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const sections = {
-    comercial: {
-      title: "Gerencia",
-      items: [
-        {
-          label: "Metas Comerciales",
-          icon: <BarChart3 size={20} />,
-          path: "metas-comerciales",
-        },
-        {
-          label: "Reporte Entregas",
-          icon: <BarChart3 size={20} />,
-          path: "reporte-entregas",
-        },
-        {
-          label: "Revisar Gestiones",
-          icon: <BarChart3 size={20} />,
-          path: "revision-gestiones",
-        },
-        {
-          label: "Base de Datos Ventas",
-          icon: <BarChart3 size={20} />,
-          path: "BDD-ventas",
-        },
+  const closeMobileSidebar = () => setMobileOpen(false);
 
-        {
-          label: "Bonos",
-          icon: <LucideTicketPercent size={20} />,
-          path: "bonos",
-        },
-        
-        {
-          label: "Tareas",
-          icon: <FaTasks size={20} />,
-          path: "tasks",
-        },
+  const sections = useMemo(
+    () => ({
+      comercial: {
+        title: "Gerencia",
+        items: [
+          { label: "Metas Comerciales", icon: <BarChart3 size={20} />, path: "/metas-comerciales" },
+          { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
+          { label: "Revisar Gestiones", icon: <BarChart3 size={20} />, path: "/revision-gestiones" },
+          { label: "Base de Datos Ventas", icon: <BarChart3 size={20} />, path: "/BDD-ventas" },
+          { label: "Bonos", icon: <LucideTicketPercent size={20} />, path: "/bonos" },
+          { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
+        ],
+      },
 
-      ],
-    },
+      Marketing: {
+        title: "Marketing",
+        items: [
+          { label: "Copa Creditek 🏆", icon: <BarChart3 size={20} />, path: "/copa-creditek" },
+          { label: "Goleadores ⚽", icon: <BarChart3 size={20} />, path: "/goleadores" },
+        ],
+      },
 
-    Marketing: {
-      title: "Marketing",
-      items: [
-        {
-          label: "Copa Creditek 🏆",
-          icon: <BarChart3 size={20} />,
-          path: "copa-creditek",
-        },
-        {
-          label: "Goleadores ⚽",
-          icon: <BarChart3 size={20} />,
-          path: "goleadores",
-        },
-      ],
-    },
+      logistica: {
+        title: "Logística",
+        items: [
+          { label: "Entregas Pendientes", icon: <PackageCheck size={20} />, path: "/entregas-pendientes" },
+          { label: "Entregas Repartidores", icon: <PackageCheck size={20} />, path: "/entregas-repartidores" },
+          { label: "Informe de Entregas", icon: <PackageCheck size={20} />, path: "/entregas-repartidores-tabla" },
+        ],
+      },
 
-    logistica: {
-      title: "Logística",
-      items: [
-        {
-          label: "Entregas Pendientes",
-          icon: <PackageCheck size={20} />,
-          path: "entregas-pendientes",
-        },
+      contabilidad: {
+        title: "Contabilidad",
+        items: [
+          { label: "Cierres de Caja", icon: <PackageCheck size={20} />, path: "/revisar-cajas" },
+        ],
+      },
 
-        {
-          label: "Entregas Repartidores",
-          icon: <PackageCheck size={20} />,
-          path: "entregas-repartidores",
-        },
+      Auditoria: {
+        title: "Auditoría",
+        items: [
+          { label: "Entregas Auditoría", icon: <PackageCheck size={20} />, path: "/entregas-auditoria" },
+          { label: "Ventas Auditoría", icon: <PackageCheck size={20} />, path: "/ventas-auditoria" },
+        ],
+      },
 
-        {
-          label: "Informe de Entregas",
-          icon: <PackageCheck size={20} />,
-          path: "entregas-repartidores-tabla",
-        },
-      ],
-    },
+      admin: {
+        title: "Administración",
+        items: [
+          { label: "Usuarios", icon: <Users size={20} />, path: "/usuarios" },
+          { label: "Roles", icon: <ShieldCheck size={20} />, path: "/rol" },
+          { label: "Agencias", icon: <Building2 size={20} />, path: "/agencias" },
+          { label: "Postulaciones", icon: <FileText size={20} />, path: "/postulaciones" },
+          { label: "Asignar usuarios a agencias", icon: <UserPlus size={20} />, path: "/usuarios-agencias" },
+          { label: "Permisos", icon: <MdSecurity size={20} />, path: "/permisos" },
+          { label: "Asignar Permisos", icon: <MdSecurity size={20} />, path: "/asignar-permisos" },
+          {
+            label: "Asignar Permisos Usuario-Agencia",
+            icon: <MdSecurity size={20} />,
+            path: "/asignar-permisos-usuario-agencia",
+          },
+          { label: "Usuarios con Permisos", icon: <MdSecurity size={20} />, path: "/usuarios-permisos" },
+        ],
+      },
 
-    
-    contabilidad: {
-      title: "Contabilidad",
-      items: [
-        {
-          label: "Cierres de Caja",
-          icon: <PackageCheck size={20} />,
-          path: "revisar-cajas",
-        },
+      catalogos: {
+        title: "Catálogos",
+        items: [
+          { label: "Marcas", icon: <Tag size={20} />, path: "/marcas" },
+          { label: "Modelos", icon: <Layers size={20} />, path: "/modelos" },
+          { label: "Dispositivos", icon: <Factory size={20} />, path: "/dispositivos" },
+          { label: "Dispositivos-Marcas", icon: <Boxes size={20} />, path: "/dispositivosMarcas" },
+          { label: "Formas de Pago", icon: <CreditCard size={20} />, path: "/formas-pago" },
+          { label: "Origen", icon: <Tag size={20} />, path: "/origen" },
+          { label: "Obsequios", icon: <Gift size={20} />, path: "/obsequios" },
+          { label: "Costo Histórico", icon: <ClipboardList size={20} />, path: "/costoHistorico" },
+        ],
+      },
+    }),
+    []
+  );
 
-  
-      ],
-    },
+  const toggleMobileSidebar = () => setMobileOpen((prev) => !prev);
 
-    Auditoria: {
-      title: "Auditoría",
-      items: [
-        {
-          label: "Entregas Auditoría",
-          icon: <PackageCheck size={20} />,
-          path: "entregas-auditoria",
-        },
-        {
-          label: "Ventas Auditoría",
-          icon: <PackageCheck size={20} />,
-          path: "ventas-auditoria",
-        },
-      ],
-    },
 
-    admin: {
-      title: "Administración",
-      items: [
-        { label: "Usuarios", icon: <Users size={20} />, path: "usuarios" },
-        { label: "Roles", icon: <ShieldCheck size={20} />, path: "rol" },
-        { label: "Agencias", icon: <Building2 size={20} />, path: "agencias" },
-        {
-          label: "Postulaciones",
-          icon: <FileText size={20} />,
-          path: "postulaciones",
-        },
-        {
-          label: "Asignar usuarios a agencias",
-          icon: <UserPlus size={20} />,
-          path: "usuarios-agencias",
-        },
-        {
-          label: "Permisos",
-          icon: <MdSecurity size={20} />,
-          path: "permisos",
-        },
-        {
-          label: "Asignar Permisos",
-          icon: <MdSecurity size={20} />,
-          path: "asignar-permisos",
-        },
-        {
-          label: "Asignar Permisos Usuario-Agencia",
-          icon: <MdSecurity size={20} />,
-          path: "asignar-permisos-usuario-agencia",
-        },
-        {
-          label: "Usuarios con Permisos",
-          icon: <MdSecurity size={20} />,
-          path: "usuarios-permisos",
-        },
-      ],
-    },
+  const renderSection = (key, section) => {
+    const isOpen = open[key];
 
-    catalogos: {
-      title: "Catálogos",
-      items: [
-        { label: "Marcas", icon: <Tag size={20} />, path: "marcas" },
-        { label: "Modelos", icon: <Layers size={20} />, path: "modelos" },
-        {
-          label: "Dispositivos",
-          icon: <Factory size={20} />,
-          path: "dispositivos",
-        },
-        {
-          label: "Dispositivos-Marcas",
-          icon: <Boxes size={20} />,
-          path: "dispositivosMarcas",
-        },
-        {
-          label: "Formas de Pago",
-          icon: <CreditCard size={20} />,
-          path: "formas-pago",
-        },
-        { label: "Origen", icon: <Tag size={20} />, path: "origen" },
-        { label: "Obsequios", icon: <Gift size={20} />, path: "obsequios" },
-        {
-          label: "Costo Histórico",
-          icon: <ClipboardList size={20} />,
-          path: "costoHistorico",
-        },
-      ],
-    },
+    return (
+      <div key={key} className="mb-3">
+        <button
+          onClick={() => toggleSection(key)}
+          className={`flex w-full items-center rounded-lg px-2 py-2 transition hover:bg-neutral-800 ${
+            collapsed ? "justify-center" : "justify-between"
+          }`}
+        >
+          {!collapsed ? (
+            <>
+              <span className="font-semibold">{section.title}</span>
+              <ChevronDown
+                size={18}
+                className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              />
+            </>
+          ) : (
+            <ChevronDown
+              size={18}
+              className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            />
+          )}
+        </button>
+
+        <div
+          className={`overflow-hidden transition-all duration-300 ease-in-out ${
+            isOpen ? "max-h-[1000px] opacity-100 mt-2" : "max-h-0 opacity-0"
+          }`}
+        >
+          <ul className="flex flex-col gap-1">
+            {section.items.map((item, i) => {
+              const active = location.pathname === item.path;
+
+              return (
+                <li key={i}>
+                  <Link
+                    to={item.path}
+                    title={collapsed ? item.label : ""}
+                    onClick={closeMobileSidebar}
+                    className={`flex items-center gap-3 rounded-lg p-3 transition-colors ${
+                      active
+                        ? "bg-green-600 text-black"
+                        : "text-white hover:bg-neutral-800"
+                    } ${collapsed ? "justify-center" : ""}`}
+                  >
+                    <span className="shrink-0">{item.icon}</span>
+                    {!collapsed && (
+                      <span className="text-sm leading-tight">{item.label}</span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div
-      className={`relative min-h-screen bg-neutral-900 text-white border-r border-neutral-800
-        transition-all duration-300
-        ${collapsed ? "w-20 px-2" : "w-64 px-4"}
-      `}
-    >
-      {/* Botón colapsar */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-6 bg-neutral-800 p-1 rounded-full border border-neutral-700 hover:bg-neutral-700"
+    <>
+      {/* BOTÓN HAMBURGUESA SOLO EN MÓVIL */}
+<button
+  onClick={toggleMobileSidebar}
+  className="fixed left-4 top-4 z-[60] rounded-lg bg-neutral-900 p-2 text-white shadow-lg md:hidden"
+>
+  <Menu size={22} />
+</button>
+
+      {/* OVERLAY MÓVIL */}
+      <div
+        onClick={closeMobileSidebar}
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 md:hidden ${
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+      />
+
+      {/* SIDEBAR */}
+      <aside
+        className={`
+          bg-neutral-900 text-white border-r border-neutral-800
+          flex flex-col
+          will-change-transform
+          md:sticky md:top-0 md:h-screen md:z-30
+          fixed top-0 left-0 z-50 h-screen
+          transition-all duration-300 ease-in-out
+          ${collapsed ? "md:w-20" : "md:w-64"}
+          w-72
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        `}
       >
-        <ChevronDown
-          size={18}
-          className={`transition-transform ${
-            collapsed ? "-rotate-90" : "rotate-90"
-          }`}
-        />
-      </button>
+        {/* Header */}
+<div className="relative flex items-center justify-start px-4 py-4 border-b border-neutral-800 min-h-[64px]">          <h1 className="text-xl font-bold text-green-400">
+            {!collapsed ? <Link to="/dashboard" onClick={closeMobileSidebar}>Dashboard</Link> : "D"}
+          </h1>
 
-      {/* Logo / Dashboard */}
-      <h1 className="text-xl font-bold mb-6 text-green-400 text-center">
-        {!collapsed && <Link to="/dashboard">Dashboard</Link>}
-      </h1>
-
-      {/* Secciones */}
-      {Object.entries(sections).map(([key, section]) => (
-        <div key={key} className="mb-3">
-          {/* Header sección */}
-          <button
-            onClick={() => toggle(key)}
-            className="flex justify-between items-center w-full py-2 px-2 hover:bg-neutral-800 rounded-lg"
-          >
-            {!collapsed && (
-              <span className="font-semibold">{section.title}</span>
-            )}
-            {!collapsed && (
-              <ChevronDown
-                size={18}
-                className={`transition-transform ${
-                  open[key] ? "rotate-180" : ""
-                }`}
-              />
-            )}
-          </button>
-
-          {/* Items */}
-          <div
-            className={`overflow-hidden transition-all duration-300
-              ${open[key] && !collapsed ? "max-h-[1000px]" : "max-h-0"}
-            `}
-          >
-            <ul className="flex flex-col gap-1 mt-2">
-              {section.items.map((item, i) => {
-                const active = location.pathname === item.path;
-
-                return (
-                  <li key={i}>
-                    <Link
-                      to={item.path}
-                      title={collapsed ? item.label : ""}
-                      className={`flex items-center gap-3 p-3 rounded-lg transition
-                        ${
-                          active
-                            ? "bg-green-600 text-black"
-                            : "hover:bg-neutral-800"
-                        }
-                        ${collapsed ? "justify-center" : ""}
-                      `}
-                    >
-                      {item.icon}
-                      {!collapsed && <span>{item.label}</span>}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
         </div>
-      ))}
-    </div>
+
+        {/* contenido */}
+        <div className="flex-1 overflow-y-auto px-2 py-4 md:px-3">
+          {Object.entries(sections).map(([key, section]) => renderSection(key, section))}
+        </div>
+      </aside>
+    </>
   );
 }

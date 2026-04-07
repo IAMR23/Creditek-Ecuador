@@ -6,6 +6,7 @@ import { jwtDecode } from "jwt-decode";
 import DashboardGraficas from "./DashboardGraficas";
 import MetasDiarias from "./MetasDiaras";
 import * as XLSX from "xlsx";
+import { FaFileExcel } from "react-icons/fa";
 
 const STORAGE_KEY = "dashboard_filtros";
 
@@ -184,74 +185,69 @@ export default function Dashboard() {
     usuarioInfo,
   ]);
 
-
-
   const generarDataExcel = (porTipoModelo) => {
-  return Object.entries(porTipoModelo)
-    .map(([key, venta]) => {
-      const [tipo, modelo] = key.split("||");
+    return Object.entries(porTipoModelo)
+      .map(([key, venta]) => {
+        const [tipo, modelo] = key.split("||");
 
-      return {
-        tipo: tipo.toLowerCase(),
-        modelo: modelo.trim(),
-        venta: venta,
-        stock: "",
-        proyeccion: "",
-        pedido: "",
-        costo: "",
-        total: "",
-        forma_pago: "contado"
-      };
-    })
-    .sort((a, b) => b.venta - a.venta); // 🔥 ORDEN DESC
-};
+        return {
+          tipo: tipo.toLowerCase(),
+          modelo: modelo.trim(),
+          venta: venta,
+          stock: "",
+          proyeccion: "",
+          pedido: "",
+          costo: "",
+          total: "",
+          forma_pago: "contado",
+        };
+      })
+      .sort((a, b) => b.venta - a.venta); // 🔥 ORDEN DESC
+  };
 
+  const exportarExcel = (porTipoModelo) => {
+    const data = generarDataExcel(porTipoModelo);
 
+    const wsData = [
+      [
+        "Tipo",
+        "Modelo",
+        "Venta",
+        "Stock",
+        "Proyeccion",
+        "Pedido",
+        "Costo",
+        "Total",
+        "Forma De Pago",
+      ],
+    ];
 
-const exportarExcel = (porTipoModelo) => {
-  const data = generarDataExcel(porTipoModelo);
+    data.forEach((row, index) => {
+      const excelRow = index + 2;
 
-  const wsData = [
-    [
-      "Tipo",
-      "Modelo",
-      "Venta",
-      "Stock",
-      "Proyeccion",
-      "Pedido",
-      "Costo",
-      "Total",
-      "Forma De Pago"
-    ]
-  ];
+      wsData.push([
+        row.tipo,
+        row.modelo,
+        row.venta,
+        row.stock,
+        row.proyeccion,
+        row.pedido,
+        row.costo,
+        { f: `F${excelRow}*G${excelRow}` },
+        row.forma_pago,
+      ]);
+    });
 
-  data.forEach((row, index) => {
-    const excelRow = index + 2;
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
 
-    wsData.push([
-      row.tipo,
-      row.modelo,
-      row.venta,
-      row.stock,
-      row.proyeccion,
-      row.pedido,
-      row.costo,
-      { f: `F${excelRow}*G${excelRow}` },
-      row.forma_pago
-    ]);
-  });
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte");
 
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  const wb = XLSX.utils.book_new();
+    // 🔥 AQUÍ EL CAMBIO
+    const nombreArchivo = `Comite de compras_${fechaInicio}_a_${fechaFin}.xlsx`;
 
-  XLSX.utils.book_append_sheet(wb, ws, "Reporte");
-
-  // 🔥 AQUÍ EL CAMBIO
-  const nombreArchivo = `Comite de compras_${fechaInicio}_a_${fechaFin}.xlsx`;
-
-  XLSX.writeFile(wb, nombreArchivo);
-};
-
+    XLSX.writeFile(wb, nombreArchivo);
+  };
 
   return (
     <div className="p-4">
@@ -261,73 +257,94 @@ const exportarExcel = (porTipoModelo) => {
         </h1>
       </div>
 
-      <div className="flex gap-4 mb-4 items-end">
-        <div>
-          <label className="block text-sm font-medium">Fecha Inicio</label>
-          <input
-            type="date"
-            className="border px-2 py-1 rounded"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-          />
-        </div>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 mb-5">
 
-        <div>
-          <label className="block text-sm font-medium">Fecha Fin</label>
-          <input
-            type="date"
-            className="border px-2 py-1 rounded"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-          />
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium">Agencia</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={agenciaId}
-            onChange={(e) => setAgenciaId(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {agencias.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-sm font-medium text-gray-700">
+              Fecha Inicio
+            </label>
+            <input
+              type="date"
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              value={fechaInicio}
+              onChange={(e) => setFechaInicio(e.target.value)}
+            />
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium">Vendedor</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={vendedorId}
-            onChange={(e) => setVendedorId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-sm font-medium text-gray-700">
+              Fecha Fin
+            </label>
+            <input
+              type="date"
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              value={fechaFin}
+              onChange={(e) => setFechaFin(e.target.value)}
+            />
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium">
-            Tipo de cierre de caja
-          </label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={cierreCajaTipo}
-            onChange={(e) => setCierreCajaTipo(e.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="CONTADO">Contado</option>
-            <option value="CREDITV">CrediTV</option>
-            <option value="UPHONE">Uphone</option>
-          </select>
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-sm font-medium text-gray-700">
+              Agencia
+            </label>
+            <select
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              value={agenciaId}
+              onChange={(e) => setAgenciaId(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {agencias.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-sm font-medium text-gray-700">
+              Vendedor
+            </label>
+            <select
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              value={vendedorId}
+              onChange={(e) => setVendedorId(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {usuarios.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-sm font-medium text-gray-700">
+              Cierre de caja
+            </label>
+            <select
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              value={cierreCajaTipo}
+              onChange={(e) => setCierreCajaTipo(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="CONTADO">Contado</option>
+              <option value="CREDITV">CrediTV</option>
+              <option value="UPHONE">Uphone</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col justify-end">
+            <button
+              onClick={() => exportarExcel(estadisticas.porTipoModelo)}
+              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition"
+            >
+              <FaFileExcel size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -337,12 +354,6 @@ const exportarExcel = (porTipoModelo) => {
         <p>Cargando...</p>
       ) : (
         <>
-        <button
-  onClick={() => exportarExcel(estadisticas.porTipoModelo)}
-  className="bg-green-600 text-white px-4 py-2 rounded-xl"
->
-  Descargar Excel
-</button>
           <DashboardGraficas estadisticas={estadisticas} />
           <MetasDiarias data={estadisticas} />
         </>
