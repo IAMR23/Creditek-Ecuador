@@ -4,6 +4,7 @@ import NotificacionesModal from "./NotificacionesModal";
 import { socket } from "../socket/socket";
 import { useTaskNotifications } from "../context/TaskNotificationContext";
 import { useState } from "react";
+import { getDefaultRoute } from "../utils/getDefaultRoute";
 
 function Navbar({ auth, setAuth }) {
   const navigate = useNavigate();
@@ -12,37 +13,22 @@ function Navbar({ auth, setAuth }) {
   const { pendingCount, connected, pendingTasks, clearNotifications } =
     useTaskNotifications();
 
-  const handleLogoClick = () => {
-    if (!auth.isAuthenticated) {
-      navigate("/login");
-      return;
-    }
+const handleLogoClick = () => {
+  if (!auth.isAuthenticated) {
+    navigate("/login");
+    return;
+  }
 
-    const permiso = localStorage.getItem("activeMode");
+  const activeMode = localStorage.getItem("activeMode");
 
-    switch (auth.rol) {
-      case "admin":
-        if (permiso === "REPARTO") {
-          navigate("/logistica-panel");
-        } else if (permiso === "VENTAS") {
-          navigate("/vendedor-panel");
-        } else {
-          navigate("/dashboard");
-        }
-        break;
+  const redirectTo = getDefaultRoute({
+    rol: auth.rol,
+    permisos: auth.permisos || [],
+    activeMode,
+  });
 
-      case "vendedor":
-        navigate("/vendedor-panel");
-        break;
-
-      case "repartidor":
-        navigate("/logistica-panel");
-        break;
-
-      default:
-        navigate("/login");
-    }
-  };
+  navigate(redirectTo);
+};
 
   const handleLogout = () => {
     localStorage.removeItem("token");

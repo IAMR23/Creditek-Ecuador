@@ -15,7 +15,6 @@ const { normalizarCorreo } = require("../../utils/normalizarCorreo");
 const CostoHistorico = require("../../models/CostoHistorico");
 const { Op } = require("sequelize");
 
-// 🔹 Calcular la semana según fecha (jueves-miércoles)
 function calcularSemana(fecha) {
   const f = new Date(fecha);
   const yearStart = new Date(f.getFullYear(), 0, 1); // 1 de enero del año

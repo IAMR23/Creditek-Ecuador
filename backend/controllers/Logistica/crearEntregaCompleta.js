@@ -6,6 +6,21 @@ const Entrega = require("../../models/Entrega");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 const EntregaObsequio = require("../../models/EntregaObsequio");
 
+function calcularSemana(fecha) {
+  const f = new Date(fecha);
+  const yearStart = new Date(f.getFullYear(), 0, 1); // 1 de enero del año
+  const dayOfWeek = yearStart.getDay(); // 0=domingo ... 6=sábado
+  // días hasta primer jueves
+  const diasHastaJueves = (4 - dayOfWeek + 7) % 7;
+  const primerJueves = new Date(yearStart);
+  primerJueves.setDate(yearStart.getDate() + diasHastaJueves);
+
+  // diferencia de días
+  const diffDias = Math.floor((f - primerJueves) / (1000 * 60 * 60 * 24));
+  const semana = Math.floor(diffDias / 7) + 1;
+  return semana;
+}
+
 const crearEntregaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -59,6 +74,7 @@ const crearEntregaCompleta = async (req, res) => {
         observacion: entrega.observacion,
         fecha: entrega.fecha,
         FechaHoraLlamada : entrega.FechaHoraLlamada,
+        semana: calcularSemana(entrega.fecha),
         validada: true,
         estado  :entrega.estado,
         fotoFechaLlamada: fotoUrl,

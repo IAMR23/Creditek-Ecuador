@@ -14,6 +14,10 @@ const Entrega = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+        semana: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
     clienteId: {
       type: DataTypes.INTEGER,
       allowNull: false,
