@@ -62,6 +62,7 @@ export default function Sidebar() {
           { label: "Base de Datos Ventas", icon: <BarChart3 size={20} />, path: "/BDD-ventas" },
           { label: "Bonos", icon: <LucideTicketPercent size={20} />, path: "/bonos" },
           { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
+          { label: "Power BI", icon: <BarChart3 size={20} />, path: "/powerbi" },
         ],
       },
 

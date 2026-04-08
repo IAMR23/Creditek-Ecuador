@@ -82,6 +82,7 @@ import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
 import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
+import Powerbi from "./components/Powerbi";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -225,6 +226,7 @@ useEffect(() => {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="dashboard" element={<Dashboard />} />
+                <Route path="powerbi" element={<Powerbi />} />
                 <Route path="ventas-completas" element={<VentasCompletas />} />
                 <Route path="usuarios" element={<Usuarios />} />
                 <Route path="agencias" element={<Agencias />} />
