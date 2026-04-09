@@ -14,7 +14,7 @@ const Entrega = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-        semana: {
+    semana: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
@@ -68,7 +68,7 @@ const Entrega = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
-        sectorEntrega: { 
+    sectorEntrega: {
       type: DataTypes.STRING,
       allowNull: true,
     },
@@ -81,18 +81,22 @@ const Entrega = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
-    horaEstimadaEntrega: { 
+    horaEstimadaEntrega: {
       type: DataTypes.STRING,
       allowNull: true,
-    }
-    
+    },
+errores: {
+  type: DataTypes.JSONB,
+  allowNull: true,
+  defaultValue: [],
+}
   },
-  { 
-    tableName: "entregas",  
+  {
+    tableName: "entregas",
     timestamps: true,
-  }   
+  },
 );
- 
+
 Entrega.belongsTo(UsuarioAgencia, {
   foreignKey: "usuarioAgenciaId",
   as: "usuarioAgencia",

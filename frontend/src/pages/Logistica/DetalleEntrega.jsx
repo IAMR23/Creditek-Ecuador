@@ -21,7 +21,7 @@ export default function DetalleEntrega() {
     "9 - 11",
     "11 - 13",
     "13 - 15",
-    "15 - 17", 
+    "15 - 17",
     "17 - 19",
     "19 - 21",
     "21 - 22",
@@ -68,6 +68,15 @@ export default function DetalleEntrega() {
         icon: "warning",
         title: "Seleccione un repartidor",
         text: "Debe asignar un repartidor antes de continuar",
+      });
+      return;
+    }
+
+    if (!sectorEntrega || sectorEntrega.trim() === "") {
+      Swal.fire({
+        icon: "warning",
+        title: "Sector requerido",
+        text: "Debe seleccionar el sector de entrega",
       });
       return;
     }
@@ -453,6 +462,7 @@ export default function DetalleEntrega() {
           <select
             value={repartidorSeleccionado}
             onChange={(e) => setRepartidorSeleccionado(e.target.value)}
+            required
             className="w-full p-3 border border-green-300 rounded-xl bg-white"
           >
             <option value="">-- Seleccione un repartidor --</option>
@@ -516,7 +526,7 @@ export default function DetalleEntrega() {
             </div>
           </div>
 
-                    <div className="flex flex-col space-y-2">
+          <div className="flex flex-col space-y-2">
             <label className="text-sm font-semibold text-gray-700">
               Sector de la entrega
             </label>
@@ -524,13 +534,12 @@ export default function DetalleEntrega() {
             <input
               type="text"
               value={sectorEntrega}
+              required
+              placeholder="Ej: Norte, Sur, Centro, etc."
               onChange={(e) => setSectorEntrega(e.target.value)}
               className="w-full p-3 border border-green-300 rounded-xl"
             />
           </div>
-
-
-          
 
           <div>
             <h3 className="text-lg font-semibold text-gray-800">

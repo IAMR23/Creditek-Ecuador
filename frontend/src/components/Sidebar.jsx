@@ -78,7 +78,7 @@ export default function Sidebar() {
         title: "Logística",
         items: [
           { label: "Entregas Pendientes", icon: <PackageCheck size={20} />, path: "/entregas-pendientes" },
-          { label: "Entregas Repartidores", icon: <PackageCheck size={20} />, path: "/entregas-repartidores" },
+         /*  { label: "Entregas Repartidores", icon: <PackageCheck size={20} />, path: "/entregas-repartidores" }, */
           { label: "Informe de Entregas", icon: <PackageCheck size={20} />, path: "/entregas-repartidores-tabla" },
         ],
       },

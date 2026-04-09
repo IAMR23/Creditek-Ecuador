@@ -188,7 +188,7 @@ router.get("/entregas", async (req, res) => {
 
     const entregas = await Entrega.findAll({
       where: whereEntrega,
-      attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega"],
+      attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega" , "errores"],
       order: [["createdAt", "DESC"]],
 
       include: [
@@ -453,7 +453,6 @@ router.put("/:id", async (req, res) => {
     const entrega = await Entrega.findByPk(id);
     if (!entrega)
       return res.status(404).json({ mensaje: "Entrega no encontrada." });
-
     await entrega.update(data);
     res.json(entrega);
   } catch (error) {

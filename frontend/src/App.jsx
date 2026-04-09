@@ -245,10 +245,10 @@ useEffect(() => {
                   path="entrega-logistica/:id"
                   element={<DetalleEntrega />}
                 />
-                <Route
+   {/*              <Route
                   path="entregas-repartidores"
                   element={<EntregasRepartidores />}
-                />
+                /> */}
                 <Route
                   path="entregas-repartidores-tabla"
                   element={<EntregasRepartidoresTabla />}

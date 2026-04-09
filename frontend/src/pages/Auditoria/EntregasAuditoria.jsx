@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { FaEye } from "react-icons/fa";
 
 export default function EntregasAuditoria() {
   const [entregas, setEntregas] = useState([]);
@@ -42,8 +43,6 @@ export default function EntregasAuditoria() {
             <tr>
               <th className="px-4 py-2 text-left">ID</th>
               <th className="px-4 py-2 text-left">Cliente</th>
-              <th className="px-4 py-2 text-left">Origen</th>
-              <th className="px-4 py-2 text-left">Fecha Llamada</th>
               <th className="px-4 py-2 text-left">Estado</th>
               <th className="px-4 py-2 text-center">Acción</th>
             </tr>
@@ -75,19 +74,6 @@ export default function EntregasAuditoria() {
                   </td>
 
                   <td className="px-4 py-2">
-                    {e.origen?.nombre || "-"}
-                  </td>
-
-                  <td className="px-4 py-2">
-                    {e.FechaHoraLlamada
-                      ? new Date(e.FechaHoraLlamada).toLocaleString("es-EC", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })
-                      : "Sin llamada"}
-                  </td>
-
-                  <td className="px-4 py-2">
                     <span
                       className={`px-2 py-1 rounded text-xs font-semibold ${
                         e.estado === "Urgente"
@@ -105,9 +91,9 @@ export default function EntregasAuditoria() {
                     <Link
                       to={`/entregas-auditoria/${e.id}`}
                       state={{ entrega: e }}
-                      className="text-orange-600 hover:underline font-semibold"
+                      className="text-orange-600  hover:underline font-semibold"
                     >
-                      Ver
+                      <FaEye size={18} />
                     </Link>
                   </td>
                 </tr>
