@@ -31,7 +31,7 @@ const cerrarCaja = async (req, res) => {
         message: "No existen movimientos para cerrar caja",
       });
     }
-
+  
     // 2. Calcular totales
     let totalEfectivo = 0;
     let totalTransferencia = 0;

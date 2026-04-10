@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { FaPlus, FaTimes } from "react-icons/fa";
+import { getHoyLocal } from "../../utils/dateUtils";
+import { useAuthUser } from "../../utils/useAuthUser";
 
 const filaVacia = {
   responsable: "",
@@ -15,99 +18,93 @@ export default function MovimientoCaja() {
   const [rows, setRows] = useState([{ ...filaVacia }]);
   const [fecha, setFecha] = useState("");
   const [loading, setLoading] = useState(false);
-const denominacionesBase = [
-  { denominacion: 100, cantidad: 0, total: 0 },
-  { denominacion: 50, cantidad: 0, total: 0 },
-  { denominacion: 20, cantidad: 0, total: 0 },
-  { denominacion: 10, cantidad: 0, total: 0 },
-  { denominacion: 5, cantidad: 0, total: 0 },
-  { denominacion: 1, cantidad: 0, total: 0 },
-  { denominacion: 0.5, cantidad: 0, total: 0 },
-  { denominacion: 0.25, cantidad: 0, total: 0 },
-  { denominacion: 0.1, cantidad: 0, total: 0 },
-];
+  const denominacionesBase = [
+    { denominacion: 100, cantidad: 0, total: 0 },
+    { denominacion: 50, cantidad: 0, total: 0 },
+    { denominacion: 20, cantidad: 0, total: 0 },
+    { denominacion: 10, cantidad: 0, total: 0 },
+    { denominacion: 5, cantidad: 0, total: 0 },
+    { denominacion: 1, cantidad: 0, total: 0 },
+    { denominacion: 0.5, cantidad: 0, total: 0 },
+    { denominacion: 0.25, cantidad: 0, total: 0 },
+    { denominacion: 0.1, cantidad: 0, total: 0 },
+  ];
 
-const [detalles, setDetalles] = useState(denominacionesBase);
+  const [detalles, setDetalles] = useState(denominacionesBase);
 
+  const handleCantidadChange = (index, cantidad) => {
+    const newDetalles = [...detalles];
 
-const handleCantidadChange = (index, cantidad) => {
-  const newDetalles = [...detalles];
+    const cant = Number(cantidad) || 0;
+    const denom = newDetalles[index].denominacion;
 
-  const cant = Number(cantidad) || 0;
-  const denom = newDetalles[index].denominacion;
+    newDetalles[index].cantidad = cant;
+    newDetalles[index].total = cant * denom;
 
-  newDetalles[index].cantidad = cant;
-  newDetalles[index].total = cant * denom;
-
-  setDetalles(newDetalles);
-};
+    setDetalles(newDetalles);
+  };
 
   useEffect(() => {
     const hoyLocal = new Date().toLocaleDateString("en-CA");
     setFecha(hoyLocal);
   }, []);
 
-
   const cerrarCaja = async () => {
-  try {
-    const token = localStorage.getItem("token");
+    try {
+      const token = localStorage.getItem("token");
 
-    if (!token) {
-      alert("Sesión expirada");
-      return;
-    }
-
-    setLoading(true);
-
-    const retirosLimpios = retiros.map((r) => ({
-      monto: Number(r.monto),
-      motivo: r.motivo,
-      autorizadoPor: r.autorizadoPor,
-    }));
-
-  
-    const denominaciones = detalles
-  .filter((d) => d.cantidad > 0)
-  .map((d) => ({
-    denominacion: d.denominacion,
-    cantidad: Number(d.cantidad),
-    total: Number(d.total),
-  }));
-
-
-    const payload = {
-      cierre: {
-        fecha,
-        observacion: "Cierre desde sistema",
-      },
-      denominaciones,
-      retiros: retirosLimpios,
-    };
-
-    const res = await axios.post(
-      `${API_URL}/api/contabilidad/cierre-caja`,
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      if (!token) {
+        alert("Sesión expirada");
+        return;
       }
-    );
 
-    alert("Cierre realizado correctamente");
+      setLoading(true);
 
-    // 🔄 reset UI
-    setRows([{ ...filaVacia }]);
-    setRetiros([]);
+      const retirosLimpios = retiros.map((r) => ({
+        monto: Number(r.monto),
+        motivo: r.motivo,
+        autorizadoPor: r.autorizadoPor,
+      }));
 
-  } catch (error) {
-    console.error(error?.response?.data || error);
-    alert(error?.response?.data?.message || "Error al cerrar caja");
-  } finally {
-    setLoading(false);
-  }
-};
+      const denominaciones = detalles
+        .filter((d) => d.cantidad > 0)
+        .map((d) => ({
+          denominacion: d.denominacion,
+          cantidad: Number(d.cantidad),
+          total: Number(d.total),
+        }));
 
+      const payload = {
+        cierre: {
+          fecha,
+          observacion: "Cierre desde sistema",
+        },
+        denominaciones,
+        retiros: retirosLimpios,
+      };
+
+      const res = await axios.post(
+        `${API_URL}/api/contabilidad/cierre-caja`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      alert("Cierre realizado correctamente");
+
+      // 🔄 reset UI
+      setRows([{ ...filaVacia }]);
+      setRetiros([]);
+    } catch (error) {
+      console.error(error?.response?.data || error);
+      alert(error?.response?.data?.message || "Error al cerrar caja");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (index, field, value) => {
     setRows((prev) => {
@@ -118,90 +115,86 @@ const handleCantidadChange = (index, cantidad) => {
   };
 
   useEffect(() => {
-  const cargarMovimientos = async () => {
-    try {
-      const token = localStorage.getItem("token");
+    const cargarMovimientos = async () => {
+      try {
+        const token = localStorage.getItem("token");
 
-      const res = await axios.get(`${API_URL}/api/movimientos`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+        const res = await axios.get(`${API_URL}/api/movimientos`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-const data = res.data.data;
+        const data = res.data.data;
 
-if (!data || data.length === 0) {
-  setRows([{ ...filaVacia }]);
-} else {
-  const mapped = data.map((item) => ({
-    ...item,
-    recibo: item.recibo || "", // 🔥 map correcto
-  }));
+        if (!data || data.length === 0) {
+          setRows([{ ...filaVacia }]);
+        } else {
+          const mapped = data.map((item) => ({
+            ...item,
+            recibo: item.recibo || "", // 🔥 map correcto
+          }));
 
-  setRows(mapped);
-}
-
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  cargarMovimientos();
-}, []);
-
-
-/* TEMPORAL */
-
-const agregarFila = async () => {
-  try {
-    const ultimaFila = rows[rows.length - 1];
-
-    // 🔴 Validación
-    if (!ultimaFila.formaPago && !ultimaFila.observacion) {
-      alert("Debe seleccionar forma de pago o escribir una observación");
-      return;
-    }
-
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      alert("Sesión expirada");
-      return;
-    }
-
-    setLoading(true);
-
-    await axios.post(
-      `${API_URL}/api/movimientos`,
-      {
-        ...ultimaFila,
-        valor: Number(ultimaFila.valor),
-        recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) : null,
-        formaPago: ultimaFila.formaPago || null,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+          setRows(mapped);
+        }
+      } catch (error) {
+        console.error(error);
       }
-    );
-
-    const nuevaFila = {
-      ...filaVacia,
-      responsable: ultimaFila.responsable || "",
-      recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) + 1 : null,
     };
 
-    setRows((prev) => [...prev, nuevaFila]);
+    cargarMovimientos();
+  }, []);
 
-  } catch (error) {
-    console.error(error?.response?.data || error);
-    alert(error?.response?.data?.msg || "Error al guardar");
-  } finally {
-    setLoading(false);
-  }
-};
+  /* TEMPORAL */
 
+  const agregarFila = async () => {
+    try {
+      const ultimaFila = rows[rows.length - 1];
+
+      // 🔴 Validación
+      if (!ultimaFila.formaPago && !ultimaFila.observacion) {
+        alert("Debe seleccionar forma de pago o escribir una observación");
+        return;
+      }
+
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        alert("Sesión expirada");
+        return;
+      }
+
+      setLoading(true);
+
+      await axios.post(
+        `${API_URL}/api/movimientos`,
+        {
+          ...ultimaFila,
+          valor: Number(ultimaFila.valor),
+          recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) : null,
+          formaPago: ultimaFila.formaPago || null,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      const nuevaFila = {
+        ...filaVacia,
+        responsable: ultimaFila.responsable || "",
+        recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) + 1 : null,
+      };
+
+      setRows((prev) => [...prev, nuevaFila]);
+    } catch (error) {
+      console.error(error?.response?.data || error);
+      alert(error?.response?.data?.msg || "Error al guardar");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const eliminarFila = (index) => {
     const nuevas = rows.filter((_, i) => i !== index);
@@ -214,7 +207,6 @@ const agregarFila = async () => {
 
       const forma = row.formaPago || "NINGUNO";
 
-    
       if (forma === "EFECTIVO") {
         acc.efectivo += valor;
       } else if (forma === "TRANSFERENCIA") {
@@ -232,16 +224,13 @@ const agregarFila = async () => {
     },
   );
 
-  const totalDenominaciones = detalles.reduce(
-  (acc, d) => acc + d.total,
-  0
-);
+  const totalDenominaciones = detalles.reduce((acc, d) => acc + d.total, 0);
 
   // Totales combinados
   const totalET = totales.efectivo + totales.transferencia;
   const totalGeneral = totalET + totales.pendiente;
 
-  const resumenDetalle = rows.reduce((acc, row) => {  
+  const resumenDetalle = rows.reduce((acc, row) => {
     const valor = Number(row.valor) || 0;
 
     if (!row.detalle || !row.formaPago) return acc;
@@ -301,316 +290,325 @@ const agregarFila = async () => {
     },
   ];
 
-  const retiroVacio = {
-    monto: "",
-    motivo: "",
-    autorizadoPor: "",
-  };
-
-  const [retiros, setRetiros] = useState([]);
+  const [retiros, setRetiros] = useState([
+    { monto: "", motivo: "", autorizadoPor: "" },
+  ]);
 
   const totalRetiros = retiros.reduce(
     (acc, r) => acc + (Number(r.monto) || 0),
     0,
   );
 
+  const user = useAuthUser(); 
+  const agencia = user?.agenciaPrincipal?.nombre || "Agencia Desconocida";
+
   return (
-    <div className="p-4">
-
-      <div className="mt-4 border p-3 bg-gray-50">
-  <h3 className="font-bold mb-2">
-    Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
-  </h3>
-
-  <div className="border rounded overflow-hidden">
-    <table className="w-full text-sm">
-      <thead className="bg-gray-200">
-        <tr>
-          <th className="p-2 text-left">Denominación</th>
-          <th className="p-2 text-left">Cantidad</th>
-          <th className="p-2 text-left">Total</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {detalles.map((d, i) => (
-          <tr key={i} className="border-t">
-            <td className="p-2">${d.denominacion}</td>
-
-            <td className="p-2">
-              <input
-                type="number"
-                min="0"
-                className="border p-1 w-full"
-                value={d.cantidad}
-                onChange={(e) =>
-                  handleCantidadChange(i, e.target.value)
-                }
-              />
-            </td>
-
-            <td className="p-2 font-semibold">
-              ${d.total.toFixed(2)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-      <h2 className="text-xl font-bold mb-4">Movimiento de Caja</h2>
-
-      <div className="mt-4 border p-3 w-fit bg-gray-100">
-        <h3 className="font-bold mb-2">Resumen</h3>
-
-        <div className="flex flex-wrap gap-4 text-sm items-center">
-          <div>
-            Efectivo: <strong>${totales.efectivo.toFixed(2)}</strong>
-          </div>
-          <div>
-            Transferencia: <strong>${totales.transferencia.toFixed(2)}</strong>
-          </div>
-          <div>
-            Pendiente: <strong>${totales.pendiente.toFixed(2)}</strong>
-          </div>
-          <div className="font-semibold">
-            Efectivo + Transferencia: ${totalET.toFixed(2)}
-          </div>
-          <div className="font-bold">
-            Total General: ${totalGeneral.toFixed(2)}
-          </div>
+    <div className=" flex justify-between flex-row gap-2 items-start p-4">
+      <div>
+        <div>
+          <h2 className="text-xl font-bold mb-2 uppercase text-blue-600">CUADRE DE CAJA AGENCIA {agencia} </h2>
+          <input
+            type="date"
+            value={getHoyLocal()}
+            readOnly
+            className="border p-2  cursor-not-allowed"
+          />
         </div>
-      </div>
 
-      <div className="mt-4 border p-3 w-fit bg-gray-50">
-        <h3 className="font-bold mb-2">Resumen por Tipo</h3>
-
-        <div className="flex flex-wrap gap-6 text-sm">
-          {resumenArray.map((item) => (
-            <div key={item.key} className="flex flex-col">
-              <span className="text-gray-500">{item.label}</span>
-              <span className="font-semibold">
-                ${(item.value || 0).toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* TABLA */}
-      <div className="overflow-auto border p-3">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-200">
-            <tr>
-              <th>Item</th>
-              <th>Responsable</th>
-              <th>Detalle</th>
-              <th>Valor</th>
-              <th>Forma Pago</th>
-              <th>Recibo</th>
-              <th>Observación</th>
-              <th></th>
-            </tr>
-          </thead>
-
-          <tbody className="">
-            {rows.map((row, i) => (
-              <tr key={i} className="border-t">
-                <td className="p-1">{i + 1}</td>
-                <td>
-                  <input
-                    value={row.responsable}
-                    onChange={(e) =>
-                      handleChange(i, "responsable", e.target.value)
-                    }
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <select
-                    value={row.detalle}
-                    onChange={(e) => handleChange(i, "detalle", e.target.value)}
-                    className="w-full p-1"
-                  >
-                    <option value="">-- Seleccionar --</option>
-                    <option value="CUOTA">CUOTA</option>
-                    <option value="ENTRADA">ENTRADA</option>
-                    <option value="ALCANCE">ALCANCE</option>
-                    <option value="CONTADO">CONTADO</option>
-                    <option value="CANCELA_ENTRADA_PEND">
-                      CANCELA ENTRADA PEND.
-                    </option>
-                    <option value="CANCELA_ALCANCE_PEND">
-                      CANCELA ALCANCE PEND.
-                    </option>
-                    <option value="EGRESO">EGRESO</option>
-                  </select>
-                </td>
-
-                <td>
-                  <input
-                    type="number"
-                    value={row.valor}
-                    onChange={(e) => handleChange(i, "valor", e.target.value)}
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <select
-                    value={row.formaPago}
-                    onChange={(e) =>
-                      handleChange(i, "formaPago", e.target.value)
-                    }
-                    className="w-full p-1"
-                  >
-                    <option value="">-- Seleccionar --</option>
-                    <option value="EFECTIVO">EFECTIVO</option>
-                    <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-                    <option value="PENDIENTE">PENDIENTE</option>
-                  </select>
-                </td>
-
-                <td>
-                  <input
-                    type="number"
-                    value={row.recibo}
-                    onChange={(e) =>
-                      handleChange(i, "recibo", e.target.value)
-                    }
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <input
-                    value={row.observacion}
-                    onChange={(e) =>
-                      handleChange(i, "observacion", e.target.value)
-                    }
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <button
-                    onClick={() => eliminarFila(i)}
-                    className="text-red-500"
-                  >
-                    X
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ACCIONES */}
-      <div className="flex justify-between mt-4">
-        <button
-          onClick={agregarFila}
-          disabled={loading}
-          className="bg-gray-500 text-white px-4 py-2"
-        >
-          {loading ? "Guardando..." : "+ Fila"}
-        </button>
-      </div>
-
-      <div className="mt-4 border p-3 bg-red-50">
-        <h3 className="font-bold mb-2">
-          {" "}
-          Retiros de Caja - Total: ${totalRetiros.toFixed(2)}
+        <h3 className="font-bold ">
+          Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
         </h3>
 
-        <table className="w-full text-sm">
-          <thead className="bg-red-200">
-            <tr>
-              <th>#</th>
-              <th>Monto</th>
-              <th>Motivo</th>
-              <th>Autorizado por</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {retiros.map((r, i) => (
-              <tr key={i} className="border-t">
-                <td>{i + 1}</td>
-
-                <td>
-                  <input
-                    type="number"
-                    value={r.monto}
-                    onChange={(e) => {
-                      const newData = [...retiros];
-                      newData[i].monto = e.target.value;
-                      setRetiros(newData);
-                    }}
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <input
-                    value={r.motivo}
-                    onChange={(e) => {
-                      const newData = [...retiros];
-                      newData[i].motivo = e.target.value;
-                      setRetiros(newData);
-                    }}
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <input
-                    value={r.autorizadoPor}
-                    onChange={(e) => {
-                      const newData = [...retiros];
-                      newData[i].autorizadoPor = e.target.value;
-                      setRetiros(newData);
-                    }}
-                    className="w-full p-1"
-                  />
-                </td>
-
-                <td>
-                  <button
-                    onClick={() =>
-                      setRetiros(retiros.filter((_, index) => index !== i))
-                    }
-                    className="text-red-500"
-                  >
-                    X
-                  </button>
-                </td>
+        <div className="border rounded overflow-hidden">
+          <table className="w-full text-sm">
+            <thead >
+              <tr>
+                <th className="p-2 text-left">Denominación</th>
+                <th className="p-2 text-left">Cantidad</th>
+                <th className="p-2 text-left">Total</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
 
-        <button
-          onClick={() =>
-            setRetiros([
-              ...retiros,
-              { monto: "", motivo: "", autorizadoPor: "" },
-            ])
-          }
-          className="mt-2 bg-red-500 text-white px-3 py-1"
-        >
-          + Retiro
-        </button>
+            <tbody>
+              {detalles.map((d, i) => (
+                <tr key={i} className="border-t">
+                  <td className="p-2">${d.denominacion}</td>
+
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="border p-1 w-full"
+                      value={d.cantidad}
+                      onChange={(e) => handleCantidadChange(i, e.target.value)}
+                    />
+                  </td>
+
+                  <td className="p-2 font-semibold">${d.total.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <button
-        onClick={cerrarCaja}
-        className="bg-blue-600 text-white px-6 py-2 mt-4"
-      >
-        Cerrar Caja
-      </button>
+      <div className="flex justify-center  flex-col gap-2 ">
+        <h2 className="text-xl font-bold ">Movimiento de Caja</h2>
+
+        <div className="border p-3 w-fit ">
+          <h3 className="font-bold mb-2">Resumen</h3>
+
+          <div className="flex flex-wrap gap-4 text-sm items-center">
+            <div>
+              Efectivo: <strong>${totales.efectivo.toFixed(2)}</strong>
+            </div>
+            <div>
+              Transferencia:{" "}
+              <strong>${totales.transferencia.toFixed(2)}</strong>
+            </div>
+            <div>
+              Pendiente: <strong>${totales.pendiente.toFixed(2)}</strong>
+            </div>
+            <div className="font-semibold">
+              Efectivo + Transferencia: ${totalET.toFixed(2)}
+            </div>
+            <div className="font-bold">
+              Total General: ${totalGeneral.toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        <div className="border p-3 w-fit ">
+          <h3 className="font-bold mb-2">Resumen por Tipo</h3>
+
+          <div className="flex flex-wrap gap-6 text-sm">
+            {resumenArray.map((item) => (
+              <div key={item.key} className="flex flex-col">
+                <span className="text-gray-500">{item.label}</span>
+                <span className="font-semibold">
+                  ${(item.value || 0).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* TABLA */}
+        <div className="overflow-auto border p-3">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-200">
+              <tr>
+                <th>Item</th>
+                <th>Responsable</th>
+                <th>Detalle</th>
+                <th>Valor</th>
+                <th>Forma Pago</th>
+                <th>Recibo</th>
+                <th>Observación</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody className="">
+              {rows.map((row, i) => (
+                <tr key={i} className="border-t">
+                  <td className="p-1">{i + 1}</td>
+                  <td>
+                    <input
+                      value={row.responsable}
+                      onChange={(e) =>
+                        handleChange(i, "responsable", e.target.value)
+                      }
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td>
+                    <select
+                      value={row.detalle}
+                      onChange={(e) =>
+                        handleChange(i, "detalle", e.target.value)
+                      }
+                      className="w-full p-1"
+                    >
+                      <option value="">-- Seleccionar --</option>
+                      <option value="CUOTA">CUOTA</option>
+                      <option value="ENTRADA">ENTRADA</option>
+                      <option value="ALCANCE">ALCANCE</option>
+                      <option value="CREDITO">CREDITO</option>
+                      <option value="CONTADO">CONTADO</option>
+                      <option value="CANCELA_ENTRADA_PEND">
+                        CANCELA ENTRADA PEND.
+                      </option>
+                      <option value="CANCELA_ALCANCE_PEND">
+                        CANCELA ALCANCE PEND.
+                      </option>
+                      <option value="EGRESO">EGRESO</option>
+                      <option value="TARJETA DE CREDITO">
+                        TARJETA DE CREDITO
+                      </option>
+                    </select>
+                  </td>
+
+                  <td>
+                    <input
+                      type="number"
+                      value={row.valor}
+                      onChange={(e) => handleChange(i, "valor", e.target.value)}
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td>
+                    <select
+                      value={row.formaPago}
+                      onChange={(e) =>
+                        handleChange(i, "formaPago", e.target.value)
+                      }
+                      className="w-full p-1"
+                    >
+                      <option value="">-- Seleccionar --</option>
+                      <option value="EFECTIVO">EFECTIVO</option>
+                      <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                      <option value="PENDIENTE">PENDIENTE</option>
+                    </select>
+                  </td>
+
+                  <td>
+                    <input
+                      type="number"
+                      value={row.recibo}
+                      onChange={(e) =>
+                        handleChange(i, "recibo", e.target.value)
+                      }
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      value={row.observacion}
+                      onChange={(e) =>
+                        handleChange(i, "observacion", e.target.value)
+                      }
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td className="flex justify-center items-center p-2 gap-2">
+                    <button
+                      onClick={agregarFila}
+                      disabled={loading}
+                      className="bg-green-500 text-white p-2"
+                    >
+                      {loading ? "Guardando..." : <FaPlus />}
+                    </button>
+                    <button
+                      onClick={() => eliminarFila(i)}
+                      className="text-white bg-red-600 p-2"
+                    >
+                      <FaTimes />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="border p-3 bg-red-50">
+          <h3 className="font-bold mb-2">
+            Retiros de Caja - Total: ${totalRetiros.toFixed(2)}
+          </h3>
+
+          <table className="w-full text-sm">
+            <thead className="bg-red-200">
+              <tr>
+                <th>#</th>
+                <th>Monto</th>
+                <th>Motivo</th>
+                <th>Autorizado por</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {retiros.map((r, i) => (
+                <tr key={i} className="border-t">
+                  <td>{i + 1}</td>
+
+                  <td>
+                    <input
+                      type="number"
+                      value={r.monto}
+                      onChange={(e) => {
+                        const newData = [...retiros];
+                        newData[i].monto = e.target.value;
+                        setRetiros(newData);
+                      }}
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      value={r.motivo}
+                      onChange={(e) => {
+                        const newData = [...retiros];
+                        newData[i].motivo = e.target.value;
+                        setRetiros(newData);
+                      }}
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      value={r.autorizadoPor}
+                      onChange={(e) => {
+                        const newData = [...retiros];
+                        newData[i].autorizadoPor = e.target.value;
+                        setRetiros(newData);
+                      }}
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td className="flex justify-center items-center p-2 gap-2">
+                    <button
+                      onClick={() =>
+                        setRetiros([
+                          ...retiros,
+                          { monto: "", motivo: "", autorizadoPor: "" },
+                        ])
+                      }
+                      className="bg-green-500 text-white p-2"
+                    >
+                      <FaPlus />
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        setRetiros(retiros.filter((_, index) => index !== i))
+                      }
+                      className="text-white bg-red-600 p-2"
+                    >
+                      <FaTimes />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-col justify-end h-full">
+          <button
+            onClick={cerrarCaja}
+            className="bg-blue-600 text-white px-6 py-2 self-end"
+          >
+            Cerrar Caja
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

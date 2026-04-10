@@ -188,7 +188,14 @@ router.get("/entregas", async (req, res) => {
 
     const entregas = await Entrega.findAll({
       where: whereEntrega,
-      attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega" , "errores"],
+      attributes: [
+        "id",
+        "fecha",
+        "observacion",
+        "estado",
+        "sectorEntrega",
+        "errores",
+      ],
       order: [["createdAt", "DESC"]],
 
       include: [
@@ -222,11 +229,19 @@ router.get("/entregas", async (req, res) => {
           attributes: ["id"],
           required: userId && userId !== "todos", // fuerza INNER JOIN si hay filtro
           through: {
-            attributes: ["estado"],
-            ...(userId &&
-              userId !== "todos" && {
-                where: { usuario_agencia_id: Number(userId) },
-              }),
+            attributes: [
+              "estado",
+              "activo",
+              "fecha_asignacion",
+              "fecha_desasignacion",
+            ],
+            where: {
+              activo: true,
+              ...(userId &&
+                userId !== "todos" && {
+                  usuario_agencia_id: Number(userId),
+                }),
+            },
           },
           include: [
             {

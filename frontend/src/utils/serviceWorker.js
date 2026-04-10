@@ -42,5 +42,4 @@ export const initSWWithToken = async () => {
     apiUrl: API_URL,
   });
 
-  console.log("📨 Mensaje enviado al SW con apiUrl:", API_URL);
 };

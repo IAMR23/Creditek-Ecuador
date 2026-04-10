@@ -8,7 +8,6 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SET_TOKEN") {
     token = event.data.token;
     API_URL = event.data.apiUrl; // ✅ Llega desde la app
-    console.log("[SW] Token y URL recibidos, iniciando polling...");
     startPolling();
   }
 });
