@@ -3,7 +3,7 @@ const router = express.Router();
 const { sequelize } = require("../../config/db");
 
 const { authenticate } = require("../../middleware/authMiddleware");
-const { cerrarCaja } = require("../../controllers/CierreCaja/cierreCaja");
+const { cerrarCaja, obtenerCierreCajaPorId, obtenerTodosLosCierresCaja } = require("../../controllers/CierreCaja/cierreCaja");
 const CierreCaja = require("../../models/CierreCaja/CierreCaja");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Usuario = require("../../models/Usuario");
@@ -15,10 +15,9 @@ const { Op } = require("sequelize");
 
 router.post("/cierre-caja", authenticate, cerrarCaja);
 
-router.get("/cierres-caja", async (req, res) => {
+router.get("/cierres-caja1", async (req, res) => {
   try {
     const { fechaInicio, fechaFin, agenciaId } = req.query;
-    console.log(agenciaId)
     const where = {};
 
     // 🔹 Filtro por fecha
@@ -100,5 +99,9 @@ router.get("/cierres-caja", async (req, res) => {
     });
   }
 });
+
+router.get("/cierres-caja",  obtenerTodosLosCierresCaja);
+
+router.get("/cierre-caja/:id", authenticate, obtenerCierreCajaPorId);
 
 module.exports = router;

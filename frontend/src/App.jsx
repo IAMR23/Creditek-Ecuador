@@ -83,6 +83,7 @@ import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
 import Powerbi from "./components/Powerbi";
+import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -308,6 +309,7 @@ useEffect(() => {
                   element={<UsuariosConPermisos />}
                 />
                 <Route path="revisar-cajas" element={<RevisarCaja />} />
+                <Route path="revisar-cajas2" element={<CierresCajaTabla />} />
                 <Route path="tasks" element={<TasksPage />} />
               </Route>
 

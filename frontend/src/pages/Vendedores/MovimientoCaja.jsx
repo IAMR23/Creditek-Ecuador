@@ -12,11 +12,11 @@ const filaVacia = {
   formaPago: "",
   recibo: "",
   observacion: "",
+  guardado: false,
 };
 
 export default function MovimientoCaja() {
   const [rows, setRows] = useState([{ ...filaVacia }]);
-  const [fecha, setFecha] = useState("");
   const [loading, setLoading] = useState(false);
   const denominacionesBase = [
     { denominacion: 100, cantidad: 0, total: 0 },
@@ -28,9 +28,13 @@ export default function MovimientoCaja() {
     { denominacion: 0.5, cantidad: 0, total: 0 },
     { denominacion: 0.25, cantidad: 0, total: 0 },
     { denominacion: 0.1, cantidad: 0, total: 0 },
+        { denominacion: 0.05, cantidad: 0, total: 0 },
+    { denominacion: 0.01, cantidad: 0, total: 0 },
   ];
 
   const [detalles, setDetalles] = useState(denominacionesBase);
+
+  let guardado = false;
 
   const handleCantidadChange = (index, cantidad) => {
     const newDetalles = [...detalles];
@@ -44,10 +48,11 @@ export default function MovimientoCaja() {
     setDetalles(newDetalles);
   };
 
-  useEffect(() => {
-    const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFecha(hoyLocal);
-  }, []);
+  const filaEsMovimientoValido = (fila) => {
+    return (
+      fila.detalle?.trim() && Number(fila.valor) > 0 && fila.formaPago?.trim()
+    );
+  };
 
   const cerrarCaja = async () => {
     try {
@@ -60,11 +65,16 @@ export default function MovimientoCaja() {
 
       setLoading(true);
 
-      const retirosLimpios = retiros.map((r) => ({
-        monto: Number(r.monto),
-        motivo: r.motivo,
-        autorizadoPor: r.autorizadoPor,
-      }));
+      const retirosLimpios = retiros
+        .filter(
+          (r) =>
+            Number(r.monto) > 0 || r.motivo?.trim() || r.autorizadoPor?.trim(),
+        )
+        .map((r) => ({
+          monto: Number(r.monto) || 0,
+          motivo: r.motivo || "",
+          autorizadoPor: r.autorizadoPor || "",
+        }));
 
       const denominaciones = detalles
         .filter((d) => d.cantidad > 0)
@@ -74,30 +84,38 @@ export default function MovimientoCaja() {
           total: Number(d.total),
         }));
 
+      const movimientosPendientes = rows
+        .filter(filaEsMovimientoValido)
+        .map((row) => ({
+          responsable: row.responsable || "",
+          detalle: row.detalle || "",
+          valor: Number(row.valor) || 0,
+          formaPago: row.formaPago || null,
+          recibo: row.recibo ? Number(row.recibo) : null,
+          observacion: row.observacion || "",
+        }));
+
       const payload = {
         cierre: {
-          fecha,
+          
           observacion: "Cierre desde sistema",
         },
         denominaciones,
         retiros: retirosLimpios,
+        movimientosPendientes,
       };
 
-      const res = await axios.post(
-        `${API_URL}/api/contabilidad/cierre-caja`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      await axios.post(`${API_URL}/api/contabilidad/cierre-caja`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      );
+      });
 
       alert("Cierre realizado correctamente");
 
-      // 🔄 reset UI
       setRows([{ ...filaVacia }]);
-      setRetiros([]);
+      setRetiros([{ monto: "", motivo: "", autorizadoPor: "" }]);
+      setDetalles(denominacionesBase);
     } catch (error) {
       console.error(error?.response?.data || error);
       alert(error?.response?.data?.message || "Error al cerrar caja");
@@ -128,12 +146,22 @@ export default function MovimientoCaja() {
         const data = res.data.data;
 
         if (!data || data.length === 0) {
-          setRows([{ ...filaVacia }]);
+          setRows([{ ...filaVacia, guardado: false }]);
         } else {
           const mapped = data.map((item) => ({
             ...item,
-            recibo: item.recibo || "", // 🔥 map correcto
+            recibo: item.recibo || "",
+            guardado: true,
           }));
+
+          const ultimaFila = mapped[mapped.length - 1];
+
+          mapped.push({
+            ...filaVacia,
+            responsable: ultimaFila?.responsable || "",
+            recibo: ultimaFila?.recibo ? Number(ultimaFila.recibo) + 1 : "",
+            guardado: false,
+          });
 
           setRows(mapped);
         }
@@ -145,15 +173,16 @@ export default function MovimientoCaja() {
     cargarMovimientos();
   }, []);
 
-  /* TEMPORAL */
-
   const agregarFila = async () => {
     try {
       const ultimaFila = rows[rows.length - 1];
 
-      // 🔴 Validación
-      if (!ultimaFila.formaPago && !ultimaFila.observacion) {
-        alert("Debe seleccionar forma de pago o escribir una observación");
+      if (
+        !ultimaFila.detalle?.trim() ||
+        Number(ultimaFila.valor) <= 0 ||
+        !ultimaFila.formaPago?.trim()
+      ) {
+        alert("Debe completar detalle, valor y forma de pago");
         return;
       }
 
@@ -184,10 +213,19 @@ export default function MovimientoCaja() {
       const nuevaFila = {
         ...filaVacia,
         responsable: ultimaFila.responsable || "",
-        recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) + 1 : null,
+        recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) + 1 : "",
+        guardado: false,
       };
 
-      setRows((prev) => [...prev, nuevaFila]);
+      setRows((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          ...updated[updated.length - 1],
+          guardado: true,
+        };
+        updated.push(nuevaFila);
+        return updated;
+      });
     } catch (error) {
       console.error(error?.response?.data || error);
       alert(error?.response?.data?.msg || "Error al guardar");
@@ -196,9 +234,40 @@ export default function MovimientoCaja() {
     }
   };
 
-  const eliminarFila = (index) => {
-    const nuevas = rows.filter((_, i) => i !== index);
-    setRows(nuevas);
+  const eliminarFila = async (index) => {
+    const fila = rows[index];
+
+    try {
+      if (fila.id) {
+        await axios.delete(`${API_URL}/api/movimientos/${fila.id}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+      }
+
+      setRows((prev) => {
+        const nuevas = prev.filter((_, i) => i !== index);
+
+        const existeFilaEditable = nuevas.some((fila) => !fila.guardado);
+
+        if (!existeFilaEditable) {
+          const ultimaFila = nuevas[nuevas.length - 1];
+
+          nuevas.push({
+            ...filaVacia,
+            responsable: ultimaFila?.responsable || "",
+            recibo: ultimaFila?.recibo ? Number(ultimaFila.recibo) + 1 : "",
+            guardado: false,
+          });
+        }
+
+        return nuevas;
+      });
+    } catch (error) {
+      console.error("Error al eliminar fila:", error);
+      alert("No se pudo eliminar la fila");
+    }
   };
 
   const totales = rows.reduce(
@@ -299,29 +368,25 @@ export default function MovimientoCaja() {
     0,
   );
 
-  const user = useAuthUser(); 
+  const user = useAuthUser();
   const agencia = user?.agenciaPrincipal?.nombre || "Agencia Desconocida";
 
   return (
     <div className=" flex justify-between flex-row gap-2 items-start p-4">
-      <div>
+      <div className="flex flex-col border">
         <div>
-          <h2 className="text-xl font-bold mb-2 uppercase text-blue-600">CUADRE DE CAJA AGENCIA {agencia} </h2>
-          <input
-            type="date"
-            value={getHoyLocal()}
-            readOnly
-            className="border p-2  cursor-not-allowed"
-          />
+          <h2 className="text-xl font-bold mb-2 uppercase ">
+            CUADRE DE CAJA AGENCIA {agencia}{" "}
+          </h2>
         </div>
 
         <h3 className="font-bold ">
           Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
         </h3>
 
-        <div className="border rounded overflow-hidden">
+        <div className="border rounded-lg shadow-lg overflow-hidden m-2">
           <table className="w-full text-sm">
-            <thead >
+            <thead>
               <tr>
                 <th className="p-2 text-left">Denominación</th>
                 <th className="p-2 text-left">Cantidad</th>
@@ -353,8 +418,16 @@ export default function MovimientoCaja() {
       </div>
 
       <div className="flex justify-center  flex-col gap-2 ">
-        <h2 className="text-xl font-bold ">Movimiento de Caja</h2>
-
+        <div className="flex justify-between p-2">
+          <h2 className="text-xl font-bold ">Movimiento de Caja</h2>
+          <input
+            type="date"
+            value={getHoyLocal()}
+            disabled
+            readOnly
+            className="border"
+          />
+        </div>
         <div className="border p-3 w-fit ">
           <h3 className="font-bold mb-2">Resumen</h3>
 
@@ -415,6 +488,7 @@ export default function MovimientoCaja() {
                   <td className="p-1">{i + 1}</td>
                   <td>
                     <input
+                      disabled={row.guardado}
                       value={row.responsable}
                       onChange={(e) =>
                         handleChange(i, "responsable", e.target.value)
@@ -425,6 +499,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <select
+                      disabled={row.guardado}
                       value={row.detalle}
                       onChange={(e) =>
                         handleChange(i, "detalle", e.target.value)
@@ -456,6 +531,7 @@ export default function MovimientoCaja() {
                       value={row.valor}
                       onChange={(e) => handleChange(i, "valor", e.target.value)}
                       className="w-full p-1"
+                      disabled={row.guardado}
                     />
                   </td>
 
@@ -466,6 +542,7 @@ export default function MovimientoCaja() {
                         handleChange(i, "formaPago", e.target.value)
                       }
                       className="w-full p-1"
+                      disabled={row.guardado}
                     >
                       <option value="">-- Seleccionar --</option>
                       <option value="EFECTIVO">EFECTIVO</option>
@@ -476,6 +553,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
+                      disabled={row.guardado}
                       type="number"
                       value={row.recibo}
                       onChange={(e) =>
@@ -487,6 +565,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
+                      disabled={row.guardado}
                       value={row.observacion}
                       onChange={(e) =>
                         handleChange(i, "observacion", e.target.value)
@@ -498,8 +577,10 @@ export default function MovimientoCaja() {
                   <td className="flex justify-center items-center p-2 gap-2">
                     <button
                       onClick={agregarFila}
-                      disabled={loading}
-                      className="bg-green-500 text-white p-2"
+                      disabled={
+                        loading || row.guardado || i !== rows.length - 1
+                      }
+                      className="bg-green-500 text-white p-2 disabled:bg-gray-400"
                     >
                       {loading ? "Guardando..." : <FaPlus />}
                     </button>

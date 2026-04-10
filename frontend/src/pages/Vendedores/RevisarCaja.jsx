@@ -27,6 +27,8 @@ export default function RevisarCaja() {
     { denominacion: 0.5, cantidad: 0, total: 0 },
     { denominacion: 0.25, cantidad: 0, total: 0 },
     { denominacion: 0.1, cantidad: 0, total: 0 },
+    { denominacion: 0.05, cantidad: 0, total: 0 },
+    { denominacion: 0.01, cantidad: 0, total: 0 },
   ];
 
   const [detalles, setDetalles] = useState(denominacionesBase);
@@ -375,7 +377,7 @@ export default function RevisarCaja() {
         if (!token) return;
 
         const res = await axios.get(
-          `${API_URL}/api/contabilidad/cierres-caja`,
+          `${API_URL}/api/contabilidad/cierres-caja1`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -443,43 +445,6 @@ export default function RevisarCaja() {
 
       </div>
 
-    {/*   <div className="mt-4 border p-3 bg-gray-50">
-        <h3 className="font-bold mb-2">
-          Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
-        </h3>
-
-        <div className="border rounded overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-200">
-              <tr>
-                <th className="p-2 text-left">Denominación</th>
-                <th className="p-2 text-left">Cantidad</th>
-                <th className="p-2 text-left">Total</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {detalles.map((d, i) => (
-                <tr key={i} className="border-t">
-                  <td className="p-2">${d.denominacion}</td>
-
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="border p-1 w-full"
-                      value={d.cantidad}
-                      onChange={(e) => handleCantidadChange(i, e.target.value)}
-                    />
-                  </td>
-
-                  <td className="p-2 font-semibold">${d.total.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div> */}
 
       <h2 className="text-xl font-bold mb-4">Movimiento de Caja</h2>
 

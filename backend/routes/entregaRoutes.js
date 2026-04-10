@@ -214,8 +214,6 @@ router.get("/entregas", async (req, res) => {
             },
           ],
         },
-
-        // 🏍 REPARTIDORES (TABLA INTERMEDIA)
         {
           model: UsuarioAgencia,
           as: "repartidores",
