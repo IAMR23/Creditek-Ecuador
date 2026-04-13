@@ -11,6 +11,7 @@ const OPCIONES_ERRORES = [
   "Retrasos en la coordinación",
   "Retrasos en la entrega",
   "No actualiza al RVE",
+  "No envia el TAG"
 ];
 
 export default function EntregasRepartidoresTabla() {
