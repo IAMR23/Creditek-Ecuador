@@ -70,7 +70,9 @@ import CrearTraslado from "./pages/Vendedores/CrearTraslado";
 import TrasladosList from "./pages/Vendedores/TrasladosList";
 import Gestion from "./pages/Vendedores/Gestion";
 import MisGestiones from "./pages/Vendedores/MisGestiones";
+import MisGestionesComerciales from "./pages/Vendedores/MisGestionesComerciales";
 import RevisionGestiones from "./pages/Admin/RevisionGestiones";
+import RevisionGestionesComercial from "./pages/Admin/RevisionGestionesComercial";
 import EditarGestion from "./pages/Vendedores/EditarGestion";
 import Caja from "./pages/Vendedores/Caja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
@@ -84,6 +86,7 @@ import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
 import Powerbi from "./components/Powerbi";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
+import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -240,6 +243,10 @@ useEffect(() => {
                   path="revision-gestiones"
                   element={<RevisionGestiones />}
                 />
+                             <Route
+                  path="revision-gestiones-comercial"
+                  element={<RevisionGestionesComercial />}
+                />
                 <Route path="bdd-ventas" element={<BDDVentas />} />
                 <Route path="bonos" element={<Bonos />} />
                 <Route
@@ -375,11 +382,17 @@ useEffect(() => {
                 element={<EditarEntregaCompleta />}
               />
 
+                            <Route
+                path="crear-gestion-comercial"
+                element={<CrearGestionComercial />}
+              />
+
               <Route path="seleccionar-modo" element={<SeleccionarModo />} />
               <Route path="crear-traslado" element={<CrearTraslado />} />
               <Route path="mis-traslados" element={<TrasladosList />} />
               <Route path="gestion" element={<Gestion />} />
               <Route path="mis-gestiones" element={<MisGestiones />} />
+              <Route path="mis-gestiones-comerciales" element={<MisGestionesComerciales />} />
               <Route path="mi-gestion/:id" element={<EditarGestion />} />
               <Route path="caja" element={<Caja />} />
 

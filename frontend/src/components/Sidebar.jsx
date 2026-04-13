@@ -59,6 +59,7 @@ export default function Sidebar() {
           { label: "Metas Comerciales", icon: <BarChart3 size={20} />, path: "/metas-comerciales" },
           { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
           { label: "Revisar Gestiones", icon: <BarChart3 size={20} />, path: "/revision-gestiones" },
+          { label: "Revisar Gestiones Comerciales", icon: <BarChart3 size={20} />, path: "/revision-gestiones-comercial" },
           { label: "Base de Datos Ventas", icon: <BarChart3 size={20} />, path: "/BDD-ventas" },
           { label: "Bonos", icon: <LucideTicketPercent size={20} />, path: "/bonos" },
           { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },

@@ -11,7 +11,7 @@ const OPCIONES_ERRORES = [
   "Retrasos en la coordinación",
   "Retrasos en la entrega",
   "No actualiza al RVE",
-  "No envia el TAG"
+  "No envia el TAG",
 ];
 
 export default function EntregasRepartidoresTabla() {
@@ -31,14 +31,13 @@ export default function EntregasRepartidoresTabla() {
   const [erroresTemp, setErroresTemp] = useState({});
   const [guardandoErrores, setGuardandoErrores] = useState({});
 
-
   useEffect(() => {
     const fetchRepartidores = async () => {
       try {
         setLoadingRepartidores(true);
 
         const response = await axios.get(
-          `${API_URL}/api/usuario-agencia-permisos/usuarios-repartidores`
+          `${API_URL}/api/usuario-agencia-permisos/usuarios-repartidores`,
         );
 
         setRepartidores(Array.isArray(response.data) ? response.data : []);
@@ -125,8 +124,8 @@ export default function EntregasRepartidoresTabla() {
 
       setEntregas((prev) =>
         prev.map((entrega) =>
-          entrega.id === id ? { ...entrega, errores } : entrega
-        )
+          entrega.id === id ? { ...entrega, errores } : entrega,
+        ),
       );
 
       setFilaAbierta(null);
@@ -160,7 +159,9 @@ export default function EntregasRepartidoresTabla() {
   return (
     <div className="mx-auto p-6">
       <div className="mb-4">
-        <h2 className="text-2xl font-bold text-gray-800">Informe de Entregas</h2>
+        <h2 className="text-2xl font-bold text-gray-800">
+          Informe de Entregas
+        </h2>
         <p className="text-sm text-gray-500">
           Consulta y seguimiento de entregas asignadas
         </p>
@@ -168,7 +169,9 @@ export default function EntregasRepartidoresTabla() {
 
       <div className="bg-white p-4 rounded-2xl shadow-sm border grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div>
-          <label className="text-sm font-medium text-gray-700">Repartidor</label>
+          <label className="text-sm font-medium text-gray-700">
+            Repartidor
+          </label>
           <select
             value={repartidorSeleccionado}
             onChange={(e) => setRepartidorSeleccionado(e.target.value)}
@@ -274,12 +277,7 @@ export default function EntregasRepartidoresTabla() {
                         <td className="px-4 py-2">{j + 1}</td>
 
                         <td className="px-4 py-2">{entrega.id}</td>
-
-                        <td className="px-4 py-2">
-                          {entrega.fecha
-                            ? new Date(entrega.fecha).toLocaleDateString()
-                            : "—"}
-                        </td>
+                        <td className="px-4 py-2">{entrega.fecha ?? "—"}</td>
 
                         <td className="px-4 py-2">
                           {entrega.cliente?.cliente ?? "—"}
@@ -295,7 +293,8 @@ export default function EntregasRepartidoresTabla() {
                           {entrega.obsequiosEntrega?.length > 0
                             ? entrega.obsequiosEntrega
                                 .map(
-                                  (o) => `${o.obsequio?.nombre} (${o.cantidad})`
+                                  (o) =>
+                                    `${o.obsequio?.nombre} (${o.cantidad})`,
                                 )
                                 .join(", ")
                             : "—"}
@@ -317,8 +316,8 @@ export default function EntregasRepartidoresTabla() {
                               entrega.estado === "Entregado"
                                 ? "bg-green-100 text-green-700"
                                 : entrega.estado === "Transito"
-                                ? "bg-yellow-100 text-yellow-700"
-                                : "bg-red-100 text-red-700"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-700"
                             }`}
                           >
                             {entrega.estado}
@@ -351,7 +350,9 @@ export default function EntregasRepartidoresTabla() {
                               type="button"
                               onClick={() =>
                                 setFilaAbierta(
-                                  filaAbierta === entrega.id ? null : entrega.id
+                                  filaAbierta === entrega.id
+                                    ? null
+                                    : entrega.id,
                                 )
                               }
                               className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700"
@@ -367,9 +368,12 @@ export default function EntregasRepartidoresTabla() {
                                   <input
                                     type="checkbox"
                                     checked={
-                                      (erroresTemp[entrega.id] || []).length === 0
+                                      (erroresTemp[entrega.id] || []).length ===
+                                      0
                                     }
-                                    onChange={() => seleccionarNinguno(entrega.id)}
+                                    onChange={() =>
+                                      seleccionarNinguno(entrega.id)
+                                    }
                                   />
                                   Ninguno
                                 </label>
@@ -382,9 +386,9 @@ export default function EntregasRepartidoresTabla() {
                                     >
                                       <input
                                         type="checkbox"
-                                        checked={(erroresTemp[entrega.id] || []).includes(
-                                          opcion
-                                        )}
+                                        checked={(
+                                          erroresTemp[entrega.id] || []
+                                        ).includes(opcion)}
                                         onChange={() =>
                                           toggleError(entrega.id, opcion)
                                         }
@@ -411,7 +415,9 @@ export default function EntregasRepartidoresTabla() {
                                     onClick={() => {
                                       setErroresTemp((prev) => ({
                                         ...prev,
-                                        [entrega.id]: Array.isArray(entrega.errores)
+                                        [entrega.id]: Array.isArray(
+                                          entrega.errores,
+                                        )
                                           ? entrega.errores
                                           : [],
                                       }));
@@ -437,7 +443,7 @@ export default function EntregasRepartidoresTabla() {
                           Entrega sin productos
                         </td>
                       </tr>,
-                    ]
+                    ],
               )}
           </tbody>
         </table>

@@ -12,16 +12,16 @@ import {
 } from "recharts";
 import { API_URL } from "../../../config";
 import { Cell } from "recharts";
+import { getHoyLocal } from "../../utils/dateUtils";
 
 export default function DashboardEntregas() {
 
   const COLORS = ["#F59E0B", "#3B82F6", "#22C55E", "#EF4444"];
 
-  const hoy = new Date().toISOString().split("T")[0];
   const [repartidores, setRepartidores] = useState([]);
 
-  const [fechaInicio, setFechaInicio] = useState(hoy);
-  const [fechaFin, setFechaFin] = useState(hoy);
+  const [fechaInicio, setFechaInicio] = useState(getHoyLocal());
+  const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [repartidorSeleccionado, setRepartidorSeleccionado] = useState("");

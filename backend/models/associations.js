@@ -30,6 +30,7 @@ const MovimientoCaja = require('./CierreCaja/MovimientoCaja');
 const Denominacion = require('./CierreCaja/Denominacion');
 const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const Task = require('./Task');
+const GestionComercial = require('./GestionComercial');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
@@ -323,3 +324,27 @@ Usuario.hasMany(Task, { foreignKey: "assignedTo", as: "assignedTasks" });
 
 Task.belongsTo(Usuario, { foreignKey: "createdBy", as: "creator" });
 Task.belongsTo(Usuario, { foreignKey: "assignedTo", as: "assignee" });
+
+/* GESTIONES COMERCIALES */
+
+// UsuarioAgencia -> GestionComercial
+UsuarioAgencia.hasMany(GestionComercial, {
+  foreignKey: "usuarioAgenciaId",
+  as: "gestionesComerciales",
+});
+
+GestionComercial.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+// Dispositivo -> GestionComercial
+Dispositivo.hasMany(GestionComercial, {
+  foreignKey: "dispositivoId",
+  as: "gestionesComerciales",
+});
+
+GestionComercial.belongsTo(Dispositivo, {
+  foreignKey: "dispositivoId",
+  as: "dispositivo",
+});

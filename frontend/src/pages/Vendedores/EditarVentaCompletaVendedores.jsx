@@ -194,7 +194,7 @@ const EditarVentaCompletaVendedores = () => {
       });
 
       Swal.fire("Actualizado", "Venta editada correctamente", "success");
-      navigate("/ventas-auditoria");
+      navigate("/vendedor-panel");
     } catch (error) {
       Swal.fire("Error", "No se pudo editar la venta", "error");
       console.error(error);

@@ -347,7 +347,7 @@ if (!/^\d{10}$/.test(telefono)) {
       observacion: "",
     }));
 
-    navigate("/");
+    navigate("/vendedor-panel");
   } catch (error) {
     console.error(error);
 

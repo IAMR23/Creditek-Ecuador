@@ -120,7 +120,7 @@ export default function CostosHistoricosCRUD() {
             <tr key={c.id} className="border-b hover:bg-gray-100">
               <td className="p-2">{c.modelo?.nombre}</td>
               <td className="p-2">{c.costo}</td>
-              <td className="p-2">{new Date(c.fechaCompra).toLocaleDateString()}</td>
+              <td className="p-2">{(c.fechaCompra)}</td>
               <td className="p-2">
                 <button
                   onClick={() => openEditModal(c)}

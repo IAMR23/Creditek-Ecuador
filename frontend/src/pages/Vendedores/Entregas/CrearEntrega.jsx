@@ -4,13 +4,12 @@ import { API_URL } from "../../../../config";
 import { useLocation, useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { jwtDecode } from "jwt-decode";
+import { getHoyLocal } from "../../../utils/dateUtils";
 
 const CrearEntrega = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const cliente = location.state?.cliente;
-
-  const hoy = new Date().toLocaleDateString("en-CA");
 
   const [formData, setFormData] = useState({
     usuarioAgenciaId: "",
@@ -18,7 +17,7 @@ const CrearEntrega = () => {
     origenId: "",
     entregaObsequioId: "",
     observacion: "",
-    fecha: hoy, // <-- FECHA
+    fecha: getHoyLocal(), // <-- FECHA
   });
 
   const [loading, setLoading] = useState(false);

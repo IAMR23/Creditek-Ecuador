@@ -83,7 +83,7 @@ export default function VentasPorUsuario() {
                   <td className="px-4 py-3">{v.usuarioAgencia.agencia.nombre}</td>
                   <td className="px-4 py-3">{v.origenId}</td>
                   <td className="px-4 py-3">
-                    {new Date(v.createdAt).toLocaleString()}
+                    {(v.createdAt)}
                   </td>
                   <td className="px-4 py-3">{v.validada ? "Sí" : "No"}</td>
                   <td className="px-4 py-3">

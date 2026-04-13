@@ -344,7 +344,7 @@ const CrearVentaCompleta = () => {
       observacion: "",
     }));
 
-    navigate("/");
+    navigate("/vendedor-panel");
 
   } catch (error) {
     console.error(error);

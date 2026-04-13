@@ -6,12 +6,13 @@ import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import { Eye } from "lucide-react";
 import { FaPen } from "react-icons/fa";
+import { getHoyLocal } from "../../../utils/dateUtils";
 
 export default function MisMetas() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState(getHoyLocal());
+  const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const navigate = useNavigate();
@@ -71,11 +72,6 @@ export default function MisMetas() {
     if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
   }, [fechaInicio, fechaFin]);
 
-  useEffect(() => {
-    const hoyLocal = new Date().toLocaleDateString("en-CA");
-    setFechaInicio(hoyLocal);
-    setFechaFin(hoyLocal);
-  }, []);
 
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [modalAbierto, setModalAbierto] = useState(false);

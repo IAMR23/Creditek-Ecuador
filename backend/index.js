@@ -169,6 +169,7 @@ connectDB()
     app.use("/api/usuario-agencia-permisos", require("./routes/usuarioAgenciaPermisoRoutes"));
     app.use("/api/traslados", require("./routes/trasladosRoutes"));
     app.use("/api/gestion", require("./routes/CallCenter/gestionRoutes"));
+    app.use("/api/gestion-comercial", require("./routes/Comercial/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));

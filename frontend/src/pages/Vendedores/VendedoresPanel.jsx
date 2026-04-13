@@ -25,7 +25,7 @@ function VendedorPanel() {
         console.error("Error al decodificar token", error);
         localStorage.removeItem("token");
       }
-    }else {
+    } else {
       navigate("/login");
     }
   }, []);
@@ -54,6 +54,17 @@ function VendedorPanel() {
           icon: <MdAnalytics />,
           path: "/mis-ventas",
         },
+          {
+          title: "Registrar Prospectos",
+          desc: "Crea nuevas gestiones",
+          icon: <MdSupportAgent />,
+          path: "/crear-gestion-comercial",
+        },          {
+          title: "Mis Prospectos",
+          desc: "Revisa tus gestiones",
+          icon: <MdSupportAgent />,
+          path: "/mis-gestiones-comerciales",
+        },
       ],
     },
     {
@@ -72,7 +83,7 @@ function VendedorPanel() {
           icon: <MdList />,
           path: "/mis-entregas",
         },
-     /*    {
+        /*    {
           title: "Crear Traslado",
           desc: "Traslados entre agencias",
           icon: <MdSwapHoriz />,
@@ -143,20 +154,17 @@ function VendedorPanel() {
         {title}
       </h2>
 
-      <p className="text-xs text-gray-500 mt-2">
-        {desc}
-      </p>
+      <p className="text-xs text-gray-500 mt-2">{desc}</p>
     </div>
   );
 
   return (
     <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
-      
       {/* Header */}
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-gray-900">
           Bienvenido {user?.usuario?.nombre || "Vendedor"}
-        </h1>     
+        </h1>
       </div>
 
       {/* Secciones */}
