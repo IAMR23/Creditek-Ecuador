@@ -324,7 +324,7 @@ exports.obtenerReporteGerencia = async ({
 
   return await Venta.findAll({
     where: whereVenta,
-    attributes: ["id", "fecha", "validada", "observacion", "activo"],
+    attributes: ["id", "fecha", "validada", "observacion", "activo" , "semana"],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -407,7 +407,7 @@ exports.formatearReporte = (ventas) => {
       filas.push({
         id: venta.id,
         activo: venta.activo,
-        semana: null,
+        semana: venta.semana || null,
         dia: obtenerDiaSemana(new Date(venta.fecha)),
         valorAcumulado: null,
 

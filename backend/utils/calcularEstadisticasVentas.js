@@ -12,7 +12,8 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     porTipo: {},
     porCierreCaja: {},
     porObservacion: {},
-    porTipoModelo: {}
+    porTipoModelo: {},
+    porSemana: {},
   };
 
   ventas.forEach((v) => {
@@ -21,12 +22,14 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
       stats.porVendedor[v.vendedor] = (stats.porVendedor[v.vendedor] || 0) + 1;
     }
 
-        if (v.tipo && v.modelo) {
+    if (v.semana) {
+      const key = `Semana ${v.semana}`;
+      stats.porSemana[key] = (stats.porSemana[key] || 0) + 1;
+    }
+    if (v.tipo && v.modelo) {
       const key = `${v.tipo}||${v.modelo}`; // separador seguro
       stats.porTipoModelo[key] = (stats.porTipoModelo[key] || 0) + 1;
     }
-
-
 
     // 🏢 Agencia / Local
     if (v.local) {

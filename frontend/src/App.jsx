@@ -84,9 +84,9 @@ import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
 import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
-import Powerbi from "./components/Powerbi";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
+import Powerbi from "./pages/Admin/PowerBi";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
