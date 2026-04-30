@@ -275,7 +275,6 @@ exports.obtenerReporteGerencia = async ({
     activo: true,
   };
 
-  // 🔹 Filtro por fecha
   if (fechaInicio && fechaFin) {
     whereVenta.fecha = {
       [Op.between]: [
@@ -295,36 +294,45 @@ exports.obtenerReporteGerencia = async ({
     whereDetalleVenta.cierreCaja = cierreCaja;
   }
 
+  const agenciasIds = normalizarIds(agenciaId);
+  const vendedoresIds = normalizarIds(vendedorId);
+
   const includeUsuarioAgencia = {
     model: UsuarioAgencia,
     as: "usuarioAgencia",
     attributes: ["id"],
-    required: !!agenciaId || !!vendedorId, // INNER JOIN si hay filtro
+    required: !!agenciasIds || !!vendedoresIds,
     include: [
       {
         model: Usuario,
         as: "usuario",
         attributes: ["id", "nombre"],
-        ...(vendedorId &&
-          vendedorId !== "todos" && {
-            where: { id: vendedorId },
-          }),
+        ...(vendedoresIds && {
+          where: {
+            id: {
+              [Op.in]: vendedoresIds,
+            },
+          },
+        }),
       },
       {
         model: Agencia,
         as: "agencia",
-        attributes: ["nombre"],
-        ...(agenciaId &&
-          agenciaId !== "todas" && {
-            where: { id: agenciaId },
-          }),
+        attributes: ["id", "nombre"],
+        ...(agenciasIds && {
+          where: {
+            id: {
+              [Op.in]: agenciasIds,
+            },
+          },
+        }),
       },
     ],
   };
 
   return await Venta.findAll({
     where: whereVenta,
-    attributes: ["id", "fecha", "validada", "observacion", "activo" , "semana"],
+    attributes: ["id", "fecha", "validada", "observacion", "activo", "semana"],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -352,7 +360,7 @@ exports.obtenerReporteGerencia = async ({
         ],
         ...(Object.keys(whereDetalleVenta).length > 0 && {
           where: whereDetalleVenta,
-          required: true, // INNER JOIN cuando filtras por cierreCaja
+          required: true,
         }),
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
@@ -377,6 +385,20 @@ exports.obtenerReporteGerencia = async ({
     ],
   });
 };
+
+const normalizarIds = (valor) => {
+  if (!valor || valor === "todas" || valor === "todos") return null;
+
+  if (Array.isArray(valor)) {
+    return valor.map(Number).filter(Boolean);
+  }
+
+  return String(valor)
+    .split(",")
+    .map(Number)
+    .filter(Boolean);
+};
+
 
 const obtenerDiaSemana = (fecha) => {
   const dias = [
