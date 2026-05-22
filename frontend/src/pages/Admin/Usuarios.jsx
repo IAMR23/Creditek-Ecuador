@@ -1,12 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
+
+const normalizeText = (value) => (value?.trim() ? value.trim() : null);
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const [filters, setFilters] = useState({
+    q: "",
+    rolId: "",
+    activo: "",
+  });
 
   const [form, setForm] = useState({
     nombre: "",
@@ -14,6 +22,11 @@ export default function Usuarios() {
     email: "",
     password: "",
     rolId: "",
+    fechaIngreso: "",
+    fechaSalida: "",
+    numeroCuenta: "",
+    direccion: "",
+    telefono: "",
   });
 
   const [editModal, setEditModal] = useState(false);
@@ -24,18 +37,28 @@ export default function Usuarios() {
     email: "",
     password: "",
     rolId: "",
+    fechaIngreso: "",
+    fechaSalida: "",
+    numeroCuenta: "",
+    direccion: "",
+    telefono: "",
     activo: true,
   });
 
   const abrirModalEditar = (usuario) => {
     setEditForm({
       id: usuario.id,
-      nombre: usuario.nombre,
-      cedula: usuario.cedula,
-      email: usuario.email,
+      nombre: usuario.nombre || "",
+      cedula: usuario.cedula || "",
+      email: usuario.email || "",
       password: "",
       rolId: usuario.rol?.id || "",
-      activo: usuario.activo,
+      fechaIngreso: usuario.fechaIngreso || "",
+      fechaSalida: usuario.fechaSalida || "",
+      numeroCuenta: usuario.numeroCuenta || "",
+      direccion: usuario.direccion || "",
+      telefono: usuario.telefono || "",
+      activo: !!usuario.activo,
     });
     setEditModal(true);
   };
@@ -49,6 +72,11 @@ export default function Usuarios() {
       email: "",
       password: "",
       rolId: "",
+      fechaIngreso: "",
+      fechaSalida: "",
+      numeroCuenta: "",
+      direccion: "",
+      telefono: "",
       activo: true,
     });
   };
@@ -78,6 +106,11 @@ export default function Usuarios() {
         email: form.email,
         password: form.password,
         rolId: form.rolId,
+        fechaIngreso: form.fechaIngreso || null,
+        fechaSalida: form.fechaSalida || null,
+        numeroCuenta: normalizeText(form.numeroCuenta),
+        direccion: normalizeText(form.direccion),
+        telefono: normalizeText(form.telefono),
       });
 
       setForm({
@@ -86,9 +119,14 @@ export default function Usuarios() {
         email: "",
         password: "",
         rolId: "",
+        fechaIngreso: "",
+        fechaSalida: "",
+        numeroCuenta: "",
+        direccion: "",
+        telefono: "",
       });
 
-      cargarUsuarios();
+      await cargarUsuarios();
 
       Swal.fire({
         icon: "success",
@@ -107,38 +145,6 @@ export default function Usuarios() {
     }
   };
 
-  const eliminarUsuario = async (id) => {
-    const confirm = await Swal.fire({
-      title: "¿Eliminar usuario?",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#16a34a",
-      cancelButtonColor: "#d33",
-      confirmButtonText: "Sí, eliminar",
-      cancelButtonText: "Cancelar",
-    });
-
-    if (!confirm.isConfirmed) return;
-
-    try {
-      await axios.delete(`${API_URL}/usuarios/${id}`);
-      cargarUsuarios();
-
-      Swal.fire({
-        icon: "success",
-        title: "Eliminado",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    } catch {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "No se pudo eliminar el usuario",
-      });
-    }
-  };
-
   const actualizarUsuario = async (e) => {
     e.preventDefault();
     try {
@@ -148,11 +154,16 @@ export default function Usuarios() {
         email: editForm.email,
         password: editForm.password || undefined,
         rolId: editForm.rolId,
+        fechaIngreso: editForm.fechaIngreso || null,
+        fechaSalida: editForm.fechaSalida || null,
+        numeroCuenta: normalizeText(editForm.numeroCuenta),
+        direccion: normalizeText(editForm.direccion),
+        telefono: normalizeText(editForm.telefono),
         activo: editForm.activo,
       });
 
       cerrarModalEditar();
-      cargarUsuarios();
+      await cargarUsuarios();
 
       Swal.fire({
         icon: "success",
@@ -164,199 +175,729 @@ export default function Usuarios() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: error.response?.data?.message || "No se pudo actualizar el usuario",
+        text:
+          error.response?.data?.message || "No se pudo actualizar el usuario",
       });
     }
   };
 
+  const usuariosFiltrados = useMemo(() => {
+    const q = filters.q.trim().toLowerCase();
+    return usuarios
+      .filter((u) => {
+        if (!q) return true;
+        const nombre = (u.nombre || "").toLowerCase();
+        const email = (u.email || "").toLowerCase();
+        const cedula = (u.cedula || "").toLowerCase();
+        const telefono = (u.telefono || "").toLowerCase();
+        return (
+          nombre.includes(q) ||
+          email.includes(q) ||
+          cedula.includes(q) ||
+          telefono.includes(q)
+        );
+      })
+      .filter((u) => {
+        if (!filters.rolId) return true;
+        return String(u.rol?.id || "") === String(filters.rolId);
+      })
+      .filter((u) => {
+        if (filters.activo === "") return true;
+        return u.activo === (filters.activo === "true");
+      });
+  }, [usuarios, filters]);
+
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold text-green-600 mb-6">Gestión de Usuarios</h1>
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* HEADER */}
+        <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-600">
+                Administración
+              </p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Gestión de Usuarios
+              </h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Controla usuarios, roles, accesos y estado operativo del
+                sistema.
+              </p>
+            </div>
 
-      <div className="bg-white shadow-md rounded-xl p-6 mb-8 border border-green-200">
-        <h2 className="text-xl font-semibold text-green-600 mb-4">Crear Usuario</h2>
-
-        <form onSubmit={crearUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            type="text"
-            placeholder="Nombre"
-            className="border p-3 rounded-lg"
-            value={form.nombre}
-            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Cédula"
-            className="border p-3 rounded-lg"
-            value={form.cedula}
-            onChange={(e) => setForm({ ...form, cedula: e.target.value })}
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            className="border p-3 rounded-lg"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            className="border p-3 rounded-lg"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-
-          <select
-            className="border p-3 rounded-lg"
-            value={form.rolId}
-            onChange={(e) => setForm({ ...form, rolId: e.target.value })}
-          >
-            <option value="">Rol</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.nombre}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="md:col-span-2 bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg font-semibold"
-          >
-            {loading ? "Creando..." : "Crear Usuario"}
-          </button>
-        </form>
-      </div>
-
-      <div className="bg-white shadow-md rounded-xl p-6 border border-green-200">
-        <h2 className="text-xl font-semibold text-green-600 mb-4">Lista de Usuarios</h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-green-500 text-white">
-                <th className="p-3 text-left">Nombre</th>
-                <th className="p-3 text-left">Cédula</th>
-                <th className="p-3 text-left">Email</th>
-                <th className="p-3 text-left">Rol</th>
-                <th className="p-3 text-left">Activo</th>
-                <th className="p-3 text-center">Acciones</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {usuarios.map((u) => (
-                <tr key={u.id} className="border-b hover:bg-green-100 transition-colors">
-                  <td className="p-3">{u.nombre}</td>
-                  <td className="p-3">{u.cedula}</td>
-                  <td className="p-3">{u.email}</td>
-                  <td className="p-3">{u.rol?.nombre || "Sin rol"}</td>
-                  <td className="p-3">{u.activo ? "Sí" : "No"}</td>
-
-                  <td className="p-3 text-center flex gap-2 justify-center">
-                    <button
-                      onClick={() => abrirModalEditar(u)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
-                    >
-                      Editar
-                    </button>
-
-                 {/*    <button
-                      onClick={() => eliminarUsuario(u.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg"
-                    >
-                      Eliminar
-                    </button> */}
-                  </td>
-                </tr>
-              ))}
-
-              {usuarios.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="p-4 text-center text-gray-500">
-                    No hay usuarios registrados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {editModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center">
-          <div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4 text-green-600">Editar Usuario</h2>
-
-            <form onSubmit={actualizarUsuario} className="grid grid-cols-1 gap-4">
-              <input
-                type="text"
-                className="border p-3 rounded-lg"
-                value={editForm.nombre}
-                onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
-              />
-              <input
-                type="text"
-                className="border p-3 rounded-lg"
-                value={editForm.cedula}
-                onChange={(e) => setEditForm({ ...editForm, cedula: e.target.value })}
-              />
-              <input
-                type="email"
-                className="border p-3 rounded-lg"
-                value={editForm.email}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              />
-              <input
-                type="password"
-                className="border p-3 rounded-lg"
-                value={editForm.password}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-              />
-
-              <select
-                className="border p-3 rounded-lg"
-                value={editForm.rolId}
-                onChange={(e) => setEditForm({ ...editForm, rolId: e.target.value })}
-              >
-                {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.nombre}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="border p-3 rounded-lg"
-                value={editForm.activo}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, activo: e.target.value === "true" })
-                }
-              >
-                <option value="true">Activo</option>
-                <option value="false">Inactivo</option>
-              </select>
-
-              <div className="flex justify-end gap-3 mt-4">
-                <button
-                  type="button"
-                  onClick={cerrarModalEditar}
-                  className="px-4 py-2 bg-gray-400 hover:bg-gray-500 text-white rounded-lg"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg"
-                >
-                  Guardar Cambios
-                </button>
+            <div className="grid grid-cols-2 gap-3 sm:flex">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-medium text-slate-500">Total</p>
+                <p className="text-xl font-bold text-slate-900">
+                  {usuarios.length}
+                </p>
               </div>
-            </form>
+
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-medium text-emerald-700">
+                  Mostrando
+                </p>
+                <p className="text-xl font-bold text-emerald-700">
+                  {usuariosFiltrados.length}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* FORM CREAR USUARIO */}
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <h2 className="text-lg font-bold text-slate-900">Crear Usuario</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Registra un nuevo usuario con su información personal y rol
+              asignado.
+            </p>
+          </div>
+
+          <form onSubmit={crearUsuario} className="p-6">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Nombre completo
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Juan Pérez"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.nombre}
+                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Cédula
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: 1723456789"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.cedula}
+                  onChange={(e) => setForm({ ...form, cedula: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Correo electrónico
+                </label>
+                <input
+                  type="email"
+                  placeholder="usuario@empresa.com"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Contraseña
+                </label>
+                <input
+                  type="password"
+                  placeholder="Contraseña de acceso"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm({ ...form, password: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Rol del usuario
+                </label>
+                <select
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.rolId}
+                  onChange={(e) => setForm({ ...form, rolId: e.target.value })}
+                >
+                  <option value="">Seleccionar rol</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Teléfono
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: 0999999999"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.telefono}
+                  onChange={(e) =>
+                    setForm({ ...form, telefono: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Número de cuenta
+                </label>
+                <input
+                  type="text"
+                  placeholder="Cuenta bancaria"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.numeroCuenta}
+                  onChange={(e) =>
+                    setForm({ ...form, numeroCuenta: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Fecha de ingreso
+                </label>
+                <input
+                  type="date"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.fechaIngreso}
+                  onChange={(e) =>
+                    setForm({ ...form, fechaIngreso: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Fecha de salida
+                </label>
+                <input
+                  type="date"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.fechaSalida}
+                  onChange={(e) =>
+                    setForm({ ...form, fechaSalida: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
+                <label className="text-sm font-semibold text-slate-700">
+                  Dirección
+                </label>
+                <textarea
+                  placeholder="Dirección domiciliaria"
+                  className="min-h-[90px] w-full resize-none rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.direccion}
+                  onChange={(e) =>
+                    setForm({ ...form, direccion: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-6  flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-black  text-white inline-flex items-center justify-center rounded-2xl  px-6 py-3 text-sm font-bold  shadow-sm transition "
+              >
+                {loading ? "Creando usuario..." : "Crear Usuario"}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* LISTA USUARIOS */}
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Lista de Usuarios
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Filtra, revisa y administra usuarios registrados.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-sm font-semibold text-slate-700">
+                  Buscar usuario
+                </label>
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, email, cédula o teléfono"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                  value={filters.q}
+                  onChange={(e) =>
+                    setFilters({ ...filters, q: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Filtrar por rol
+                </label>
+                <select
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                  value={filters.rolId}
+                  onChange={(e) =>
+                    setFilters({ ...filters, rolId: e.target.value })
+                  }
+                >
+                  <option value="">Todos los roles</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Estado
+                </label>
+                <select
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+                  value={filters.activo}
+                  onChange={(e) =>
+                    setFilters({ ...filters, activo: e.target.value })
+                  }
+                >
+                  <option value="">Todos</option>
+                  <option value="true">Activos</option>
+                  <option value="false">Inactivos</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setFilters({ q: "", rolId: "", activo: "" })}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          </div>
+
+          {/* DESKTOP TABLE */}
+          <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-6 py-4 text-left">Usuario</th>
+                  <th className="px-6 py-4 text-left">Cédula</th>
+                  <th className="px-6 py-4 text-left">Contacto</th>
+                  <th className="px-6 py-4 text-left">Rol</th>
+                  <th className="px-6 py-4 text-left">Ingreso</th>
+                  <th className="px-6 py-4 text-left">Estado</th>
+                  <th className="px-6 py-4 text-center">Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {usuariosFiltrados.map((u) => (
+                  <tr key={u.id} className="transition hover:bg-slate-50">
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {u.nombre}
+                        </p>
+                        <p className="text-sm text-slate-500">{u.email}</p>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 text-sm text-slate-700">
+                      {u.cedula}
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-slate-700">
+                        {u.telefono || "-"}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Cuenta: {u.numeroCuenta || "-"}
+                      </p>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                        {u.rol?.nombre || "Sin rol"}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-slate-700">
+                        {u.fechaIngreso || "-"}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Salida: {u.fechaSalida || "-"}
+                      </p>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          u.activo
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-rose-50 text-rose-700"
+                        }`}
+                      >
+                        {u.activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => abrirModalEditar(u)}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700"
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {usuariosFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-10 text-center">
+                      <p className="font-semibold text-slate-700">
+                        No se encontraron usuarios
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Ajusta los filtros para ver más resultados.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* MOBILE CARDS */}
+          <div className="grid grid-cols-1 gap-4 p-4 lg:hidden">
+            {usuariosFiltrados.map((u) => (
+              <div
+                key={u.id}
+                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900">{u.nombre}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{u.email}</p>
+                  </div>
+
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                      u.activo
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-rose-50 text-rose-700"
+                    }`}
+                  >
+                    {u.activo ? "Activo" : "Inactivo"}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      Cédula
+                    </p>
+                    <p className="font-medium text-slate-700">{u.cedula}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">Rol</p>
+                    <p className="font-medium text-slate-700">
+                      {u.rol?.nombre || "Sin rol"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      Teléfono
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      {u.telefono || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      Ingreso
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      {u.fechaIngreso || "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => abrirModalEditar(u)}
+                  className="mt-5 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:bg-slate-700"
+                >
+                  Editar usuario
+                </button>
+              </div>
+            ))}
+
+            {usuariosFiltrados.length === 0 && (
+              <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center">
+                <p className="font-semibold text-slate-700">
+                  No hay usuarios para los filtros actuales.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* MODAL EDITAR */}
+        {editModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
+            <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+              <div className="sticky top-0 z-10 border-b border-slate-100 bg-white px-6 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Editar Usuario
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Actualiza la información y permisos principales del
+                      usuario.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={cerrarModalEditar}
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={actualizarUsuario} className="p-6">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Nombre completo
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Nombre"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.nombre}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, nombre: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Cédula
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Cédula"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.cedula}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, cedula: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Correo electrónico
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.email}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, email: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Nueva contraseña
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Opcional"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.password}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, password: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Rol
+                    </label>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.rolId}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, rolId: e.target.value })
+                      }
+                    >
+                      <option value="">Seleccionar rol</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Teléfono
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Teléfono"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.telefono}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, telefono: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Número de cuenta
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Número de cuenta"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.numeroCuenta}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          numeroCuenta: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Estado
+                    </label>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.activo}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activo: e.target.value === "true",
+                        })
+                      }
+                    >
+                      <option value="true">Activo</option>
+                      <option value="false">Inactivo</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Fecha de ingreso
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.fechaIngreso}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          fechaIngreso: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Fecha de salida
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.fechaSalida}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          fechaSalida: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 md:col-span-2">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Dirección
+                    </label>
+                    <textarea
+                      placeholder="Dirección"
+                      className="min-h-[90px] w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.direccion}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          direccion: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={cerrarModalEditar}
+                    className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                  >
+                    Guardar Cambios
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

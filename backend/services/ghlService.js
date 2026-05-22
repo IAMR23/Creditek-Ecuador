@@ -72,22 +72,10 @@ async function enviarAGHL({
       field_value: ctwaClid,
     });
   }
-
-  const tags = ["WhatsApp Entrante"];
-
-  if (origen) {
-    tags.push(origen);
-  }
-
-  if (hayCampaniaDetectada) {
-    tags.push(campania);
-  }
-
   const payloadGHL = {
     locationId: GHL_LOCATION_ID,
     phone,
     source: "WhatsApp Stevo",
-    tags,
     customFields,
   };
 

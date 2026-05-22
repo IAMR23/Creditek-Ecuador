@@ -11,7 +11,18 @@ const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
 // ===========================
 router.post("/", async (req, res) => {
   try {
-    const { nombre, cedula, email, password, rolId } = req.body;
+    const {
+      nombre,
+      cedula,
+      email,
+      password,
+      rolId,
+      fechaIngreso,
+      fechaSalida,
+      numeroCuenta,
+      direccion,
+      telefono,
+    } = req.body;
 
     // Validar contraseña
     if (!passwordRegex.test(password)) {
@@ -50,6 +61,11 @@ router.post("/", async (req, res) => {
       email,
       password: hashedPassword,
       rolId,
+      fechaIngreso,
+      fechaSalida,
+      numeroCuenta,
+      direccion,
+      telefono,
       activo: true,
     });
 
@@ -103,7 +119,19 @@ router.get("/:id", async (req, res) => {
 // ===========================
 router.put("/:id", async (req, res) => {
   try {
-    const { nombre, cedula, email, password, rolId, activo } = req.body;
+    const {
+      nombre,
+      cedula,
+      email,
+      password,
+      rolId,
+      activo,
+      fechaIngreso,
+      fechaSalida,
+      numeroCuenta,
+      direccion,
+      telefono,
+    } = req.body;
     const usuario = await Usuario.findByPk(req.params.id);
 
     if (!usuario) {
@@ -145,6 +173,11 @@ router.put("/:id", async (req, res) => {
     if (nombre !== undefined) usuario.nombre = nombre;
     if (cedula !== undefined) usuario.cedula = cedula;
     if (activo !== undefined) usuario.activo = activo;
+    if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
+    if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalida;
+    if (numeroCuenta !== undefined) usuario.numeroCuenta = numeroCuenta;
+    if (direccion !== undefined) usuario.direccion = direccion;
+    if (telefono !== undefined) usuario.telefono = telefono;
 
     await usuario.save();
 

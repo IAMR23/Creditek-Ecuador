@@ -56,46 +56,119 @@ export default function Sidebar() {
       comercial: {
         title: "Gerencia",
         items: [
-          { label: "Metas Comerciales", icon: <BarChart3 size={20} />, path: "/metas-comerciales" },
-          { label: "Reporte Entregas", icon: <BarChart3 size={20} />, path: "/reporte-entregas" },
-          { label: "Revisar Gestiones", icon: <BarChart3 size={20} />, path: "/revision-gestiones" },
-          { label: "Revisar Gestiones Comerciales", icon: <BarChart3 size={20} />, path: "/revision-gestiones-comercial" },
-          { label: "Base de Datos Ventas", icon: <BarChart3 size={20} />, path: "/BDD-ventas" },
-          { label: "Bonos", icon: <LucideTicketPercent size={20} />, path: "/bonos" },
+          {
+            label: "Metas Comerciales",
+            icon: <BarChart3 size={20} />,
+            path: "/metas-comerciales",
+          },
+          {
+            label: "Reporte Entregas",
+            icon: <BarChart3 size={20} />,
+            path: "/reporte-entregas",
+          },
+          {
+            label: "Revisar Gestiones",
+            icon: <BarChart3 size={20} />,
+            path: "/revision-gestiones",
+          },
+          {
+            label: "Revisar Gestiones Comerciales",
+            icon: <BarChart3 size={20} />,
+            path: "/revision-gestiones-comercial",
+          },
+          {
+            label: "Base de Datos Ventas",
+            icon: <BarChart3 size={20} />,
+            path: "/BDD-ventas",
+          },
+          {
+            label: "Bonos",
+            icon: <LucideTicketPercent size={20} />,
+            path: "/bonos",
+          },
           { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
-          { label: "Power BI", icon: <BarChart3 size={20} />, path: "/powerbi" },
+          {
+            label: "Power BI",
+            icon: <BarChart3 size={20} />,
+            path: "/powerbi",
+          },
         ],
       },
+
+     /*  desarrolloOrganizacional: {
+        title: "Desarrollo Organizacional",
+        items: [
+          {
+            label: "Control de Asistencia",
+            icon: <BarChart3 size={20} />,
+            path: "/control-asistencia",
+          },
+
+          {
+            label: "Postulaciones",
+            icon: <FileText size={20} />,
+            path: "/postulaciones",
+          },
+        ],
+      }, */
 
       Marketing: {
         title: "Marketing",
         items: [
-          { label: "Copa Creditek 🏆", icon: <BarChart3 size={20} />, path: "/copa-creditek" },
-          { label: "Goleadores ⚽", icon: <BarChart3 size={20} />, path: "/goleadores" },
+          {
+            label: "Copa Creditek 🏆",
+            icon: <BarChart3 size={20} />,
+            path: "/copa-creditek",
+          },
+          {
+            label: "Goleadores ⚽",
+            icon: <BarChart3 size={20} />,
+            path: "/goleadores",
+          },
         ],
       },
 
       logistica: {
         title: "Logística",
         items: [
-          { label: "Entregas Pendientes", icon: <PackageCheck size={20} />, path: "/entregas-pendientes" },
-         /*  { label: "Entregas Repartidores", icon: <PackageCheck size={20} />, path: "/entregas-repartidores" }, */
-          { label: "Informe de Entregas", icon: <PackageCheck size={20} />, path: "/entregas-repartidores-tabla" },
+          {
+            label: "Entregas Pendientes",
+            icon: <PackageCheck size={20} />,
+            path: "/entregas-pendientes",
+          },
+          /*  { label: "Entregas Repartidores", icon: <PackageCheck size={20} />, path: "/entregas-repartidores" }, */
+          {
+            label: "Informe de Entregas",
+            icon: <PackageCheck size={20} />,
+            path: "/entregas-repartidores-tabla",
+          },
         ],
       },
 
       contabilidad: {
         title: "Contabilidad",
         items: [
-          { label: "Cierres de Caja", icon: <PackageCheck size={20} />, path: "/revisar-cajas" },
+          {
+            label: "Cierres de Caja",
+            icon: <PackageCheck size={20} />,
+            path: "/revisar-cajas",
+          },
         ],
       },
 
       Auditoria: {
         title: "Auditoría",
         items: [
-          { label: "Entregas Auditoría", icon: <PackageCheck size={20} />, path: "/entregas-auditoria" },
-          { label: "Ventas Auditoría", icon: <PackageCheck size={20} />, path: "/ventas-auditoria" },
+          {
+            label: "Entregas Auditoría",
+            icon: <PackageCheck size={20} />,
+            path: "/entregas-auditoria",
+          },
+          {
+            label: "Ventas Auditoría",
+            icon: <PackageCheck size={20} />,
+            path: "/ventas-auditoria",
+          },
         ],
       },
 
@@ -104,17 +177,36 @@ export default function Sidebar() {
         items: [
           { label: "Usuarios", icon: <Users size={20} />, path: "/usuarios" },
           { label: "Roles", icon: <ShieldCheck size={20} />, path: "/rol" },
-          { label: "Agencias", icon: <Building2 size={20} />, path: "/agencias" },
-          { label: "Postulaciones", icon: <FileText size={20} />, path: "/postulaciones" },
-          { label: "Asignar usuarios a agencias", icon: <UserPlus size={20} />, path: "/usuarios-agencias" },
-          { label: "Permisos", icon: <MdSecurity size={20} />, path: "/permisos" },
-          { label: "Asignar Permisos", icon: <MdSecurity size={20} />, path: "/asignar-permisos" },
+          {
+            label: "Agencias",
+            icon: <Building2 size={20} />,
+            path: "/agencias",
+          },
+          {
+            label: "Asignar usuarios a agencias",
+            icon: <UserPlus size={20} />,
+            path: "/usuarios-agencias",
+          },
+          {
+            label: "Permisos",
+            icon: <MdSecurity size={20} />,
+            path: "/permisos",
+          },
+          {
+            label: "Asignar Permisos",
+            icon: <MdSecurity size={20} />,
+            path: "/asignar-permisos",
+          },
           {
             label: "Asignar Permisos Usuario-Agencia",
             icon: <MdSecurity size={20} />,
             path: "/asignar-permisos-usuario-agencia",
           },
-          { label: "Usuarios con Permisos", icon: <MdSecurity size={20} />, path: "/usuarios-permisos" },
+          {
+            label: "Usuarios con Permisos",
+            icon: <MdSecurity size={20} />,
+            path: "/usuarios-permisos",
+          },
         ],
       },
 
@@ -123,20 +215,35 @@ export default function Sidebar() {
         items: [
           { label: "Marcas", icon: <Tag size={20} />, path: "/marcas" },
           { label: "Modelos", icon: <Layers size={20} />, path: "/modelos" },
-          { label: "Dispositivos", icon: <Factory size={20} />, path: "/dispositivos" },
-          { label: "Dispositivos-Marcas", icon: <Boxes size={20} />, path: "/dispositivosMarcas" },
-          { label: "Formas de Pago", icon: <CreditCard size={20} />, path: "/formas-pago" },
+          {
+            label: "Dispositivos",
+            icon: <Factory size={20} />,
+            path: "/dispositivos",
+          },
+          {
+            label: "Dispositivos-Marcas",
+            icon: <Boxes size={20} />,
+            path: "/dispositivosMarcas",
+          },
+          {
+            label: "Formas de Pago",
+            icon: <CreditCard size={20} />,
+            path: "/formas-pago",
+          },
           { label: "Origen", icon: <Tag size={20} />, path: "/origen" },
           { label: "Obsequios", icon: <Gift size={20} />, path: "/obsequios" },
-          { label: "Costo Histórico", icon: <ClipboardList size={20} />, path: "/costoHistorico" },
+          {
+            label: "Costo Histórico",
+            icon: <ClipboardList size={20} />,
+            path: "/costoHistorico",
+          },
         ],
       },
     }),
-    []
+    [],
   );
 
   const toggleMobileSidebar = () => setMobileOpen((prev) => !prev);
-
 
   const renderSection = (key, section) => {
     const isOpen = open[key];
@@ -188,7 +295,9 @@ export default function Sidebar() {
                   >
                     <span className="shrink-0">{item.icon}</span>
                     {!collapsed && (
-                      <span className="text-sm leading-tight">{item.label}</span>
+                      <span className="text-sm leading-tight">
+                        {item.label}
+                      </span>
                     )}
                   </Link>
                 </li>
@@ -203,18 +312,20 @@ export default function Sidebar() {
   return (
     <>
       {/* BOTÓN HAMBURGUESA SOLO EN MÓVIL */}
-<button
-  onClick={toggleMobileSidebar}
-  className="fixed left-4 top-4 z-[60] rounded-lg bg-neutral-900 p-2 text-white shadow-lg md:hidden"
->
-  <Menu size={22} />
-</button>
+      <button
+        onClick={toggleMobileSidebar}
+        className="fixed left-4 top-4 z-[60] rounded-lg bg-neutral-900 p-2 text-white shadow-lg md:hidden"
+      >
+        <Menu size={22} />
+      </button>
 
       {/* OVERLAY MÓVIL */}
       <div
         onClick={closeMobileSidebar}
         className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 md:hidden ${
-          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          mobileOpen
+            ? "opacity-100 pointer-events-auto"
+            : "opacity-0 pointer-events-none"
         }`}
       />
 
@@ -233,15 +344,24 @@ export default function Sidebar() {
         `}
       >
         {/* Header */}
-<div className="relative flex items-center justify-start px-4 py-4 border-b border-neutral-800 min-h-[64px]">          <h1 className="text-xl font-bold text-green-400">
-            {!collapsed ? <Link to="/dashboard" onClick={closeMobileSidebar}>Dashboard</Link> : "D"}
+        <div className="relative flex items-center justify-start px-4 py-4 border-b border-neutral-800 min-h-[64px]">
+          {" "}
+          <h1 className="text-xl font-bold text-green-400">
+            {!collapsed ? (
+              <Link to="/dashboard" onClick={closeMobileSidebar}>
+                Dashboard
+              </Link>
+            ) : (
+              "D"
+            )}
           </h1>
-
         </div>
 
         {/* contenido */}
         <div className="flex-1 overflow-y-auto px-2 py-4 md:px-3">
-          {Object.entries(sections).map(([key, section]) => renderSection(key, section))}
+          {Object.entries(sections).map(([key, section]) =>
+            renderSection(key, section),
+          )}
         </div>
       </aside>
     </>

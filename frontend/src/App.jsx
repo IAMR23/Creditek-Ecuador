@@ -87,6 +87,7 @@ import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 import Powerbi from "./pages/Admin/PowerBi";
+import ControlAsistencia from "./pages/DesarrolloOrganizacional/ControlAsistencia";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -318,6 +319,7 @@ useEffect(() => {
                 <Route path="revisar-cajas" element={<RevisarCaja />} />
                 <Route path="revisar-cajas2" element={<CierresCajaTabla />} />
                 <Route path="tasks" element={<TasksPage />} />
+                <Route path="control-asistencia" element={<ControlAsistencia />} />
               </Route>
 
               <Route path="logistica-panel" element={<LogisticaPanel />} />

@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --abs-bg: 248 250 252; /* slate-50 */
+    --abs-surface: 255 255 255;
+    --abs-border: 226 232 240; /* slate-200 */
+    --abs-ink: 2 6 23; /* slate-950 */
+    --abs-muted: 71 85 105; /* slate-600 */
+    --abs-accent: 249 115 22; /* orange-500 */
+  }
+
+  html {
+    font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+      Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  }
+
+  body {
+    color: rgb(var(--abs-ink));
+    background: rgb(var(--abs-bg));
+  }
+}

@@ -53,6 +53,31 @@ const Usuario = sequelize.define(
       },
     },
 
+    fechaIngreso: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+
+    fechaSalida: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+
+    numeroCuenta: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    direccion: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    telefono: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
