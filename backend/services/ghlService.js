@@ -8,10 +8,18 @@ async function enviarAGHL({
   message,
   origen,
   campania,
+
+  // Instancia actual del mensaje: gestión / extensión actual
   instancia,
+
+  // Instancia real de la pauta: solo viene cuando vieneDeAnuncio === true
+  instanciaPauta,
+
   sourceId,
   sourceUrl,
   ctwaClid,
+  isFromMe,
+  vieneDeAnuncio,
 }) {
   if (!GHL_TOKEN) {
     throw new Error("Falta GHL_TOKEN en el archivo .env");
@@ -43,15 +51,54 @@ async function enviarAGHL({
       key: "ultimo_mensaje_whatsapp",
       field_value: message || "",
     },
+    {
+      key: "tipo_ultimo_mensaje",
+      field_value: isFromMe ? "Asesor" : "Cliente",
+    },
   ];
 
-  if (hayCampaniaDetectada) {
+  /**
+   * Gestión actual.
+   * Este campo SÍ puede cambiar.
+   * Ejemplo:
+   * - Llegó por 7520
+   * - Luego lo gestiona 1413
+   * Entonces instancia_gestion puede pasar a 1413.
+   */
+  if (instancia) {
     customFields.push({
-      key: "campania_origen",
+      key: "instancia_gestion",
       field_value: instancia,
     });
   }
 
+  /**
+   * Origen real de pauta.
+   * Este campo NO debe cambiar por mensajes normales o respuestas del asesor.
+   * Solo se actualiza cuando el mensaje realmente trae datos de anuncio.
+   */
+  if (vieneDeAnuncio && instanciaPauta) {
+    customFields.push({
+      key: "campania_origen",
+      field_value: instanciaPauta,
+    });
+  }
+
+  /**
+   * Nombre de campaña detectada.
+   * Opcional, solo si tienes este custom field creado en GHL.
+   */
+  if (vieneDeAnuncio && hayCampaniaDetectada) {
+    customFields.push({
+      key: "nombre_campania_meta",
+      field_value: campania,
+    });
+  }
+
+  /**
+   * Datos Meta.
+   * Solo se mandan si existen.
+   */
   if (sourceId) {
     customFields.push({
       key: "meta_source_id",
@@ -72,12 +119,20 @@ async function enviarAGHL({
       field_value: ctwaClid,
     });
   }
+
   const payloadGHL = {
     locationId: GHL_LOCATION_ID,
     phone,
-    source: "WhatsApp Stevo",
+    source: vieneDeAnuncio
+      ? "WhatsApp Stevo - Meta Ads"
+      : isFromMe
+        ? "WhatsApp Stevo - Asesor"
+        : "WhatsApp Stevo - Cliente",
     customFields,
   };
+
+  console.log("📤 PAYLOAD GHL:");
+  console.dir(payloadGHL, { depth: null });
 
   const response = await axios.post(
     "https://services.leadconnectorhq.com/contacts/upsert",

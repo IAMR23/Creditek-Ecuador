@@ -7,10 +7,16 @@ async function recibirWebhookStevo(req, res) {
   try {
     const payload = req.body;
 
+    const info = payload?.data?.Info;
+    const sourceWebMsg = payload?.data?.SourceWebMsg;
+
+    const isFromMe = info?.IsFromMe === true;
+
     console.log("\n==============================");
     console.log("📩 WEBHOOK STEVO RECIBIDO");
     console.log("==============================\n");
 
+    console.log("📤 Es mensaje enviado por asesor:", isFromMe);
     console.dir(payload, { depth: null });
 
     const sourceId = findValueDeep(payload, [
@@ -19,38 +25,53 @@ async function recibirWebhookStevo(req, res) {
       "sourceID",
       "adId",
       "ad_id",
+      "SourceID",
+      "SourceId",
     ]);
 
     const sourceUrl = findValueDeep(payload, [
       "sourceUrl",
       "source_url",
       "sourceURL",
+      "SourceURL",
+      "SourceUrl",
     ]);
 
     const ctwaPayload = findValueDeep(payload, [
       "ctwaPayload",
       "ctwa_payload",
+      "CTWAPayload",
     ]);
 
     const ctwaClid = findValueDeep(payload, [
       "ctwaClid",
       "ctwa_clid",
+      "CTWAClid",
+      "ctwa_clid",
     ]);
 
-    const rawPhone = findValueDeep(payload, [
-      "remoteJid",
-      "from",
-      "sender",
-      "Sender",
-      "phone",
-      "number",
-    ]);
+    const rawPhone = isFromMe
+      ? info?.Chat ||
+        info?.RecipientAlt ||
+        findValueDeep(payload, ["Chat", "RecipientAlt"])
+      : findValueDeep(payload, [
+          "remoteJid",
+          "from",
+          "sender",
+          "Sender",
+          "phone",
+          "number",
+          "Chat",
+        ]);
 
     const rawMessage = findValueDeep(payload, [
       "conversation",
       "text",
       "body",
       "Body",
+      "caption",
+      "Caption",
+      "extendedTextMessage",
     ]);
 
     const phone = limpiarTelefono(rawPhone);
@@ -69,6 +90,37 @@ async function recibirWebhookStevo(req, res) {
       payload,
     });
 
+    /**
+     * Esta es la instancia actual del evento.
+     * Puede ser 7520, 1413, 8179, etc.
+     * Sirve para saber por dónde se está gestionando este mensaje.
+     */
+    const instanciaActual =
+      payload?.instanceName ||
+      payload?.data?.instanceName ||
+      campaniaInfo.instancia ||
+      "";
+
+    /**
+     * Esto define si el mensaje realmente viene desde una pauta/anuncio.
+     * No basta con tener instanceName, porque cualquier mensaje normal también tiene instanceName.
+     */
+    const vieneDeAnuncio =
+      Boolean(sourceWebMsg) ||
+      Boolean(sourceId) ||
+      Boolean(sourceUrl) ||
+      Boolean(ctwaClid) ||
+      Boolean(ctwaPayload) ||
+      campaniaInfo.origen === "Meta Ads" ||
+      campaniaInfo.origen === "Facebook Ads" ||
+      campaniaInfo.origen === "Instagram Ads";
+
+    /**
+     * Esta es la instancia que se debe usar para medir pauta.
+     * Solo se llena cuando realmente viene de anuncio.
+     */
+    const instanciaPauta = vieneDeAnuncio ? instanciaActual : "";
+
     console.log("\n🔥 DATOS PROCESADOS\n");
     console.log("📱 Teléfono:", phone);
     console.log("💬 Mensaje:", message);
@@ -76,8 +128,11 @@ async function recibirWebhookStevo(req, res) {
     console.log("🌐 Source URL:", sourceUrl);
     console.log("🧠 CTWA CLID:", ctwaClid);
     console.log("🎯 Origen:", campaniaInfo.origen);
-    console.log("🎯 Campaña:", campaniaInfo.campania);
-    console.log("🎯 Instancia:", campaniaInfo.instancia);
+    console.log("🎯 Campaña detectada:", campaniaInfo.campania);
+    console.log("📌 Instancia actual:", instanciaActual);
+    console.log("📣 Viene de anuncio:", vieneDeAnuncio);
+    console.log("🎯 Instancia pauta:", instanciaPauta);
+    console.log("📤 IsFromMe:", isFromMe);
 
     let ghlResponse = null;
 
@@ -87,10 +142,18 @@ async function recibirWebhookStevo(req, res) {
         message,
         origen: campaniaInfo.origen,
         campania: campaniaInfo.campania,
-        instancia: campaniaInfo.instancia,
+
+        // Gestión actual del mensaje
+        instancia: instanciaActual,
+
+        // Pauta real
+        instanciaPauta,
+        vieneDeAnuncio,
+
         sourceId,
         sourceUrl,
         ctwaClid,
+        isFromMe,
       });
 
       console.log("\n✅ CONTACTO ENVIADO A GHL");
@@ -116,7 +179,10 @@ async function recibirWebhookStevo(req, res) {
       decoded,
       origen: campaniaInfo.origen,
       campania: campaniaInfo.campania,
-      instancia: campaniaInfo.instancia,
+      instanciaActual,
+      instanciaPauta,
+      vieneDeAnuncio,
+      isFromMe,
       ghl: ghlResponse,
     });
   } catch (error) {
@@ -128,6 +194,7 @@ async function recibirWebhookStevo(req, res) {
     });
   }
 }
+
 
 module.exports = {
   recibirWebhookStevo,

@@ -45,10 +45,10 @@ app.get("/health", (_req, res) => res.json({ ok: true, app: "APOLO BUSINESS SOLU
 app.use("/bootstrap", bootstrapRoutes);
 app.use("/auth", authRoutes);
 
-app.use("/usuarios", auth, usuarioRoutes);
-app.use("/agencias", auth, agenciaRoutes);
-app.use("/usuario-agencia", auth, usuarioAgenciaRoutes);
-app.use("/rol", auth, rolRoutes);
+app.use("/usuarios",  auth, usuarioRoutes);
+app.use("/agencias",  auth , agenciaRoutes);
+app.use("/usuario-agencia",  auth , usuarioAgenciaRoutes);
+app.use("/rol", auth,  rolRoutes);
 
 connectDB()
   .then(() => {
