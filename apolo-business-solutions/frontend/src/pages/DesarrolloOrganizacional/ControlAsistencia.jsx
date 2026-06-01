@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import Swal from "sweetalert2"
 import { api } from "../../api/client"
 
-export const asistenciasMock = [
+/* const asistenciasMock = [
   {
     id: 1,
     nombre: "NUEVA AURORA",
@@ -514,7 +514,7 @@ export const asistenciasMock = [
     ],
   },
 ]
- 
+ */
 
 const ESTADOS = {
   asistencia: {
@@ -606,19 +606,7 @@ const cargarAsistencia = async () => {
   setLoading(true)
 
   try {
-    // MOCK TEMPORAL
-    // Cuando ya esté el backend, eliminas esta parte y dejas el axios.
-    let data = asistenciasMock
-
-    if (agenciaId) {
-      data = data.filter((agencia) => String(agencia.id) === String(agenciaId))
-    }
-
-    setAgencias(data)
-
-    /*
-    // BACKEND REAL DESPUÉS
-    const res = await axios.get(`${API_URL}/asistencias/agencias`, {
+    const res = await api.get("/asistencias/agencias", {
       params: {
         mes,
         agenciaId: agenciaId || undefined,
@@ -626,7 +614,6 @@ const cargarAsistencia = async () => {
     })
 
     setAgencias(res.data || [])
-    */
   } catch (err) {
     Swal.fire(
       "Error",
@@ -649,38 +636,33 @@ const guardarAsistencia = async ({
   estado,
 }) => {
   try {
-    // MOCK TEMPORAL
-    setAgencias((prev) =>
-      prev.map((agencia) => {
+    setAgencias((current) =>
+      current.map((agencia) => {
         if (agencia.id !== agenciaId) return agencia
 
         return {
           ...agencia,
-          usuarios: agencia.usuarios.map((usuario) => {
+          usuarios: (agencia.usuarios || []).map((usuario) => {
             if (usuario.usuarioAgenciaId !== usuarioAgenciaId) return usuario
 
-            return {
-              ...usuario,
-              asistencias: {
-                ...(usuario.asistencias || {}),
-                [fecha]: estado,
-              },
-            }
+            const asistencias = { ...(usuario.asistencias || {}) }
+            if (!estado || estado === "libre") delete asistencias[fecha]
+            else asistencias[fecha] = estado
+
+            return { ...usuario, asistencias }
           }),
         }
       })
     )
 
-    /*
-    // BACKEND REAL DESPUÉS
-    await axios.post(`${API_URL}/asistencias`, {
+    await api.post("/asistencias", {
       agenciaId,
       usuarioAgenciaId,
       fecha,
       estado,
     })
-    */
   } catch (err) {
+    await cargarAsistencia()
     Swal.fire(
       "Error",
       err.response?.data?.message || "No se pudo guardar la asistencia",

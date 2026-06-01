@@ -11,6 +11,7 @@ const usuarioAgenciaRoutes = require("./routes/UsuarioAgenciaRoutes");
 const rolRoutes = require("./routes/RolRoutes");
 const authRoutes = require("./routes/authRoutes");
 const bootstrapRoutes = require("./routes/bootstrapRoutes");
+const asistenciaRoutes = require("./routes/AsistenciaRoutes");
 const auth = require("./middleware/auth");
 const Rol = require("./models/Rol");
 const Agencia = require("./models/Agencia");
@@ -49,6 +50,7 @@ app.use("/usuarios",  auth, usuarioRoutes);
 app.use("/agencias",  auth , agenciaRoutes);
 app.use("/usuario-agencia",  auth , usuarioAgenciaRoutes);
 app.use("/rol", auth,  rolRoutes);
+app.use("/asistencias", auth, asistenciaRoutes);
 
 connectDB()
   .then(() => {

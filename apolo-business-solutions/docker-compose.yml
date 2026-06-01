@@ -8,10 +8,13 @@ services:
     image: jc21/nginx-proxy-manager:latest
     container_name: apolo_nginx_proxy_manager
     restart: always
+    profiles: ["proxy"]
+    env_file:
+      - .env
     ports:
-      - "80:80"
-      - "81:81"
-      - "443:443"
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:81:81"
+      - "127.0.0.1:443:443"
     volumes:
       - npm-data:/data
       - npm-letsencrypt:/etc/letsencrypt
@@ -26,15 +29,22 @@ services:
     image: postgres:17
     restart: always
     container_name: apolo_postgres_db
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apolo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-APOLO}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres-backups:/backups
     networks:
       - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # ------------------------------
   # 3. BACKEND (NODE)
@@ -44,25 +54,46 @@ services:
     restart: always
     container_name: apolo_backend
     ports:
-      - "${PORT:-5030}:5030"
+      - "127.0.0.1:${PORT:-5030}:${PORT:-5030}"
+    env_file:
+      - .env
     environment:
-      PORT: ${PORT}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASS: ${DB_PASS}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      WEB_CORS: ${WEB_CORS}
-      JWT_SECRET: ${JWT_SECRET}
-      DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      PORT: ${PORT:-5030}
+      DB_NAME: ${DB_NAME:-APOLO}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:-apolo_password}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      WEB_CORS: ${WEB_CORS:-http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:-apolo_secret}
+      DATABASE_URL: postgres://${DB_USER:-postgres}:${DB_PASS:-apolo_password}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-APOLO}
     networks:
       - internal
       - public-internet
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     dns:
       - 8.8.8.8
       - 1.1.1.1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const http=require('http');const port=process.env.PORT||5030;http.get('http://localhost:'+port+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   # ------------------------------
   # 4. FRONTEND (VITE, SERVIDO POR NGINX)
@@ -72,11 +103,19 @@ services:
     restart: always
     container_name: apolo_frontend
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     networks:
       - internal
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
 
 volumes:
   npm-data:
