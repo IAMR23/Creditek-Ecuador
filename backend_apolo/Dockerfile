@@ -8,5 +8,4 @@ RUN npm install
 COPY . .
 
 EXPOSE 5030
-CMD ["node", "index.js"]
-
+CMD ["npm", "start"]
