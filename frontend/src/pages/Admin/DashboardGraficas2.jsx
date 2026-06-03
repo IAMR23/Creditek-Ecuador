@@ -63,11 +63,19 @@ const tooltipStyle = {
   },
 };
 
-export default function DashboardGraficas2({ estadisticas }) {
+
+
+export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
   const [viabilidadSemana, setViabilidadSemana] = useState(12);
   const refSemana = useRef(null);
 
   if (!estadisticas) return null;
+
+  const dataSemana = toSemanaArray(
+    estadisticas.porSemana,
+    viabilidadSemana,
+    fechaInicio
+  );
 
   const copiarGrafico = async () => {
     if (!refSemana.current) return;
@@ -98,7 +106,6 @@ export default function DashboardGraficas2({ estadisticas }) {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-6">
-      {/* KPI */}
       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-1">
         <h3 className="text-gray-500 text-sm">Total Ventas</h3>
 
@@ -107,7 +114,6 @@ export default function DashboardGraficas2({ estadisticas }) {
         </p>
       </div>
 
-      {/* Ventas por Semana */}
       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 className="font-semibold">Ventas por Semana</h3>
@@ -131,7 +137,7 @@ export default function DashboardGraficas2({ estadisticas }) {
               onClick={copiarGrafico}
               className="bg-green-600 text-white px-4 py-2 rounded-lg"
             >
-              <FaCopy size={18}/>
+              <FaCopy size={18} />
             </button>
           </div>
         </div>
@@ -141,11 +147,7 @@ export default function DashboardGraficas2({ estadisticas }) {
 
           <ResponsiveContainer width="100%" height={700}>
             <LineChart
-              data={toSemanaArray(
-                estadisticas.porSemana,
-                viabilidadSemana,
-                "2026-01-01"
-              )}
+              data={dataSemana}
               margin={{ top: 20, right: 30, left: 70, bottom: 150 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />

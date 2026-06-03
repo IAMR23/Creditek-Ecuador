@@ -57,7 +57,7 @@ router.get("/ventas2", async (req, res) => {
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);
 
-    const estadisticas = calcularEstadisticasVentas(reporte);
+    const estadisticas = calcularEstadisticasVentas(reporte , fechaInicio);
  
     res.json({ ok: true, estadisticas});
   } catch (error) {

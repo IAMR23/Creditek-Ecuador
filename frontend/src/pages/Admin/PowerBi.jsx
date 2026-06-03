@@ -329,7 +329,10 @@ export default function Powerbi() {
       {loading ? (
         <p>Cargando...</p>
       ) : (
-        <DashboardGraficas2 estadisticas={estadisticas} />
+<DashboardGraficas2
+  estadisticas={estadisticas}
+  fechaInicio={fechaInicio}
+/>
       )}
     </div>
   );
