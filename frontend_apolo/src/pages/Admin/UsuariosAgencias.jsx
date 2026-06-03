@@ -154,6 +154,7 @@ export default function UsuariosAgencias() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-slate-950 text-white">
+                <th className="p-3 text-left">ID</th>
                 <th className="p-3 text-left">Usuario</th>
                 <th className="p-3 text-left">Agencia</th>
                 <th className="p-3 text-left">Activo</th>
@@ -166,6 +167,7 @@ export default function UsuariosAgencias() {
                 const a = rel.agencia || agenciasById.get(String(rel.agenciaId));
                 return (
                   <tr key={rel.id} className="border-b border-slate-200 hover:bg-white">
+                    <td className="p-3">{rel.id}</td>
                     <td className="p-3">
                       <div className="font-semibold text-slate-950">{u?.nombre || "-"}</div>
                       <div className="text-xs text-slate-500">{u?.email || ""}</div>

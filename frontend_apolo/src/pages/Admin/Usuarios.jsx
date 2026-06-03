@@ -80,14 +80,19 @@ export default function Usuarios() {
 
   const toggleAgenciaInList = (list, agenciaId) => {
     const id = String(agenciaId);
-    if (list.some((x) => String(x) === id)) return list.filter((x) => String(x) !== id);
+    if (list.some((x) => String(x) === id))
+      return list.filter((x) => String(x) !== id);
     return [...list, agenciaId];
   };
 
   const crearUsuario = async (e) => {
     e.preventDefault();
     if (!form.rolId) {
-      return Swal.fire({ icon: "warning", title: "Rol requerido", text: "Selecciona un rol." });
+      return Swal.fire({
+        icon: "warning",
+        title: "Rol requerido",
+        text: "Selecciona un rol.",
+      });
     }
     if (form.agenciasIds.length === 0) {
       return Swal.fire({
@@ -115,8 +120,12 @@ export default function Usuarios() {
       const userId = res.data?.id;
       await Promise.all(
         form.agenciasIds.map((agenciaId) =>
-          api.post("/usuario-agencia", { usuarioId: userId, agenciaId, activo: true })
-        )
+          api.post("/usuario-agencia", {
+            usuarioId: userId,
+            agenciaId,
+            activo: true,
+          }),
+        ),
       );
 
       setForm({
@@ -134,7 +143,12 @@ export default function Usuarios() {
       });
 
       await cargarTodo();
-      Swal.fire({ icon: "success", title: "Usuario creado", timer: 1300, showConfirmButton: false });
+      Swal.fire({
+        icon: "success",
+        title: "Usuario creado",
+        timer: 1300,
+        showConfirmButton: false,
+      });
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -185,7 +199,10 @@ export default function Usuarios() {
     });
   };
 
-  const sincronizarAgenciasUsuario = async (usuarioId, agenciasSeleccionadas) => {
+  const sincronizarAgenciasUsuario = async (
+    usuarioId,
+    agenciasSeleccionadas,
+  ) => {
     const actuales = (agenciasPorUsuario.get(usuarioId) || []).map((a) => ({
       agenciaId: a.id,
       usuarioAgenciaId: a.usuarioAgenciaId,
@@ -193,16 +210,24 @@ export default function Usuarios() {
 
     const selectedSet = new Set(agenciasSeleccionadas.map((id) => String(id)));
 
-    const toDisable = actuales.filter((x) => !selectedSet.has(String(x.agenciaId)));
+    const toDisable = actuales.filter(
+      (x) => !selectedSet.has(String(x.agenciaId)),
+    );
     const toKeep = actuales.filter((x) => selectedSet.has(String(x.agenciaId)));
     const currentSet = new Set(actuales.map((x) => String(x.agenciaId)));
-    const toCreate = agenciasSeleccionadas.filter((id) => !currentSet.has(String(id)));
+    const toCreate = agenciasSeleccionadas.filter(
+      (id) => !currentSet.has(String(id)),
+    );
 
     await Promise.all([
-      ...toDisable.map((x) => api.put(`/usuario-agencia/${x.usuarioAgenciaId}`, { activo: false })),
-      ...toKeep.map((x) => api.put(`/usuario-agencia/${x.usuarioAgenciaId}`, { activo: true })),
+      ...toDisable.map((x) =>
+        api.put(`/usuario-agencia/${x.usuarioAgenciaId}`, { activo: false }),
+      ),
+      ...toKeep.map((x) =>
+        api.put(`/usuario-agencia/${x.usuarioAgenciaId}`, { activo: true }),
+      ),
       ...toCreate.map((agenciaId) =>
-        api.post("/usuario-agencia", { usuarioId, agenciaId, activo: true })
+        api.post("/usuario-agencia", { usuarioId, agenciaId, activo: true }),
       ),
     ]);
   };
@@ -210,7 +235,11 @@ export default function Usuarios() {
   const actualizarUsuario = async (e) => {
     e.preventDefault();
     if (!editForm.rolId) {
-      return Swal.fire({ icon: "warning", title: "Rol requerido", text: "Selecciona un rol." });
+      return Swal.fire({
+        icon: "warning",
+        title: "Rol requerido",
+        text: "Selecciona un rol.",
+      });
     }
     if (editForm.agenciasIds.length === 0) {
       return Swal.fire({
@@ -239,12 +268,18 @@ export default function Usuarios() {
 
       cerrarModalEditar();
       await cargarTodo();
-      Swal.fire({ icon: "success", title: "Actualizado", timer: 1200, showConfirmButton: false });
+      Swal.fire({
+        icon: "success",
+        title: "Actualizado",
+        timer: 1200,
+        showConfirmButton: false,
+      });
     } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: error.response?.data?.message || "No se pudo actualizar el usuario",
+        text:
+          error.response?.data?.message || "No se pudo actualizar el usuario",
       });
     }
   };
@@ -259,7 +294,10 @@ export default function Usuarios() {
         const cedula = (u.cedula || "").toLowerCase();
         const telefono = (u.telefono || "").toLowerCase();
         return (
-          nombre.includes(q) || email.includes(q) || cedula.includes(q) || telefono.includes(q)
+          nombre.includes(q) ||
+          email.includes(q) ||
+          cedula.includes(q) ||
+          telefono.includes(q)
         );
       })
       .filter((u) => {
@@ -280,7 +318,9 @@ export default function Usuarios() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-7">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Usuarios</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
+          Usuarios
+        </h1>
         <p className="text-sm text-slate-500 mt-1">
           Mostrando {usuariosFiltrados.length} de {usuarios.length}
         </p>
@@ -297,85 +337,147 @@ export default function Usuarios() {
           <div className="hidden md:block h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
         </div>
 
-        <form onSubmit={crearUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            type="text"
-            placeholder="Nombre"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.nombre}
-            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="Cédula"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.cedula}
-            onChange={(e) => setForm({ ...form, cedula: e.target.value })}
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+        <form
+          onSubmit={crearUsuario}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        >
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Nombre
+            </label>
+            <input
+              type="text"
+              placeholder="Ingrese el nombre"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.nombre}
+              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            />
+          </div>
 
-          <select
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.rolId}
-            onChange={(e) => setForm({ ...form, rolId: e.target.value })}
-          >
-            <option value="">Rol</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.nombre}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Cédula
+            </label>
+            <input
+              type="text"
+              placeholder="Ingrese la cédula"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.cedula}
+              onChange={(e) => setForm({ ...form, cedula: e.target.value })}
+            />
+          </div>
 
-          <input
-            type="text"
-            placeholder="Teléfono"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.telefono}
-            onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-          />
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              placeholder="Ingrese el email"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
 
-          <input
-            type="text"
-            placeholder="Número de cuenta"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.numeroCuenta}
-            onChange={(e) => setForm({ ...form, numeroCuenta: e.target.value })}
-          />
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              placeholder="Ingrese la contraseña"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+          </div>
 
-          <input
-            type="date"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.fechaIngreso}
-            onChange={(e) => setForm({ ...form, fechaIngreso: e.target.value })}
-          />
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Rol
+            </label>
+            <select
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.rolId}
+              onChange={(e) => setForm({ ...form, rolId: e.target.value })}
+            >
+              <option value="">Seleccione un rol</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <input
-            type="date"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.fechaSalida}
-            onChange={(e) => setForm({ ...form, fechaSalida: e.target.value })}
-          />
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Teléfono
+            </label>
+            <input
+              type="text"
+              placeholder="Ingrese el teléfono"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.telefono}
+              onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+            />
+          </div>
 
-          <textarea
-            placeholder="Dirección"
-            className="border border-slate-200 bg-white p-3 rounded-xl md:col-span-2 min-h-[44px] outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.direccion}
-            onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-          />
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Número de cuenta
+            </label>
+            <input
+              type="text"
+              placeholder="Ingrese el número de cuenta"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.numeroCuenta}
+              onChange={(e) =>
+                setForm({ ...form, numeroCuenta: e.target.value })
+              }
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Fecha de ingreso
+            </label>
+            <input
+              type="date"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.fechaIngreso}
+              onChange={(e) =>
+                setForm({ ...form, fechaIngreso: e.target.value })
+              }
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Fecha de salida
+            </label>
+            <input
+              type="date"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.fechaSalida}
+              onChange={(e) =>
+                setForm({ ...form, fechaSalida: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Dirección
+            </label>
+            <textarea
+              placeholder="Ingrese la dirección"
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl min-h-[44px] outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.direccion}
+              onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+            />
+          </div>
 
           <div className="md:col-span-2 border border-slate-200 rounded-2xl p-4 bg-white">
             <div className="text-sm font-extrabold tracking-tight text-slate-950">
@@ -393,20 +495,30 @@ export default function Usuarios() {
                 >
                   <input
                     type="checkbox"
-                    checked={form.agenciasIds.some((id) => String(id) === String(a.id))}
+                    checked={form.agenciasIds.some(
+                      (id) => String(id) === String(a.id),
+                    )}
                     onChange={() =>
                       setForm({
                         ...form,
-                        agenciasIds: toggleAgenciaInList(form.agenciasIds, a.id),
+                        agenciasIds: toggleAgenciaInList(
+                          form.agenciasIds,
+                          a.id,
+                        ),
                       })
                     }
                   />
                   <div className="flex-1">
-                    <div className="text-sm font-semibold text-slate-900">{a.nombre}</div>
-                    <div className="text-xs text-slate-500">{a.ciudad || "-"}</div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      {a.nombre}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {a.ciudad || "-"}
+                    </div>
                   </div>
                 </label>
               ))}
+
               {agencias.length === 0 && (
                 <div className="text-sm text-slate-500">
                   No hay agencias. Crea una en “Agencias”.
@@ -430,53 +542,81 @@ export default function Usuarios() {
           <h2 className="text-lg font-bold text-slate-950">Lista</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <input
-              type="text"
-              placeholder="Buscar (nombre, email, cédula, teléfono)"
-              className="border border-slate-200 bg-white p-3 rounded-xl md:col-span-2 outline-none focus:ring-2 focus:ring-orange-200"
-              value={filters.q}
-              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-            />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Buscar
+              </label>
+              <input
+                type="text"
+                placeholder="Nombre, email, cédula o teléfono"
+                className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                value={filters.q}
+                onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+              />
+            </div>
 
-            <select
-              className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-              value={filters.rolId}
-              onChange={(e) => setFilters({ ...filters, rolId: e.target.value })}
-            >
-              <option value="">Todos los roles</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.nombre}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Rol
+              </label>
+              <select
+                className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                value={filters.rolId}
+                onChange={(e) =>
+                  setFilters({ ...filters, rolId: e.target.value })
+                }
+              >
+                <option value="">Todos los roles</option>
+                {roles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <select
-              className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-              value={filters.agenciaId}
-              onChange={(e) => setFilters({ ...filters, agenciaId: e.target.value })}
-            >
-              <option value="">Todas las agencias</option>
-              {agencias.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Agencia
+              </label>
+              <select
+                className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                value={filters.agenciaId}
+                onChange={(e) =>
+                  setFilters({ ...filters, agenciaId: e.target.value })
+                }
+              >
+                <option value="">Todas las agencias</option>
+                {agencias.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <select
-              className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-              value={filters.activo}
-              onChange={(e) => setFilters({ ...filters, activo: e.target.value })}
-            >
-              <option value="">Todos</option>
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-            </select>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">
+                Estado
+              </label>
+              <select
+                className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                value={filters.activo}
+                onChange={(e) =>
+                  setFilters({ ...filters, activo: e.target.value })
+                }
+              >
+                <option value="">Todos</option>
+                <option value="true">Activos</option>
+                <option value="false">Inactivos</option>
+              </select>
+            </div>
 
             <button
               type="button"
-              onClick={() => setFilters({ q: "", rolId: "", agenciaId: "", activo: "" })}
+              onClick={() =>
+                setFilters({ q: "", rolId: "", agenciaId: "", activo: "" })
+              }
               className="md:col-span-5 justify-self-start text-sm font-semibold text-slate-600 hover:text-slate-900"
             >
               Limpiar filtros
@@ -500,8 +640,12 @@ export default function Usuarios() {
             <tbody>
               {usuariosFiltrados.map((u) => {
                 const list = agenciasPorUsuario.get(u.id) || [];
+
                 return (
-                  <tr key={u.id} className="border-b border-slate-200 hover:bg-white">
+                  <tr
+                    key={u.id}
+                    className="border-b border-slate-200 hover:bg-white"
+                  >
                     <td className="p-3">{u.nombre}</td>
                     <td className="p-3">{u.email}</td>
                     <td className="p-3">{u.rol?.nombre || "-"}</td>
@@ -543,90 +687,167 @@ export default function Usuarios() {
               <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
             </div>
 
-            <form onSubmit={actualizarUsuario} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="Nombre"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.nombre}
-                onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })}
-              />
-              <input
-                type="text"
-                placeholder="Cédula"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.cedula}
-                onChange={(e) => setEditForm({ ...editForm, cedula: e.target.value })}
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.email}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              />
-              <input
-                type="password"
-                placeholder="Nueva contraseña (opcional)"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.password}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-              />
+            <form
+              onSubmit={actualizarUsuario}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            >
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Nombre
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ingrese el nombre"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.nombre}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, nombre: e.target.value })
+                  }
+                />
+              </div>
 
-              <select
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.rolId}
-                onChange={(e) => setEditForm({ ...editForm, rolId: e.target.value })}
-              >
-                <option value="">Rol</option>
-                {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.nombre}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Cédula
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ingrese la cédula"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.cedula}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, cedula: e.target.value })
+                  }
+                />
+              </div>
 
-              <input
-                type="text"
-                placeholder="Teléfono"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.telefono}
-                onChange={(e) => setEditForm({ ...editForm, telefono: e.target.value })}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  placeholder="Ingrese el email"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.email}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, email: e.target.value })
+                  }
+                />
+              </div>
 
-              <input
-                type="text"
-                placeholder="Número de cuenta"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.numeroCuenta}
-                onChange={(e) => setEditForm({ ...editForm, numeroCuenta: e.target.value })}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Nueva contraseña
+                </label>
+                <input
+                  type="password"
+                  placeholder="Opcional"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.password}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, password: e.target.value })
+                  }
+                />
+              </div>
 
-              <input
-                type="date"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.fechaIngreso}
-                onChange={(e) => setEditForm({ ...editForm, fechaIngreso: e.target.value })}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Rol
+                </label>
+                <select
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.rolId}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, rolId: e.target.value })
+                  }
+                >
+                  <option value="">Seleccione un rol</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <input
-                type="date"
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.fechaSalida}
-                onChange={(e) => setEditForm({ ...editForm, fechaSalida: e.target.value })}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Teléfono
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ingrese el teléfono"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.telefono}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, telefono: e.target.value })
+                  }
+                />
+              </div>
 
-              <textarea
-                placeholder="Dirección"
-                className="border border-slate-200 bg-white p-3 rounded-xl md:col-span-2 min-h-[44px] outline-none focus:ring-2 focus:ring-orange-200"
-                value={editForm.direccion}
-                onChange={(e) => setEditForm({ ...editForm, direccion: e.target.value })}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Número de cuenta
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ingrese el número de cuenta"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.numeroCuenta}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, numeroCuenta: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Fecha de ingreso
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.fechaIngreso}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, fechaIngreso: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Fecha de salida
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.fechaSalida}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, fechaSalida: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Dirección
+                </label>
+                <textarea
+                  placeholder="Ingrese la dirección"
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl min-h-[44px] outline-none focus:ring-2 focus:ring-orange-200"
+                  value={editForm.direccion}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, direccion: e.target.value })
+                  }
+                />
+              </div>
 
               <div className="md:col-span-2 border border-slate-200 rounded-2xl p-4 bg-white">
                 <div className="text-sm font-extrabold tracking-tight text-slate-950">
                   Agencias
                 </div>
+
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {agencias.map((a) => (
                     <label
@@ -635,31 +856,50 @@ export default function Usuarios() {
                     >
                       <input
                         type="checkbox"
-                        checked={editForm.agenciasIds.some((id) => String(id) === String(a.id))}
+                        checked={editForm.agenciasIds.some(
+                          (id) => String(id) === String(a.id),
+                        )}
                         onChange={() =>
                           setEditForm({
                             ...editForm,
-                            agenciasIds: toggleAgenciaInList(editForm.agenciasIds, a.id),
+                            agenciasIds: toggleAgenciaInList(
+                              editForm.agenciasIds,
+                              a.id,
+                            ),
                           })
                         }
                       />
                       <div className="flex-1">
-                        <div className="text-sm font-semibold text-slate-900">{a.nombre}</div>
-                        <div className="text-xs text-slate-500">{a.ciudad || "-"}</div>
+                                 <div className="text-sm font-semibold text-slate-900">
+                          {a.nombre}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {a.ciudad || "-"}
+                        </div>
                       </div>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <select
-                className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-                value={String(editForm.activo)}
-                onChange={(e) => setEditForm({ ...editForm, activo: e.target.value === "true" })}
-              >
-                <option value="true">Activo</option>
-                <option value="false">Inactivo</option>
-              </select>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                  Estado
+                </label>
+                <select
+                  className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+                  value={String(editForm.activo)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      activo: e.target.value === "true",
+                    })
+                  }
+                >
+                  <option value="true">Activo</option>
+                  <option value="false">Inactivo</option>
+                </select>
+              </div>
 
               <div className="flex justify-end gap-3 mt-2 md:col-span-2">
                 <button
@@ -669,6 +909,7 @@ export default function Usuarios() {
                 >
                   Cancelar
                 </button>
+
                 <button
                   type="submit"
                   className="px-4 py-2 bg-slate-950 hover:bg-slate-900 text-white rounded-xl font-semibold"
@@ -683,4 +924,3 @@ export default function Usuarios() {
     </div>
   );
 }
-

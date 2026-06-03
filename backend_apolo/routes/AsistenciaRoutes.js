@@ -14,6 +14,7 @@ const ESTADOS_VALIDOS = new Set([
   "falta_injustificada",
   "atraso",
   "salida",
+  "pago",
 ]);
 
 const parseMesToRange = (mes) => {

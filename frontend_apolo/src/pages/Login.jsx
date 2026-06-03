@@ -1,17 +1,26 @@
 import { useContext, useState } from "react";
 import Swal from "sweetalert2";
 import { AuthContext } from "../context/AuthContext";
+import { FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function Login() {
   const auth = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+  });
 
   const onSubmit = async (e) => {
     e.preventDefault();
+
     try {
       setLoading(true);
+
       await auth.login(form);
+
       Swal.fire({
         icon: "success",
         title: "Bienvenido",
@@ -38,12 +47,15 @@ export default function Login() {
             <span className="text-orange-500">B</span>
             <span className="text-black">S</span>
           </div>
+
           <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
         </div>
+
         <div className="mt-3">
           <h1 className="text-xl font-extrabold tracking-tight text-slate-950">
             Iniciar sesión
           </h1>
+
           <p className="text-sm text-slate-500 mt-1">
             Accede al panel de administración.
           </p>
@@ -55,15 +67,36 @@ export default function Login() {
             placeholder="Email"
             className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                email: e.target.value,
+              })
+            }
           />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
+
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Contraseña"
+              className="w-full border border-slate-200 bg-white p-3 pr-12 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+              value={form.password}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  password: e.target.value,
+                })
+              }
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-3 flex items-center text-slate-500 hover:text-orange-500"
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
+          </div>
 
           <button
             type="submit"
@@ -77,4 +110,3 @@ export default function Login() {
     </div>
   );
 }
-
