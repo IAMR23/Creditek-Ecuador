@@ -52,17 +52,13 @@ export function getDefaultRoute({ rol, permisos = [], activeMode }) {
 
   if (primeraRutaPermitida) return primeraRutaPermitida;
 
-  if (rolNormalizado === "admin") {
-    return "/asignar-permisos-usuario-agencia";
-  }
-
-  if (rolNormalizado === "repartidor") {
+  if (rolNormalizado === "repartidor" && permisosNormalizados.length > 0) {
     return "/logistica-panel";
   }
 
-  if (rolNormalizado === "vendedor" || puedeVender) {
+  if ((rolNormalizado === "vendedor" || puedeVender) && permisosNormalizados.length > 0) {
     return "/vendedor-panel";
   }
 
-  return "/unauthorized";
+  return "/recuperar-permisos";
 }

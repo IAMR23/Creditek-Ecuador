@@ -323,20 +323,47 @@ useEffect(() => {
                   element={protect(<EditarVentaCompletaAuditoria />, "/ventas-auditoria")}
                 />
                 <Route path="postulaciones" element={protect(<Postulaciones />, "/postulaciones")} />
-                <Route path="permisos" element={protect(<Permisos />, "/permisos", ["admin"])} />
-                <Route path="asignar-permisos" element={protect(<AsignarPermisos />, "/asignar-permisos", ["admin"])} />
+                <Route path="permisos" element={protect(<Permisos />, "/permisos")} />
+                <Route path="asignar-permisos" element={protect(<AsignarPermisos />, "/asignar-permisos")} />
                 <Route
                   path="asignar-permisos-usuario-agencia"
-                  element={protect(<AsignarPermisosUsuarioAgencia />, "/asignar-permisos-usuario-agencia", ["admin"])}
+                  element={protect(<AsignarPermisosUsuarioAgencia />, "/asignar-permisos-usuario-agencia")}
                 />
                 <Route
                   path="usuarios-permisos"
-                  element={protect(<UsuariosConPermisos />, "/usuarios-permisos", ["admin"])}
+                  element={protect(<UsuariosConPermisos />, "/usuarios-permisos")}
                 />
                 <Route path="revisar-cajas" element={protect(<RevisarCaja />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
                 <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />
               </Route>
+
+              <Route
+                path="recuperar-permisos"
+                element={
+                  <ProtectedRoute
+                    isAuthenticated={auth.isAuthenticated}
+                    rol={auth.rol}
+                    permisos={auth.permisos || []}
+                    permission={ROUTE_PERMISSIONS["/recuperar-permisos"]}
+                  >
+                    <AsignarPermisosUsuarioAgencia />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="recuperar-permisos/catalogo"
+                element={
+                  <ProtectedRoute
+                    isAuthenticated={auth.isAuthenticated}
+                    rol={auth.rol}
+                    permisos={auth.permisos || []}
+                    permission={ROUTE_PERMISSIONS["/recuperar-permisos"]}
+                  >
+                    <Permisos />
+                  </ProtectedRoute>
+                }
+              />
 
               <Route path="logistica-panel" element={protect(<LogisticaPanel />, "/logistica-panel")} />
               <Route path="vendedor-panel" element={protect(<VendedorPanel />, "/vendedor-panel")} />

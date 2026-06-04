@@ -63,6 +63,7 @@ export const SYSTEM_ROUTES = Object.entries(ROUTE_PERMISSIONS).map(
 );
 
 export const ADMIN_PERMISSION_PATHS = [
+  "/recuperar-permisos",
   "/permisos",
   "/asignar-permisos",
   "/asignar-permisos-usuario-agencia",
@@ -95,9 +96,8 @@ export const normalizePermissions = (permisos = []) =>
     ? permisos.map((permiso) => String(permiso).trim()).filter(Boolean)
     : [];
 
-export const hasRouteAccess = ({ rol, permisos = [], path, permission }) => {
-  const rolNormalizado = normalizeRole(rol);
-  if (rolNormalizado === "admin" && ADMIN_PERMISSION_PATHS.includes(path)) {
+export const hasRouteAccess = ({ permisos = [], path, permission }) => {
+  if (ADMIN_PERMISSION_PATHS.includes(path)) {
     return true;
   }
 
