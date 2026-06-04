@@ -53,7 +53,7 @@ export default function Sidebar() {
 
         <NavLink to="/control-asistencia" className={linkClass}>
           <ClipboardList size={18} />
-          Control de Asistencia
+          Movimientos de Terminales
         </NavLink>
       </nav>
 

@@ -33,6 +33,11 @@ const ESTADOS = {
     nombre: "Pago",
     className: "bg-cyan-500 text-black",
   },
+  capacitacion: {
+    label: "C",
+    nombre: "Capacitacion",
+    className: "bg-sky-300 text-black",
+  },
   libre: {
     label: "",
     nombre: "Libre",
@@ -72,6 +77,7 @@ const calcularResumen = (asistencias = {}) => {
     atrasos: 0,
     salidas: 0,
     pagos: 0,
+    capacitaciones: 0,
   }
 
   Object.values(asistencias).forEach((estado) => {
@@ -81,6 +87,7 @@ const calcularResumen = (asistencias = {}) => {
     if (estado === "atraso") resumen.atrasos += 1
     if (estado === "salida") resumen.salidas += 1
     if (estado === "pago") resumen.pagos += 1
+    if (estado === "capacitacion") resumen.capacitaciones += 1
   })
 
   return resumen
@@ -181,6 +188,7 @@ const guardarAsistencia = async ({
         atraso: "Atraso",
         salida: "Salida",
         pago: "Pago",
+        capacitacion: "Capacitacion",
         libre: "Libre / Sin registro",
       },
       showCancelButton: true,
@@ -259,41 +267,24 @@ const guardarAsistencia = async ({
           </button>
         </div>
 
-        <div className="overflow-auto max-h-[75vh]">
-          <table className="min-w-max w-full border-collapse text-sm">
+        <div className="overflow-auto max-h-[72vh]">
+          <table className="min-w-max w-full border-collapse text-xs leading-tight">
             <thead className="sticky top-0 z-20">
               <tr className="bg-yellow-300 text-black">
-                <th className="sticky left-0 z-30 bg-yellow-300 border border-black px-3 py-2 text-left min-w-[230px]">
+                <th className="sticky left-0 z-30 bg-yellow-300 border border-black px-2 py-1 text-left min-w-[180px]">
                   Usuario
                 </th>
 
                 {fechas.map((item) => (
                   <th
                     key={item.fecha}
-                    className="border border-black px-2 py-2 text-center min-w-[45px]"
+                    className="border border-black px-1 py-1 text-center min-w-[34px]"
                   >
                     {item.label}
                   </th>
                 ))}
 
-                <th className="border border-black px-3 py-2 text-center bg-gray-100 min-w-[90px]">
-                  Asist.
-                </th>
-                <th className="border border-black px-3 py-2 text-center bg-gray-100 min-w-[90px]">
-                  F. Just.
-                </th>
-                <th className="border border-black px-3 py-2 text-center bg-gray-100 min-w-[90px]">
-                  F. Injust.
-                </th>
-                <th className="border border-black px-3 py-2 text-center bg-gray-100 min-w-[90px]">
-                  Atrasos
-                </th>
-                <th className="border border-black px-3 py-2 text-center bg-gray-100 min-w-[90px]">
-                  Salidas
-                </th>
-                <th className="border border-black px-3 py-2 text-center bg-gray-100 min-w-[90px]">
-                  Pagos
-                </th>
+
               </tr>
             </thead>
 
@@ -322,7 +313,7 @@ const guardarAsistencia = async ({
                     <tr className="bg-yellow-400">
                       <td
                         colSpan={fechas.length + 7}
-                        className="border border-black px-3 py-2 font-bold uppercase"
+                        className="border border-black px-2 py-1 font-bold uppercase"
                       >
                         {agencia.nombre}
                       </td>
@@ -336,7 +327,7 @@ const guardarAsistencia = async ({
                           key={usuario.usuarioAgenciaId}
                           className="hover:bg-gray-50"
                         >
-                          <td className="sticky left-0 z-10 bg-white border border-black px-3 py-2 font-medium uppercase min-w-[230px]">
+                          <td className="sticky left-0 z-10 bg-white border border-black px-2 py-1 font-medium uppercase min-w-[180px] max-w-[180px] truncate">
                             {`${usuario.nombre || ""} ${
                               usuario.apellido || ""
                             }`.trim()}
@@ -359,7 +350,7 @@ const guardarAsistencia = async ({
                                   })
                                 }
                                 title={ESTADOS[estado]?.nombre}
-                                className={`border border-black text-center cursor-pointer h-8 min-w-[45px] font-bold ${
+                                className={`border border-black text-center cursor-pointer h-6 min-w-[34px] font-bold ${
                                   ESTADOS[estado]?.className ||
                                   "bg-green-400 text-black"
                                 }`}
@@ -369,24 +360,7 @@ const guardarAsistencia = async ({
                             )
                           })}
 
-                          <td className="border border-black text-center font-bold bg-gray-100">
-                            {resumen.asistencias}
-                          </td>
-                          <td className="border border-black text-center font-bold bg-gray-100">
-                            {resumen.faltasJustificadas}
-                          </td>
-                          <td className="border border-black text-center font-bold bg-gray-100">
-                            {resumen.faltasInjustificadas}
-                          </td>
-                          <td className="border border-black text-center font-bold bg-gray-100">
-                            {resumen.atrasos}
-                          </td>
-                          <td className="border border-black text-center font-bold bg-gray-100">
-                            {resumen.salidas}
-                          </td>
-                          <td className="border border-black text-center font-bold bg-gray-100">
-                            {resumen.pagos}
-                          </td>
+                   
                         </tr>
                       )
                     })}
@@ -397,11 +371,11 @@ const guardarAsistencia = async ({
           </table>
         </div>
 
-        <div className="p-4 border-t bg-gray-50 flex flex-wrap gap-3 text-xs">
+        <div className="p-3 border-t bg-gray-50 flex flex-wrap gap-3 text-xs">
           {Object.entries(ESTADOS).map(([key, item]) => (
             <div key={key} className="flex items-center gap-2">
               <span
-                className={`inline-flex w-8 h-6 items-center justify-center border font-bold ${item.className}`}
+                className={`inline-flex w-7 h-5 items-center justify-center border font-bold ${item.className}`}
               >
                 {item.label || "-"}
               </span>

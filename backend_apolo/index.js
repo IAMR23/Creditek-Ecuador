@@ -19,10 +19,23 @@ const Agencia = require("./models/Agencia");
 const app = express();
 const PORT = process.env.PORT || 5030;
 
+const parseCookies = (req, _res, next) => {
+  const header = req.headers.cookie || "";
+  req.cookies = header.split(";").reduce((cookies, item) => {
+    const [rawKey, ...rawValue] = item.trim().split("=");
+    if (!rawKey) return cookies;
+
+    cookies[rawKey] = decodeURIComponent(rawValue.join("=") || "");
+    return cookies;
+  }, {});
+  next();
+};
+
 const allowedOrigins = [
   process.env.WEB_CORS,
   /^https?:\/\/localhost:\d+$/,
-];
+  /^https?:\/\/127\.0\.0\.1:\d+$/,
+].filter(Boolean);
 
 app.use(
   cors({
@@ -41,6 +54,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use(parseCookies);
 
 app.get("/health", (_req, res) => res.json({ ok: true, app: "APOLO BUSINESS SOLUTIONS" }));
 app.use("/bootstrap", bootstrapRoutes);

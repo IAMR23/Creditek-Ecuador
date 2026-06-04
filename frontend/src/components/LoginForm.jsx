@@ -1,9 +1,11 @@
+/* eslint-disable react/prop-types */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/userServices";
 import { jwtDecode } from "jwt-decode";
 import { AiFillEye, AiFillEyeInvisible } from "react-icons/ai";
 import { useTaskNotifications } from "../context/TaskNotificationContext";
+import { getDefaultRoute } from "../utils/getDefaultRoute";
 
 function LoginForm({ setAuth }) {
   const [credentials, setCredentials] = useState({
@@ -41,6 +43,15 @@ function LoginForm({ setAuth }) {
         permisos,
         usuario: decodedToken.usuario || null,
       });
+
+      navigate(
+        getDefaultRoute({
+          rol,
+          permisos,
+          activeMode: localStorage.getItem("activeMode"),
+        }),
+        { replace: true },
+      );
     } catch (error) {
       setError(error.response?.data?.message || "Error al iniciar sesión.");
     } finally {

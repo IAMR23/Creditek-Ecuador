@@ -1,28 +1,68 @@
-// utils/getDefaultRoute.js
+import {
+  ROUTE_PERMISSIONS,
+  ROUTE_REDIRECT_ORDER,
+  hasRouteAccess,
+  normalizePermissions,
+  normalizeRole,
+} from "../config/routePermissions";
+
 export function getDefaultRoute({ rol, permisos = [], activeMode }) {
-  const rolNormalizado = rol?.trim().toLowerCase();
-  const puedeRepartir = permisos.includes("Repartir");
+  const rolNormalizado = normalizeRole(rol);
+  const permisosNormalizados = normalizePermissions(permisos);
+  const puedeRepartir = permisosNormalizados.includes("Repartir");
+  const puedeVender = permisosNormalizados.includes("Ventas");
 
-  // Si ya eligió modo, se respeta
-  if (activeMode === "ADMIN") return "/dashboard";
-  if (activeMode === "REPARTO") return "/logistica-panel";
-  if (activeMode === "VENTAS") return "/vendedor-panel";
-
-  // Si es admin y también puede repartir
-  if (rolNormalizado === "admin" && puedeRepartir) {
-    return "/seleccionar-modo";
-  }
-
-  // Admin puro
-  if (rolNormalizado === "admin") {
+  if (
+    activeMode === "ADMIN" &&
+    hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/dashboard" })
+  ) {
     return "/dashboard";
   }
 
-  // Repartidor
+  if (
+    activeMode === "REPARTO" &&
+    hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/logistica-panel" })
+  ) {
+    return "/logistica-panel";
+  }
+
+  if (
+    activeMode === "VENTAS" &&
+    hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/vendedor-panel" })
+  ) {
+    return "/vendedor-panel";
+  }
+
+  if (
+    rolNormalizado === "admin" &&
+    puedeRepartir &&
+    hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/dashboard" })
+  ) {
+    return "/seleccionar-modo";
+  }
+
+  const primeraRutaPermitida = ROUTE_REDIRECT_ORDER.find((path) =>
+    hasRouteAccess({
+      rol,
+      permisos: permisosNormalizados,
+      path,
+      permission: ROUTE_PERMISSIONS[path],
+    }),
+  );
+
+  if (primeraRutaPermitida) return primeraRutaPermitida;
+
+  if (rolNormalizado === "admin") {
+    return "/asignar-permisos-usuario-agencia";
+  }
+
   if (rolNormalizado === "repartidor") {
     return "/logistica-panel";
   }
 
-  // Default: vendedor
-  return "/vendedor-panel";
+  if (rolNormalizado === "vendedor" || puedeVender) {
+    return "/vendedor-panel";
+  }
+
+  return "/unauthorized";
 }

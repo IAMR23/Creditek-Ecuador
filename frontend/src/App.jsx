@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { jwtDecode } from "jwt-decode";
 
@@ -65,7 +65,6 @@ import UsuariosConPermisos from "./pages/Admin/UsuariosConPermisos";
 import SeleccionarModo from "./pages/SeleccionarModo";
 import MisEntregasPendientes from "./pages/Logistica/MisEntregasPendientes";
 import MisEntregasRealizadas from "./pages/Logistica/MisEntregasRealizadas";
-import EntregasRepartidores from "./pages/Logistica/EntregasRepartidores";
 import CrearTraslado from "./pages/Vendedores/CrearTraslado";
 import TrasladosList from "./pages/Vendedores/TrasladosList";
 import Gestion from "./pages/Vendedores/Gestion";
@@ -87,6 +86,8 @@ import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 import Powerbi from "./pages/Admin/PowerBi";
+import { ROUTE_PERMISSIONS } from "./config/routePermissions";
+import { getDefaultRoute } from "./utils/getDefaultRoute";
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -137,7 +138,7 @@ function App() {
     setAuth({
       isAuthenticated: true,
       rol: decodedToken.usuario?.rol?.nombre?.toLowerCase() || null,
-      permisos: decodedToken.usuario?.permisos || null,
+      permisos: decodedToken.usuario?.permisosAsignados || [],
       usuario: decodedToken.usuario || null,
     });
   } catch (error) {
@@ -196,6 +197,23 @@ useEffect(() => {
     );
   }
 
+  const protect = (element, path, allowedRoles = []) => (
+    <ProtectedRoute
+      isAuthenticated={auth.isAuthenticated}
+      rol={auth.rol}
+      permisos={auth.permisos || []}
+      allowedRoles={allowedRoles}
+      permission={ROUTE_PERMISSIONS[path]}
+    >
+      {element}
+    </ProtectedRoute>
+  );
+  const defaultRoute = getDefaultRoute({
+    rol: auth.rol,
+    permisos: auth.permisos || [],
+    activeMode: localStorage.getItem("activeMode"),
+  });
+
   return (
     <TaskNotificationProvider>
       <BrowserRouter>
@@ -222,36 +240,36 @@ useEffect(() => {
                   <ProtectedRoute
                     isAuthenticated={auth.isAuthenticated}
                     rol={auth.rol}
-                    allowedRoles={["admin"]}
+                    permisos={auth.permisos || []}
                   >
-                    <SidebarLayout />
+                    <SidebarLayout auth={auth} />
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Dashboard />} />
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="powerbi" element={<Powerbi />} />
-                <Route path="ventas-completas" element={<VentasCompletas />} />
-                <Route path="usuarios" element={<Usuarios />} />
-                <Route path="agencias" element={<Agencias />} />
+                <Route index element={<Navigate to={defaultRoute} replace />} />
+                <Route path="dashboard" element={protect(<Dashboard />, "/dashboard")} />
+                <Route path="powerbi" element={protect(<Powerbi />, "/powerbi")} />
+                <Route path="ventas-completas" element={protect(<VentasCompletas />, "/ventas-completas")} />
+                <Route path="usuarios" element={protect(<Usuarios />, "/usuarios")} />
+                <Route path="agencias" element={protect(<Agencias />, "/agencias")} />
                 <Route
                   path="usuarios-agencias"
-                  element={<UsuariosAgencias />}
+                  element={protect(<UsuariosAgencias />, "/usuarios-agencias")}
                 />
-                <Route path="entregas" element={<Entregas />} />
+                <Route path="entregas" element={protect(<Entregas />, "/entregas-pendientes")} />
                 <Route
                   path="revision-gestiones"
-                  element={<RevisionGestiones />}
+                  element={protect(<RevisionGestiones />, "/revision-gestiones")}
                 />
                              <Route
                   path="revision-gestiones-comercial"
-                  element={<RevisionGestionesComercial />}
+                  element={protect(<RevisionGestionesComercial />, "/revision-gestiones-comercial")}
                 />
-                <Route path="bdd-ventas" element={<BDDVentas />} />
-                <Route path="bonos" element={<Bonos />} />
+                <Route path="bdd-ventas" element={protect(<BDDVentas />, "/bdd-ventas")} />
+                <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
                 <Route
                   path="entrega-logistica/:id"
-                  element={<DetalleEntrega />}
+                  element={protect(<DetalleEntrega />, "/entregas-pendientes")}
                 />
    {/*              <Route
                   path="entregas-repartidores"
@@ -259,142 +277,154 @@ useEffect(() => {
                 /> */}
                 <Route
                   path="entregas-repartidores-tabla"
-                  element={<EntregasRepartidoresTabla />}
+                  element={protect(<EntregasRepartidoresTabla />, "/entregas-repartidores-tabla")}
                 />
-                <Route path="rol" element={<AdminUsuariosRoles />} />
-                <Route path="dispositivos" element={<Dispositivos />} />
-                <Route path="marcas" element={<MarcasAdmin />} />
-                <Route path="modelos" element={<ModelosAdmin />} />
+                <Route path="rol" element={protect(<AdminUsuariosRoles />, "/rol")} />
+                <Route path="dispositivos" element={protect(<Dispositivos />, "/dispositivos")} />
+                <Route path="marcas" element={protect(<MarcasAdmin />, "/marcas")} />
+                <Route path="modelos" element={protect(<ModelosAdmin />, "/modelos")} />
                 <Route
                   path="dispositivosMarcas"
-                  element={<AdminDispositivoMarca />}
+                  element={protect(<AdminDispositivoMarca />, "/dispositivosMarcas")}
                 />
                 <Route
                   path="costoHistorico"
-                  element={<AdminCostoHistorico />}
+                  element={protect(<AdminCostoHistorico />, "/costoHistorico")}
                 />
-                <Route path="formas-pago" element={<FormasPago />} />
-                <Route path="origen" element={<OrigenAdmin />} />
-                <Route path="obsequios" element={<AdminObsequios />} />
+                <Route path="formas-pago" element={protect(<FormasPago />, "/formas-pago")} />
+                <Route path="origen" element={protect(<OrigenAdmin />, "/origen")} />
+                <Route path="obsequios" element={protect(<AdminObsequios />, "/obsequios")} />
                 <Route
                   path="metas-comerciales"
-                  element={<MetasComerciales />}
+                  element={protect(<MetasComerciales />, "/metas-comerciales")}
                 />
                 <Route
                   path="entregas-pendientes"
-                  element={<EntregasPendientes />}
+                  element={protect(<EntregasPendientes />, "/entregas-pendientes")}
                 />
-                <Route path="estado-entrega" element={<EstadoEntrega />} />
-                <Route path="reporte-entregas" element={<ReporteEntregas />} />
+                <Route path="estado-entrega" element={protect(<EstadoEntrega />, "/estado-entrega")} />
+                <Route path="reporte-entregas" element={protect(<ReporteEntregas />, "/reporte-entregas")} />
                 <Route
                   path="copa-creditek"
-                  element={<MarketingVentasAgencia />}
+                  element={protect(<MarketingVentasAgencia />, "/copa-creditek")}
                 />
-                <Route path="goleadores" element={<Goleadores />} />
+                <Route path="goleadores" element={protect(<Goleadores />, "/goleadores")} />
                 <Route
                   path="entregas-auditoria"
-                  element={<EntregasAuditoria />}
+                  element={protect(<EntregasAuditoria />, "/entregas-auditoria")}
                 />
                 <Route
                   path="entregas-auditoria/:id"
-                  element={<EntregaAuditoria />}
+                  element={protect(<EntregaAuditoria />, "/entregas-auditoria")}
                 />
-                <Route path="ventas-auditoria" element={<VentasAuditoria />} />
+                <Route path="ventas-auditoria" element={protect(<VentasAuditoria />, "/ventas-auditoria")} />
                 <Route
                   path="ventas-auditoria/:id"
-                  element={<EditarVentaCompletaAuditoria />}
+                  element={protect(<EditarVentaCompletaAuditoria />, "/ventas-auditoria")}
                 />
-                <Route path="postulaciones" element={<Postulaciones />} />
-                <Route path="permisos" element={<Permisos />} />
-                <Route path="asignar-permisos" element={<AsignarPermisos />} />
+                <Route path="postulaciones" element={protect(<Postulaciones />, "/postulaciones")} />
+                <Route path="permisos" element={protect(<Permisos />, "/permisos", ["admin"])} />
+                <Route path="asignar-permisos" element={protect(<AsignarPermisos />, "/asignar-permisos", ["admin"])} />
                 <Route
                   path="asignar-permisos-usuario-agencia"
-                  element={<AsignarPermisosUsuarioAgencia />}
+                  element={protect(<AsignarPermisosUsuarioAgencia />, "/asignar-permisos-usuario-agencia", ["admin"])}
                 />
                 <Route
                   path="usuarios-permisos"
-                  element={<UsuariosConPermisos />}
+                  element={protect(<UsuariosConPermisos />, "/usuarios-permisos", ["admin"])}
                 />
-                <Route path="revisar-cajas" element={<RevisarCaja />} />
-                <Route path="revisar-cajas2" element={<CierresCajaTabla />} />
-                <Route path="tasks" element={<TasksPage />} />
+                <Route path="revisar-cajas" element={protect(<RevisarCaja />, "/revisar-cajas")} />
+                <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
+                <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />
               </Route>
 
-              <Route path="logistica-panel" element={<LogisticaPanel />} />
-              <Route path="vendedor-panel" element={<VendedorPanel />} />
+              <Route path="logistica-panel" element={protect(<LogisticaPanel />, "/logistica-panel")} />
+              <Route path="vendedor-panel" element={protect(<VendedorPanel />, "/vendedor-panel")} />
 
-              <Route path="mis-ventas" element={<MisVentas />} />
+              <Route path="mis-ventas" element={protect(<MisVentas />, "/mis-ventas")} />
               <Route
                 path="registrar-clientes-venta"
-                element={<FormularioClienteVenta />}
+                element={protect(<FormularioClienteVenta />, "/registrar-clientes-venta")}
               />
-              <Route path="crear-venta" element={<CrearVenta />} />
-              <Route path="ventas/:id/detalles" element={<DetalleVenta />} />
+              <Route path="crear-venta" element={protect(<CrearVenta />, "/crear-venta")} />
+              <Route path="ventas/:id/detalles" element={protect(<DetalleVenta />, "/crear-venta")} />
               <Route
                 path="ventas/:id/obsequios"
-                element={<VentaObsequioPage />}
+                element={protect(<VentaObsequioPage />, "/crear-venta")}
               />
-              <Route path="ventas/:id/validacion" element={<VentaFoto />} />
+              <Route path="ventas/:id/validacion" element={protect(<VentaFoto />, "/crear-venta")} />
 
               <Route
                 path="registrar-clientes-entrega"
-                element={<FormularioClienteEntrega />}
+                element={protect(<FormularioClienteEntrega />, "/crear-entrega-completa")}
               />
-              <Route path="crear-entrega" element={<CrearEntrega />} />
+              <Route path="crear-entrega" element={protect(<CrearEntrega />, "/crear-entrega-completa")} />
               <Route
                 path="entregas/:id/detalles"
-                element={<DetalleEntregaVendedores />}
+                element={protect(<DetalleEntregaVendedores />, "/crear-entrega-completa")}
               />
               <Route
                 path="entregas/:id/obsequios"
-                element={<EntregaObsequioPage />}
+                element={protect(<EntregaObsequioPage />, "/crear-entrega-completa")}
               />
               <Route
                 path="entregas/:id/pre-aprobacion"
-                element={<EntregaFoto />}
+                element={protect(<EntregaFoto />, "/crear-entrega-completa")}
               />
               <Route
                 path="entregas/:id/fecha-llamada"
-                element={<FotoFechaHoraEntrega />}
+                element={protect(<FotoFechaHoraEntrega />, "/crear-entrega-completa")}
               />
-              <Route path="mis-entregas" element={<MisEntregas />} />
+              <Route path="mis-entregas" element={protect(<MisEntregas />, "/mis-entregas")} />
               <Route
                 path="mis-entregas-pendientes"
-                element={<MisEntregasPendientes />}
+                element={protect(<MisEntregasPendientes />, "/mis-entregas-pendientes")}
               />
               <Route
                 path="mis-entregas-realizadas"
-                element={<MisEntregasRealizadas />}
+                element={protect(<MisEntregasRealizadas />, "/mis-entregas-realizadas")}
               />
 
-              <Route path="ventacompleta" element={<CrearVentaCompleta />} />
+              <Route path="ventacompleta" element={protect(<CrearVentaCompleta />, "/ventacompleta")} />
               <Route
                 path="editar-venta/:id"
-                element={<EditarVentaCompletaVendedores />}
+                element={protect(<EditarVentaCompletaVendedores />, "/ventacompleta")}
               />
 
               <Route
                 path="crear-entrega-completa"
-                element={<CrearEntregaCompleta />}
+                element={protect(<CrearEntregaCompleta />, "/crear-entrega-completa")}
               />
               <Route
                 path="editar-entrega/:id"
-                element={<EditarEntregaCompleta />}
+                element={protect(<EditarEntregaCompleta />, "/crear-entrega-completa")}
               />
 
                             <Route
                 path="crear-gestion-comercial"
-                element={<CrearGestionComercial />}
+                element={protect(<CrearGestionComercial />, "/crear-gestion-comercial")}
               />
 
-              <Route path="seleccionar-modo" element={<SeleccionarModo />} />
-              <Route path="crear-traslado" element={<CrearTraslado />} />
-              <Route path="mis-traslados" element={<TrasladosList />} />
-              <Route path="gestion" element={<Gestion />} />
-              <Route path="mis-gestiones" element={<MisGestiones />} />
-              <Route path="mis-gestiones-comerciales" element={<MisGestionesComerciales />} />
-              <Route path="mi-gestion/:id" element={<EditarGestion />} />
-              <Route path="caja" element={<Caja />} />
+              <Route path="seleccionar-modo" element={protect(<SeleccionarModo />, "/seleccionar-modo")} />
+              <Route path="crear-traslado" element={protect(<CrearTraslado />, "/crear-traslado")} />
+              <Route path="mis-traslados" element={protect(<TrasladosList />, "/mis-traslados")} />
+              <Route path="gestion" element={protect(<Gestion />, "/gestion")} />
+              <Route path="mis-gestiones" element={protect(<MisGestiones />, "/mis-gestiones")} />
+              <Route path="mis-gestiones-comerciales" element={protect(<MisGestionesComerciales />, "/mis-gestiones-comerciales")} />
+              <Route path="mi-gestion/:id" element={protect(<EditarGestion />, "/mis-gestiones")} />
+              <Route path="caja" element={protect(<Caja />, "/caja")} />
+
+              <Route
+                path="unauthorized"
+                element={
+                  <div className="mt-10 text-center">
+                    <h1 className="text-2xl font-bold">Sin acceso</h1>
+                    <p className="mt-2 text-gray-600">
+                      No tienes permisos para ingresar a esta seccion.
+                    </p>
+                  </div>
+                }
+              />
 
               <Route
                 path="*"

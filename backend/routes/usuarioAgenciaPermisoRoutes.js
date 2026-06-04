@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const permisoController = require("../controllers/permisoController");
 const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Permiso = require("../models/Permiso");
@@ -12,53 +11,59 @@ router.post("/", async (req, res) => {
   try {
     const { usuarioAgenciaId, permisoIds, fechaInicio, fechaFin } = req.body;
 
-    if (!Array.isArray(permisoIds) || permisoIds.length === 0) {
-      return res.status(400).json({ message: "Debe enviar al menos un permiso" });
+    if (!usuarioAgenciaId) {
+      return res.status(400).json({ message: "Debe enviar usuarioAgenciaId" });
     }
 
-    // Filtrar permisos que ya existen
-    const existentes = await UsuarioAgenciaPermiso.findAll({
-      where: { 
-        usuarioAgenciaId,
-        permisoId: permisoIds
-      }
+    if (!Array.isArray(permisoIds)) {
+      return res.status(400).json({ message: "Debe enviar permisoIds como arreglo" });
+    }
+
+    const usuarioAgencia = await UsuarioAgencia.findByPk(usuarioAgenciaId);
+    if (!usuarioAgencia) {
+      return res.status(404).json({ message: "Usuario-agencia no existe" });
+    }
+
+    const permisoIdsNormalizados = [...new Set(permisoIds.map(Number).filter(Boolean))];
+    const permisosValidos = await Permiso.findAll({
+      where: { id: permisoIdsNormalizados },
+      attributes: ["id"],
+    });
+    const permisosValidosIds = permisosValidos.map((p) => p.id);
+
+    await UsuarioAgenciaPermiso.destroy({
+      where: { usuarioAgenciaId },
     });
 
-    const existentesIds = existentes.map(e => e.permisoId);
-
-    const permisosNuevos = permisoIds.filter(id => !existentesIds.includes(id));
-
-    if (permisosNuevos.length === 0) {
-      return res.status(400).json({ message: "Los permisos ya están asignados" });
-    }
-
-    // Crear los permisos que no existían
-    const nuevos = await Promise.all(
-      permisosNuevos.map((permisoId) =>
-        UsuarioAgenciaPermiso.create({
+    if (permisosValidosIds.length > 0) {
+      await UsuarioAgenciaPermiso.bulkCreate(
+        permisosValidosIds.map((permisoId) => ({
           usuarioAgenciaId,
           permisoId,
           fechaInicio,
           fechaFin,
-        })
-      )
-    );
+          activo: true,
+        })),
+      );
+    }
 
     const permisosConInfo = await UsuarioAgenciaPermiso.findAll({
-      where: { id: nuevos.map((n) => n.id) },
+      where: { usuarioAgenciaId },
       include: [
         { model: UsuarioAgencia, as: "usuarioAgencia" },
         { model: Permiso, as: "permiso" },
       ],
     });
 
-    res.json(permisosConInfo);
+    res.json({
+      message: "Permisos actualizados correctamente",
+      permisos: permisosConInfo,
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Error creando permisos asignados" });
+    res.status(500).json({ message: "Error actualizando permisos asignados" });
   }
 });
-
 
 router.get("/usuarios-permisos", async (req, res) => {
   try {
@@ -77,7 +82,7 @@ router.get("/usuarios-permisos", async (req, res) => {
           model: UsuarioAgenciaPermiso,
           as: "permisosAsignados",
           where: { activo: true },
-          required: false, // ← importante: usuarios sin permisos igual salen
+          required: false,
           include: [
             {
               model: Permiso,
@@ -105,7 +110,7 @@ router.get("/usuarios-repartidores", async (req, res) => {
       where: { activo: true },
       include: [
         {
-          model: Usuario,  
+          model: Usuario,
           as: "usuario",
           where: { activo: true },
           attributes: ["id", "nombre", "email"],
@@ -113,7 +118,7 @@ router.get("/usuarios-repartidores", async (req, res) => {
             {
               model: Rol,
               as: "rol",
-              required: false, // ⬅️ puede no tener rol repartidor
+              required: false,
               attributes: ["id", "nombre"],
             },
           ],
@@ -126,7 +131,7 @@ router.get("/usuarios-repartidores", async (req, res) => {
         {
           model: UsuarioAgenciaPermiso,
           as: "permisosAsignados",
-          required: false, // ⬅️ puede no tener permisos
+          required: false,
           include: [
             {
               model: Permiso,
@@ -138,26 +143,20 @@ router.get("/usuarios-repartidores", async (req, res) => {
       ],
     });
 
-    // 🧠 FILTRO OR REAL
     const repartidores = relaciones.filter((ua) => {
-      const tieneRol =
-        ua.usuario?.rol?.nombre === "Repartidor";
-
-      const tienePermiso =
-        ua.permisosAsignados?.some(
-          (p) => p.permiso?.nombre === "Repartir"
-        );
+      const tieneRol = ua.usuario?.rol?.nombre === "Repartidor";
+      const tienePermiso = ua.permisosAsignados?.some(
+        (p) => p.permiso?.nombre === "Repartir",
+      );
 
       return tieneRol || tienePermiso;
     });
 
     res.json(repartidores);
   } catch (error) {
-    console.error("❌ Error obteniendo repartidores:", error);
+    console.error("Error obteniendo repartidores:", error);
     res.status(500).json({ message: "Error al obtener repartidores" });
   }
 });
-
-
 
 module.exports = router;

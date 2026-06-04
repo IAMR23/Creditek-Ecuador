@@ -25,6 +25,7 @@ const Asistencia = sequelize.define(
               "atraso",
               "salida",
               "pago",
+              "capacitacion",
             ],
           ],
           msg: "Estado de asistencia inválido.",

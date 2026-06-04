@@ -3,6 +3,8 @@ const router = express.Router();
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
+const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
+const Permiso = require("../models/Permiso");
 
 // ===========================
 // 🔹 CONTROLADORES
@@ -62,6 +64,13 @@ router.get("/activos", async (req, res) => {
       include: [
         { model: Usuario, as: "usuario" },
         { model: Agencia, as: "agencia" },
+        {
+          model: UsuarioAgenciaPermiso,
+          as: "permisosAsignados",
+          where: { activo: true },
+          required: false,
+          include: [{ model: Permiso, as: "permiso" }],
+        },
       ],
       order: [
         ["id", "ASC"], // opcional, orden por id

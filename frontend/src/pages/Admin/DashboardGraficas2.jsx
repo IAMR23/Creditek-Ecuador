@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useState, useRef } from "react";
 import html2canvas from "html2canvas";
 import {
@@ -14,6 +15,7 @@ import { FaCopy } from "react-icons/fa";
 const COLORS = {
   semana: "#4ADE80",
   viabilidad: "#dc2626",
+  gerencia: "#2563eb",
 };
 
 const crearFechaLocal = (fechaStr) => {
@@ -22,7 +24,11 @@ const crearFechaLocal = (fechaStr) => {
 };
 
 const getRangoSemana = (semana, fechaInicio) => {
-  const inicio = crearFechaLocal(fechaInicio);
+  const inicio = crearFechaLocal(fechaInicio) || new Date(new Date().getFullYear(), 0, 1);
+
+  while (inicio.getDay() !== 4) {
+    inicio.setDate(inicio.getDate() - 1);
+  }
 
   const start = new Date(inicio);
   start.setDate(start.getDate() + (semana - 1) * 7);
@@ -55,6 +61,24 @@ const toSemanaArray = (obj = {}, viabilidad = 100, fechaInicio = "2026-01-01") =
     })
     .sort((a, b) => a.semanaNumero - b.semanaNumero);
 
+const toIndicadorGerenciaArray = (obj = {}, fechaInicio = "2026-01-01") =>
+  Object.entries(obj)
+    .map(([name, value]) => {
+      const semanaNumero = Number(String(name).replace(/\D/g, ""));
+
+      return {
+        name: getRangoSemana(semanaNumero, fechaInicio),
+        margen: Number(value) || 0,
+        semanaNumero,
+      };
+    })
+    .sort((a, b) => a.semanaNumero - b.semanaNumero);
+
+const moneyFormatter = new Intl.NumberFormat("es-EC", {
+  style: "currency",
+  currency: "USD",
+});
+
 const tooltipStyle = {
   contentStyle: {
     borderRadius: "10px",
@@ -74,6 +98,10 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
   const dataSemana = toSemanaArray(
     estadisticas.porSemana,
     viabilidadSemana,
+    fechaInicio
+  );
+  const dataIndicadorGerencia = toIndicadorGerenciaArray(
+    estadisticas.indicadorGerenciaPorSemana,
     fechaInicio
   );
 
@@ -114,7 +142,15 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-1">
+        <h3 className="text-gray-500 text-sm">Indicador Gerencia</h3>
+
+        <p className="text-4xl font-bold text-blue-800">
+          {moneyFormatter.format(Number(estadisticas.indicadorGerenciaTotal) || 0)}
+        </p>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 className="font-semibold">Ventas por Semana</h3>
 
@@ -183,6 +219,43 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
             </LineChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+        <h3 className="font-semibold mb-4">Indicador Gerencia por Semana</h3>
+
+        <ResponsiveContainer width="100%" height={420}>
+          <LineChart
+            data={dataIndicadorGerencia}
+            margin={{ top: 20, right: 30, left: 70, bottom: 120 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+            <XAxis
+              dataKey="name"
+              angle={-50}
+              textAnchor="end"
+              interval={0}
+            />
+
+            <YAxis tickFormatter={(value) => moneyFormatter.format(value)} />
+
+            <Tooltip
+              {...tooltipStyle}
+              formatter={(value) => moneyFormatter.format(Number(value) || 0)}
+            />
+
+            <Line
+              type="linear"
+              dataKey="margen"
+              name="Indicador Gerencia"
+              stroke={COLORS.gerencia}
+              strokeWidth={3}
+              dot={{ r: 6 }}
+              activeDot={{ r: 10 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

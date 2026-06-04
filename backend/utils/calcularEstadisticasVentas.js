@@ -1,6 +1,7 @@
-exports.calcularEstadisticasVentas = (ventas = []) => {
+exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   const stats = {
     totalVentas: ventas.length,
+    indicadorGerenciaTotal: 0,
 
     porVendedor: {},
     porAgencia: {},
@@ -14,6 +15,7 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     porObservacion: {},
     porTipoModelo: {},
     porSemana: {},
+    indicadorGerenciaPorSemana: {},
   };
 
   const normalizarTexto = (valor) => {
@@ -55,16 +57,22 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     return `${year}-${month}-${day}`;
   };
 
-  // Semana comercial:
-  // Semana 1 = 01 enero al 07 enero
-  // Semana 2 = 08 enero al 14 enero
-  // Semana 3 = 15 enero al 21 enero
-  // etc.
+  const getInicioSemanaJueves = (fechaInput) => {
+    const fecha = crearFechaLocal(fechaInput) || new Date(new Date().getFullYear(), 0, 1);
+    const inicio = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+
+    while (inicio.getDay() !== 4) {
+      inicio.setDate(inicio.getDate() - 1);
+    }
+
+    return inicio;
+  };
+
+  const inicioSemanas = getInicioSemanaJueves(fechaInicio);
+
   const getSemanaComercial = (fechaInput) => {
     const fecha = crearFechaLocal(fechaInput);
     if (!fecha) return null;
-
-    const inicioAnio = new Date(fecha.getFullYear(), 0, 1);
 
     const fechaNormalizada = new Date(
       fecha.getFullYear(),
@@ -73,9 +81,9 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
     );
 
     const inicioNormalizado = new Date(
-      inicioAnio.getFullYear(),
-      inicioAnio.getMonth(),
-      inicioAnio.getDate()
+      inicioSemanas.getFullYear(),
+      inicioSemanas.getMonth(),
+      inicioSemanas.getDate()
     );
 
     const msPorDia = 24 * 60 * 60 * 1000;
@@ -95,13 +103,21 @@ exports.calcularEstadisticasVentas = (ventas = []) => {
       stats.porVendedor[vendedor] = (stats.porVendedor[vendedor] || 0) + 1;
     }
 
-    // Semana comercial calculada desde la fecha real
+    const margen = Number(v.margen) || 0;
+    stats.indicadorGerenciaTotal = Number(
+      (stats.indicadorGerenciaTotal + margen).toFixed(2)
+    );
+
+    // Semana comercial jueves-miercoles calculada desde la fecha real.
     if (v.fecha) {
       const semanaCalculada = getSemanaComercial(v.fecha);
 
       if (semanaCalculada) {
         const key = `Semana ${semanaCalculada}`;
         stats.porSemana[key] = (stats.porSemana[key] || 0) + 1;
+        stats.indicadorGerenciaPorSemana[key] = Number(
+          ((stats.indicadorGerenciaPorSemana[key] || 0) + margen).toFixed(2)
+        );
       }
     }
 

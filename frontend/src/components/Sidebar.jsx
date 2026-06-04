@@ -1,11 +1,9 @@
-import React, { useState, useMemo } from "react";
+/* eslint-disable react/prop-types */
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   ChevronDown,
-  PanelLeftClose,
-  PanelLeftOpen,
   Menu,
-  X,
   Users,
   Building2,
   UserPlus,
@@ -19,17 +17,18 @@ import {
   Factory,
   Gift,
   ShieldCheck,
-  FileText,
   LucideTicketPercent,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { FaTasks } from "react-icons/fa";
+import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
+import { getDefaultRoute } from "../utils/getDefaultRoute";
 
-export default function Sidebar() {
+export default function Sidebar({ auth }) {
   const location = useLocation();
 
   // Desktop
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed] = useState(false);
 
   // Mobile drawer
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -79,7 +78,7 @@ export default function Sidebar() {
           {
             label: "Base de Datos Ventas",
             icon: <BarChart3 size={20} />,
-            path: "/BDD-ventas",
+            path: "/bdd-ventas",
           },
           {
             label: "Bonos",
@@ -94,23 +93,6 @@ export default function Sidebar() {
           },
         ],
       },
-
-     /*  desarrolloOrganizacional: {
-        title: "Desarrollo Organizacional",
-        items: [
-          {
-            label: "Control de Asistencia",
-            icon: <BarChart3 size={20} />,
-            path: "/control-asistencia",
-          },
-
-          {
-            label: "Postulaciones",
-            icon: <FileText size={20} />,
-            path: "/postulaciones",
-          },
-        ],
-      }, */
 
       Marketing: {
         title: "Marketing",
@@ -244,6 +226,35 @@ export default function Sidebar() {
   );
 
   const toggleMobileSidebar = () => setMobileOpen((prev) => !prev);
+  const homePath = getDefaultRoute({
+    rol: auth?.rol,
+    permisos: auth?.permisos || [],
+    activeMode: localStorage.getItem("activeMode"),
+  });
+
+  const visibleSections = useMemo(() => {
+    const rol = auth?.rol;
+    const permisos = auth?.permisos || [];
+
+    return Object.fromEntries(
+      Object.entries(sections)
+        .map(([key, section]) => [
+          key,
+          {
+            ...section,
+            items: section.items.filter((item) =>
+              hasRouteAccess({
+                rol,
+                permisos,
+                path: item.path,
+                permission: ROUTE_PERMISSIONS[item.path],
+              }),
+            ),
+          },
+        ])
+        .filter(([, section]) => section.items.length > 0),
+    );
+  }, [auth?.permisos, auth?.rol, sections]);
 
   const renderSection = (key, section) => {
     const isOpen = open[key];
@@ -348,7 +359,7 @@ export default function Sidebar() {
           {" "}
           <h1 className="text-xl font-bold text-green-400">
             {!collapsed ? (
-              <Link to="/dashboard" onClick={closeMobileSidebar}>
+              <Link to={homePath} onClick={closeMobileSidebar}>
                 Dashboard
               </Link>
             ) : (
@@ -359,7 +370,7 @@ export default function Sidebar() {
 
         {/* contenido */}
         <div className="flex-1 overflow-y-auto px-2 py-4 md:px-3">
-          {Object.entries(sections).map(([key, section]) =>
+          {Object.entries(visibleSections).map(([key, section]) =>
             renderSection(key, section),
           )}
         </div>
