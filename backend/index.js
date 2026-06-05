@@ -150,6 +150,7 @@ connectDB()
     app.use("/ventas", VentaRoutes);
     app.use("/detalle-venta", DetalleVentaRoutes);
     app.use("/precio", precioDispositivoRoutes);
+    app.use("/precios-venta", require("./routes/precioVentaRoutes"));
     app.use("/obsequios", require("./routes/obsequioRoutes"));
     app.use("/venta-obsequios", require("./routes/ventaObsequioRoutes"));
     app.use("/uploads", express.static(path.join(__dirname, "uploads")));

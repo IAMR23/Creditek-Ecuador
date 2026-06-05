@@ -31,6 +31,34 @@ const connectDB = async () => {
       /* force : true */
       /*  force: false  */
     }); // alter: true actualiza tablas sin borrarlas
+
+    const queryInterface = sequelize.getQueryInterface();
+    const tables = await queryInterface.showAllTables();
+    if (tables.includes("precios_venta")) {
+      const columns = await queryInterface.describeTable("precios_venta");
+      if (!columns.modeloId) {
+        await queryInterface.addColumn("precios_venta", "modeloId", {
+          type: Sequelize.INTEGER,
+          allowNull: true,
+          references: {
+            model: "modelos",
+            key: "id",
+          },
+          onUpdate: "CASCADE",
+          onDelete: "SET NULL",
+        });
+      }
+    }
+
+    if (tables.includes("detalle_ventas")) {
+      const detalleColumns = await queryInterface.describeTable("detalle_ventas");
+      if (!detalleColumns.precioVenta) {
+        await queryInterface.addColumn("detalle_ventas", "precioVenta", {
+          type: Sequelize.DECIMAL(10, 2),
+          allowNull: true,
+        });
+      }
+    }
     console.log("✅ Tablas sincronizadas correctamente");  
   } catch (error) {
     console.error("❌ Error de conexión o sincronización:", error);

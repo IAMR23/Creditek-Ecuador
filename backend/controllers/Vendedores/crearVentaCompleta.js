@@ -147,7 +147,8 @@ const crearVentaCompleta = async (req, res) => {
       throw new Error("Modelo no existe");
     }
 
-    const precioVendedor = Number(detalle.precioVendedor) || 0;
+    const precioVenta = Number(detalle.precioVenta || detalle.precioVendedor) || 0;
+    const precioVendedor = Number(detalle.precioVendedor || precioVenta) || 0;
     const alcance = Number(detalle.alcance) || 0;
     const pvp1 = Number(modeloDB.PVP1) || 0;
     const costo = Number(costoDB.costo) || 0;
@@ -160,7 +161,8 @@ const crearVentaCompleta = async (req, res) => {
         ventaId: ventaDB.id,
         cantidad: detalle.cantidad,
         precioUnitario: detalle.precioUnitario,
-        precioVendedor: detalle.precioVendedor,
+        precioVendedor: precioVendedor,
+        precioVenta: precioVenta,
         margen: margen,
         costo: costoDB.costo,
         dispositivoMarcaId: detalle.dispositivoMarcaId,

@@ -1,4 +1,6 @@
 const Permiso = require("../models/Permiso");
+const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
+const { Op } = require("sequelize");
 
 exports.crearPermiso = async (req, res) => {
   try {
@@ -42,6 +44,25 @@ exports.sincronizarPermisos = async (req, res) => {
       await Permiso.findOrCreate({
         where: { nombre: permiso.nombre },
         defaults: permiso,
+      });
+    }
+
+    const nombresPermitidos = permisosNormalizados.map((p) => p.nombre);
+    const permisosObsoletos = await Permiso.findAll({
+      where: {
+        nombre: { [Op.notIn]: nombresPermitidos },
+        descripcion: { [Op.like]: "Acceso a /%" },
+      },
+      attributes: ["id"],
+    });
+    const permisoIdsObsoletos = permisosObsoletos.map((p) => p.id);
+
+    if (permisoIdsObsoletos.length > 0) {
+      await UsuarioAgenciaPermiso.destroy({
+        where: { permisoId: permisoIdsObsoletos },
+      });
+      await Permiso.destroy({
+        where: { id: permisoIdsObsoletos },
       });
     }
 

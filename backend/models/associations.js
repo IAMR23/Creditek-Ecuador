@@ -31,6 +31,7 @@ const Denominacion = require('./CierreCaja/Denominacion');
 const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const Task = require('./Task');
 const GestionComercial = require('./GestionComercial');
+const PrecioVenta = require('./PrecioVenta');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
@@ -78,6 +79,9 @@ Marca.hasMany(DispositivoMarca, { foreignKey: "marcaId", as: "marcasDispositivos
 
 CostoHistorico.belongsTo(Modelo, { foreignKey: "modeloId", as: "modelo" });
 Modelo.hasMany(CostoHistorico, { foreignKey: "modeloId", as: "costosHistoricos" });
+
+PrecioVenta.belongsTo(Modelo, { foreignKey: "modeloId", as: "modelo" });
+Modelo.hasMany(PrecioVenta, { foreignKey: "modeloId", as: "preciosVenta" });
 
 // -------------------- Venta --------------------
 Venta.belongsTo(Cliente, { foreignKey: 'clienteId', as: 'cliente' });

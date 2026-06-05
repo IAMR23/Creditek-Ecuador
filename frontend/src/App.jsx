@@ -86,6 +86,7 @@ import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 import Powerbi from "./pages/Admin/PowerBi";
+import PreciosVenta from "./pages/Admin/PreciosVenta";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
 function App() {
@@ -256,7 +257,7 @@ useEffect(() => {
                   path="usuarios-agencias"
                   element={protect(<UsuariosAgencias />, "/usuarios-agencias")}
                 />
-                <Route path="entregas" element={protect(<Entregas />, "/entregas-pendientes")} />
+                <Route path="entregas" element={protect(<Entregas />)} />
                 <Route
                   path="revision-gestiones"
                   element={protect(<RevisionGestiones />, "/revision-gestiones")}
@@ -269,7 +270,7 @@ useEffect(() => {
                 <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
                 <Route
                   path="entrega-logistica/:id"
-                  element={protect(<DetalleEntrega />, "/entregas-pendientes")}
+                  element={protect(<DetalleEntrega />)}
                 />
    {/*              <Route
                   path="entregas-repartidores"
@@ -290,6 +291,10 @@ useEffect(() => {
                 <Route
                   path="costoHistorico"
                   element={protect(<AdminCostoHistorico />, "/costoHistorico")}
+                />
+                <Route
+                  path="precios-venta"
+                  element={protect(<PreciosVenta />, "/precios-venta")}
                 />
                 <Route path="formas-pago" element={protect(<FormasPago />, "/formas-pago")} />
                 <Route path="origen" element={protect(<OrigenAdmin />, "/origen")} />
@@ -315,12 +320,12 @@ useEffect(() => {
                 />
                 <Route
                   path="entregas-auditoria/:id"
-                  element={protect(<EntregaAuditoria />, "/entregas-auditoria")}
+                  element={protect(<EntregaAuditoria />)}
                 />
                 <Route path="ventas-auditoria" element={protect(<VentasAuditoria />, "/ventas-auditoria")} />
                 <Route
                   path="ventas-auditoria/:id"
-                  element={protect(<EditarVentaCompletaAuditoria />, "/ventas-auditoria")}
+                  element={protect(<EditarVentaCompletaAuditoria />)}
                 />
                 <Route path="postulaciones" element={protect(<Postulaciones />, "/postulaciones")} />
                 <Route path="permisos" element={protect(<Permisos />, "/permisos")} />

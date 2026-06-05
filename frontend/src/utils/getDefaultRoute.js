@@ -12,6 +12,10 @@ export function getDefaultRoute({ rol, permisos = [], activeMode }) {
   const puedeRepartir = permisosNormalizados.includes("Repartir");
   const puedeVender = permisosNormalizados.includes("Ventas");
 
+  if (rolNormalizado === "vendedor") {
+    return "/vendedor-panel";
+  }
+
   if (
     activeMode === "ADMIN" &&
     hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/dashboard" })

@@ -7,6 +7,43 @@ import imageCompression from "browser-image-compression";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye } from "lucide-react";
 import { FaPen } from "react-icons/fa";
+import { socket } from "../../socket/socket";
+
+const normalizeText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+const normalizeMoneyValue = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw || /^[a-z]/i.test(raw)) return "";
+
+  const clean = raw
+    .replace(/\$/g, "")
+    .replace(/\s/g, "")
+    .replace(",", ".");
+
+  const number = Number(clean);
+  return Number.isFinite(number) ? number.toFixed(2) : "";
+};
+
+const isCreditoDirecto = (formaPago) =>
+  normalizeText(formaPago?.nombre).includes("credito directo");
+
+const getPrecioVentaPorFormaPago = (precioVenta, formaPago) => {
+  const forma = normalizeText(formaPago?.nombre);
+
+  if (!precioVenta || !forma || forma.includes("credito directo")) return "";
+  if (forma.includes("tar")) return normalizeMoneyValue(precioVenta.pvpTarjetaCredito);
+  if (forma.includes("efectivo") || forma.includes("transfer")) {
+    return normalizeMoneyValue(precioVenta.pvpContado);
+  }
+  if (forma.includes("credito")) return normalizeMoneyValue(precioVenta.pvpCredito);
+
+  return "";
+};
 
 const CrearVentaCompleta = () => {
   const [loading, setLoading] = useState(false);
@@ -16,6 +53,7 @@ const CrearVentaCompleta = () => {
   const [dispositivoMarcas, setDispositivoMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [formasPago, setFormasPago] = useState([]);
+  const [precioVentaCatalogo, setPrecioVentaCatalogo] = useState(null);
 
   const [foto, setFoto] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -74,6 +112,7 @@ const CrearVentaCompleta = () => {
   const [detalle, setDetalle] = useState({
     cantidad: 1,
     precioUnitario: "",
+    precioVenta: "",
     precioVendedor: "",
     dispositivoMarcaId: "",
     modeloId: "",
@@ -123,6 +162,59 @@ const CrearVentaCompleta = () => {
     fetchPrecio();
   }, [detalle.modeloId, detalle.formaPagoId]);
 
+  const fetchPrecioVentaModelo = async (modeloId) => {
+    if (!modeloId) {
+      setPrecioVentaCatalogo(null);
+      return;
+    }
+
+    try {
+      const res = await axios.get(`${API_URL}/precios-venta/modelo/${modeloId}`);
+      setPrecioVentaCatalogo(res.data);
+    } catch (err) {
+      console.error(err);
+      setPrecioVentaCatalogo(null);
+      setDetalle((prev) => {
+        if (isCreditoDirecto(formaPagoSeleccionada)) return prev;
+        return { ...prev, precioVenta: "" };
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchPrecioVentaModelo(detalle.modeloId);
+  }, [detalle.modeloId]);
+
+  useEffect(() => {
+    const precioCalculado = getPrecioVentaPorFormaPago(
+      precioVentaCatalogo,
+      formaPagoSeleccionada,
+    );
+
+    if (!detalle.formaPagoId || isCreditoDirecto(formaPagoSeleccionada)) {
+      return;
+    }
+
+    setDetalle((prev) => ({
+      ...prev,
+      precioVenta: precioCalculado,
+    }));
+  }, [detalle.formaPagoId, formaPagoSeleccionada, precioVentaCatalogo]);
+
+  useEffect(() => {
+    const handlePreciosVentaUpdated = () => {
+      if (detalle.modeloId) {
+        fetchPrecioVentaModelo(detalle.modeloId);
+      }
+    };
+
+    socket.on("preciosVenta:updated", handlePreciosVentaUpdated);
+
+    return () => {
+      socket.off("preciosVenta:updated", handlePreciosVentaUpdated);
+    };
+  }, [detalle.modeloId]);
+
   /* ===============================
      MODELOS
   =============================== */
@@ -133,6 +225,7 @@ const CrearVentaCompleta = () => {
       ...prev,
       dispositivoMarcaId,
       modeloId: "",
+      precioVenta: "",
     }));
 
     if (!dispositivoMarcaId) {
@@ -262,6 +355,7 @@ const CrearVentaCompleta = () => {
           modeloId: Number(detalle.modeloId),
           formaPagoId: Number(detalle.formaPagoId),
           cantidad: Number(detalle.cantidad),
+          precioVenta: Number(detalle.precioVenta),
           precioVendedor: Number(detalle.precioVendedor),
           entrada: detalle.entrada ? Number(detalle.entrada) : 0,
           alcance: detalle.alcance ? Number(detalle.alcance) : 0,
@@ -480,6 +574,10 @@ const CrearVentaCompleta = () => {
         formaPagoId,
         cantidad: Number(detalleDB?.cantidad) || 1,
         precioUnitario: detalleDB?.precioUnitario?.toString() || "",
+        precioVenta:
+          detalleDB?.precioVenta?.toString() ||
+          detalleDB?.precioVendedor?.toString() ||
+          "",
         precioVendedor: detalleDB?.precioVendedor?.toString() || "",
         entrada: detalleDB?.entrada?.toString() || "",
         alcance: detalleDB?.alcance?.toString() || "",
@@ -605,7 +703,7 @@ Detalle:
 - Marca: ${dispositivoMarcaSeleccionado?.marca?.nombre || "N/A"}
 - Modelo: ${modelo?.nombre || "N/A"}
 - Forma de Pago: ${formaPago?.nombre || "N/A"}
-- Precio : $${detalle.precioVendedor || 0}
+- Precio Venta : $${detalle.precioVenta || detalle.precioVendedor || 0}
 - Cantidad: ${detalle.cantidad || 0}
 - Entrada : $${detalle.entrada || 0}
 - Alcance : $${detalle.alcance || 0}
@@ -880,6 +978,7 @@ ${
                     ...prev,
                     dispositivoMarcaId: value,
                     modeloId: "", // reset modelo
+                    precioVenta: "",
                   }));
 
                   // Buscar el objeto completo
@@ -925,6 +1024,7 @@ ${
                   setDetalle((prev) => ({
                     ...prev,
                     modeloId: value,
+                    precioVenta: "",
                   }));
 
                   setModeloSeleccionado(
@@ -955,7 +1055,11 @@ ${
                   const value = e.target.value;
 
                   if (!value) {
-                    setDetalle((prev) => ({ ...prev, formaPagoId: "" }));
+                    setDetalle((prev) => ({
+                      ...prev,
+                      formaPagoId: "",
+                      precioVenta: "",
+                    }));
                     setFormaPagoSeleccionada(null);
                     return;
                   }
@@ -963,7 +1067,11 @@ ${
                   const id = Number(value);
                   const forma = formasPago.find((f) => f.id === id);
 
-                  setDetalle((prev) => ({ ...prev, formaPagoId: id }));
+                  setDetalle((prev) => ({
+                    ...prev,
+                    formaPagoId: id,
+                    ...(isCreditoDirecto(forma) ? { precioVenta: "" } : {}),
+                  }));
                   setFormaPagoSeleccionada(forma || null);
                 }}
                 className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
@@ -1000,7 +1108,7 @@ ${
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio *
+                  Precio Vendedor *
                 </label>
 
                 <input

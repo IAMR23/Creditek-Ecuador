@@ -86,6 +86,7 @@ exports.obtenerReporteAuditoria = async ({
         as: "detalleVenta",
         attributes: [
           "precioUnitario",
+          "precioVenta",
           "precioVendedor",
           "entrada",
           "margen",
@@ -210,6 +211,7 @@ exports.obtenerReporte = async ({
         as: "detalleVenta",
         attributes: [
           "precioUnitario",
+          "precioVenta",
           "precioVendedor",
           "entrada",
           "margen",
@@ -351,6 +353,7 @@ exports.obtenerReporteGerencia = async ({
         as: "detalleVenta",
         attributes: [
           "precioUnitario",
+          "precioVenta",
           "precioVendedor",
           "entrada",
           "alcance",
@@ -448,6 +451,7 @@ exports.formatearReporte = (ventas) => {
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         precioSistema: detalle.precioUnitario || "",
+        precioVenta: detalle.precioVenta || detalle.precioVendedor || "",
         precioVendedor: detalle.precioVendedor || "",
         margen: detalle.margen || "",
         costo : detalle.costo || "" , 

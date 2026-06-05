@@ -6,6 +6,17 @@ import { jwtDecode } from "jwt-decode";
 import { Eye, Trash } from "lucide-react";
 import Swal from "sweetalert2";
 
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const toMoney = (value) => {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  return Number.isFinite(number) ? Number(number.toFixed(2)) : "";
+};
+
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -92,27 +103,38 @@ export default function VentasAuditoria() {
 
       const ventas = data.ventas || [];
 
-      const resultado = ventas.map((venta) => ({
-        id: venta.id,
-        Fecha: venta.fecha ?? "",
-        Cedula: venta.cedula ?? "",
-        Cliente: venta.nombre ?? "",
-        Agencia: venta.local ?? "",
-        Vendedor: venta.vendedor ?? "",
-        Origen: venta.origen ?? "",
-        Observacion: venta.observaciones ?? "",
-        Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
-        Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
-        Precio: venta.precioVendedor ?? "",
-        "Precio Unitario":
-          venta.precioVendedor != null
-            ? Number((venta.precioVendedor / 1.15).toFixed(2))
-            : "",
-        "Forma Pago": venta.formaPago ?? "",
-        Entrada: venta.entrada ?? "",
-        Alcance: venta.alcance ?? "",
-        Estado: venta.activo ? "Activo" : "Desactivada",
-      }));
+      const resultado = ventas.map((venta) => {
+        const precioVenta = toMoney(venta.precioVenta);
+        const precioVendedor = toMoney(venta.precioVendedor);
+        const diferencia =
+          precioVenta !== "" || precioVendedor !== ""
+            ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
+            : "";
+
+        return {
+          id: venta.id,
+          Fecha: venta.fecha ?? "",
+          Cedula: venta.cedula ?? "",
+          Cliente: venta.nombre ?? "",
+          Agencia: venta.local ?? "",
+          Vendedor: venta.vendedor ?? "",
+          Origen: venta.origen ?? "",
+          Observacion: venta.observaciones ?? "",
+          Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
+          Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
+          "Precio Venta": precioVenta,
+          "Precio Vendedor": precioVendedor,
+          Diferencia: diferencia,
+          "Precio Unitario":
+            venta.precioVendedor != null
+              ? Number((venta.precioVendedor / 1.15).toFixed(2))
+              : "",
+          "Forma Pago": venta.formaPago ?? "",
+          Entrada: venta.entrada ?? "",
+          Alcance: venta.alcance ?? "",
+          Estado: venta.activo ? "Activo" : "Desactivada",
+        };
+      });
 
       setFilas(resultado);
     } catch (error) {
@@ -253,14 +275,27 @@ export default function VentasAuditoria() {
                     clase += " text-blue-600 font-semibold";
                   }
 
+                  if (key === "Precio Venta") {
+                    clase += " text-blue-600 font-semibold";
+                  }
+
                   if (key === "Precio Vendedor") {
-                    const precioSistema = Number(f["Precio Sistema"]) || 0;
+                    const precioSistema = Number(f["Precio Venta"]) || 0;
                     const precioVendedor = Number(val) || 0;
 
                     if (precioVendedor < precioSistema) {
                       clase += " text-red-600 font-bold";
                     } else {
                       clase += " text-green-600 font-semibold";
+                    }
+                  }
+
+                  if (key === "Diferencia") {
+                    const diferencia = Number(val) || 0;
+                    if (diferencia !== 0) {
+                      clase += diferencia > 0 ? " text-red-600 font-bold" : " text-green-600 font-semibold";
+                    } else {
+                      clase += " text-gray-600 font-semibold";
                     }
                   }
 

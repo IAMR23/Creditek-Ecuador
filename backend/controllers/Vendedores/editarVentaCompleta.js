@@ -130,7 +130,8 @@ const editarVentaCompleta = async (req, res) => {
       );
     }
 
-    const precioVendedor = Number(detalle.precioVendedor) || 0;
+    const precioVenta = Number(detalle.precioVenta || detalle.precioVendedor) || 0;
+    const precioVendedor = Number(detalle.precioVendedor || precioVenta) || 0;
     const alcance = Number(detalle.alcance) || 0;
     const costo = Number(costoDB.costo) || 0;
 
@@ -161,7 +162,8 @@ const editarVentaCompleta = async (req, res) => {
       {
         cantidad: detalle.cantidad,
         precioUnitario: detalle.precioUnitario,
-        precioVendedor: detalle.precioVendedor,
+        precioVenta: precioVenta,
+        precioVendedor: precioVendedor,
         margen: margen,
         costo: costoDB.costo , 
         dispositivoMarcaId: detalle.dispositivoMarcaId,
@@ -233,6 +235,7 @@ const obtenerVentaCompleta = async (req, res) => {
           attributes: [
             "cantidad",
             "precioUnitario",
+            "precioVenta",
             "precioVendedor",
             "dispositivoMarcaId",
             "modeloId",
@@ -286,6 +289,7 @@ const obtenerVentaCompleta = async (req, res) => {
       detalle: venta.detalleVenta?.[0] || {
         cantidad: 1,
         precioUnitario: "",
+        precioVenta: "",
         precioVendedor: "",
         dispositivoMarcaId: "",
         modeloId: "",
