@@ -4,7 +4,34 @@ const router = express.Router();
 const CostoHistorico = require("../models/CostoHistorico");
 const Modelo = require("../models/Modelo");
 
-const validarCostoHistorico = async ({ modeloId, costo, fechaCompra }, excludeId = null) => {
+const parseDecimalOpcional = (valor, campo, { permitirNegativo = false } = {}) => {
+  if (valor === null || valor === undefined || valor === "") {
+    return { value: null };
+  }
+
+  const normalizado = typeof valor === "string" ? valor.replace(",", ".") : valor;
+  const numero = Number(normalizado);
+
+  if (Number.isNaN(numero)) {
+    return { error: `${campo} invalido` };
+  }
+
+  if (!permitirNegativo && numero < 0) {
+    return { error: `${campo} no puede ser negativo` };
+  }
+
+  const decimalPart = String(normalizado).split(".")[1];
+  if (decimalPart && decimalPart.length > 2) {
+    return { error: `${campo} solo puede tener hasta 2 decimales` };
+  }
+
+  return { value: Number(numero.toFixed(2)) };
+};
+
+const validarCostoHistorico = async (
+  { modeloId, costo, fechaCompra, precioCarga, precioContado },
+  excludeId = null,
+) => {
   if (!modeloId || !costo || !fechaCompra) {
     return { error: "modeloId, costo y fechaCompra son obligatorios" };
   }
@@ -34,6 +61,12 @@ const validarCostoHistorico = async ({ modeloId, costo, fechaCompra }, excludeId
     return { error: "El costo solo puede tener hasta 2 decimales" };
   }
 
+  const precioCargaParsed = parseDecimalOpcional(precioCarga, "Precio carga");
+  if (precioCargaParsed.error) return { error: precioCargaParsed.error };
+
+  const precioContadoParsed = parseDecimalOpcional(precioContado, "Precio contado");
+  if (precioContadoParsed.error) return { error: precioContadoParsed.error };
+
   const modelo = await Modelo.findByPk(modeloIdNum);
   if (!modelo) {
     return { error: "Modelo no existe", status: 404 };
@@ -57,6 +90,16 @@ const validarCostoHistorico = async ({ modeloId, costo, fechaCompra }, excludeId
     data: {
       modeloId: modeloIdNum,
       costo: Number(costoNum.toFixed(2)),
+      precioCarga: precioCargaParsed.value,
+      precioContado: precioContadoParsed.value,
+      margen:
+        precioCargaParsed.value !== null
+          ? Number((precioCargaParsed.value - costoNum).toFixed(2))
+          : null,
+      margenPorcentual:
+        precioCargaParsed.value && precioCargaParsed.value > 0
+          ? Number((((precioCargaParsed.value - costoNum) / precioCargaParsed.value) * 100).toFixed(2))
+          : null,
       fechaCompra,
     },
   };

@@ -86,7 +86,6 @@ import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 import Powerbi from "./pages/Admin/PowerBi";
-import PreciosVenta from "./pages/Admin/PreciosVenta";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
 function App() {
@@ -292,10 +291,7 @@ useEffect(() => {
                   path="costoHistorico"
                   element={protect(<AdminCostoHistorico />, "/costoHistorico")}
                 />
-                <Route
-                  path="precios-venta"
-                  element={protect(<PreciosVenta />, "/precios-venta")}
-                />
+
                 <Route path="formas-pago" element={protect(<FormasPago />, "/formas-pago")} />
                 <Route path="origen" element={protect(<OrigenAdmin />, "/origen")} />
                 <Route path="obsequios" element={protect(<AdminObsequios />, "/obsequios")} />

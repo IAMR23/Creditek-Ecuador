@@ -16,34 +16,8 @@ const normalizeText = (value) =>
     .trim()
     .toLowerCase();
 
-const normalizeMoneyValue = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw || /^[a-z]/i.test(raw)) return "";
-
-  const clean = raw
-    .replace(/\$/g, "")
-    .replace(/\s/g, "")
-    .replace(",", ".");
-
-  const number = Number(clean);
-  return Number.isFinite(number) ? number.toFixed(2) : "";
-};
-
 const isCreditoDirecto = (formaPago) =>
   normalizeText(formaPago?.nombre).includes("credito directo");
-
-const getPrecioVentaPorFormaPago = (precioVenta, formaPago) => {
-  const forma = normalizeText(formaPago?.nombre);
-
-  if (!precioVenta || !forma || forma.includes("credito directo")) return "";
-  if (forma.includes("tar")) return normalizeMoneyValue(precioVenta.pvpTarjetaCredito);
-  if (forma.includes("efectivo") || forma.includes("transfer")) {
-    return normalizeMoneyValue(precioVenta.pvpContado);
-  }
-  if (forma.includes("credito")) return normalizeMoneyValue(precioVenta.pvpCredito);
-
-  return "";
-};
 
 const CrearVentaCompleta = () => {
   const [loading, setLoading] = useState(false);
@@ -146,21 +120,26 @@ const CrearVentaCompleta = () => {
 
       try {
         const res = await axios.get(
-          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}`,
+          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}?fecha=${venta.fecha}`,
         );
 
         setDetalle((prev) => ({
           ...prev,
           precioUnitario: res.data?.precio?.toString() || "0",
+          precioVenta: res.data?.precio?.toString() || "0",
         }));
       } catch (err) {
         console.error(err);
-        setDetalle((prev) => ({ ...prev, precioUnitario: "0" }));
+        setDetalle((prev) => ({
+          ...prev,
+          precioUnitario: "0",
+          precioVenta: "0",
+        }));
       }
     };
 
     fetchPrecio();
-  }, [detalle.modeloId, detalle.formaPagoId]);
+  }, [detalle.modeloId, detalle.formaPagoId, venta.fecha]);
 
   const fetchPrecioVentaModelo = async (modeloId) => {
     if (!modeloId) {
@@ -186,19 +165,7 @@ const CrearVentaCompleta = () => {
   }, [detalle.modeloId]);
 
   useEffect(() => {
-    const precioCalculado = getPrecioVentaPorFormaPago(
-      precioVentaCatalogo,
-      formaPagoSeleccionada,
-    );
-
-    if (!detalle.formaPagoId || isCreditoDirecto(formaPagoSeleccionada)) {
-      return;
-    }
-
-    setDetalle((prev) => ({
-      ...prev,
-      precioVenta: precioCalculado,
-    }));
+    if (!detalle.formaPagoId || !precioVentaCatalogo || !formaPagoSeleccionada) return;
   }, [detalle.formaPagoId, formaPagoSeleccionada, precioVentaCatalogo]);
 
   useEffect(() => {
@@ -1118,8 +1085,6 @@ ${
                   value={detalle.precioVendedor}
                   onChange={(e) => {
                     let value = e.target.value.replace(",", ".");
-
-                    // Regex: números + punto opcional + 2 decimales
                     const regex = /^\d*\.?\d{0,2}$/;
 
                     if (regex.test(value)) {

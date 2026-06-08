@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
+import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
 
 const STORAGE_KEY = "dashboard_filtros";
@@ -56,6 +57,7 @@ export default function Powerbi() {
       } catch (error) {
         console.error("Error al decodificar token", error);
         localStorage.removeItem("token");
+        Swal.fire("Sesion invalida", "Vuelve a iniciar sesion", "warning");
       }
     }
   }, []);
@@ -80,6 +82,7 @@ export default function Powerbi() {
     } catch (error) {
       console.error("Error cargando usuarios:", error);
       setUsuarios([]);
+      Swal.fire("Error", "No se pudieron cargar los usuarios", "error");
     }
   };
 
@@ -90,6 +93,7 @@ export default function Powerbi() {
     } catch (error) {
       console.error("Error cargando agencias:", error);
       setAgencias([]);
+      Swal.fire("Error", "No se pudieron cargar las agencias", "error");
     }
   };
 
@@ -115,6 +119,11 @@ export default function Powerbi() {
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+      Swal.fire(
+        "Fechas invalidas",
+        "La fecha de inicio no puede ser mayor que la fecha de fin",
+        "warning",
+      );
       return;
     }
 
@@ -137,12 +146,16 @@ export default function Powerbi() {
       const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
       const { data } = await axios.get(url);
 
-      if (!data.ok) return;
+      if (!data.ok) {
+        Swal.fire("Atencion", "No se pudo cargar la informacion solicitada", "warning");
+        return;
+      }
 
       setEstadisticas(data.estadisticas);
     } catch (error) {
       console.error(error);
       setError("Error al cargar la información");
+      Swal.fire("Error", "Error al cargar la informacion", "error");
     } finally {
       setLoading(false);
     }

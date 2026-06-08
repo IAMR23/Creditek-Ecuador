@@ -2,6 +2,8 @@
 import { useState, useRef } from "react";
 import html2canvas from "html2canvas";
 import {
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -16,6 +18,7 @@ const COLORS = {
   semana: "#4ADE80",
   viabilidad: "#dc2626",
   gerencia: "#2563eb",
+  enganche: "#16a34a",
 };
 
 const crearFechaLocal = (fechaStr) => {
@@ -74,6 +77,11 @@ const toIndicadorGerenciaArray = (obj = {}, fechaInicio = "2026-01-01") =>
     })
     .sort((a, b) => a.semanaNumero - b.semanaNumero);
 
+const toArray = (obj = {}) =>
+  Object.entries(obj)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
 const moneyFormatter = new Intl.NumberFormat("es-EC", {
   style: "currency",
   currency: "USD",
@@ -103,6 +111,9 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
   const dataIndicadorGerencia = toIndicadorGerenciaArray(
     estadisticas.indicadorGerenciaPorSemana,
     fechaInicio
+  );
+  const dataEngancheJavier = toArray(
+    estadisticas.indicadorEngancheJavierPorVendedor
   );
 
   const copiarGrafico = async () => {
@@ -148,6 +159,47 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         <p className="text-4xl font-bold text-blue-800">
           {moneyFormatter.format(Number(estadisticas.indicadorGerenciaTotal) || 0)}
         </p>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-1">
+        <h3 className="text-gray-500 text-sm">Enganche Javier</h3>
+
+        <p className="text-4xl font-bold text-green-700">
+          {Number(estadisticas.indicadorEngancheJavierTotal) || 0}
+        </p>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+        <h3 className="font-semibold mb-4">
+          Ventas Enganche Javier por Vendedor
+        </h3>
+
+        <ResponsiveContainer width="100%" height={360}>
+          <BarChart
+            data={dataEngancheJavier}
+            margin={{ top: 20, right: 30, left: 40, bottom: 120 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+            <XAxis
+              dataKey="name"
+              angle={-45}
+              textAnchor="end"
+              interval={0}
+            />
+
+            <YAxis allowDecimals={false} />
+
+            <Tooltip {...tooltipStyle} />
+
+            <Bar
+              dataKey="value"
+              name="Ventas"
+              fill={COLORS.enganche}
+              radius={[6, 6, 0, 0]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">

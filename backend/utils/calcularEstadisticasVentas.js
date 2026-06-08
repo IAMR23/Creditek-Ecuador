@@ -2,8 +2,10 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   const stats = {
     totalVentas: ventas.length,
     indicadorGerenciaTotal: 0,
+    indicadorEngancheJavierTotal: 0,
 
     porVendedor: {},
+    indicadorEngancheJavierPorVendedor: {},
     porAgencia: {},
     porOrigen: {},
     porFecha: {},
@@ -22,6 +24,12 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     if (valor === null || valor === undefined) return "";
     return String(valor).trim();
   };
+
+  const normalizarClave = (valor) =>
+    normalizarTexto(valor)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
 
   const crearFechaLocal = (fechaInput) => {
     if (!fechaInput) return null;
@@ -103,6 +111,21 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
       stats.porVendedor[vendedor] = (stats.porVendedor[vendedor] || 0) + 1;
     }
 
+    const origenNormalizado = normalizarClave(v.origen);
+    const observacionValor = v.observacion ?? v.observaciones;
+    const observacionNormalizada = normalizarClave(observacionValor);
+    const esEngancheJavier =
+      origenNormalizado === "enganche" && observacionNormalizada === "javier";
+
+    if (esEngancheJavier) {
+      stats.indicadorEngancheJavierTotal += 1;
+
+      if (vendedor) {
+        stats.indicadorEngancheJavierPorVendedor[vendedor] =
+          (stats.indicadorEngancheJavierPorVendedor[vendedor] || 0) + 1;
+      }
+    }
+
     const margen = Number(v.margen) || 0;
     stats.indicadorGerenciaTotal = Number(
       (stats.indicadorGerenciaTotal + margen).toFixed(2)
@@ -171,7 +194,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
         (stats.porCierreCaja[cierreCaja] || 0) + 1;
     }
 
-    const observacion = normalizarTexto(v.observacion);
+    const observacion = normalizarTexto(v.observacion ?? v.observaciones);
     if (observacion) {
       stats.porObservacion[observacion] =
         (stats.porObservacion[observacion] || 0) + 1;

@@ -6,7 +6,11 @@ import { API_URL } from "../../../config";
 
 const emptyForm = {
   modeloId: "",
+  precioCarga: "",
+  precioContado: "",
   costo: "",
+  margen: "",
+  margenPorcentual: "",
   fechaCompra: "",
   nota: "",
 };
@@ -19,6 +23,58 @@ const currencyFormatter = new Intl.NumberFormat("es-EC", {
 const formatCurrency = (value) => {
   if (value === null || value === undefined || value === "") return "-";
   return currencyFormatter.format(Number(value)).replace("US$", "").trim();
+};
+
+const formatPercent = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  return `${Number(value).toFixed(2)}%`;
+};
+
+const parseNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(String(value).replace(",", "."));
+  return Number.isNaN(number) ? null : number;
+};
+
+const calcularMargen = ({ precioCarga, costo }) => {
+  const precioCargaNum = parseNumber(precioCarga);
+  const costoNum = parseNumber(costo);
+
+  if (precioCargaNum === null || costoNum === null) {
+    return { margen: "", margenPorcentual: "" };
+  }
+
+  const margen = Number((precioCargaNum - costoNum).toFixed(2));
+  const margenPorcentual =
+    precioCargaNum > 0
+      ? Number(((margen / precioCargaNum) * 100).toFixed(2))
+      : "";
+
+  return { margen, margenPorcentual };
+};
+
+const hasExtraValues = (registro) =>
+  registro?.precioCarga != null ||
+  registro?.precioContado != null ||
+  registro?.margen != null ||
+  registro?.margenPorcentual != null;
+
+const renderCostoDetalle = (registro) => {
+  if (!registro) return <span>-</span>;
+
+  if (!hasExtraValues(registro)) {
+    return <span>{formatCurrency(registro.costo)}</span>;
+  }
+
+  return (
+    <div className="space-y-0.5 text-right leading-tight">
+      <div>Precio Carga: {formatCurrency(registro.precioCarga)}</div>
+      <div>Precio Contado: {formatCurrency(registro.precioContado)}</div>
+      <div>Costo: {formatCurrency(registro.costo)}</div>
+      <div>Margen: {formatCurrency(registro.margen)}</div>
+      <div>Margen Porcentual: {formatPercent(registro.margenPorcentual)}</div>
+    </div>
+  );
 };
 
 const buildCostMatrix = (costos, modelos) => {
@@ -64,6 +120,7 @@ const buildCostMatrix = (costos, modelos) => {
 
         acc[fecha] = {
           costo: costoVigente?.costo ?? null,
+          vigente: costoVigente,
           registro: registroExacto,
           heredado: Boolean(costoVigente) && !registroExacto,
         };
@@ -123,6 +180,7 @@ export default function CostosHistoricosCRUD() {
     () => buildCostMatrix(filteredCostos, modelos),
     [filteredCostos, modelos],
   );
+  const calculoMargen = useMemo(() => calcularMargen(form), [form]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -137,7 +195,11 @@ export default function CostosHistoricosCRUD() {
   const openEditModal = (costo) => {
     setForm({
       modeloId: costo.modeloId || "",
+      precioCarga: costo.precioCarga ?? "",
+      precioContado: costo.precioContado ?? "",
       costo: costo.costo ?? "",
+      margen: costo.margen ?? "",
+      margenPorcentual: costo.margenPorcentual ?? "",
       fechaCompra: costo.fechaCompra?.split("T")[0] || "",
       nota: costo.nota || "",
     });
@@ -155,10 +217,19 @@ export default function CostosHistoricosCRUD() {
     setSaving(true);
 
     try {
+      const payload = {
+        modeloId: form.modeloId,
+        precioCarga: form.precioCarga,
+        precioContado: form.precioContado,
+        costo: form.costo,
+        fechaCompra: form.fechaCompra,
+        nota: form.nota,
+      };
+
       if (editId) {
-        await axios.put(`${API_URL}/costos/${editId}`, form);
+        await axios.put(`${API_URL}/costos/${editId}`, payload);
       } else {
-        await axios.post(`${API_URL}/costos`, form);
+        await axios.post(`${API_URL}/costos`, payload);
       }
 
       setIsModalOpen(false);
@@ -218,7 +289,7 @@ export default function CostosHistoricosCRUD() {
                 Modelo
               </th>
               {matrizCostos.fechas.map((fecha) => (
-                <th key={fecha} className="min-w-32 border border-gray-300 p-2 text-right">
+                <th key={fecha} className="min-w-56 border border-gray-300 p-2 text-right">
                   {fecha}
                 </th>
               ))}
@@ -239,12 +310,12 @@ export default function CostosHistoricosCRUD() {
                   </td>
                   {matrizCostos.fechas.map((fecha) => {
                     const celda = valores[fecha];
-                    const contenido = formatCurrency(celda?.costo);
+                    const contenido = renderCostoDetalle(celda?.vigente);
 
                     return (
                       <td
                         key={`${modelo.id}-${fecha}`}
-                        className={`border border-gray-300 p-0 text-right ${
+                        className={`border border-gray-300 p-0 text-right align-top ${
                           celda?.heredado ? "bg-gray-50 text-gray-700" : "bg-white text-gray-900"
                         }`}
                       >
@@ -255,11 +326,11 @@ export default function CostosHistoricosCRUD() {
                             className="flex w-full items-center justify-end gap-2 px-2 py-1 text-right font-semibold hover:bg-blue-50"
                             title="Editar costo de esta fecha"
                           >
-                            <span>{contenido}</span>
+                            <div>{contenido}</div>
                             <FaPen className="text-xs text-blue-600" />
                           </button>
                         ) : (
-                          <span className="block px-2 py-1 font-semibold">{contenido}</span>
+                          <div className="block px-2 py-1 font-semibold">{contenido}</div>
                         )}
                       </td>
                     );
@@ -273,7 +344,7 @@ export default function CostosHistoricosCRUD() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="w-full max-w-md rounded bg-white p-6 shadow-lg">
+          <div className="w-full max-w-2xl rounded bg-white p-6 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">
                 {editId ? "Editar" : "Nuevo"} Costo
@@ -307,20 +378,82 @@ export default function CostosHistoricosCRUD() {
                 </select>
               </label>
 
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-gray-700">Costo</span>
-                <input
-                  type="number"
-                  name="costo"
-                  value={form.costo}
-                  onChange={handleChange}
-                  placeholder="0.00"
-                  min="0.01"
-                  step="0.01"
-                  className="w-full rounded border p-2"
-                  required
-                />
-              </label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">
+                    Precio Carga
+                  </span>
+                  <input
+                    type="number"
+                    name="precioCarga"
+                    value={form.precioCarga}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded border p-2"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">
+                    Precio Contado
+                  </span>
+                  <input
+                    type="number"
+                    name="precioContado"
+                    value={form.precioContado}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded border p-2"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">Costo</span>
+                  <input
+                    type="number"
+                    name="costo"
+                    value={form.costo}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    min="0.01"
+                    step="0.01"
+                    className="w-full rounded border p-2"
+                    required
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">Margen</span>
+                  <input
+                    type="number"
+                    name="margen"
+                    value={calculoMargen.margen}
+                    placeholder="0.00"
+                    step="0.01"
+                    className="w-full rounded border bg-gray-100 p-2 text-gray-700"
+                    readOnly
+                  />
+                </label>
+
+                <label className="block sm:col-span-2">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">
+                    Margen Porcentual
+                  </span>
+                  <input
+                    type="number"
+                    name="margenPorcentual"
+                    value={calculoMargen.margenPorcentual}
+                    placeholder="0.00"
+                    step="0.01"
+                    className="w-full rounded border bg-gray-100 p-2 text-gray-700"
+                    readOnly
+                  />
+                </label>
+              </div>
 
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-gray-700">Fecha</span>

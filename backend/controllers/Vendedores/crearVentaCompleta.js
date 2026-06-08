@@ -6,6 +6,7 @@ const { sequelize } = require("../../config/db");
 const { validarCedulaEC } = require("../../middleware/validacionCedula");
 const DispositivoMarca = require("../../models/DispositivoMarca");
 const Modelo = require("../../models/Modelo");
+const FormaPago = require("../../models/FormaPago");
 const {
   buscarClienteContifico,
   actualizarClienteContifico,
@@ -14,6 +15,16 @@ const {
 const { normalizarCorreo } = require("../../utils/normalizarCorreo");
 const CostoHistorico = require("../../models/CostoHistorico");
 const { Op } = require("sequelize");
+
+const normalizeText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
+const esFormaPagoCredito = (formaPago) =>
+  Number(formaPago?.id) === 1 || normalizeText(formaPago?.nombre).includes("credito");
 
 function calcularSemana(fecha) {
   const f = new Date(fecha);
@@ -131,8 +142,16 @@ const crearVentaCompleta = async (req, res) => {
     const costoDB = await CostoHistorico.findOne({
       where: {
         modeloId: detalle.modeloId,
+        ...(venta.fecha && {
+          fechaCompra: {
+            [Op.lte]: venta.fecha,
+          },
+        }),
       },
-      order: [["fechaCompra", "DESC"]], // el más reciente global
+      order: [
+        ["fechaCompra", "DESC"],
+        ["id", "DESC"],
+      ],
       transaction: t,
     });
 
@@ -147,10 +166,30 @@ const crearVentaCompleta = async (req, res) => {
       throw new Error("Modelo no existe");
     }
 
-    const precioVenta = Number(detalle.precioVenta || detalle.precioVendedor) || 0;
-    const precioVendedor = Number(detalle.precioVendedor || precioVenta) || 0;
+    const formaPagoDB = await FormaPago.findByPk(detalle.formaPagoId, {
+      transaction: t,
+    });
+
+    if (!formaPagoDB) {
+      throw new Error("Forma de pago no existe");
+    }
+
+    const usarPrecioCarga = esFormaPagoCredito(formaPagoDB);
+    const precioHistorico = usarPrecioCarga
+      ? Number(costoDB.precioCarga)
+      : Number(costoDB.precioContado);
+
+    if (!Number.isFinite(precioHistorico) || precioHistorico <= 0) {
+      throw new Error(
+        usarPrecioCarga
+          ? "No existe precio carga para este modelo en costo historico"
+          : "No existe precio contado para este modelo en costo historico",
+      );
+    }
+
+    const precioVenta = precioHistorico;
+    const precioVendedor = Number(detalle.precioVendedor) || 0;
     const alcance = Number(detalle.alcance) || 0;
-    const pvp1 = Number(modeloDB.PVP1) || 0;
     const costo = Number(costoDB.costo) || 0;
 
     const margen = Number((precioVendedor + alcance - costo).toFixed(2));
@@ -160,7 +199,7 @@ const crearVentaCompleta = async (req, res) => {
       {
         ventaId: ventaDB.id,
         cantidad: detalle.cantidad,
-        precioUnitario: detalle.precioUnitario,
+        precioUnitario: precioHistorico,
         precioVendedor: precioVendedor,
         precioVenta: precioVenta,
         margen: margen,

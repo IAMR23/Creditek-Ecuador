@@ -41,6 +41,7 @@ export default function Sidebar({ auth }) {
     logistica: false,
     contabilidad: false,
     Auditoria: false,
+    DesarrolloOrganizacional: true,
     admin: false,
     catalogos: false,
   });
@@ -155,6 +156,18 @@ export default function Sidebar({ auth }) {
         ],
       },
 
+            DesarrolloOrganizacional: {
+        title: "Desarrollo Organizacional",
+        items: [
+          {
+            label: "Postulaciones",
+            icon: <UserPlus size={20} />,
+            path: "/postulaciones",
+          },
+       
+        ],
+      },
+
       admin: {
         title: "Administración",
         items: [
@@ -220,11 +233,7 @@ export default function Sidebar({ auth }) {
             icon: <ClipboardList size={20} />,
             path: "/costoHistorico",
           },
-          {
-            label: "Precio de Venta",
-            icon: <DollarSign size={20} />,
-            path: "/precios-venta",
-          },
+        
         ],
       },
     }),

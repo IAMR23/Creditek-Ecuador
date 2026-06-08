@@ -75,6 +75,33 @@ const EditarVentaCompletaVendedores = () => {
   }, []);
 
   useEffect(() => {
+    const fetchPrecio = async () => {
+      if (!detalle.modeloId || !detalle.formaPagoId) return;
+
+      try {
+        const res = await axios.get(
+          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}?fecha=${venta.fecha || hoy}`,
+        );
+
+        setDetalle((prev) => ({
+          ...prev,
+          precioUnitario: res.data?.precio?.toString() || "0",
+          precioVenta: res.data?.precio?.toString() || "0",
+        }));
+      } catch (error) {
+        console.error(error);
+        setDetalle((prev) => ({
+          ...prev,
+          precioUnitario: "0",
+          precioVenta: "0",
+        }));
+      }
+    };
+
+    fetchPrecio();
+  }, [detalle.modeloId, detalle.formaPagoId, venta.fecha, hoy]);
+
+  useEffect(() => {
     const cargarVenta = async () => {
       try {
         const res = await axios.get(
@@ -522,7 +549,7 @@ const EditarVentaCompletaVendedores = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio *
+                  Precio Vendedor *
                 </label>
 
                 <input
@@ -532,8 +559,6 @@ const EditarVentaCompletaVendedores = () => {
                   value={detalle.precioVendedor}
                   onChange={(e) => {
                     let value = e.target.value.replace(",", ".");
-
-                    // Regex: números + punto opcional + 2 decimales
                     const regex = /^\d*\.?\d{0,2}$/;
 
                     if (regex.test(value)) {

@@ -17,6 +17,25 @@ const toMoney = (value) => {
   return Number.isFinite(number) ? Number(number.toFixed(2)) : "";
 };
 
+const getPrecioVendedorClass = (precioVendedorValue, precioVentaValue) => {
+  const precioVenta = Number(precioVentaValue);
+  const precioVendedor = Number(precioVendedorValue);
+
+  if (!Number.isFinite(precioVenta) || !Number.isFinite(precioVendedor)) {
+    return "";
+  }
+
+  if (precioVendedor > precioVenta) {
+    return " text-green-600 font-bold";
+  }
+
+  if (precioVendedor < precioVenta) {
+    return " text-red-600 font-bold";
+  }
+
+  return " text-gray-700 font-semibold";
+};
+
 export default function VentasAuditoria() {
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -280,14 +299,7 @@ export default function VentasAuditoria() {
                   }
 
                   if (key === "Precio Vendedor") {
-                    const precioSistema = Number(f["Precio Venta"]) || 0;
-                    const precioVendedor = Number(val) || 0;
-
-                    if (precioVendedor < precioSistema) {
-                      clase += " text-red-600 font-bold";
-                    } else {
-                      clase += " text-green-600 font-semibold";
-                    }
+                    clase += getPrecioVendedorClass(val, f["Precio Venta"]);
                   }
 
                   if (key === "Diferencia") {
