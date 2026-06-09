@@ -3,6 +3,45 @@ import Swal from "sweetalert2";
 import { api } from "../../api/client";
 
 const normalizeText = (value) => (value?.trim() ? value.trim() : null);
+const USUARIOS_FILTERS_STORAGE_KEY = "apolo:usuarios:filters";
+
+const getInitialFilters = () => {
+  if (typeof window === "undefined") {
+    return {
+      q: "",
+      rolId: "",
+      agenciaId: "",
+      activo: "",
+    };
+  }
+
+  try {
+    const saved = window.localStorage.getItem(USUARIOS_FILTERS_STORAGE_KEY);
+    if (!saved) {
+      return {
+        q: "",
+        rolId: "",
+        agenciaId: "",
+        activo: "",
+      };
+    }
+
+    const parsed = JSON.parse(saved);
+    return {
+      q: typeof parsed.q === "string" ? parsed.q : "",
+      rolId: typeof parsed.rolId === "string" ? parsed.rolId : "",
+      agenciaId: typeof parsed.agenciaId === "string" ? parsed.agenciaId : "",
+      activo: typeof parsed.activo === "string" ? parsed.activo : "",
+    };
+  } catch {
+    return {
+      q: "",
+      rolId: "",
+      agenciaId: "",
+      activo: "",
+    };
+  }
+};
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
@@ -11,12 +50,7 @@ export default function Usuarios() {
   const [relacionesActivas, setRelacionesActivas] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const [filters, setFilters] = useState({
-    q: "",
-    rolId: "",
-    agenciaId: "",
-    activo: "",
-  });
+  const [filters, setFilters] = useState(getInitialFilters);
 
   const [form, setForm] = useState({
     nombre: "",
@@ -51,7 +85,7 @@ export default function Usuarios() {
 
   const cargarTodo = async () => {
     const [u, r, a, rel] = await Promise.all([
-      api.get("/usuarios"),
+      api.get("/usuarios", { params: { includeInactive: true } }),
       api.get("/rol"),
       api.get("/agencias"),
       api.get("/usuario-agencia/activos"),
@@ -65,6 +99,13 @@ export default function Usuarios() {
   useEffect(() => {
     cargarTodo();
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      USUARIOS_FILTERS_STORAGE_KEY,
+      JSON.stringify(filters)
+    );
+  }, [filters]);
 
   const agenciasPorUsuario = useMemo(() => {
     const map = new Map();
@@ -280,6 +321,38 @@ export default function Usuarios() {
         title: "Error",
         text:
           error.response?.data?.message || "No se pudo actualizar el usuario",
+      });
+    }
+  };
+
+  const desactivarUsuario = async (usuario) => {
+    const result = await Swal.fire({
+      icon: "warning",
+      title: "Desactivar usuario",
+      text: `Se desactivará ${usuario.nombre || "este usuario"} y ya no aparecerá en las selecciones activas.`,
+      showCancelButton: true,
+      confirmButtonText: "Desactivar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await api.delete(`/usuarios/${usuario.id}`);
+      await cargarTodo();
+      Swal.fire({
+        icon: "success",
+        title: "Usuario desactivado",
+        timer: 1300,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text:
+          error.response?.data?.message || "No se pudo desactivar el usuario",
       });
     }
   };
@@ -654,12 +727,22 @@ export default function Usuarios() {
                     </td>
                     <td className="p-3">{u.activo ? "Sí" : "No"}</td>
                     <td className="p-3 text-center">
-                      <button
-                        onClick={() => abrirModalEditar(u)}
-                        className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-semibold"
-                      >
-                        Editar
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => abrirModalEditar(u)}
+                          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-semibold"
+                        >
+                          Editar
+                        </button>
+                        {u.activo ? (
+                          <button
+                            onClick={() => desactivarUsuario(u)}
+                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-semibold"
+                          >
+                            Eliminar
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -678,19 +761,27 @@ export default function Usuarios() {
       </div>
 
       {editModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center p-4">
-          <div className="bg-white p-6 rounded-2xl w-full max-w-3xl shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-xl font-extrabold tracking-tight text-slate-950">
-                Editar usuario
-              </h2>
-              <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
-            </div>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-3 sm:p-4">
+          <div className="flex min-h-full items-start justify-center py-3 sm:py-6">
+            <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl max-sm:min-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)]">
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+                <h2 className="text-xl font-extrabold tracking-tight text-slate-950">
+                  Editar usuario
+                </h2>
+                <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
+                <button
+                  type="button"
+                  onClick={cerrarModalEditar}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Cerrar
+                </button>
+              </div>
 
-            <form
-              onSubmit={actualizarUsuario}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            >
+              <form
+                onSubmit={actualizarUsuario}
+                className="grid flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 md:grid-cols-2 sm:p-6"
+              >
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">
                   Nombre
@@ -901,7 +992,7 @@ export default function Usuarios() {
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 mt-2 md:col-span-2">
+              <div className="sticky bottom-0 mt-2 flex justify-end gap-3 border-t border-slate-200 bg-white pt-4 md:col-span-2">
                 <button
                   type="button"
                   onClick={cerrarModalEditar}
@@ -917,7 +1008,8 @@ export default function Usuarios() {
                   Guardar Cambios
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}

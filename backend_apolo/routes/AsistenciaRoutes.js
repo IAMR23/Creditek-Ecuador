@@ -36,6 +36,13 @@ const parseMesToRange = (mes) => {
   return { start, end };
 };
 
+const normalizarObservacion = (observacion) => {
+  if (typeof observacion !== "string") return null;
+
+  const limpia = observacion.trim();
+  return limpia ? limpia : null;
+};
+
 router.get("/agencias", async (req, res) => {
   try {
     const { mes, agenciaId } = req.query;
@@ -75,16 +82,20 @@ router.get("/agencias", async (req, res) => {
             usuarioAgenciaId: { [Op.in]: usuarioAgenciaIds },
             fecha: { [Op.gte]: start, [Op.lt]: end },
           },
-          attributes: ["usuarioAgenciaId", "fecha", "estado"],
+          attributes: ["usuarioAgenciaId", "fecha", "estado", "observacion"],
         })
       : [];
 
     const asistenciasPorUA = new Map();
     for (const a of asistencias) {
       const key = a.usuarioAgenciaId;
-      const fecha = a.fecha; // YYYY-MM-DD
+      const fecha = a.fecha;
       if (!asistenciasPorUA.has(key)) asistenciasPorUA.set(key, {});
-      asistenciasPorUA.get(key)[fecha] = a.estado;
+
+      asistenciasPorUA.get(key)[fecha] = {
+        estado: a.estado || "libre",
+        observacion: a.observacion || "",
+      };
     }
 
     const usuariosPorAgencia = new Map();
@@ -111,16 +122,21 @@ router.get("/agencias", async (req, res) => {
     return res.json(payload);
   } catch (error) {
     const status = error.statusCode || 500;
-    return res.status(status).json({ message: error.message || "Error al cargar asistencias", error });
+    return res
+      .status(status)
+      .json({ message: error.message || "Error al cargar asistencias", error });
   }
 });
 
 router.post("/", async (req, res) => {
   try {
-    const { agenciaId, usuarioAgenciaId, fecha, estado } = req.body;
+    const { agenciaId, usuarioAgenciaId, fecha, estado, observacion } = req.body;
+    const observacionNormalizada = normalizarObservacion(observacion);
 
     if (!agenciaId || !usuarioAgenciaId || !fecha) {
-      return res.status(400).json({ message: "agenciaId, usuarioAgenciaId y fecha son obligatorios." });
+      return res
+        .status(400)
+        .json({ message: "agenciaId, usuarioAgenciaId y fecha son obligatorios." });
     }
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) {
@@ -129,23 +145,34 @@ router.post("/", async (req, res) => {
 
     const ua = await UsuarioAgencia.findByPk(usuarioAgenciaId);
     if (!ua || !ua.activo) {
-      return res.status(400).json({ message: "La relación usuario-agencia no existe o no está activa." });
+      return res
+        .status(400)
+        .json({ message: "La relación usuario-agencia no existe o no está activa." });
     }
     if (String(ua.agenciaId) !== String(agenciaId)) {
-      return res.status(400).json({ message: "El usuarioAgenciaId no pertenece a la agenciaId enviada." });
+      return res
+        .status(400)
+        .json({ message: "El usuarioAgenciaId no pertenece a la agenciaId enviada." });
     }
 
-    if (!estado || estado === "libre") {
+    const estadoNormalizado = !estado || estado === "libre" ? null : estado;
+
+    if (!estadoNormalizado && !observacionNormalizada) {
       await Asistencia.destroy({ where: { usuarioAgenciaId, fecha } });
-      return res.json({ ok: true, message: "Asistencia eliminada (libre)." });
+      return res.json({ ok: true, message: "Asistencia eliminada." });
     }
 
-    if (!ESTADOS_VALIDOS.has(estado)) {
+    if (estadoNormalizado && !ESTADOS_VALIDOS.has(estadoNormalizado)) {
       return res.status(400).json({ message: "Estado de asistencia inválido." });
     }
 
     const [record] = await Asistencia.upsert(
-      { usuarioAgenciaId, fecha, estado },
+      {
+        usuarioAgenciaId,
+        fecha,
+        estado: estadoNormalizado,
+        observacion: observacionNormalizada,
+      },
       { returning: true }
     );
 

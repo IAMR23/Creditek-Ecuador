@@ -11,6 +11,9 @@ router.post("/", async (req, res) => {
 
     const usuario = await Usuario.findByPk(usuarioId);
     if (!usuario) return res.status(400).json({ message: "Usuario no encontrado" });
+    if (!usuario.activo) {
+      return res.status(400).json({ message: "No se puede asignar un usuario inactivo." });
+    }
 
     const agencia = await Agencia.findByPk(agenciaId);
     if (!agencia) return res.status(400).json({ message: "Agencia no encontrada" });
@@ -51,8 +54,8 @@ router.get("/activos", async (_req, res) => {
     const relaciones = await UsuarioAgencia.findAll({
       where: { activo: true },
       include: [
-        { model: Usuario, as: "usuario" },
-        { model: Agencia, as: "agencia" },
+        { model: Usuario, as: "usuario", where: { activo: true } },
+        { model: Agencia, as: "agencia", where: { activo: true } },
       ],
       order: [["id", "ASC"]],
     });
@@ -87,4 +90,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
-

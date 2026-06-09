@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
 
 const router = express.Router();
 
@@ -62,9 +63,13 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
+    const includeInactive =
+      String(req.query.includeInactive || "").toLowerCase() === "true";
+
     const usuarios = await Usuario.findAll({
+      where: includeInactive ? undefined : { activo: true },
       attributes: { exclude: ["password"] },
       include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
       order: [["nombre", "ASC"]],
@@ -139,6 +144,14 @@ router.put("/:id", async (req, res) => {
     if (telefono !== undefined) usuario.telefono = telefono;
 
     await usuario.save();
+
+    if (activo === false) {
+      await UsuarioAgencia.update(
+        { activo: false },
+        { where: { usuarioId: usuario.id, activo: true } }
+      );
+    }
+
     const { password: _pw, ...usuarioSinPassword } = usuario.toJSON();
     return res.json(usuarioSinPassword);
   } catch (error) {
@@ -150,8 +163,16 @@ router.delete("/:id", async (req, res) => {
   try {
     const usuario = await Usuario.findByPk(req.params.id);
     if (!usuario) return res.status(404).json({ message: "Usuario no encontrado" });
-    await usuario.destroy();
-    return res.json({ message: "Usuario eliminado correctamente" });
+
+    usuario.activo = false;
+    await usuario.save();
+
+    await UsuarioAgencia.update(
+      { activo: false },
+      { where: { usuarioId: usuario.id, activo: true } }
+    );
+
+    return res.json({ message: "Usuario desactivado correctamente" });
   } catch (error) {
     return res.status(500).json({ message: "Error al eliminar usuario", error });
   }

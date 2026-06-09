@@ -5,13 +5,28 @@ const { calcularEstadisticasVentas, comiteCompras } = require("../../utils/calcu
 
 router.get("/ventas", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, agenciaId, vendedorId } = req.query;
+    const {
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      modeloId,
+      cierreCaja,
+      origenId,
+      dispositivoId,
+      estado,
+    } = req.query;
 
     const ventas = await auditoriaVentasController.obtenerReporteAuditoria({
       fechaInicio,
       fechaFin,
       agenciaId,
       vendedorId,
+      modeloId,
+      cierreCaja,
+      origenId,
+      dispositivoId,
+      estado,
     });
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);

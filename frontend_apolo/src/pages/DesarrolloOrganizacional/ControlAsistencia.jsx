@@ -69,29 +69,38 @@ const getFechasDelMes = (mes) => {
   })
 }
 
-const calcularResumen = (asistencias = {}) => {
-  const resumen = {
-    asistencias: 0,
-    faltasJustificadas: 0,
-    faltasInjustificadas: 0,
-    atrasos: 0,
-    salidas: 0,
-    pagos: 0,
-    capacitaciones: 0,
+const normalizarRegistro = (registro) => {
+  if (!registro) {
+    return { estado: "libre", observacion: "" }
   }
 
-  Object.values(asistencias).forEach((estado) => {
-    if (estado === "asistencia") resumen.asistencias += 1
-    if (estado === "falta_justificada") resumen.faltasJustificadas += 1
-    if (estado === "falta_injustificada") resumen.faltasInjustificadas += 1
-    if (estado === "atraso") resumen.atrasos += 1
-    if (estado === "salida") resumen.salidas += 1
-    if (estado === "pago") resumen.pagos += 1
-    if (estado === "capacitacion") resumen.capacitaciones += 1
-  })
+  if (typeof registro === "string") {
+    return { estado: registro, observacion: "" }
+  }
 
-  return resumen
+  return {
+    estado: registro.estado || "libre",
+    observacion: registro.observacion || "",
+  }
 }
+
+const formatearFecha = (fecha) => {
+  const [year, month, day] = fecha.split("-").map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString("es-EC", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+}
+
+const escapeHtml = (value = "") =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
 
 export default function ControlAsistencia() {
   const [mes, setMes] = useState(getTodayMonth())
@@ -102,108 +111,161 @@ export default function ControlAsistencia() {
 
   const fechas = useMemo(() => getFechasDelMes(mes), [mes])
 
-const cargarAsistencia = async () => {
-  setLoading(true)
+  const cargarAsistencia = async () => {
+    setLoading(true)
 
-  try {
-    const res = await api.get("/asistencias/agencias", {
-      params: {
-        mes,
-        agenciaId: agenciaId || undefined,
-      },
-    })
+    try {
+      const res = await api.get("/asistencias/agencias", {
+        params: {
+          mes,
+          agenciaId: agenciaId || undefined,
+        },
+      })
 
-    setAgencias(res.data || [])
-  } catch (err) {
-    Swal.fire(
-      "Error",
-      err.response?.data?.message || "No se pudo cargar la asistencia",
-      "error"
-    )
-  } finally {
-    setLoading(false)
+      setAgencias(res.data || [])
+    } catch (err) {
+      Swal.fire(
+        "Error",
+        err.response?.data?.message || "No se pudo cargar la asistencia",
+        "error"
+      )
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   useEffect(() => {
     cargarAsistencia()
   }, [mes, agenciaId])
 
-const guardarAsistencia = async ({
-  agenciaId,
-  usuarioAgenciaId,
-  fecha,
-  estado,
-}) => {
-  try {
-    setAgencias((current) =>
-      current.map((agencia) => {
-        if (agencia.id !== agenciaId) return agencia
+  const guardarAsistencia = async ({
+    agenciaId: agenciaActualId,
+    usuarioAgenciaId,
+    fecha,
+    estado,
+    observacion,
+  }) => {
+    try {
+      setAgencias((current) =>
+        current.map((agencia) => {
+          if (agencia.id !== agenciaActualId) return agencia
 
-        return {
-          ...agencia,
-          usuarios: (agencia.usuarios || []).map((usuario) => {
-            if (usuario.usuarioAgenciaId !== usuarioAgenciaId) return usuario
+          return {
+            ...agencia,
+            usuarios: (agencia.usuarios || []).map((usuario) => {
+              if (usuario.usuarioAgenciaId !== usuarioAgenciaId) return usuario
 
-            const asistencias = { ...(usuario.asistencias || {}) }
-            if (!estado || estado === "libre") delete asistencias[fecha]
-            else asistencias[fecha] = estado
+              const asistencias = { ...(usuario.asistencias || {}) }
+              const observacionNormalizada = observacion?.trim() || ""
 
-            return { ...usuario, asistencias }
-          }),
-        }
+              if ((!estado || estado === "libre") && !observacionNormalizada) {
+                delete asistencias[fecha]
+              } else {
+                asistencias[fecha] = {
+                  estado: estado || "libre",
+                  observacion: observacionNormalizada,
+                }
+              }
+
+              return { ...usuario, asistencias }
+            }),
+          }
+        })
+      )
+
+      await api.post("/asistencias", {
+        agenciaId: agenciaActualId,
+        usuarioAgenciaId,
+        fecha,
+        estado,
+        observacion,
       })
-    )
-
-    await api.post("/asistencias", {
-      agenciaId,
-      usuarioAgenciaId,
-      fecha,
-      estado,
-    })
-  } catch (err) {
-    await cargarAsistencia()
-    Swal.fire(
-      "Error",
-      err.response?.data?.message || "No se pudo guardar la asistencia",
-      "error"
-    )
+    } catch (err) {
+      await cargarAsistencia()
+      Swal.fire(
+        "Error",
+        err.response?.data?.message || "No se pudo guardar la asistencia",
+        "error"
+      )
+    }
   }
-}
 
   const handleCambiarEstado = async ({
-    agenciaId,
+    agenciaId: agenciaActualId,
     usuarioAgenciaId,
     fecha,
     estadoActual,
+    observacionActual,
+    usuarioNombre,
   }) => {
-    const { value: estado } = await Swal.fire({
+    const modalId = `observacion-${usuarioAgenciaId}-${fecha}`
+
+    const { isConfirmed, value } = await Swal.fire({
       title: "Registrar asistencia",
-      input: "select",
-      inputValue: estadoActual || "asistencia",
-      inputOptions: {
-        asistencia: "Asistencia",
-        falta_justificada: "Falta justificada",
-        falta_injustificada: "Falta injustificada",
-        atraso: "Atraso",
-        salida: "Salida",
-        pago: "Pago",
-        capacitacion: "Capacitacion",
-        libre: "Libre / Sin registro",
+      html: `
+        <div class="text-left space-y-3">
+          <div class="text-sm text-slate-600">
+            <strong>${escapeHtml(usuarioNombre)}</strong><br />
+            ${escapeHtml(formatearFecha(fecha))}
+          </div>
+          <div>
+            <label for="swal-estado" class="block text-sm font-medium text-slate-700 mb-1">
+              Estado
+            </label>
+            <select id="swal-estado" class="swal2-select !grid !w-full !m-0">
+              <option value="asistencia">Asistencia</option>
+              <option value="falta_justificada">Falta justificada</option>
+              <option value="falta_injustificada">Falta injustificada</option>
+              <option value="atraso">Atraso</option>
+              <option value="salida">Salida</option>
+              <option value="pago">Pago</option>
+              <option value="capacitacion">Capacitacion</option>
+              <option value="libre">Libre / Sin registro</option>
+            </select>
+          </div>
+          <div>
+            <label for="${modalId}" class="block text-sm font-medium text-slate-700 mb-1">
+              Observacion
+            </label>
+            <textarea
+              id="${modalId}"
+              class="swal2-textarea !grid !w-full !m-0 !h-28"
+              placeholder="Escribe una observacion para este dia"
+            >${escapeHtml(observacionActual || "")}</textarea>
+          </div>
+        </div>
+      `,
+      didOpen: () => {
+        const estadoInput = document.getElementById("swal-estado")
+        const observacionInput = document.getElementById(modalId)
+
+        if (estadoInput) estadoInput.value = estadoActual || "asistencia"
+        if (observacionInput) observacionInput.focus()
+      },
+      preConfirm: () => {
+        const estadoInput = document.getElementById("swal-estado")
+        const observacionInput = document.getElementById(modalId)
+
+        return {
+          estado: estadoInput?.value || "libre",
+          observacion: observacionInput?.value || "",
+        }
       },
       showCancelButton: true,
       confirmButtonText: "Guardar",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#16a34a",
+      width: 560,
     })
 
-    if (!estado) return
+    if (!isConfirmed) return
 
     await guardarAsistencia({
-      agenciaId,
+      agenciaId: agenciaActualId,
       usuarioAgenciaId,
       fecha,
-      estado,
+      estado: value?.estado || "libre",
+      observacion: value?.observacion || "",
     })
   }
 
@@ -222,26 +284,26 @@ const guardarAsistencia = async ({
 
   return (
     <div className="p-4">
-      <div className="rounded-2xl bg-white shadow-2xl overflow-hidden">
-        <div className="bg-black text-white px-4 py-3">
-          <h2 className="text-xl font-extrabold tracking-wide uppercase">
-            Registro de asistencia, planificación semanal de agencias
+      <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="bg-black px-4 py-3 text-white">
+          <h2 className="text-xl font-extrabold uppercase tracking-wide">
+            Registro de terminales, planificacion semanal de agencias
           </h2>
         </div>
 
-        <div className="p-4 flex flex-col md:flex-row gap-3 items-start md:items-center justify-between border-b">
-          <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex flex-col items-start justify-between gap-3 border-b p-4 md:flex-row md:items-center">
+          <div className="flex flex-col gap-3 md:flex-row">
             <input
               type="month"
               value={mes}
               onChange={(e) => setMes(e.target.value)}
-              className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
 
             <select
               value={agenciaId}
               onChange={(e) => setAgenciaId(e.target.value)}
-              className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <option value="">Todas las agencias</option>
               {agencias.map((agencia) => (
@@ -255,36 +317,34 @@ const guardarAsistencia = async ({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar usuario..."
-              className="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
 
           <button
             onClick={cargarAsistencia}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold shadow"
+            className="rounded-lg bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 font-semibold text-white shadow"
           >
             Actualizar
           </button>
         </div>
 
-        <div className="overflow-auto max-h-[72vh]">
+        <div className="max-h-[72vh] overflow-auto">
           <table className="min-w-max w-full border-collapse text-xs leading-tight">
             <thead className="sticky top-0 z-20">
               <tr className="bg-yellow-300 text-black">
-                <th className="sticky left-0 z-30 bg-yellow-300 border border-black px-2 py-1 text-left min-w-[180px]">
+                <th className="sticky left-0 z-30 min-w-[180px] border border-black bg-yellow-300 px-2 py-1 text-left">
                   Usuario
                 </th>
 
                 {fechas.map((item) => (
                   <th
                     key={item.fecha}
-                    className="border border-black px-1 py-1 text-center min-w-[34px]"
+                    className="min-w-[34px] border border-black px-1 py-1 text-center"
                   >
                     {item.label}
                   </th>
                 ))}
-
-
               </tr>
             </thead>
 
@@ -292,7 +352,7 @@ const guardarAsistencia = async ({
               {loading ? (
                 <tr>
                   <td
-                    colSpan={fechas.length + 7}
+                    colSpan={fechas.length + 1}
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     Cargando asistencia...
@@ -301,7 +361,7 @@ const guardarAsistencia = async ({
               ) : agenciasFiltradas.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={fechas.length + 7}
+                    colSpan={fechas.length + 1}
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     No hay datos de asistencia
@@ -312,7 +372,7 @@ const guardarAsistencia = async ({
                   <Fragment key={`agencia-${agencia.id}`}>
                     <tr className="bg-yellow-400">
                       <td
-                        colSpan={fechas.length + 7}
+                        colSpan={fechas.length + 1}
                         className="border border-black px-2 py-1 font-bold uppercase"
                       >
                         {agencia.nombre}
@@ -320,22 +380,32 @@ const guardarAsistencia = async ({
                     </tr>
 
                     {agencia.usuarios.map((usuario) => {
-                      const resumen = calcularResumen(usuario.asistencias)
+                      const nombreCompleto = `${usuario.nombre || ""} ${
+                        usuario.apellido || ""
+                      }`.trim()
 
                       return (
                         <tr
                           key={usuario.usuarioAgenciaId}
                           className="hover:bg-gray-50"
                         >
-                          <td className="sticky left-0 z-10 bg-white border border-black px-2 py-1 font-medium uppercase min-w-[180px] max-w-[180px] truncate">
-                            {`${usuario.nombre || ""} ${
-                              usuario.apellido || ""
-                            }`.trim()}
+                          <td className="sticky left-0 z-10 max-w-[180px] min-w-[180px] truncate border border-black bg-white px-2 py-1 font-medium uppercase">
+                            {nombreCompleto}
                           </td>
 
                           {fechas.map((item) => {
-                            const estado =
-                              usuario.asistencias?.[item.fecha] || "libre"
+                            const registro = normalizarRegistro(
+                              usuario.asistencias?.[item.fecha]
+                            )
+                            const estado = registro.estado || "libre"
+                            const tieneObservacion = Boolean(
+                              registro.observacion?.trim()
+                            )
+                            const titulo = tieneObservacion
+                              ? `${ESTADOS[estado]?.nombre || "Libre"}\nObservacion: ${
+                                  registro.observacion
+                                }`
+                              : ESTADOS[estado]?.nombre
 
                             return (
                               <td
@@ -347,20 +417,23 @@ const guardarAsistencia = async ({
                                       usuario.usuarioAgenciaId,
                                     fecha: item.fecha,
                                     estadoActual: estado,
+                                    observacionActual: registro.observacion,
+                                    usuarioNombre: nombreCompleto,
                                   })
                                 }
-                                title={ESTADOS[estado]?.nombre}
-                                className={`border border-black text-center cursor-pointer h-6 min-w-[34px] font-bold ${
+                                title={titulo}
+                                className={`relative h-6 min-w-[34px] cursor-pointer border border-black text-center font-bold ${
                                   ESTADOS[estado]?.className ||
                                   "bg-green-400 text-black"
                                 }`}
                               >
+                                {tieneObservacion ? (
+                                  <span className="absolute right-0 top-0 h-0 w-0 border-l-[10px] border-l-transparent border-t-[10px] border-t-red-600" />
+                                ) : null}
                                 {ESTADOS[estado]?.label || ""}
                               </td>
                             )
                           })}
-
-                   
                         </tr>
                       )
                     })}
@@ -371,17 +444,25 @@ const guardarAsistencia = async ({
           </table>
         </div>
 
-        <div className="p-3 border-t bg-gray-50 flex flex-wrap gap-3 text-xs">
+        <div className="flex flex-wrap gap-3 border-t bg-gray-50 p-3 text-xs">
           {Object.entries(ESTADOS).map(([key, item]) => (
             <div key={key} className="flex items-center gap-2">
               <span
-                className={`inline-flex w-7 h-5 items-center justify-center border font-bold ${item.className}`}
+                className={`inline-flex h-5 w-7 items-center justify-center border font-bold ${item.className}`}
               >
                 {item.label || "-"}
               </span>
               <span>{item.nombre}</span>
             </div>
           ))}
+
+          <div className="flex items-center gap-2">
+            <span className="relative inline-flex h-5 w-7 items-center justify-center border bg-white font-bold">
+              -
+              <span className="absolute right-0 top-0 h-0 w-0 border-l-[10px] border-l-transparent border-t-[10px] border-t-red-600" />
+            </span>
+            <span>Observacion registrada</span>
+          </div>
         </div>
       </div>
     </div>

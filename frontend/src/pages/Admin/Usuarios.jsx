@@ -667,8 +667,9 @@ export default function Usuarios() {
 
         {/* MODAL EDITAR */}
         {editModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-            <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 backdrop-blur-sm sm:p-4">
+            <div className="flex min-h-full items-start justify-center py-4 sm:py-6">
+              <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl max-sm:min-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)]">
               <div className="sticky top-0 z-10 border-b border-slate-100 bg-white px-6 py-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -691,7 +692,7 @@ export default function Usuarios() {
                 </div>
               </div>
 
-              <form onSubmit={actualizarUsuario} className="p-6">
+              <form onSubmit={actualizarUsuario} className="flex-1 overflow-y-auto p-4 sm:p-6">
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-slate-700">
@@ -894,6 +895,7 @@ export default function Usuarios() {
                   </button>
                 </div>
               </form>
+              </div>
             </div>
           </div>
         )}

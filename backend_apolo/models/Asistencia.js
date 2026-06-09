@@ -1,6 +1,16 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
 
+const ESTADOS_VALIDOS = [
+  "asistencia",
+  "falta_justificada",
+  "falta_injustificada",
+  "atraso",
+  "salida",
+  "pago",
+  "capacitacion",
+];
+
 const Asistencia = sequelize.define(
   "Asistencia",
   {
@@ -14,23 +24,19 @@ const Asistencia = sequelize.define(
     fecha: { type: DataTypes.DATEONLY, allowNull: false },
     estado: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
-        isIn: {
-          args: [
-            [
-              "asistencia",
-              "falta_justificada",
-              "falta_injustificada",
-              "atraso",
-              "salida",
-              "pago",
-              "capacitacion",
-            ],
-          ],
-          msg: "Estado de asistencia inválido.",
+        isValidEstado(value) {
+          if (value == null) return;
+          if (!ESTADOS_VALIDOS.includes(value)) {
+            throw new Error("Estado de asistencia inválido.");
+          }
         },
       },
+    },
+    observacion: {
+      type: DataTypes.TEXT,
+      allowNull: true,
     },
   },
   {
@@ -41,4 +47,3 @@ const Asistencia = sequelize.define(
 );
 
 module.exports = Asistencia;
-

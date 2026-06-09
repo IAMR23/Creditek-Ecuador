@@ -21,6 +21,11 @@ exports.obtenerReporteAuditoria = async ({
   fechaFin,
   agenciaId,
   vendedorId,
+  modeloId,
+  cierreCaja,
+  origenId,
+  dispositivoId,
+  estado,
 }) => {
   const whereVenta = {};
 
@@ -36,6 +41,20 @@ exports.obtenerReporteAuditoria = async ({
     whereVenta.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
   } else if (fechaFin) {
     whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+  }
+
+  const estadoActivo = normalizarEstadoActivo(estado);
+  if (estadoActivo !== null) {
+    whereVenta.activo = estadoActivo;
+  }
+
+  const whereDetalleVenta = {};
+  if (cierreCaja && cierreCaja !== "todos") {
+    whereDetalleVenta.cierreCaja = cierreCaja;
+  }
+
+  if (modeloId && modeloId !== "todos") {
+    whereDetalleVenta.modeloId = modeloId;
   }
 
   const includeUsuarioAgencia = {
@@ -80,6 +99,11 @@ exports.obtenerReporteAuditoria = async ({
         model: Origen,
         as: "origen",
         attributes: ["nombre"],
+        required: !!origenId && origenId !== "todos",
+        ...(origenId &&
+          origenId !== "todos" && {
+            where: { id: origenId },
+          }),
       },
       {
         model: DetalleVenta,
@@ -94,14 +118,29 @@ exports.obtenerReporteAuditoria = async ({
           "contrato",
           "cierreCaja",
         ],
+        ...((Object.keys(whereDetalleVenta).length > 0 ||
+          (dispositivoId && dispositivoId !== "todos")) && {
+          where: whereDetalleVenta,
+          required: true,
+        }),
         include: [
           { model: Modelo, as: "modelo", attributes: ["nombre"] },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
             attributes: ["id"],
+            required: !!dispositivoId && dispositivoId !== "todos",
             include: [
-              { model: Dispositivo, as: "dispositivo", attributes: ["nombre"] },
+              {
+                model: Dispositivo,
+                as: "dispositivo",
+                attributes: ["nombre"],
+                required: !!dispositivoId && dispositivoId !== "todos",
+                ...(dispositivoId &&
+                  dispositivoId !== "todos" && {
+                    where: { id: dispositivoId },
+                  }),
+              },
               { model: Marca, as: "marca", attributes: ["nombre"] },
             ],
           },
@@ -400,6 +439,19 @@ const normalizarIds = (valor) => {
     .split(",")
     .map(Number)
     .filter(Boolean);
+};
+
+const normalizarEstadoActivo = (estado) => {
+  if (!estado || estado === "todos") return null;
+
+  const valor = String(estado).toLowerCase();
+
+  if (["activo", "activa", "true", "1"].includes(valor)) return true;
+  if (["desactivada", "desactivado", "inactivo", "inactiva", "false", "0"].includes(valor)) {
+    return false;
+  }
+
+  return null;
 };
 
 
