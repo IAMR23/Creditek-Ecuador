@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { NavLink } from "react-router-dom";
-import { Building2, ClipboardList, Shield, Users, UsersRound } from "lucide-react";
+import { Building2, ClipboardList, FileText, Shield, Users, UsersRound } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
 
 export default function Sidebar() {
@@ -54,6 +54,11 @@ export default function Sidebar() {
         <NavLink to="/control-asistencia" className={linkClass}>
           <ClipboardList size={18} />
           Movimientos de Terminales
+        </NavLink>
+
+        <NavLink to="/postulaciones" className={linkClass}>
+          <FileText size={18} />
+          Postulaciones
         </NavLink>
       </nav>
 

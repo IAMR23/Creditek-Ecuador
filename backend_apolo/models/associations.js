@@ -3,6 +3,7 @@ const Rol = require("./Rol");
 const Agencia = require("./Agencia");
 const UsuarioAgencia = require("./UsuarioAgencia");
 const Asistencia = require("./Asistencia");
+require("./Postulacion");
 
 Usuario.belongsTo(Rol, { foreignKey: "rolId", as: "rol" });
 Rol.hasMany(Usuario, { foreignKey: "rolId", as: "usuarios" });

@@ -986,8 +986,8 @@ import FormProgress from "../../components/FormProgress.astro";
 
     try {
       const res = await fetch(
-       `https://api.creditek-ecuador.com/api/postulaciones`,
-   //     `http://localhost:3000/api/postulaciones`,
+     `https://abs.creditek-ecuador.com/api/postulaciones`,
+       //`http://localhost:5030/api/postulaciones`,
         {
           method: "POST",
           headers: {
@@ -1001,8 +1001,11 @@ import FormProgress from "../../components/FormProgress.astro";
 
       if (res.ok) {
         jobForm.reset();
-        showStep(1);
-        showStatus("Formulario enviado correctamente.", "success");
+        sessionStorage.setItem(
+          "postulacionStatus",
+          "Gracias por llenar la encuesta.",
+        );
+        window.location.href = "/trabaja-con-nosotros";
       } else {
         showStatus(result.message || "Error al enviar. Intenta de nuevo.", "error");
       }

@@ -17,6 +17,14 @@ import Whatsapp from "../../components/Whatsapp.astro";
       <span class="text-orange-500">Nosotros</span>
     </h2>
 
+    <div
+      id="postulacionStatus"
+      class="mx-auto mt-6 hidden max-w-3xl rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-center text-base font-semibold text-green-800"
+      role="status"
+      aria-live="polite"
+    >
+    </div>
+
     <div class="mb-8 mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-6">
       <h3 class="mb-3 text-lg font-semibold text-gray-900">
         Antes de comenzar
@@ -79,6 +87,15 @@ import Whatsapp from "../../components/Whatsapp.astro";
   document.addEventListener("DOMContentLoaded", () => {
     const checkbox = document.getElementById("acceptTerms") as HTMLInputElement | null;
     const boton = document.getElementById("startFormBtn") as HTMLButtonElement | null;
+    const status = document.getElementById("postulacionStatus") as HTMLDivElement | null;
+
+    const message = sessionStorage.getItem("postulacionStatus");
+    if (message && status) {
+      status.textContent = message;
+      status.classList.remove("hidden");
+      sessionStorage.removeItem("postulacionStatus");
+      status.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
 
     if (!checkbox || !boton) {
       console.warn("Elementos del formulario no encontrados");

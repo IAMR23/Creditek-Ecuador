@@ -12,6 +12,7 @@ const rolRoutes = require("./routes/RolRoutes");
 const authRoutes = require("./routes/authRoutes");
 const bootstrapRoutes = require("./routes/bootstrapRoutes");
 const asistenciaRoutes = require("./routes/AsistenciaRoutes");
+const postulacionesRouter = require("./routes/postulacionesRouter");
 const auth = require("./middleware/auth");
 const Rol = require("./models/Rol");
 const Agencia = require("./models/Agencia");
@@ -33,6 +34,8 @@ const parseCookies = (req, _res, next) => {
 
 const allowedOrigins = [
   process.env.WEB_CORS,
+  /^https?:\/\/(www\.)?creditek-ecuador\.com$/,
+  /^https?:\/\/abs\.creditek-ecuador\.com$/,
   /^https?:\/\/localhost:\d+$/,
   /^https?:\/\/127\.0\.0\.1:\d+$/,
 ].filter(Boolean);
@@ -65,6 +68,7 @@ app.use("/agencias",  auth , agenciaRoutes);
 app.use("/usuario-agencia",  auth , usuarioAgenciaRoutes);
 app.use("/rol", auth,  rolRoutes);
 app.use("/asistencias", auth, asistenciaRoutes);
+app.use("/api/postulaciones", postulacionesRouter);
 
 connectDB()
   .then(() => {
