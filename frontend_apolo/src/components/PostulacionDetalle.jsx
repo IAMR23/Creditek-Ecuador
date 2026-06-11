@@ -6,6 +6,8 @@ const labels = {
   nombreCompleto: "Nombre completo",
   cedula: "Cedula",
   edadCumplida: "Edad cumplida",
+  numeroHijos: "Numero de hijos",
+  estadoCivil: "Estado civil",
   ciudadNacimiento: "Ciudad de nacimiento",
   otraCiudadNacimiento: "Otra ciudad",
   tiempoResidenciaQuito: "Tiempo de residencia en Quito",
@@ -26,6 +28,7 @@ const labels = {
   motivoSalida: "Motivo de salida",
   jefeEncargado: "Jefe o encargado",
   telefonoReferencia: "Telefono de referencia",
+  logrosVida: "Logros alcanzados en su vida",
   observacionesAdicionales: "Observaciones adicionales",
   sinExperienciaLaboral: "Sin experiencia laboral",
   fecha_envio: "Fecha de envio",
@@ -129,7 +132,15 @@ export default function ModalDetalle({ postulacion, onClose }) {
           <Section title="Datos personales">
             <FieldGrid
               data={datos}
-              order={["nombreCompleto", "cedula", "edadCumplida", "ciudadNacimiento", "otraCiudadNacimiento"]}
+              order={[
+                "nombreCompleto",
+                "cedula",
+                "edadCumplida",
+                "numeroHijos",
+                "estadoCivil",
+                "ciudadNacimiento",
+                "otraCiudadNacimiento",
+              ]}
             />
           </Section>
 
@@ -163,7 +174,10 @@ export default function ModalDetalle({ postulacion, onClose }) {
           </Section>
 
           <Section title="Observaciones e informacion adicional">
-            <FieldGrid data={observaciones} order={["observacionesAdicionales", "sinExperienciaLaboral"]} />
+            <FieldGrid
+              data={observaciones}
+              order={["logrosVida", "observacionesAdicionales", "sinExperienciaLaboral"]}
+            />
           </Section>
 
           <Section title="Metadata">

@@ -171,12 +171,14 @@ export default function Postulaciones() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-[960px] w-full text-left text-sm">
+              <table className="min-w-[1120px] w-full text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
                     <th className="px-4 py-3">Aspirante</th>
                     <th className="px-4 py-3">Cedula</th>
                     <th className="px-4 py-3">Edad</th>
+                    <th className="px-4 py-3">Hijos</th>
+                    <th className="px-4 py-3">Estado civil</th>
                     <th className="px-4 py-3">Ciudad</th>
                     <th className="px-4 py-3">Vivienda</th>
                     <th className="px-4 py-3">Trabajos</th>
@@ -203,6 +205,12 @@ export default function Postulaciones() {
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           {datos.edadCumplida || dash}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {datos.numeroHijos || dash}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {datos.estadoCivil || dash}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           {datos.ciudadNacimiento === "Otra"

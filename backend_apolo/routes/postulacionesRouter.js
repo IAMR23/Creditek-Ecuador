@@ -26,6 +26,8 @@ const buildFromFlatPayload = (data) => ({
     nombreCompleto: data.nombreCompleto,
     cedula: data.cedula,
     edadCumplida: data.edadCumplida,
+    numeroHijos: data.numeroHijos,
+    estadoCivil: data.estadoCivil,
     ciudadNacimiento: data.ciudadNacimiento,
     otraCiudadNacimiento: data.otraCiudadNacimiento,
     provinciaNacimiento: data.provinciaNacimiento,
@@ -65,6 +67,7 @@ const buildFromFlatPayload = (data) => ({
     )
     .filter(tieneDatos),
   observaciones: clean({
+    logrosVida: data.logrosVida,
     observacionesAdicionales: data.observacionesAdicionales,
     sinExperienciaLaboral: data.sinExperienciaLaboral,
     firmaAspirante: data.firmaAspirante,
@@ -89,7 +92,7 @@ const normalizePayload = (data = {}) => {
   payload.metadata = {
     fecha_envio: new Date().toISOString(),
     origen: "web",
-    version_formulario: "postulacion-v2",
+    version_formulario: "postulacion-v3",
   };
 
   return payload;

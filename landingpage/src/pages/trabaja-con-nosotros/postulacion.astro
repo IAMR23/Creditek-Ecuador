@@ -62,6 +62,48 @@ import FormProgress from "../../components/FormProgress.astro";
           />
         </div>
 
+        <div class="mt-5">
+          <label for="numeroHijos" class="label">Numero de hijos</label>
+          <input
+            id="numeroHijos"
+            name="numeroHijos"
+            class="input"
+            type="number"
+            min="0"
+          />
+        </div>
+
+        <div class="mt-8">
+          <p class="label mb-3">Estado civil</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="radio-card">
+              <input type="radio" name="estadoCivil" value="Soltero" class="sr-only" />
+              <span>Soltero</span>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="estadoCivil" value="Casado" class="sr-only" />
+              <span>Casado</span>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="estadoCivil" value="Union libre" class="sr-only" />
+              <span>Union libre</span>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="estadoCivil" value="Separado" class="sr-only" />
+              <span>Separado</span>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="estadoCivil" value="Divorciado" class="sr-only" />
+              <span>Divorciado</span>
+            </label>
+          </div>
+        </div>
+
         <div class="mt-8">
           <p class="label mb-3">Ciudad de nacimiento</p>
 
@@ -436,6 +478,17 @@ import FormProgress from "../../components/FormProgress.astro";
       <!-- 6. Observaciones adicionales -->
       <section class="form-section mt-10">
         <h2>Observaciones adicionales</h2>
+
+        <div class="mt-5">
+          <label for="logrosVida" class="label">
+            Que logros a alcanzado en su vida
+          </label>
+          <textarea
+            id="logrosVida"
+            name="logrosVida"
+            class="input"
+            style="min-height: 140px"></textarea>
+        </div>
 
         <div class="mt-5">
           <label for="observacionesAdicionales" class="label">
@@ -923,6 +976,8 @@ import FormProgress from "../../components/FormProgress.astro";
         nombreCompleto: getValue("nombreCompleto"),
         cedula: getValue("cedula"),
         edadCumplida: getValue("edadCumplida"),
+        numeroHijos: getValue("numeroHijos"),
+        estadoCivil: getCheckedValue("estadoCivil"),
         ciudadNacimiento: getCheckedValue("ciudadNacimiento"),
         otraCiudadNacimiento: getValue("otraCiudadNacimiento"),
       },
@@ -939,6 +994,7 @@ import FormProgress from "../../components/FormProgress.astro";
       personas_con_quien_vive,
       historial_laboral,
       observaciones: {
+        logrosVida: getValue("logrosVida"),
         observacionesAdicionales: getValue("observacionesAdicionales"),
         sinExperienciaLaboral: (
           jobForm.elements.namedItem("sinExperienciaLaboral") as HTMLInputElement
@@ -986,8 +1042,8 @@ import FormProgress from "../../components/FormProgress.astro";
 
     try {
       const res = await fetch(
-     `https://apiapolo.creditek-ecuador.com/api/postulaciones`,
-       //`http://localhost:5030/api/postulaciones`,
+   //  `https://apiapolo.creditek-ecuador.com/api/postulaciones`,
+       `http://localhost:5030/api/postulaciones`,
         {
           method: "POST",
           headers: {
