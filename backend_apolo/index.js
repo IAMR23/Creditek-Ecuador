@@ -34,8 +34,12 @@ const parseCookies = (req, _res, next) => {
 
 const allowedOrigins = [
   process.env.WEB_CORS,
-  /^https?:\/\/(www\.)?creditek-ecuador\.com$/,
-  /^https?:\/\/abs\.creditek-ecuador\.com$/,
+  "https://www.creditek-ecuador.com",
+  "https://creditek-ecuador.com",
+  "https://apiapolo.creditek-ecuador.com",
+  /^https?:\/\/(www\.)?creditek-ecuador\.com(:\d+)?$/,
+  /^https?:\/\/abs\.creditek-ecuador\.com(:\d+)?$/,
+  /^https?:\/\/apiapolo\.creditek-ecuador\.com(:\d+)?$/,
   /^https?:\/\/localhost:\d+$/,
   /^https?:\/\/127\.0\.0\.1:\d+$/,
 ].filter(Boolean);
@@ -48,11 +52,13 @@ app.use(
         typeof o === "string" ? o === origin : o.test(origin)
       );
       if (allowed) return callback(null, true);
+      console.warn(`CORS bloqueado para origen: ${origin}`);
       return callback(new Error("CORS no permitido: " + origin), false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    maxAge: 3600,
   })
 );
 

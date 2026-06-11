@@ -101,7 +101,11 @@ const tooltipStyle = {
   },
 };
 
-
+const minDataDomain = ([dataMin, dataMax]) => {
+  if (!Number.isFinite(dataMin) || !Number.isFinite(dataMax)) return [0, 1];
+  if (dataMin === dataMax) return [dataMin, dataMin + 1];
+  return [dataMin, dataMax];
+};
 
 export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
   const [viabilidadSemana, setViabilidadSemana] = useState(12);
@@ -151,8 +155,8 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 mt-6">
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-1">
+    <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-12 gap-6 mt-6">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Total Ventas</h3>
 
         <p className="text-4xl font-bold text-blue-800">
@@ -160,7 +164,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-1">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Indicador Gerencia</h3>
 
         <p className="text-4xl font-bold text-blue-800">
@@ -168,7 +172,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-1">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Enganche Javier</h3>
 
         <p className="text-4xl font-bold text-green-700">
@@ -176,15 +180,15 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-4">
         <h3 className="font-semibold mb-4">
           Ventas Enganche Javier por Semana
         </h3>
 
-        <ResponsiveContainer width="100%" height={360}>
+        <ResponsiveContainer width="100%" height={650}>
           <LineChart
             data={dataEngancheJavier}
-            margin={{ top: 20, right: 30, left: 70, bottom: 120 }}
+            margin={{ top: 20, right: 12, left: 10, bottom: 110 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
 
@@ -195,7 +199,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
               interval={0}
             />
 
-            <YAxis allowDecimals={false} />
+            <YAxis allowDecimals={false} domain={minDataDomain} />
 
             <Tooltip {...tooltipStyle} />
 
@@ -212,7 +216,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 className="font-semibold">Ventas por Semana</h3>
 
@@ -240,13 +244,13 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
           </div>
         </div>
 
-        <div ref={refSemana} className="bg-white p-4 rounded-xl">
+        <div ref={refSemana} className="bg-white rounded-xl">
           <h4 className="font-semibold mb-3">Ventas por Semana</h4>
 
-          <ResponsiveContainer width="100%" height={700}>
+          <ResponsiveContainer width="100%" height={650}>
             <LineChart
               data={dataSemana}
-              margin={{ top: 20, right: 30, left: 70, bottom: 150 }}
+              margin={{ top: 20, right: 12, left: 10, bottom: 110 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
 
@@ -257,7 +261,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
                 interval={0}
               />
 
-              <YAxis />
+              <YAxis domain={minDataDomain} />
 
               <Tooltip {...tooltipStyle} />
 
@@ -283,13 +287,13 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-4">
         <h3 className="font-semibold mb-4">Indicador Gerencia por Semana</h3>
 
-        <ResponsiveContainer width="100%" height={420}>
+        <ResponsiveContainer width="100%" height={650}>
           <LineChart
             data={dataIndicadorGerencia}
-            margin={{ top: 20, right: 30, left: 70, bottom: 120 }}
+            margin={{ top: 20, right: 12, left: 22, bottom: 110 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
 
@@ -300,7 +304,10 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
               interval={0}
             />
 
-            <YAxis tickFormatter={(value) => moneyFormatter.format(value)} />
+            <YAxis
+              domain={minDataDomain}
+              tickFormatter={(value) => moneyFormatter.format(value)}
+            />
 
             <Tooltip
               {...tooltipStyle}
