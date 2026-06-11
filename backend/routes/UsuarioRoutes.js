@@ -2,9 +2,38 @@ const express = require("express");
 const router = express.Router();
 const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
+const UsuarioRol = require("../models/UsuarioRol");
 const bcrypt = require("bcryptjs");
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+
+const normalizarRolIds = (rolId, rolIds) => {
+  const ids = Array.isArray(rolIds) ? rolIds : rolId ? [rolId] : [];
+  return [...new Set(ids.map(Number).filter(Boolean))];
+};
+
+const validarRoles = async (rolIds) => {
+  const roles = await Rol.findAll({ where: { id: rolIds } });
+  if (roles.length !== rolIds.length) {
+    throw new Error("Uno o mas roles especificados no existen.");
+  }
+  return roles;
+};
+
+const sincronizarRolesUsuario = async (usuarioId, rolIds) => {
+  await UsuarioRol.destroy({ where: { usuarioId } });
+
+  if (rolIds.length > 0) {
+    await UsuarioRol.bulkCreate(
+      rolIds.map((rolId) => ({
+        usuarioId,
+        rolId,
+        activo: true,
+      })),
+    );
+  }
+};
 
 // ===========================
 // 🔹 CREAR USUARIO
@@ -17,6 +46,7 @@ router.post("/", async (req, res) => {
       email,
       password,
       rolId,
+      rolIds,
       fechaIngreso,
       fechaSalida,
       numeroCuenta,
@@ -38,18 +68,20 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "El email ya está registrado." });
     }
 
-    // Validar rolId
-    if (!rolId) {
+    const rolesIdsNormalizados = normalizarRolIds(rolId, rolIds);
+
+    if (rolesIdsNormalizados.length === 0) {
       return res
         .status(400)
-        .json({ message: "El campo rolId es obligatorio." });
+        .json({ message: "Debe asignar al menos un rol." });
     }
 
-    const existeRol = await Rol.findByPk(rolId);
-    if (!existeRol) {
+    try {
+      await validarRoles(rolesIdsNormalizados);
+    } catch (error) {
       return res
         .status(400)
-        .json({ message: "El rol especificado no existe." });
+        .json({ message: error.message });
     }
 
     // Hash password
@@ -60,7 +92,7 @@ router.post("/", async (req, res) => {
       cedula,
       email,
       password: hashedPassword,
-      rolId,
+      rolId: rolesIdsNormalizados[0],
       fechaIngreso,
       fechaSalida,
       numeroCuenta,
@@ -68,6 +100,8 @@ router.post("/", async (req, res) => {
       telefono,
       activo: true,
     });
+
+    await sincronizarRolesUsuario(nuevoUsuario.id, rolesIdsNormalizados);
 
     const { password: _, ...usuarioSinPassword } = nuevoUsuario.toJSON();
     res.status(201).json(usuarioSinPassword);
@@ -85,7 +119,15 @@ router.get("/", async (req, res) => {
     const usuarios = await Usuario.findAll({
       where: { activo: true },
       attributes: { exclude: ["password"] },
-      include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+      include: [
+        { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+        {
+          model: Rol,
+          as: "roles",
+          attributes: ["id", "nombre"],
+          through: { attributes: [] },
+        },
+      ],
       order: [["nombre", "ASC"]],
     });
     res.json(usuarios);
@@ -101,7 +143,15 @@ router.get("/:id", async (req, res) => {
   try {
     const usuario = await Usuario.findByPk(req.params.id, {
       attributes: { exclude: ["password"] },
-      include: [{ model: Rol, attributes: ["id", "nombre"] }],
+      include: [
+        { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+        {
+          model: Rol,
+          as: "roles",
+          attributes: ["id", "nombre"],
+          through: { attributes: [] },
+        },
+      ],
     });
 
     if (!usuario) {
@@ -117,7 +167,7 @@ router.get("/:id", async (req, res) => {
 // ===========================
 // 🔹 ACTUALIZAR
 // ===========================
-router.put("/:id", async (req, res) => {
+const actualizarUsuario = async (req, res) => {
   try {
     const {
       nombre,
@@ -125,6 +175,7 @@ router.put("/:id", async (req, res) => {
       email,
       password,
       rolId,
+      rolIds,
       activo,
       fechaIngreso,
       fechaSalida,
@@ -159,14 +210,25 @@ router.put("/:id", async (req, res) => {
     }
 
     // ========== VALIDAR Y ACTUALIZAR ROL SOLO SI LO ENVÍAN ==========
-    if (rolId !== undefined) {
-      const existeRol = await Rol.findByPk(rolId);
-      if (!existeRol) {
+    const debeActualizarRoles = rolId !== undefined || rolIds !== undefined;
+    let rolesIdsNormalizados = null;
+
+    if (debeActualizarRoles) {
+      rolesIdsNormalizados = normalizarRolIds(rolId, rolIds);
+
+      if (rolesIdsNormalizados.length === 0) {
         return res
           .status(400)
-          .json({ message: "El rol especificado no existe." });
+          .json({ message: "Debe asignar al menos un rol." });
       }
-      usuario.rolId = rolId;
+
+      try {
+        await validarRoles(rolesIdsNormalizados);
+      } catch (error) {
+        return res.status(400).json({ message: error.message });
+      }
+
+      usuario.rolId = rolesIdsNormalizados[0];
     }
 
     // ========== CAMPOS NORMALES (solo si vienen) ==========
@@ -181,12 +243,26 @@ router.put("/:id", async (req, res) => {
 
     await usuario.save();
 
+    if (debeActualizarRoles) {
+      await sincronizarRolesUsuario(usuario.id, rolesIdsNormalizados);
+    }
+
+    if (activo === false) {
+      await UsuarioAgencia.update(
+        { activo: false },
+        { where: { usuarioId: usuario.id } },
+      );
+    }
+
     const { password: _, ...usuarioSinPassword } = usuario.toJSON();
     res.json(usuarioSinPassword);
   } catch (error) {
     res.status(500).json({ message: "Error al actualizar usuario", error });
   }
-});
+};
+
+router.put("/:id", actualizarUsuario);
+router.patch("/:id", actualizarUsuario);
 
 // ===========================
 // 🔹 ELIMINAR
@@ -199,8 +275,13 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    await usuario.destroy();
-    res.json({ message: "Usuario eliminado correctamente" });
+    await usuario.update({ activo: false });
+    await UsuarioAgencia.update(
+      { activo: false },
+      { where: { usuarioId: usuario.id } },
+    );
+
+    res.json({ message: "Usuario desactivado correctamente" });
   } catch (error) {
     res.status(500).json({ message: "Error al eliminar usuario", error });
   }

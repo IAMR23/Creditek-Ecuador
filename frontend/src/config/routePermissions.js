@@ -1,61 +1,124 @@
+export const SIDEBAR_SECTION_PERMISSIONS = [
+  {
+    permission: "Gerencia",
+    descripcion: "Acceso a la seccion Gerencia del sidebar",
+  },
+  {
+    permission: "Marketing",
+    descripcion: "Acceso a la seccion Marketing del sidebar",
+  },
+  {
+    permission: "Logistica",
+    descripcion: "Acceso a la seccion Logistica del sidebar",
+  },
+  {
+    permission: "Contabilidad",
+    descripcion: "Acceso a la seccion Contabilidad del sidebar",
+  },
+  {
+    permission: "Auditoria",
+    descripcion: "Acceso a la seccion Auditoria del sidebar",
+  },
+  {
+    permission: "Desarrollo Organizacional",
+    descripcion: "Acceso a la seccion Desarrollo Organizacional del sidebar",
+  },
+  {
+    permission: "Administracion",
+    descripcion: "Acceso a la seccion Administracion del sidebar",
+  },
+  {
+    permission: "Catalogos",
+    descripcion: "Acceso a la seccion Catalogos del sidebar",
+  },
+];
+
+export const VENDEDOR_PERMISSION = "Vendedor";
+
 export const ROUTE_PERMISSIONS = {
-  "/powerbi": "Power BI",
-  "/usuarios": "Usuarios",
-  "/agencias": "Agencias",
-  "/usuarios-agencias": "Usuarios Agencias",
-  "/revision-gestiones": "Revision Gestiones",
-  "/revision-gestiones-comercial": "Revision Gestiones Comercial",
-  "/bdd-ventas": "Base de Datos Ventas",
-  "/bonos": "Bonos",
-  "/tasks": "Tareas",
-  "/metas-comerciales": "Metas Comerciales",
-  "/reporte-entregas": "Reporte Entregas",
-  "/entregas-pendientes": "Entregas Pendientes",
-  "/entregas-repartidores-tabla": "Informe Entregas",
-  "/revisar-cajas": "Cierres de Caja",
-  "/entregas-auditoria": "Entregas Auditoria",
-  "/ventas-auditoria": "Ventas Auditoria",
-  "/copa-creditek": "Copa Creditek",
-  "/goleadores": "Goleadores",
-  "/postulaciones": "Postulaciones",
-  "/rol": "Roles",
-  "/dispositivos": "Dispositivos",
-  "/marcas": "Marcas",
-  "/modelos": "Modelos",
-  "/dispositivosMarcas": "Dispositivos Marcas",
-  "/costoHistorico": "Costo Historico",
-  "/formas-pago": "Formas de Pago",
-  "/origen": "Origen",
-  "/obsequios": "Obsequios",
-  "/estado-entrega": "Estado Entrega",
-  "/permisos": "Permisos",
-  "/asignar-permisos": "Asignar Permisos",
-  "/asignar-permisos-usuario-agencia": "Asignar Permisos Usuario Agencia",
-  "/usuarios-permisos": "Usuarios con Permisos",
+  "/dashboard": "Gerencia",
+  "/powerbi": "Gerencia",
+  "/metas-comerciales": "Gerencia",
+  "/reporte-entregas": "Gerencia",
+  "/revision-gestiones": "Gerencia",
+  "/revision-gestiones-comercial": "Gerencia",
+  "/bdd-ventas": "Gerencia",
+  "/bonos": "Gerencia",
+  "/tasks": "Gerencia",
+  "/ventas-completas": "Gerencia",
+
+  "/copa-creditek": "Marketing",
+  "/goleadores": "Marketing",
+
+  "/logistica-panel": "Logistica",
+  "/entregas": "Logistica",
+  "/entrega-logistica": "Logistica",
+  "/entregas-pendientes": "Logistica",
+  "/entregas-repartidores-tabla": "Logistica",
+  "/mis-entregas-pendientes": "Logistica",
+  "/mis-entregas-realizadas": "Logistica",
+
+  "/revisar-cajas": "Contabilidad",
+  "/revisar-cajas2": "Contabilidad",
+
+  "/entregas-auditoria": "Auditoria",
+  "/ventas-auditoria": "Auditoria",
+
+  "/postulaciones": "Desarrollo Organizacional",
+
+  "/usuarios": "Administracion",
+  "/rol": "Administracion",
+  "/agencias": "Administracion",
+  "/usuarios-agencias": "Administracion",
+  "/permisos": "Administracion",
+  "/asignar-permisos": "Administracion",
+  "/asignar-permisos-usuario-agencia": "Administracion",
+  "/usuarios-permisos": "Administracion",
+  "/recuperar-permisos": "Administracion",
+  "/recuperar-permisos/catalogo": "Administracion",
+  "/seleccionar-modo": "Administracion",
+
+  "/marcas": "Catalogos",
+  "/modelos": "Catalogos",
+  "/dispositivos": "Catalogos",
+  "/dispositivosMarcas": "Catalogos",
+  "/costoHistorico": "Catalogos",
+  "/formas-pago": "Catalogos",
+  "/origen": "Catalogos",
+  "/obsequios": "Catalogos",
+  "/estado-entrega": "Catalogos",
+
+  "/vendedor-panel": VENDEDOR_PERMISSION,
+  "/mis-ventas": VENDEDOR_PERMISSION,
+  "/registrar-clientes-venta": VENDEDOR_PERMISSION,
+  "/crear-venta": VENDEDOR_PERMISSION,
+  "/ventacompleta": VENDEDOR_PERMISSION,
+  "/crear-gestion-comercial": VENDEDOR_PERMISSION,
+  "/mis-gestiones-comerciales": VENDEDOR_PERMISSION,
+  "/registrar-clientes-entrega": VENDEDOR_PERMISSION,
+  "/crear-entrega": VENDEDOR_PERMISSION,
+  "/crear-entrega-completa": VENDEDOR_PERMISSION,
+  "/mis-entregas": VENDEDOR_PERMISSION,
+  "/crear-traslado": VENDEDOR_PERMISSION,
+  "/mis-traslados": VENDEDOR_PERMISSION,
+  "/gestion": VENDEDOR_PERMISSION,
+  "/mis-gestiones": VENDEDOR_PERMISSION,
+  "/caja": VENDEDOR_PERMISSION,
 };
 
-export const SYSTEM_ROUTES = Object.entries(ROUTE_PERMISSIONS).map(
-  ([path, permission]) => ({
-    path,
-    permission,
-    descripcion: `Acceso a ${path}`,
-  }),
-);
-
-export const ADMIN_PERMISSION_PATHS = [
-  "/recuperar-permisos",
-];
+export const SYSTEM_ROUTES = SIDEBAR_SECTION_PERMISSIONS;
 
 export const ROUTE_REDIRECT_ORDER = [
   "/dashboard",
-  "/powerbi",
-  "/metas-comerciales",
-  "/reporte-entregas",
-  "/entregas-pendientes",
-  "/ventas-auditoria",
-  "/mis-ventas",
   "/vendedor-panel",
   "/logistica-panel",
+  "/metas-comerciales",
+  "/entregas-pendientes",
+  "/ventas-auditoria",
+  "/revisar-cajas",
+  "/postulaciones",
+  "/usuarios",
+  "/marcas",
 ];
 
 export const normalizeRole = (rol) => String(rol || "").trim().toLowerCase();
@@ -74,15 +137,26 @@ export const normalizePermissions = (permisos = []) =>
 
 export const hasRouteAccess = ({ rol, permisos = [], path, permission }) => {
   const rolNormalizado = normalizeRole(rol);
-  if (rolNormalizado === "admin") {
-    return true;
-  }
-
-  if (ADMIN_PERMISSION_PATHS.includes(path)) {
-    return true;
-  }
-
   const permisoRequerido = permission || ROUTE_PERMISSIONS[path];
+
+  if (
+    ["admin", "administrador"].includes(rolNormalizado) &&
+    normalizePermissionName(permisoRequerido) === "administracion"
+  ) {
+    return true;
+  }
+
+  if (rolNormalizado === "vendedor" && permisoRequerido === VENDEDOR_PERMISSION) {
+    return true;
+  }
+
+  if (
+    rolNormalizado === "repartidor" &&
+    normalizePermissionName(permisoRequerido) === "logistica"
+  ) {
+    return true;
+  }
+
   if (!permisoRequerido) return true;
 
   const permisosNormalizados = normalizePermissions(permisos).map(normalizePermissionName);

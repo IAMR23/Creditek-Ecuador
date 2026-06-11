@@ -3,15 +3,14 @@ const router = express.Router();
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
-const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
-const Permiso = require("../models/Permiso");
+const { authenticate, requirePermission } = require("../middleware/authMiddleware");
 
 // ===========================
 // 🔹 CONTROLADORES
 // ===========================
 
 // Crear relación usuario-agencia
-router.post("/", async (req, res) => {
+router.post("/", authenticate, requirePermission("Administracion"), async (req, res) => {
   try {
     const { usuarioId, agenciaId, activo } = req.body;
 
@@ -40,7 +39,7 @@ router.post("/", async (req, res) => {
 });
 
 // Obtener todas las relaciones
-router.get("/", async (req, res) => {
+router.get("/", authenticate, requirePermission("Administracion"), async (req, res) => {
   try {
   const relaciones = await UsuarioAgencia.findAll({
   include: [
@@ -57,20 +56,17 @@ router.get("/", async (req, res) => {
 });
 
 
-router.get("/activos", async (req, res) => {
+router.get(
+  "/activos",
+  authenticate,
+  requirePermission("Administracion"),
+  async (req, res) => {
   try {
     const relacionesActivas = await UsuarioAgencia.findAll({
       where: { activo: true }, // Solo activos
       include: [
         { model: Usuario, as: "usuario" },
         { model: Agencia, as: "agencia" },
-        {
-          model: UsuarioAgenciaPermiso,
-          as: "permisosAsignados",
-          where: { activo: true },
-          required: false,
-          include: [{ model: Permiso, as: "permiso" }],
-        },
       ],
       order: [
         ["id", "ASC"], // opcional, orden por id
@@ -82,10 +78,11 @@ router.get("/activos", async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Error al obtener relaciones activas", error });
   }
-});
+  },
+);
 
 // Obtener relación por ID
-router.get("/:id", async (req, res) => {
+router.get("/:id", authenticate, requirePermission("Administracion"), async (req, res) => {
   try {
     const { id } = req.params;
     const relacion = await UsuarioAgencia.findByPk(id, { include: [Usuario, Agencia] });
@@ -100,7 +97,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // Actualizar relación
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticate, requirePermission("Administracion"), async (req, res) => {
   try {
     const { id } = req.params;
     const {  activo } = req.body;
@@ -119,7 +116,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // Eliminar relación
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, requirePermission("Administracion"), async (req, res) => {
   try {
     const { id } = req.params;
     const relacion = await UsuarioAgencia.findByPk(id);

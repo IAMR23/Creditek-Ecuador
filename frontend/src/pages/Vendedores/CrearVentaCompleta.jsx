@@ -19,6 +19,14 @@ const normalizeText = (value) =>
 const isCreditoDirecto = (formaPago) =>
   normalizeText(formaPago?.nombre).includes("credito directo");
 
+const escapeHtml = (value) =>
+  String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 const CrearVentaCompleta = () => {
   const [loading, setLoading] = useState(false);
   const [origenes, setOrigenes] = useState([]);
@@ -410,10 +418,22 @@ const CrearVentaCompleta = () => {
   } catch (error) {
     console.error(error);
 
-    const mensaje =
-      error.response?.data?.message || "No se pudo crear la venta";
+    const data = error.response?.data;
+    const mensaje = data?.message || "No se pudo crear la venta";
+    const detalleError = data?.error && data.error !== mensaje ? data.error : null;
 
-    Swal.fire("Error", mensaje, "error");
+    Swal.fire({
+      icon: "error",
+      title: "Error al crear la venta",
+      html: `
+        <p>${escapeHtml(mensaje)}</p>
+        ${
+          detalleError
+            ? `<p class="mt-2 text-xs text-gray-500">Detalle: ${escapeHtml(detalleError)}</p>`
+            : ""
+        }
+      `,
+    });
 
   } finally {
     setLoading(false);

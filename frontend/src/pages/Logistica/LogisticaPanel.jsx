@@ -2,11 +2,9 @@ import { jwtDecode } from "jwt-decode";
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  MdShoppingCart,
-  MdLocalShipping,
-  MdList,
   MdPointOfSale,
 } from "react-icons/md";
+import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
 
 function LogisticaPanel() {
   const navigate = useNavigate();
@@ -37,6 +35,18 @@ function LogisticaPanel() {
       path: "/mis-entregas-realizadas",
     },
   ];
+
+  const usuario = user?.usuario;
+  const rol = usuario?.rol?.nombre;
+  const permisos = usuario?.permisosAsignados || [];
+  const visibleOptions = options.filter((item) =>
+    hasRouteAccess({
+      rol,
+      permisos,
+      path: item.path,
+      permission: ROUTE_PERMISSIONS[item.path],
+    }),
+  );
 
 
   const Card = ({ label, title, desc, icon, path }) => (
@@ -73,10 +83,16 @@ function LogisticaPanel() {
       </h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
-        {options.map((item, i) => (
+        {visibleOptions.map((item, i) => (
           <Card key={i} {...item} />
         ))}
       </div>
+
+      {visibleOptions.length === 0 && (
+        <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-6 text-yellow-800">
+          No tienes permisos asignados para este panel.
+        </div>
+      )}
     </div>
   );
 }

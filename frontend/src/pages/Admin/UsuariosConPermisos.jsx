@@ -13,7 +13,7 @@ export default function UsuariosConPermisos() {
   const cargarDatos = async () => {
     try {
       const res = await axios.get(
-        `${API_URL}/api/usuario-agencia-permisos/usuarios-permisos`
+        `${API_URL}/api/usuario-permisos/usuarios-permisos`
       );
       setData(res.data);
     } catch (error) {
@@ -34,7 +34,7 @@ export default function UsuariosConPermisos() {
             <tr>
               <th className="px-4 py-3 text-left">Usuario</th>
               <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Agencia</th>
+              <th className="px-4 py-3 text-left">Rol</th>
               <th className="px-4 py-3 text-left">Estado</th>
               <th className="px-4 py-3 text-left">Permisos</th>
             </tr>
@@ -49,43 +49,43 @@ export default function UsuariosConPermisos() {
               </tr>
             )}
 
-            {data.map((ua) => (
+            {data.map((usuario) => (
               <tr
-                key={ua.id}
+                key={usuario.id}
                 className="border-t border-gray-200 hover:bg-gray-50"
               >
                 <td className="px-4 py-3 font-medium">
-                  {ua.usuario.nombre}
+                  {usuario.nombre}
                 </td>
 
                 <td className="px-4 py-3 text-sm text-gray-600">
-                  {ua.usuario.email}
+                  {usuario.email}
                 </td>
 
                 <td className="px-4 py-3">
-                  {ua.agencia.nombre}
+                  {usuario.rol?.nombre || "Sin rol"}
                 </td>
 
                 <td className="px-4 py-3">
                   <span
                     className={`px-2 py-1 text-xs rounded font-semibold ${
-                      ua.activo
+                      usuario.activo
                         ? "bg-green-100 text-green-700"
                         : "bg-red-100 text-red-600"
                     }`}
                   >
-                    {ua.activo ? "Activo" : "Inactivo"}
+                    {usuario.activo ? "Activo" : "Inactivo"}
                   </span>
                 </td>
 
                 <td className="px-4 py-3">
-                  {ua.permisosAsignados.length === 0 ? (
+                  {(usuario.permisosAsignados || []).length === 0 ? (
                     <span className="text-gray-400 italic">
                       Sin permisos
                     </span>
                   ) : (
                     <div className="flex flex-wrap gap-2">
-                      {ua.permisosAsignados.map((p) => (
+                      {(usuario.permisosAsignados || []).map((p) => (
                         <span
                           key={p.id}
                           className="bg-green-500 text-white text-xs px-2 py-1 rounded"

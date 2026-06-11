@@ -4,23 +4,23 @@ import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 
 export default function AsignarPermisos() {
-  const [usuariosAgencia, setUsuariosAgencia] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
   const [todosLosPermisos, setTodosLosPermisos] = useState([]);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState("");
   const [permisosSeleccionados, setPermisosSeleccionados] = useState([]);
 
   // Cargar UsuariosAgencia
   useEffect(() => {
-    const cargarUsuariosAgencia = async () => {
+    const cargarUsuarios = async () => {
       try {
-        const { data } = await axios.get(`${API_URL}/usuario-agencia/activos`);
-        setUsuariosAgencia(data);
+        const { data } = await axios.get(`${API_URL}/api/usuario-permisos/usuarios-permisos`);
+        setUsuarios(data);
       } catch (err) {
         console.error(err);
-        Swal.fire("Error", "No se pudieron cargar los usuarios-agencia", "error");
+        Swal.fire("Error", "No se pudieron cargar los usuarios", "error");
       }
     };
-    cargarUsuariosAgencia();
+    cargarUsuarios();
   }, []);
 
   // Cargar permisos del catálogo
@@ -47,12 +47,12 @@ export default function AsignarPermisos() {
   // Enviar al backend
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!usuarioSeleccionado) return Swal.fire("Error", "Seleccione un usuario-agencia", "warning");
+    if (!usuarioSeleccionado) return Swal.fire("Error", "Seleccione un usuario", "warning");
     if (permisosSeleccionados.length === 0) return Swal.fire("Error", "Seleccione al menos un permiso", "warning");
 
 try {
-  const { data } = await axios.post(`${API_URL}/api/usuario-agencia-permisos`, {
-    usuarioAgenciaId: usuarioSeleccionado,
+  const { data } = await axios.post(`${API_URL}/api/usuario-permisos`, {
+    usuarioId: usuarioSeleccionado,
     permisoIds: permisosSeleccionados,
   });
 
@@ -72,21 +72,20 @@ try {
 
   return (
     <div className="p-6 bg-white rounded shadow-md">
-      <h2 className="text-xl font-bold text-green-500 mb-4">Asignar Permisos a Usuario-Agencia</h2>
+      <h2 className="text-xl font-bold text-green-500 mb-4">Asignar Permisos a Usuario</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* Seleccionar UsuarioAgencia */}
         <div>
-          <label className="block mb-1 font-medium">Usuario-Agencia</label>
+          <label className="block mb-1 font-medium">Usuario</label>
           <select
             value={usuarioSeleccionado}
             onChange={(e) => setUsuarioSeleccionado(e.target.value)}
             className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
           >
             <option value="">-- Seleccione un usuario --</option>
-            {usuariosAgencia.map((ua) => (
-              <option key={ua.id} value={ua.id}>
-                {ua.usuario?.nombre} - {ua.agencia?.nombre}
+            {usuarios.map((usuario) => (
+              <option key={usuario.id} value={usuario.id}>
+                {usuario.nombre} - {usuario.email}
               </option>
             ))}
           </select>

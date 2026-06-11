@@ -166,7 +166,7 @@ connectDB()
     app.use("/registrar2", require("./routes/Vendedor/crearEntregaCompletaRoute"));
     app.use("/api/postulaciones", postulacionesRouter);
     app.use("/api/permisos-catalogo", require("./routes/permisoRoutes"));
-    app.use("/api/usuario-agencia-permisos", require("./routes/usuarioAgenciaPermisoRoutes"));
+    app.use("/api/usuario-permisos", require("./routes/usuarioPermisoRoutes"));
     app.use("/api/traslados", require("./routes/trasladosRoutes"));
     app.use("/api/gestion", require("./routes/CallCenter/gestionRoutes"));
     app.use("/api/gestion-comercial", require("./routes/Comercial/gestionRoutes"));

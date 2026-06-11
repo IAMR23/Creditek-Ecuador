@@ -11,6 +11,7 @@ import {
   MdAnalytics,
   MdSupportAgent,
 } from "react-icons/md";
+import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
 
 function VendedorPanel() {
   const navigate = useNavigate();
@@ -129,6 +130,23 @@ function VendedorPanel() {
     },
   ];
 
+  const usuario = user?.usuario;
+  const rol = usuario?.rol?.nombre;
+  const permisos = usuario?.permisosAsignados || [];
+  const visibleOptions = options
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) =>
+        hasRouteAccess({
+          rol,
+          permisos,
+          path: item.path,
+          permission: ROUTE_PERMISSIONS[item.path],
+        }),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
+
   const Card = ({ title, desc, icon, path, color }) => (
     <div
       onClick={() => navigate(path)}
@@ -168,7 +186,7 @@ function VendedorPanel() {
       </div>
 
       {/* Secciones */}
-      {options.map((section, i) => (
+      {visibleOptions.map((section, i) => (
         <div key={i} className="mb-10">
           <h2 className="text-lg font-semibold text-gray-700 mb-5">
             {section.category}
@@ -181,6 +199,12 @@ function VendedorPanel() {
           </div>
         </div>
       ))}
+
+      {visibleOptions.length === 0 && (
+        <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-6 text-yellow-800">
+          No tienes permisos asignados para este panel.
+        </div>
+      )}
     </div>
   );
 }

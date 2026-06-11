@@ -9,11 +9,14 @@ import {
 export function getDefaultRoute({ rol, permisos = [], activeMode }) {
   const rolNormalizado = normalizeRole(rol);
   const permisosNormalizados = normalizePermissions(permisos);
-  const puedeRepartir = permisosNormalizados.includes("Repartir");
   const puedeVender = permisosNormalizados.includes("Ventas");
 
   if (rolNormalizado === "vendedor") {
     return "/vendedor-panel";
+  }
+
+  if (rolNormalizado === "repartidor") {
+    return "/logistica-panel";
   }
 
   if (
@@ -35,14 +38,6 @@ export function getDefaultRoute({ rol, permisos = [], activeMode }) {
     hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/vendedor-panel" })
   ) {
     return "/vendedor-panel";
-  }
-
-  if (
-    rolNormalizado === "admin" &&
-    puedeRepartir &&
-    hasRouteAccess({ rol, permisos: permisosNormalizados, path: "/dashboard" })
-  ) {
-    return "/seleccionar-modo";
   }
 
   const primeraRutaPermitida = ROUTE_REDIRECT_ORDER.find((path) =>

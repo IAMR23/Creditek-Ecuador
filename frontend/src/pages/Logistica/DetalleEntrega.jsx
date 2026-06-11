@@ -49,7 +49,7 @@ export default function DetalleEntrega() {
       try {
         setLoadingRepartidores(true);
         const { data } = await axios.get(
-          `${API_URL}/api/usuario-agencia-permisos/usuarios-repartidores`,
+          `${API_URL}/api/usuario-permisos/usuarios-repartidores`,
         );
         setRepartidores(data);
       } catch (error) {

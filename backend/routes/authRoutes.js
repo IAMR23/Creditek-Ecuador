@@ -7,7 +7,7 @@ const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Agencia = require("../models/Agencia");
 const Rol = require("../models/Rol");
-const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
+const UsuarioPermiso = require("../models/UsuarioPermiso");
 const Permiso = require("../models/Permiso");
 
 const JWT_SECRET = process.env.JWT_SECRET || "tu_clave_secreta";
@@ -15,7 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "tu_clave_secreta";
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rolId } = req.body;
 
     /* =========================
        1. Buscar usuario + rol
@@ -27,6 +27,12 @@ router.post("/login", async (req, res) => {
           model: Rol,
           as: "rol",
           attributes: ["id", "nombre", "descripcion"],
+        },
+        {
+          model: Rol,
+          as: "roles",
+          attributes: ["id", "nombre", "descripcion"],
+          through: { attributes: [] },
         },
       ],
     });
@@ -45,6 +51,34 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, usuario.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Usuario o contraseña incorrectos" });
+    }
+
+    const rolesDisponibles = usuario.roles?.length
+      ? usuario.roles
+      : [usuario.rol].filter(Boolean);
+
+    if (rolesDisponibles.length === 0) {
+      return res.status(403).json({ message: "El usuario no tiene roles asignados" });
+    }
+
+    if (rolesDisponibles.length > 1 && !rolId) {
+      return res.json({
+        requiresRoleSelection: true,
+        message: "Seleccione el rol con el que desea ingresar",
+        roles: rolesDisponibles.map((rol) => ({
+          id: rol.id,
+          nombre: rol.nombre,
+          descripcion: rol.descripcion,
+        })),
+      });
+    }
+
+    const rolSeleccionado = rolId
+      ? rolesDisponibles.find((rol) => Number(rol.id) === Number(rolId))
+      : rolesDisponibles[0];
+
+    if (!rolSeleccionado) {
+      return res.status(403).json({ message: "Rol no asignado al usuario" });
     }
 
     /* =========================
@@ -83,12 +117,11 @@ router.post("/login", async (req, res) => {
     const agenciaPrincipal = agencias[0];
 
     /* =========================
-       4. Obtener permisos
-       (UsuarioAgenciaPermiso)
+       4. Obtener permisos globales del usuario
        ========================= */
-    const permisosAsignados = await UsuarioAgenciaPermiso.findAll({
+    const permisosAsignados = await UsuarioPermiso.findAll({
       where: {
-        usuarioAgenciaId: relaciones.map((r) => r.id),
+        usuarioId: usuario.id,
         activo: true,
       },
       include: [
@@ -111,9 +144,13 @@ router.post("/login", async (req, res) => {
           email: usuario.email,
 
           rol: {
-            id: usuario.rol.id,
-            nombre: usuario.rol.nombre,
+            id: rolSeleccionado.id,
+            nombre: rolSeleccionado.nombre,
           },
+          roles: rolesDisponibles.map((rol) => ({
+            id: rol.id,
+            nombre: rol.nombre,
+          })),
 
           permisosAsignados: permisosAsignados.map((p) => p.permiso.nombre), 
 

@@ -18,8 +18,7 @@ export default function ProtectedRoute({
   const allowedRolesNormalizados = allowedRoles.map(normalizeRole);
   const roleAllowed =
     allowedRolesNormalizados.length === 0 ||
-    allowedRolesNormalizados.includes(rolNormalizado) ||
-    rolNormalizado === "admin";
+    allowedRolesNormalizados.includes(rolNormalizado);
 
   if (!roleAllowed || !hasRouteAccess({ rol, permisos, permission })) {
     return <Navigate to="/unauthorized" replace />;

@@ -1,21 +1,21 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
-const UsuarioAgencia = require("./UsuarioAgencia");
+const Usuario = require("./Usuario");
 const Permiso = require("./Permiso");
 
-const UsuarioAgenciaPermiso = sequelize.define(
-  "UsuarioAgenciaPermiso",
+const UsuarioPermiso = sequelize.define(
+  "UsuarioPermiso",
   {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
     },
-    usuarioAgenciaId: {
+    usuarioId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      field: "usuario_agencia_id",
-      references: { model: UsuarioAgencia, key: "id" },
+      field: "usuario_id",
+      references: { model: Usuario, key: "id" },
       onDelete: "CASCADE",
     },
     permisoId: {
@@ -36,38 +36,38 @@ const UsuarioAgenciaPermiso = sequelize.define(
     fechaFin: {
       type: DataTypes.DATE,
       field: "fecha_fin",
-    }, 
+    },
   },
   {
     timestamps: false,
-    tableName: "usuarios_agencias_permisos",
+    tableName: "usuarios_permisos",
     indexes: [
-      { 
+      {
         unique: true,
-        fields: ["usuario_agencia_id", "permiso_id"],
+        fields: ["usuario_id", "permiso_id"],
       },
     ],
   },
 );
 
-// Relaciones
-// Relaciones con alias
-UsuarioAgencia.hasMany(UsuarioAgenciaPermiso, {
-  foreignKey: "usuario_agencia_id",
-  as: "permisosAsignados", // alias legible
-});
-UsuarioAgenciaPermiso.belongsTo(UsuarioAgencia, {
-  foreignKey: "usuario_agencia_id",
-  as: "usuarioAgencia",
+Usuario.hasMany(UsuarioPermiso, {
+  foreignKey: "usuario_id",
+  as: "permisosAsignados",
 });
 
-Permiso.hasMany(UsuarioAgenciaPermiso, {
-  foreignKey: "permiso_id",
-  as: "permisosDeUsuario",
+UsuarioPermiso.belongsTo(Usuario, {
+  foreignKey: "usuario_id",
+  as: "usuario",
 });
-UsuarioAgenciaPermiso.belongsTo(Permiso, {
+
+Permiso.hasMany(UsuarioPermiso, {
+  foreignKey: "permiso_id",
+  as: "usuariosAsignados",
+});
+
+UsuarioPermiso.belongsTo(Permiso, {
   foreignKey: "permiso_id",
   as: "permiso",
 });
 
-module.exports = UsuarioAgenciaPermiso;
+module.exports = UsuarioPermiso;

@@ -67,6 +67,31 @@ const connectDB = async () => {
       }
     }
 
+    if (
+      tables.includes("usuarios_agencias_permisos") &&
+      tables.includes("usuario_agencia") &&
+      tables.includes("usuarios_permisos")
+    ) {
+      await sequelize.query(`
+        INSERT INTO usuarios_permisos (usuario_id, permiso_id, activo, fecha_inicio, fecha_fin)
+        SELECT DISTINCT ua."usuarioId", uap.permiso_id, uap.activo, uap.fecha_inicio, uap.fecha_fin
+        FROM usuarios_agencias_permisos uap
+        INNER JOIN usuario_agencia ua ON ua.id = uap.usuario_agencia_id
+        WHERE uap.activo = true
+        ON CONFLICT (usuario_id, permiso_id) DO NOTHING;
+      `);
+    }
+
+    if (tables.includes("usuarios") && tables.includes("usuarios_roles")) {
+      await sequelize.query(`
+        INSERT INTO usuarios_roles (usuario_id, rol_id, activo)
+        SELECT id, "rolId", true
+        FROM usuarios
+        WHERE "rolId" IS NOT NULL
+        ON CONFLICT (usuario_id, rol_id) DO NOTHING;
+      `);
+    }
+
     console.log("Tablas sincronizadas correctamente");
   } catch (error) {
     console.error("Error de conexion o sincronizacion:", error);

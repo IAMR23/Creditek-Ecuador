@@ -14,6 +14,8 @@ function LoginForm({ setAuth }) {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [rolesDisponibles, setRolesDisponibles] = useState([]);
+  const [rolSeleccionado, setRolSeleccionado] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -21,6 +23,8 @@ function LoginForm({ setAuth }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setCredentials((prev) => ({ ...prev, [name]: value }));
+    setRolesDisponibles([]);
+    setRolSeleccionado("");
   };
 
   const handleSubmit = async (e) => {
@@ -29,7 +33,17 @@ function LoginForm({ setAuth }) {
     setError(null);
 
     try {
-      const response = await loginUser(credentials);
+      const response = await loginUser({
+        ...credentials,
+        ...(rolSeleccionado ? { rolId: rolSeleccionado } : {}),
+      });
+
+      if (response.requiresRoleSelection) {
+        setRolesDisponibles(response.roles || []);
+        setRolSeleccionado("");
+        return;
+      }
+
       localStorage.setItem("token", response.token);
       reloadPendingTasks();
       const decodedToken = jwtDecode(response.token);
@@ -118,12 +132,37 @@ function LoginForm({ setAuth }) {
             </div>
           </div>
 
+          {rolesDisponibles.length > 0 && (
+            <div className="mb-6">
+              <label className="block text-gray-700 font-medium mb-1">
+                Rol de ingreso
+              </label>
+              <select
+                value={rolSeleccionado}
+                onChange={(e) => setRolSeleccionado(e.target.value)}
+                className="w-full border border-[#7F6DF2] rounded-lg p-3 focus:ring-2 focus:ring-[#9D1DF2] outline-none"
+                required
+              >
+                <option value="">Selecciona un rol</option>
+                {rolesDisponibles.map((rol) => (
+                  <option key={rol.id} value={rol.id}>
+                    {rol.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             type="submit"
             className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-400 transition duration-300 text-lg font-semibold"
             disabled={loading}
           >
-            {loading ? "Ingresando..." : "Ingresar"}
+            {loading
+              ? "Ingresando..."
+              : rolesDisponibles.length > 0
+                ? "Ingresar con rol"
+                : "Ingresar"}
           </button>
         </form>
       </div>

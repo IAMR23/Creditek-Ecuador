@@ -1,5 +1,5 @@
 const Permiso = require("../models/Permiso");
-const UsuarioAgenciaPermiso = require("../models/UsuarioAgenciaPermiso");
+const UsuarioPermiso = require("../models/UsuarioPermiso");
 const { Op } = require("sequelize");
 
 exports.crearPermiso = async (req, res) => {
@@ -16,11 +16,11 @@ exports.crearPermiso = async (req, res) => {
 exports.listarPermisos = async (req, res) => {
   try {
     const permisos = await Permiso.findAll({
-      order: [["nombre", "ASC"]],
+      order: [["nombre", "ASC"]], 
     });
     res.json(permisos);
   } catch (err) {
-    console.error(err);
+    console.error(err);   
     res.status(500).json({ message: "Error listando permisos" });
   }
 };
@@ -58,7 +58,7 @@ exports.sincronizarPermisos = async (req, res) => {
     const permisoIdsObsoletos = permisosObsoletos.map((p) => p.id);
 
     if (permisoIdsObsoletos.length > 0) {
-      await UsuarioAgenciaPermiso.destroy({
+      await UsuarioPermiso.destroy({
         where: { permisoId: permisoIdsObsoletos },
       });
       await Permiso.destroy({

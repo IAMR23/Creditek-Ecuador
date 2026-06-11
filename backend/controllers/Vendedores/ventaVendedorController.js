@@ -12,7 +12,7 @@ const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
 const EntregaObsequio = require("../../models/EntregaObsequio");
 
-const { Op } = require("sequelize");
+const { Op, fn, col, where: whereFn } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
@@ -21,18 +21,24 @@ exports.obtenerReporte = async ({ id, fechaInicio, fechaFin }) => {
   const where = { activo: true };
 
   if (fechaInicio && fechaFin) {
-  where.fecha = {
-    [Op.between]: [fechaInicio, fechaFin],
-  };
-} else if (fechaInicio) {
-  where.fecha = {
-    [Op.gte]: fechaInicio,
-  };
-} else if (fechaFin) {
-  where.fecha = {
-    [Op.lte]: fechaFin,
-  };
-}
+    where[Op.and] = [
+      whereFn(fn("DATE", col("Venta.fecha")), {
+        [Op.between]: [fechaInicio, fechaFin],
+      }),
+    ];
+  } else if (fechaInicio) {
+    where[Op.and] = [
+      whereFn(fn("DATE", col("Venta.fecha")), {
+        [Op.gte]: fechaInicio,
+      }),
+    ];
+  } else if (fechaFin) {
+    where[Op.and] = [
+      whereFn(fn("DATE", col("Venta.fecha")), {
+        [Op.lte]: fechaFin,
+      }),
+    ];
+  }
 
 
   // Filtrado por id del vendedor

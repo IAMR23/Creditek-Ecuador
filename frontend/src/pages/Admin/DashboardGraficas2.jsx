@@ -2,8 +2,6 @@
 import { useState, useRef } from "react";
 import html2canvas from "html2canvas";
 import {
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -77,10 +75,18 @@ const toIndicadorGerenciaArray = (obj = {}, fechaInicio = "2026-01-01") =>
     })
     .sort((a, b) => a.semanaNumero - b.semanaNumero);
 
-const toArray = (obj = {}) =>
+const toEngancheJavierSemanaArray = (obj = {}, fechaInicio = "2026-01-01") =>
   Object.entries(obj)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+    .map(([name, value]) => {
+      const semanaNumero = Number(String(name).replace(/\D/g, ""));
+
+      return {
+        name: getRangoSemana(semanaNumero, fechaInicio),
+        ventas: Number(value) || 0,
+        semanaNumero,
+      };
+    })
+    .sort((a, b) => a.semanaNumero - b.semanaNumero);
 
 const moneyFormatter = new Intl.NumberFormat("es-EC", {
   style: "currency",
@@ -112,8 +118,9 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
     estadisticas.indicadorGerenciaPorSemana,
     fechaInicio
   );
-  const dataEngancheJavier = toArray(
-    estadisticas.indicadorEngancheJavierPorVendedor
+  const dataEngancheJavier = toEngancheJavierSemanaArray(
+    estadisticas.indicadorEngancheJavierPorSemana,
+    fechaInicio
   );
 
   const copiarGrafico = async () => {
@@ -171,13 +178,13 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
 
       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
         <h3 className="font-semibold mb-4">
-          Ventas Enganche Javier por Vendedor
+          Ventas Enganche Javier por Semana
         </h3>
 
         <ResponsiveContainer width="100%" height={360}>
-          <BarChart
+          <LineChart
             data={dataEngancheJavier}
-            margin={{ top: 20, right: 30, left: 40, bottom: 120 }}
+            margin={{ top: 20, right: 30, left: 70, bottom: 120 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
 
@@ -192,13 +199,16 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
 
             <Tooltip {...tooltipStyle} />
 
-            <Bar
-              dataKey="value"
+            <Line
+              type="linear"
+              dataKey="ventas"
               name="Ventas"
-              fill={COLORS.enganche}
-              radius={[6, 6, 0, 0]}
+              stroke={COLORS.enganche}
+              strokeWidth={3}
+              dot={{ r: 6 }}
+              activeDot={{ r: 10 }}
             />
-          </BarChart>
+          </LineChart>
         </ResponsiveContainer>
       </div>
 

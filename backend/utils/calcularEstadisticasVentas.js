@@ -6,6 +6,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
 
     porVendedor: {},
     indicadorEngancheJavierPorVendedor: {},
+    indicadorEngancheJavierPorSemana: {},
     porAgencia: {},
     porOrigen: {},
     porFecha: {},
@@ -117,15 +118,6 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     const esEngancheJavier =
       origenNormalizado === "enganche" && observacionNormalizada === "javier";
 
-    if (esEngancheJavier) {
-      stats.indicadorEngancheJavierTotal += 1;
-
-      if (vendedor) {
-        stats.indicadorEngancheJavierPorVendedor[vendedor] =
-          (stats.indicadorEngancheJavierPorVendedor[vendedor] || 0) + 1;
-      }
-    }
-
     const margen = Number(v.margen) || 0;
     stats.indicadorGerenciaTotal = Number(
       (stats.indicadorGerenciaTotal + margen).toFixed(2)
@@ -141,6 +133,20 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
         stats.indicadorGerenciaPorSemana[key] = Number(
           ((stats.indicadorGerenciaPorSemana[key] || 0) + margen).toFixed(2)
         );
+
+        if (esEngancheJavier) {
+          stats.indicadorEngancheJavierPorSemana[key] =
+            (stats.indicadorEngancheJavierPorSemana[key] || 0) + 1;
+        }
+      }
+    }
+
+    if (esEngancheJavier) {
+      stats.indicadorEngancheJavierTotal += 1;
+
+      if (vendedor) {
+        stats.indicadorEngancheJavierPorVendedor[vendedor] =
+          (stats.indicadorEngancheJavierPorVendedor[vendedor] || 0) + 1;
       }
     }
 

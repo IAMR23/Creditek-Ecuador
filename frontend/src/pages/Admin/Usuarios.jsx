@@ -22,6 +22,7 @@ export default function Usuarios() {
     email: "",
     password: "",
     rolId: "",
+    rolIds: [],
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
@@ -37,6 +38,7 @@ export default function Usuarios() {
     email: "",
     password: "",
     rolId: "",
+    rolIds: [],
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
@@ -46,13 +48,20 @@ export default function Usuarios() {
   });
 
   const abrirModalEditar = (usuario) => {
+    const rolIds = usuario.roles?.length
+      ? usuario.roles.map((rol) => String(rol.id))
+      : usuario.rol?.id
+        ? [String(usuario.rol.id)]
+        : [];
+
     setEditForm({
       id: usuario.id,
       nombre: usuario.nombre || "",
       cedula: usuario.cedula || "",
       email: usuario.email || "",
       password: "",
-      rolId: usuario.rol?.id || "",
+      rolId: rolIds[0] || "",
+      rolIds,
       fechaIngreso: usuario.fechaIngreso || "",
       fechaSalida: usuario.fechaSalida || "",
       numeroCuenta: usuario.numeroCuenta || "",
@@ -72,6 +81,7 @@ export default function Usuarios() {
       email: "",
       password: "",
       rolId: "",
+      rolIds: [],
       fechaIngreso: "",
       fechaSalida: "",
       numeroCuenta: "",
@@ -91,6 +101,22 @@ export default function Usuarios() {
     setRoles(res.data);
   };
 
+  const toggleRol = (estado, setEstado, rolId) => {
+    setEstado((prev) => {
+      const rolIds = prev.rolIds || [];
+      const existe = rolIds.includes(String(rolId));
+      const nuevosRolIds = existe
+        ? rolIds.filter((id) => id !== String(rolId))
+        : [...rolIds, String(rolId)];
+
+      return {
+        ...prev,
+        rolIds: nuevosRolIds,
+        rolId: nuevosRolIds[0] || "",
+      };
+    });
+  };
+
   useEffect(() => {
     cargarUsuarios();
     cargarRoles();
@@ -105,7 +131,8 @@ export default function Usuarios() {
         cedula: form.cedula,
         email: form.email,
         password: form.password,
-        rolId: form.rolId,
+        rolId: form.rolIds[0] || form.rolId,
+        rolIds: form.rolIds,
         fechaIngreso: form.fechaIngreso || null,
         fechaSalida: form.fechaSalida || null,
         numeroCuenta: normalizeText(form.numeroCuenta),
@@ -119,6 +146,7 @@ export default function Usuarios() {
         email: "",
         password: "",
         rolId: "",
+        rolIds: [],
         fechaIngreso: "",
         fechaSalida: "",
         numeroCuenta: "",
@@ -153,7 +181,8 @@ export default function Usuarios() {
         cedula: editForm.cedula,
         email: editForm.email,
         password: editForm.password || undefined,
-        rolId: editForm.rolId,
+        rolId: editForm.rolIds[0] || editForm.rolId,
+        rolIds: editForm.rolIds,
         fechaIngreso: editForm.fechaIngreso || null,
         fechaSalida: editForm.fechaSalida || null,
         numeroCuenta: normalizeText(editForm.numeroCuenta),
@@ -199,7 +228,8 @@ export default function Usuarios() {
       })
       .filter((u) => {
         if (!filters.rolId) return true;
-        return String(u.rol?.id || "") === String(filters.rolId);
+        const rolesUsuario = u.roles?.length ? u.roles : u.rol ? [u.rol] : [];
+        return rolesUsuario.some((rol) => String(rol.id) === String(filters.rolId));
       })
       .filter((u) => {
         if (filters.activo === "") return true;
@@ -316,18 +346,19 @@ export default function Usuarios() {
                 <label className="text-sm font-semibold text-slate-700">
                   Rol del usuario
                 </label>
-                <select
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  value={form.rolId}
-                  onChange={(e) => setForm({ ...form, rolId: e.target.value })}
-                >
-                  <option value="">Seleccionar rol</option>
+                <div className="max-h-36 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
                   {roles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.nombre}
-                    </option>
+                    <label key={r.id} className="mb-2 flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={(form.rolIds || []).includes(String(r.id))}
+                        onChange={() => toggleRol(form, setForm, r.id)}
+                        className="accent-emerald-600"
+                      />
+                      <span>{r.nombre}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -535,9 +566,18 @@ export default function Usuarios() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                        {u.rol?.nombre || "Sin rol"}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {(u.roles?.length ? u.roles : u.rol ? [u.rol] : []).map((rol) => (
+                          <span key={rol.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                            {rol.nombre}
+                          </span>
+                        ))}
+                        {!(u.roles?.length || u.rol) && (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                            Sin rol
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-6 py-4">
@@ -623,7 +663,9 @@ export default function Usuarios() {
                   <div>
                     <p className="text-xs font-semibold text-slate-400">Rol</p>
                     <p className="font-medium text-slate-700">
-                      {u.rol?.nombre || "Sin rol"}
+                      {(u.roles?.length ? u.roles : u.rol ? [u.rol] : [])
+                        .map((rol) => rol.nombre)
+                        .join(", ") || "Sin rol"}
                     </p>
                   </div>
 
@@ -758,20 +800,19 @@ export default function Usuarios() {
                     <label className="text-sm font-semibold text-slate-700">
                       Rol
                     </label>
-                    <select
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                      value={editForm.rolId}
-                      onChange={(e) =>
-                        setEditForm({ ...editForm, rolId: e.target.value })
-                      }
-                    >
-                      <option value="">Seleccionar rol</option>
+                    <div className="max-h-36 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
                       {roles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.nombre}
-                        </option>
+                        <label key={r.id} className="mb-2 flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={(editForm.rolIds || []).includes(String(r.id))}
+                            onChange={() => toggleRol(editForm, setEditForm, r.id)}
+                            className="accent-emerald-600"
+                          />
+                          <span>{r.nombre}</span>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">

@@ -26,6 +26,12 @@ const normalizeText = (value) =>
 const esFormaPagoCredito = (formaPago) =>
   Number(formaPago?.id) === 1 || normalizeText(formaPago?.nombre).includes("credito");
 
+const getErrorMessage = (error) =>
+  error?.parent?.detail ||
+  error?.errors?.map((err) => err.message).join(", ") ||
+  error?.message ||
+  "Error al crear la venta completa";
+
 function calcularSemana(fecha) {
   const f = new Date(fecha);
   const yearStart = new Date(f.getFullYear(), 0, 1); // 1 de enero del año
@@ -51,6 +57,7 @@ const crearVentaCompleta = async (req, res) => {
 
     const usuarioAgenciaId = req.user?.usuarioAgenciaId;
     if (!usuarioAgenciaId) {
+      await t.rollback();
       return res.status(400).json({
         ok: false,
         message: "Usuario no identificado",
@@ -277,12 +284,17 @@ const crearVentaCompleta = async (req, res) => {
     });
   } catch (error) {
     await t.rollback();
-    console.error(error);
+    const message = getErrorMessage(error);
+    console.error("Error al crear venta completa:", {
+      message,
+      name: error?.name,
+      stack: error?.stack,
+    });
 
     res.status(500).json({
       ok: false,
-      message: "Error al crear la venta completa",
-      error: error.message,
+      message,
+      error: error?.name || "Error",
     });
   }
 };

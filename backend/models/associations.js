@@ -32,6 +32,8 @@ const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const Task = require('./Task');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
+require('./UsuarioPermiso');
+require('./UsuarioRol');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });

@@ -30,6 +30,8 @@ export default function MisMetas() {
   }, []);
 
   const fetchData = async () => {
+    if (!usuarioInfo?.id) return;
+
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       return;
@@ -70,7 +72,7 @@ export default function MisMetas() {
 
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) fetchData();
-  }, [fechaInicio, fechaFin]);
+  }, [fechaInicio, fechaFin, usuarioInfo?.id]);
 
 
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);

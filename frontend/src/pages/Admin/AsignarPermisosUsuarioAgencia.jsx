@@ -5,16 +5,16 @@ import { API_URL } from "../../../config";
 import { SYSTEM_ROUTES } from "../../config/routePermissions";
 
 export default function AsignarPermisosUsuarioAgencia() {
-  const [usuariosAgencia, setUsuariosAgencia] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
   const [permisos, setPermisos] = useState([]);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(null);
   const [permisosSeleccionados, setPermisosSeleccionados] = useState([]);
   const [guardando, setGuardando] = useState(false);
 
-  const cargarUsuariosAgencia = async () => {
+  const cargarUsuarios = async () => {
     try {
-      const { data } = await axios.get(`${API_URL}/usuario-agencia/activos`);
-      setUsuariosAgencia(data || []);
+      const { data } = await axios.get(`${API_URL}/api/usuario-permisos/usuarios-permisos`);
+      setUsuarios(data || []);
       return data || [];
     } catch (error) {
       console.error(error);
@@ -28,7 +28,7 @@ export default function AsignarPermisosUsuarioAgencia() {
       const { data } = await axios.post(`${API_URL}/api/permisos-catalogo/sincronizar`, {
         permisos: SYSTEM_ROUTES.map((ruta) => ({
           nombre: ruta.permission,
-          descripcion: ruta.path,
+          descripcion: ruta.descripcion,
         })),
       });
       setPermisos(data || []);
@@ -39,14 +39,14 @@ export default function AsignarPermisosUsuarioAgencia() {
   };
 
   useEffect(() => {
-    cargarUsuariosAgencia();
+    cargarUsuarios();
     cargarPermisos();
   }, []);
 
-  const seleccionarUsuario = (ua) => {
-    setUsuarioSeleccionado(ua);
+  const seleccionarUsuario = (usuario) => {
+    setUsuarioSeleccionado(usuario);
     setPermisosSeleccionados(
-      (ua.permisosAsignados || [])
+      (usuario.permisosAsignados || [])
         .map((p) => p.permiso?.id)
         .filter(Boolean),
     );
@@ -68,14 +68,14 @@ export default function AsignarPermisosUsuarioAgencia() {
     setGuardando(true);
 
     try {
-      await axios.post(`${API_URL}/api/usuario-agencia-permisos`, {
-        usuarioAgenciaId: usuarioSeleccionado.id,
+      await axios.post(`${API_URL}/api/usuario-permisos`, {
+        usuarioId: usuarioSeleccionado.id,
         permisoIds: permisosSeleccionados,
       });
 
-      const usuariosActualizados = await cargarUsuariosAgencia();
+      const usuariosActualizados = await cargarUsuarios();
       const usuarioActualizado = usuariosActualizados.find(
-        (ua) => ua.id === usuarioSeleccionado.id,
+        (usuario) => usuario.id === usuarioSeleccionado.id,
       );
 
       if (usuarioActualizado) {
@@ -101,21 +101,21 @@ export default function AsignarPermisosUsuarioAgencia() {
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <div className="rounded bg-white p-4 shadow">
-          <h2 className="mb-4 font-semibold">Usuarios / Agencia</h2>
+          <h2 className="mb-4 font-semibold">Usuarios</h2>
 
           <ul className="max-h-[70vh] space-y-2 overflow-y-auto">
-            {usuariosAgencia.map((ua) => (
+            {usuarios.map((usuario) => (
               <li
-                key={ua.id}
-                onClick={() => seleccionarUsuario(ua)}
+                key={usuario.id}
+                onClick={() => seleccionarUsuario(usuario)}
                 className={`cursor-pointer rounded border p-3 ${
-                  usuarioSeleccionado?.id === ua.id
+                  usuarioSeleccionado?.id === usuario.id
                     ? "border-green-500 bg-green-100"
                     : "hover:bg-gray-100"
                 }`}
               >
-                <p className="font-medium">{ua.usuario?.nombre}</p>
-                <p className="text-sm text-gray-500">{ua.agencia?.nombre}</p>
+                <p className="font-medium">{usuario.nombre}</p>
+                <p className="text-sm text-gray-500">{usuario.email}</p>
               </li>
             ))}
           </ul>

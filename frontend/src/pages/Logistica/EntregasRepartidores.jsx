@@ -27,7 +27,7 @@ export default function EntregasRepartidores() {
         setLoadingRepartidores(true);
 
         const response = await axios.get(
-          `${API_URL}/api/usuario-agencia-permisos/usuarios-repartidores`,
+          `${API_URL}/api/usuario-permisos/usuarios-repartidores`,
         );
 
         setRepartidores(Array.isArray(response.data) ? response.data : []);

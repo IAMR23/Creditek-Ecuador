@@ -269,7 +269,7 @@ useEffect(() => {
                 <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
                 <Route
                   path="entrega-logistica/:id"
-                  element={protect(<DetalleEntrega />)}
+                  element={protect(<DetalleEntrega />, "/entrega-logistica")}
                 />
    {/*              <Route
                   path="entregas-repartidores"
@@ -316,12 +316,12 @@ useEffect(() => {
                 />
                 <Route
                   path="entregas-auditoria/:id"
-                  element={protect(<EntregaAuditoria />)}
+                  element={protect(<EntregaAuditoria />, "/entregas-auditoria")}
                 />
                 <Route path="ventas-auditoria" element={protect(<VentasAuditoria />, "/ventas-auditoria")} />
                 <Route
                   path="ventas-auditoria/:id"
-                  element={protect(<EditarVentaCompletaAuditoria />)}
+                  element={protect(<EditarVentaCompletaAuditoria />, "/ventas-auditoria")}
                 />
                 <Route path="postulaciones" element={protect(<Postulaciones />, "/postulaciones")} />
                 <Route path="permisos" element={protect(<Permisos />, "/permisos")} />
