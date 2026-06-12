@@ -29,6 +29,7 @@ const CierreCaja = require('./CierreCaja/CierreCaja');
 const MovimientoCaja = require('./CierreCaja/MovimientoCaja');
 const Denominacion = require('./CierreCaja/Denominacion');
 const RetiroCaja = require('./CierreCaja/RetiroCaja');
+const ReaperturaCierreCaja = require('./CierreCaja/ReaperturaCierreCaja');
 const Task = require('./Task');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
@@ -321,6 +322,46 @@ CierreCaja.belongsTo(UsuarioAgencia, {
 UsuarioAgencia.hasMany(CierreCaja, {
   foreignKey: "usuarioAgenciaId",
   as: "cierresCaja",
+});
+
+CierreCaja.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+
+Usuario.hasMany(CierreCaja, {
+  foreignKey: "usuarioId",
+  as: "cierresCajaUsuario",
+});
+
+CierreCaja.belongsTo(Agencia, {
+  foreignKey: "agenciaId",
+  as: "agencia",
+});
+
+Agencia.hasMany(CierreCaja, {
+  foreignKey: "agenciaId",
+  as: "cierresCajaAgencia",
+});
+
+CierreCaja.hasMany(ReaperturaCierreCaja, {
+  foreignKey: "cierreId",
+  as: "reaperturas",
+});
+
+ReaperturaCierreCaja.belongsTo(CierreCaja, {
+  foreignKey: "cierreId",
+  as: "cierre",
+});
+
+ReaperturaCierreCaja.belongsTo(Usuario, {
+  foreignKey: "reabiertoPorUsuarioId",
+  as: "reabiertoPor",
+});
+
+ReaperturaCierreCaja.belongsTo(Usuario, {
+  foreignKey: "recerradoPorUsuarioId",
+  as: "recerradoPor",
 });
 
 

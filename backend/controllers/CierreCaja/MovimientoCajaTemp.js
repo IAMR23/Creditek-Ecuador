@@ -1,17 +1,54 @@
 // controllers/movimientoCajaTemp.controller.js
 
 const MovimientoCajaTemp = require("../../models/CierreCaja/MovimientoCajaTemp");
+const CierreCaja = require("../../models/CierreCaja/CierreCaja");
+const UsuarioAgencia = require("../../models/UsuarioAgencia");
+const { Op } = require("sequelize");
 
+const obtenerFechaEcuador = (fecha = new Date()) =>
+  fecha.toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
+
+const resolverUsuarioAgenciaId = async (req) => {
+  if (req.user?.usuarioAgenciaId) return req.user.usuarioAgenciaId;
+
+  if (!req.user?.id || !req.user?.agenciaId) return null;
+
+  const relacion = await UsuarioAgencia.findOne({
+    where: {
+      usuarioId: req.user.id,
+      agenciaId: req.user.agenciaId,
+      activo: true,
+    },
+    attributes: ["id"],
+  });
+
+  return relacion?.id || null;
+};
 
 const crearMovimientoTemp = async (req, res) => {
   try {
-    const usuarioAgenciaId = req.user?.usuarioAgenciaId ; 
+    const usuarioAgenciaId = await resolverUsuarioAgenciaId(req);
     if (!usuarioAgenciaId) {
       return res.status(400).json({
         ok: false,
         message: "Usuario no identificado",
       }); 
     } 
+
+    const cierreExistente = await CierreCaja.findOne({
+      where: {
+        usuarioId: req.user.id,
+        fecha: obtenerFechaEcuador(),
+        estadoCierre: { [Op.in]: ["CERRADO", "REABIERTO"] },
+      },
+    });
+
+    if (cierreExistente) {
+      return res.status(409).json({
+        ok: false,
+        message: "La caja de hoy ya fue cerrada para este usuario",
+      });
+    }
 
     const { responsable, detalle, valor, formaPago, recibo, observacion } = req.body;
 
@@ -66,7 +103,13 @@ const crearMovimientoTemp = async (req, res) => {
 
 const obtenerMovimientosTemp = async (req, res) => {
   try {
-    const usuarioAgenciaId = req.user?.usuarioAgenciaId ; 
+    const usuarioAgenciaId = await resolverUsuarioAgenciaId(req);
+    if (!usuarioAgenciaId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Usuario no identificado",
+      });
+    }
 
     const movimientos = await MovimientoCajaTemp.findAll({
       where: {
@@ -92,9 +135,17 @@ const obtenerMovimientosTemp = async (req, res) => {
 const eliminarMovimientoTemp = async (req, res) => {
   try {
     const { id } = req.params;
+    const usuarioAgenciaId = await resolverUsuarioAgenciaId(req);
+
+    if (!usuarioAgenciaId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Usuario no identificado",
+      });
+    }
 
     const eliminado = await MovimientoCajaTemp.destroy({
-      where: { id },
+      where: { id, usuarioAgenciaId },
     });
 
     if (!eliminado) {

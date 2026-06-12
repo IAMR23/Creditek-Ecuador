@@ -58,8 +58,8 @@ export const ROUTE_PERMISSIONS = {
   "/mis-entregas-pendientes": "Logistica",
   "/mis-entregas-realizadas": "Logistica",
 
-  "/revisar-cajas": "Contabilidad",
-  "/revisar-cajas2": "Contabilidad",
+  "/revisar-cajas": ["Contabilidad", "Administracion"],
+  "/revisar-cajas2": ["Contabilidad", "Administracion"],
 
   "/entregas-auditoria": "Auditoria",
   "/ventas-auditoria": "Auditoria",
@@ -138,27 +138,35 @@ export const normalizePermissions = (permisos = []) =>
 export const hasRouteAccess = ({ rol, permisos = [], path, permission }) => {
   const rolNormalizado = normalizeRole(rol);
   const permisoRequerido = permission || ROUTE_PERMISSIONS[path];
+  const permisosRequeridos = Array.isArray(permisoRequerido)
+    ? permisoRequerido
+    : permisoRequerido
+      ? [permisoRequerido]
+      : [];
+  const permisosRequeridosNormalizados = permisosRequeridos.map(normalizePermissionName);
 
   if (
     ["admin", "administrador"].includes(rolNormalizado) &&
-    normalizePermissionName(permisoRequerido) === "administracion"
+    permisosRequeridosNormalizados.includes("administracion")
   ) {
     return true;
   }
 
-  if (rolNormalizado === "vendedor" && permisoRequerido === VENDEDOR_PERMISSION) {
+  if (rolNormalizado === "vendedor" && permisosRequeridos.includes(VENDEDOR_PERMISSION)) {
     return true;
   }
 
   if (
     rolNormalizado === "repartidor" &&
-    normalizePermissionName(permisoRequerido) === "logistica"
+    permisosRequeridosNormalizados.includes("logistica")
   ) {
     return true;
   }
 
-  if (!permisoRequerido) return true;
+  if (!permisosRequeridos.length) return true;
 
   const permisosNormalizados = normalizePermissions(permisos).map(normalizePermissionName);
-  return permisosNormalizados.includes(normalizePermissionName(permisoRequerido));
+  return permisosRequeridosNormalizados.some((permiso) =>
+    permisosNormalizados.includes(permiso),
+  );
 };

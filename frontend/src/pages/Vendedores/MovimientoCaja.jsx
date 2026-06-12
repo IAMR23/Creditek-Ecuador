@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import { API_URL } from "../../../config";
 import { FaPlus, FaTimes } from "react-icons/fa";
 import { getHoyLocal } from "../../utils/dateUtils";
@@ -15,9 +16,19 @@ const filaVacia = {
   guardado: false,
 };
 
+const formatearFechaLocal = (fecha) => {
+  if (!fecha) return "";
+  const partes = String(fecha).slice(0, 10).split("-");
+  if (partes.length !== 3) return fecha;
+  return `${partes[2]}/${partes[1]}/${partes[0]}`;
+};
+
 export default function MovimientoCaja() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState([{ ...filaVacia }]);
   const [loading, setLoading] = useState(false);
+  const [estadoLoading, setEstadoLoading] = useState(true);
+  const [cierreActual, setCierreActual] = useState(null);
   const denominacionesBase = [
     { denominacion: 100, cantidad: 0, total: 0 },
     { denominacion: 50, cantidad: 0, total: 0 },
@@ -54,12 +65,41 @@ export default function MovimientoCaja() {
     );
   };
 
+  const manejarSesionExpirada = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("activeMode");
+    alert("Sesion expirada. Vuelve a iniciar sesion.");
+    navigate("/login");
+  };
+
+  const cargarEstadoCierre = async () => {
+    try {
+      setEstadoLoading(true);
+      const res = await axios.get(`${API_URL}/api/contabilidad/cierre-caja/estado`, {
+        params: { fecha: getHoyLocal() },
+      });
+      setCierreActual(res.data?.cierre || null);
+    } catch (error) {
+      console.error(error?.response?.data || error);
+      if (error?.response?.status === 401) {
+        manejarSesionExpirada();
+      }
+    } finally {
+      setEstadoLoading(false);
+    }
+  };
+
   const cerrarCaja = async () => {
     try {
       const token = localStorage.getItem("token");
 
       if (!token) {
         alert("Sesión expirada");
+        return;
+      }
+
+      if (cierreActual) {
+        alert("La caja de hoy ya fue cerrada para este usuario.");
         return;
       }
 
@@ -105,19 +145,27 @@ export default function MovimientoCaja() {
         movimientosPendientes,
       };
 
-      await axios.post(`${API_URL}/api/contabilidad/cierre-caja`, payload, {
+      const response = await axios.post(`${API_URL}/api/contabilidad/cierre-caja`, payload, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
       alert("Cierre realizado correctamente");
+      setCierreActual(response.data?.cierre || null);
 
       setRows([{ ...filaVacia }]);
       setRetiros([{ monto: "", motivo: "", autorizadoPor: "" }]);
       setDetalles(denominacionesBase);
     } catch (error) {
       console.error(error?.response?.data || error);
+      if (error?.response?.status === 401) {
+        manejarSesionExpirada();
+        return;
+      }
+      if (error?.response?.status === 409) {
+        setCierreActual(error.response.data?.cierre || { fecha: getHoyLocal() });
+      }
       alert(error?.response?.data?.message || "Error al cerrar caja");
     } finally {
       setLoading(false);
@@ -167,9 +215,13 @@ export default function MovimientoCaja() {
         }
       } catch (error) {
         console.error(error);
+        if (error?.response?.status === 401) {
+          manejarSesionExpirada();
+        }
       }
     };
 
+    cargarEstadoCierre();
     cargarMovimientos();
   }, []);
 
@@ -190,6 +242,11 @@ export default function MovimientoCaja() {
 
       if (!token) {
         alert("Sesión expirada");
+        return;
+      }
+
+      if (cierreActual) {
+        alert("La caja de hoy ya fue cerrada para este usuario.");
         return;
       }
 
@@ -228,7 +285,14 @@ export default function MovimientoCaja() {
       });
     } catch (error) {
       console.error(error?.response?.data || error);
-      alert(error?.response?.data?.msg || "Error al guardar");
+      if (error?.response?.status === 401) {
+        manejarSesionExpirada();
+        return;
+      }
+      if (error?.response?.status === 409) { 
+        setCierreActual({ fecha: getHoyLocal() }); 
+      }
+      alert(error?.response?.data?.message || error?.response?.data?.msg || "Error al guardar");
     } finally {
       setLoading(false);
     }
@@ -266,6 +330,10 @@ export default function MovimientoCaja() {
       });
     } catch (error) {
       console.error("Error al eliminar fila:", error);
+      if (error?.response?.status === 401) {
+        manejarSesionExpirada();
+        return;
+      }
       alert("No se pudo eliminar la fila");
     }
   };
@@ -428,6 +496,17 @@ export default function MovimientoCaja() {
             className="border"
           />
         </div>
+        {estadoLoading && (
+          <div className="border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+            Validando estado de cierre...
+          </div>
+        )}
+        {!estadoLoading && cierreActual && (
+          <div className="border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            La caja del {formatearFechaLocal(cierreActual.fecha || getHoyLocal())} ya fue cerrada.
+            No se pueden agregar movimientos ni generar otro cierre.
+          </div>
+        )}
         <div className="border p-3 w-fit ">
           <h3 className="font-bold mb-2">Resumen</h3>
 
@@ -578,7 +657,7 @@ export default function MovimientoCaja() {
                     <button
                       onClick={agregarFila}
                       disabled={
-                        loading || row.guardado || i !== rows.length - 1
+                        loading || !!cierreActual || row.guardado || i !== rows.length - 1
                       }
                       className="bg-green-500 text-white p-2 disabled:bg-gray-400"
                     >
@@ -684,9 +763,10 @@ export default function MovimientoCaja() {
         <div className="flex flex-col justify-end h-full">
           <button
             onClick={cerrarCaja}
-            className="bg-blue-600 text-white px-6 py-2 self-end"
+            disabled={loading || estadoLoading || !!cierreActual}
+            className="bg-blue-600 text-white px-6 py-2 self-end disabled:bg-gray-400"
           >
-            Cerrar Caja
+            {loading ? "Cerrando..." : "Cerrar Caja"}
           </button>
         </div>
       </div>

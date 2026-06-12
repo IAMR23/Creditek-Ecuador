@@ -98,24 +98,7 @@ function VendedorPanel() {
         }, */
       ],
     },
-    {
-      category: "Call Center",
-      color: "purple",
-      items: [
-        {
-          title: "Registrar Prospectos",
-          desc: "Crea nuevas gestiones",
-          icon: <MdSupportAgent />,
-          path: "/gestion",
-        },
-        {
-          title: "Mis Gestiones",
-          desc: "Revisa tus gestiones",
-          icon: <MdList />,
-          path: "/mis-gestiones",
-        },
-      ],
-    },
+
     {
       category: "Caja",
       color: "orange",

@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
 
 const JWT_SECRET = process.env.JWT_SECRET || "tu_clave_secreta";
 
@@ -18,10 +19,53 @@ const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    const agenciaPrincipal = decoded.usuario.agenciaPrincipal || {};
+    const agencias = Array.isArray(decoded.usuario.agencias)
+      ? decoded.usuario.agencias
+      : [];
+    let agenciaId =
+      agenciaPrincipal.agenciaId ||
+      agenciaPrincipal.id ||
+      agencias[0]?.agenciaId ||
+      agencias[0]?.id;
+    let usuarioAgenciaId =
+      agenciaPrincipal.usuarioAgenciaId ||
+      agenciaPrincipal.idUsuarioAgencia ||
+      agencias.find((agencia) => String(agencia.agenciaId) === String(agenciaId))
+        ?.usuarioAgenciaId ||
+      agencias[0]?.usuarioAgenciaId;
+
+    if (usuarioAgenciaId && !agenciaId) {
+      const relacion = await UsuarioAgencia.findOne({
+        where: {
+          id: usuarioAgenciaId,
+          activo: true,
+        },
+        attributes: ["id", "agenciaId"],
+      });
+
+      agenciaId = relacion?.agenciaId;
+      usuarioAgenciaId = relacion?.id || usuarioAgenciaId;
+    }
+
+    if (!usuarioAgenciaId && agenciaId) {
+      const relacion = await UsuarioAgencia.findOne({
+        where: {
+          usuarioId: decoded.usuario.id,
+          agenciaId,
+          activo: true,
+        },
+        attributes: ["id", "agenciaId"],
+      });
+
+      usuarioAgenciaId = relacion?.id;
+      agenciaId = relacion?.agenciaId || agenciaId;
+    }
+
     req.user = {
       id: decoded.usuario.id,
-      agenciaId: decoded.usuario.agenciaPrincipal?.agenciaId  , 
-      usuarioAgenciaId: decoded.usuario.agenciaPrincipal?.usuarioAgenciaId , 
+      agenciaId,
+      usuarioAgenciaId,
       rol: decoded.usuario.rol?.nombre,
       permisos: decoded.usuario.permisosAsignados || [],
     };

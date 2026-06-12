@@ -21,12 +21,42 @@ const CierreCaja = sequelize.define(
       allowNull: false,
     },
 
+    agenciaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+
+    usuarioId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+
+    usuarioCreacion: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    usuarioModificacion: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    fechaCreacion: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    fechaModificacion: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
     observacion: {
       type: DataTypes.STRING, 
       allowNull: true,
     },
 
-    totalFisico: {
+    totalFisico: { 
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
     },
@@ -60,6 +90,37 @@ const CierreCaja = sequelize.define(
       type: DataTypes.ENUM("CUADRADO", "DESCUADRADO"),
       allowNull: false,
       defaultValue: "CUADRADO",
+    },
+
+    estadoCierre: {
+      type: DataTypes.ENUM("CERRADO", "REABIERTO", "ANULADO"),
+      allowNull: false,
+      defaultValue: "CERRADO",
+    },
+
+    reabiertoPorUsuarioId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+
+    fechaReapertura: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    motivoReapertura: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    recerradoPorUsuarioId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+
+    fechaRecierre: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   },
   {

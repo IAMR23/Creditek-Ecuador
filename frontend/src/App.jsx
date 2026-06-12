@@ -77,7 +77,6 @@ import Caja from "./pages/Vendedores/Caja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 import BDDVentas from "./pages/Admin/BDDVentas";
 import Bonos from "./pages/Admin/Bonos";
-import RevisarCaja from "./pages/Vendedores/RevisarCaja";
 import TasksPage from "./pages/Tareas/TaskPage";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
@@ -334,7 +333,7 @@ useEffect(() => {
                   path="usuarios-permisos"
                   element={protect(<UsuariosConPermisos />, "/usuarios-permisos")}
                 />
-                <Route path="revisar-cajas" element={protect(<RevisarCaja />, "/revisar-cajas")} />
+                <Route path="revisar-cajas" element={protect(<CierresCajaTabla />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
                 <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />
               </Route>
