@@ -90,7 +90,7 @@ const CierreCaja = sequelize.define(
       type: DataTypes.ENUM("CUADRADO", "DESCUADRADO"),
       allowNull: false,
       defaultValue: "CUADRADO",
-    },
+    }, 
 
     estadoCierre: {
       type: DataTypes.ENUM("CERRADO", "REABIERTO", "ANULADO"),

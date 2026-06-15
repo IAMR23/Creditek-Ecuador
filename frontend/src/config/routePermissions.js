@@ -104,6 +104,7 @@ export const ROUTE_PERMISSIONS = {
   "/gestion": VENDEDOR_PERMISSION,
   "/mis-gestiones": VENDEDOR_PERMISSION,
   "/caja": VENDEDOR_PERMISSION,
+  "/mis-cierres-caja": VENDEDOR_PERMISSION,
 };
 
 export const SYSTEM_ROUTES = SIDEBAR_SECTION_PERMISSIONS;

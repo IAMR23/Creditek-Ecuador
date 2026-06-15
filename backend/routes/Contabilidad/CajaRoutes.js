@@ -6,6 +6,7 @@ const {
   cerrarCaja,
   obtenerCierreCajaPorId,
   obtenerTodosLosCierresCaja,
+  obtenerMisCierresCaja,
   obtenerCierresCajaLegacy,
   obtenerEstadoCierreUsuario,
   obtenerFiltrosCierresCaja,
@@ -36,6 +37,7 @@ const requireLecturaCaja = requirePermission("Contabilidad", "Administracion");
 
 router.post("/cierre-caja", authenticate, cerrarCaja);
 router.get("/cierre-caja/estado", authenticate, obtenerEstadoCierreUsuario);
+router.get("/mis-cierres-caja", authenticate, obtenerMisCierresCaja);
   
 router.get(
   "/cierres-caja/filtros",

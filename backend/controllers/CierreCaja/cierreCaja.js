@@ -16,6 +16,12 @@ const ESTADOS_CIERRE_ACTIVOS = ["CERRADO", "REABIERTO"];
 const obtenerFechaEcuador = (fecha = new Date()) =>
   fecha.toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
 
+const esFechaISOValida = (fecha) =>
+  typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha);
+
+const resolverFechaCierre = (cierre = {}) =>
+  esFechaISOValida(cierre.fecha) ? cierre.fecha : obtenerFechaEcuador();
+
 const resolverRelacionUsuarioAgencia = async (req, transaction = null) => {
   const usuarioAgenciaId = req.user?.usuarioAgenciaId || null;
   const agenciaId = req.user?.agenciaId || null;
@@ -60,6 +66,9 @@ const resolverRelacionUsuarioAgencia = async (req, transaction = null) => {
 
 const normalizarTexto = (valor) => String(valor || "").trim();
 
+const redondearDosDecimales = (valor) =>
+  Number((Number(valor) || 0).toFixed(2));
+
 const esMovimientoValido = (m) =>
   m &&
   typeof m.detalle === "string" &&
@@ -72,7 +81,7 @@ const normalizarMovimiento = (m = {}) => ({
   responsable: normalizarTexto(m.responsable),
   detalle: normalizarTexto(m.detalle),
   entidad: m.entidad ? normalizarTexto(m.entidad) : null,
-  valor: Number(m.valor) || 0,
+  valor: redondearDosDecimales(m.valor),
   formaPago: m.formaPago ? normalizarTexto(m.formaPago).toUpperCase() : null,
   recibo:
     m.recibo !== null && m.recibo !== undefined && m.recibo !== ""
@@ -96,14 +105,14 @@ const normalizarDenominaciones = (denominaciones = []) =>
   denominaciones
     .map((d) => ({
       valor: Number(d.valor ?? d.denominacion) || 0,
-      cantidad: Number(d.cantidad) || 0,
+      cantidad: redondearDosDecimales(d.cantidad),
     }))
     .filter((d) => d.valor > 0 && d.cantidad > 0);
 
 const normalizarRetiros = (retiros = []) =>
   retiros
     .map((r) => ({
-      monto: Number(r.monto) || 0,
+      monto: redondearDosDecimales(r.monto),
       motivo: normalizarTexto(r.motivo),
       autorizadoPor: normalizarTexto(r.autorizadoPor),
     }))
@@ -343,9 +352,9 @@ const cerrarCaja = async (req, res) => {
   try {
     const { usuarioAgenciaId, agenciaId } = await resolverRelacionUsuarioAgencia(req, t);
     const usuarioId = req.user.id;
-    const fechaCierre = obtenerFechaEcuador();
     const ahora = new Date();
     const { cierre = {}, denominaciones = [], retiros = [], movimientosPendientes = [] } = req.body;
+    const fechaCierre = resolverFechaCierre(cierre);
 
     if (!usuarioAgenciaId || !agenciaId) {
       await t.rollback();
@@ -538,6 +547,50 @@ const obtenerTodosLosCierresCaja = async (req, res) => {
     console.error(error);
     return res.status(500).json({
       message: "Error al obtener los cierres de caja",
+      error: error.message,
+    });
+  }
+};
+
+const obtenerMisCierresCaja = async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, estadoCierre } = req.query;
+    const where = {
+      usuarioId: req.user.id,
+    };
+
+    if (fechaInicio && fechaFin) {
+      where.fecha = { [Op.between]: [fechaInicio, fechaFin] };
+    } else if (fechaInicio) {
+      where.fecha = { [Op.gte]: fechaInicio };
+    } else if (fechaFin) {
+      where.fecha = { [Op.lte]: fechaFin };
+    }
+
+    if (estadoCierre && estadoCierre !== "todos") {
+      where.estadoCierre = estadoCierre;
+    }
+
+    const cierres = await CierreCaja.findAll({
+      where,
+      include: [includeUsuarioAgencia()],
+      order: [
+        ["fecha", "DESC"],
+        ["id", "DESC"],
+      ],
+    });
+
+    const data = await armarDataCierres(cierres);
+
+    return res.status(200).json({
+      message: data.length ? "Cierres obtenidos correctamente" : "No existen cierres de caja",
+      total: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Error al obtener mis cierres de caja",
       error: error.message,
     });
   }
@@ -869,6 +922,7 @@ module.exports = {
   cerrarCaja,
   obtenerCierreCajaPorId,
   obtenerTodosLosCierresCaja,
+  obtenerMisCierresCaja,
   obtenerCierresCajaLegacy,
   obtenerEstadoCierreUsuario,
   obtenerFiltrosCierresCaja,

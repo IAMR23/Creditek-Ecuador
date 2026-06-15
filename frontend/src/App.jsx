@@ -74,6 +74,7 @@ import RevisionGestiones from "./pages/Admin/RevisionGestiones";
 import RevisionGestionesComercial from "./pages/Admin/RevisionGestionesComercial";
 import EditarGestion from "./pages/Vendedores/EditarGestion";
 import Caja from "./pages/Vendedores/Caja";
+import MisCierresCaja from "./pages/Vendedores/MisCierresCaja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 import BDDVentas from "./pages/Admin/BDDVentas";
 import Bonos from "./pages/Admin/Bonos";
@@ -440,6 +441,7 @@ useEffect(() => {
               <Route path="mis-gestiones-comerciales" element={protect(<MisGestionesComerciales />, "/mis-gestiones-comerciales")} />
               <Route path="mi-gestion/:id" element={protect(<EditarGestion />, "/mis-gestiones")} />
               <Route path="caja" element={protect(<Caja />, "/caja")} />
+              <Route path="mis-cierres-caja" element={protect(<MisCierresCaja />, "/mis-cierres-caja")} />
 
               <Route
                 path="unauthorized"

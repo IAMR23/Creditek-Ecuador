@@ -8,6 +8,12 @@ const { Op } = require("sequelize");
 const obtenerFechaEcuador = (fecha = new Date()) =>
   fecha.toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
 
+const esFechaISOValida = (fecha) =>
+  typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha);
+
+const redondearDosDecimales = (valor) =>
+  Number((Number(valor) || 0).toFixed(2));
+
 const resolverUsuarioAgenciaId = async (req) => {
   if (req.user?.usuarioAgenciaId) return req.user.usuarioAgenciaId;
 
@@ -35,10 +41,14 @@ const crearMovimientoTemp = async (req, res) => {
       }); 
     } 
 
+    const fechaMovimiento = esFechaISOValida(req.body?.fecha)
+      ? req.body.fecha
+      : obtenerFechaEcuador();
+
     const cierreExistente = await CierreCaja.findOne({
       where: {
         usuarioId: req.user.id,
-        fecha: obtenerFechaEcuador(),
+        fecha: fechaMovimiento,
         estadoCierre: { [Op.in]: ["CERRADO", "REABIERTO"] },
       },
     });
@@ -46,7 +56,7 @@ const crearMovimientoTemp = async (req, res) => {
     if (cierreExistente) {
       return res.status(409).json({
         ok: false,
-        message: "La caja de hoy ya fue cerrada para este usuario",
+        message: "La caja de la fecha seleccionada ya fue cerrada para este usuario",
       });
     }
 
@@ -79,7 +89,7 @@ const crearMovimientoTemp = async (req, res) => {
       usuarioAgenciaId,
       responsable,
       detalle: detalle?.trim() || null,
-      valor: Number(valor) || 0,
+      valor: redondearDosDecimales(valor),
       formaPago: formaPago?.trim() || null,
       recibo,
       observacion,

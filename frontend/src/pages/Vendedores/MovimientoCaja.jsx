@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { FaPlus, FaTimes } from "react-icons/fa";
 import { getHoyLocal } from "../../utils/dateUtils";
@@ -23,12 +24,26 @@ const formatearFechaLocal = (fecha) => {
   return `${partes[2]}/${partes[1]}/${partes[0]}`;
 };
 
+const normalizarNumeroPositivoTexto = (value) => {
+  const normalizado = String(value || "").replace(/,/g, ".");
+  const limpio = normalizado.replace(/[^\d.]/g, "");
+  const [entero, ...decimales] = limpio.split(".");
+
+  if (!decimales.length) return entero;
+
+  return `${entero}.${decimales.join("").slice(0, 2)}`;
+};
+
+const convertirNumeroDosDecimales = (value) =>
+  Number((Number(normalizarNumeroPositivoTexto(value)) || 0).toFixed(2));
+
 export default function MovimientoCaja() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([{ ...filaVacia }]);
   const [loading, setLoading] = useState(false);
   const [estadoLoading, setEstadoLoading] = useState(true);
   const [cierreActual, setCierreActual] = useState(null);
+  const [fechaCaja, setFechaCaja] = useState(getHoyLocal());
   const denominacionesBase = [
     { denominacion: 100, cantidad: 0, total: 0 },
     { denominacion: 50, cantidad: 0, total: 0 },
@@ -50,10 +65,11 @@ export default function MovimientoCaja() {
   const handleCantidadChange = (index, cantidad) => {
     const newDetalles = [...detalles];
 
-    const cant = Number(cantidad) || 0;
+    const cantidadNormalizada = normalizarNumeroPositivoTexto(cantidad);
+    const cant = Number(cantidadNormalizada) || 0;
     const denom = newDetalles[index].denominacion;
 
-    newDetalles[index].cantidad = cant;
+    newDetalles[index].cantidad = cantidadNormalizada;
     newDetalles[index].total = cant * denom;
 
     setDetalles(newDetalles);
@@ -72,11 +88,11 @@ export default function MovimientoCaja() {
     navigate("/login");
   };
 
-  const cargarEstadoCierre = async () => {
+  const cargarEstadoCierre = async (fecha = fechaCaja) => {
     try {
       setEstadoLoading(true);
       const res = await axios.get(`${API_URL}/api/contabilidad/cierre-caja/estado`, {
-        params: { fecha: getHoyLocal() },
+        params: { fecha },
       });
       setCierreActual(res.data?.cierre || null);
     } catch (error) {
@@ -99,9 +115,22 @@ export default function MovimientoCaja() {
       }
 
       if (cierreActual) {
-        alert("La caja de hoy ya fue cerrada para este usuario.");
+        alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
         return;
       }
+
+      const { isConfirmed } = await Swal.fire({
+        title: "Advertencia",
+        text: "Esta opcion no puede ser removida. Desea continuar?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Continuar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#2563eb",
+        cancelButtonColor: "#6b7280",
+      });
+
+      if (!isConfirmed) return;
 
       setLoading(true);
 
@@ -111,7 +140,7 @@ export default function MovimientoCaja() {
             Number(r.monto) > 0 || r.motivo?.trim() || r.autorizadoPor?.trim(),
         )
         .map((r) => ({
-          monto: Number(r.monto) || 0,
+          monto: convertirNumeroDosDecimales(r.monto),
           motivo: r.motivo || "",
           autorizadoPor: r.autorizadoPor || "",
         }));
@@ -120,8 +149,8 @@ export default function MovimientoCaja() {
         .filter((d) => d.cantidad > 0)
         .map((d) => ({
           denominacion: d.denominacion,
-          cantidad: Number(d.cantidad),
-          total: Number(d.total),
+          cantidad: convertirNumeroDosDecimales(d.cantidad),
+          total: convertirNumeroDosDecimales(d.total),
         }));
 
       const movimientosPendientes = rows
@@ -129,7 +158,7 @@ export default function MovimientoCaja() {
         .map((row) => ({
           responsable: row.responsable || "",
           detalle: row.detalle || "",
-          valor: Number(row.valor) || 0,
+          valor: convertirNumeroDosDecimales(row.valor),
           formaPago: row.formaPago || null,
           recibo: row.recibo ? Number(row.recibo) : null,
           observacion: row.observacion || "",
@@ -137,7 +166,7 @@ export default function MovimientoCaja() {
 
       const payload = {
         cierre: {
-          
+          fecha: fechaCaja,
           observacion: "Cierre desde sistema",
         },
         denominaciones,
@@ -151,7 +180,7 @@ export default function MovimientoCaja() {
         },
       });
 
-      alert("Cierre realizado correctamente");
+      await Swal.fire("Cierre de caja completado", "", "success");
       setCierreActual(response.data?.cierre || null);
 
       setRows([{ ...filaVacia }]);
@@ -164,7 +193,7 @@ export default function MovimientoCaja() {
         return;
       }
       if (error?.response?.status === 409) {
-        setCierreActual(error.response.data?.cierre || { fecha: getHoyLocal() });
+        setCierreActual(error.response.data?.cierre || { fecha: fechaCaja });
       }
       alert(error?.response?.data?.message || "Error al cerrar caja");
     } finally {
@@ -221,9 +250,12 @@ export default function MovimientoCaja() {
       }
     };
 
-    cargarEstadoCierre();
     cargarMovimientos();
   }, []);
+
+  useEffect(() => {
+    cargarEstadoCierre(fechaCaja);
+  }, [fechaCaja]);
 
   const agregarFila = async () => {
     try {
@@ -246,7 +278,7 @@ export default function MovimientoCaja() {
       }
 
       if (cierreActual) {
-        alert("La caja de hoy ya fue cerrada para este usuario.");
+        alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
         return;
       }
 
@@ -256,7 +288,8 @@ export default function MovimientoCaja() {
         `${API_URL}/api/movimientos`,
         {
           ...ultimaFila,
-          valor: Number(ultimaFila.valor),
+          fecha: fechaCaja,
+          valor: convertirNumeroDosDecimales(ultimaFila.valor),
           recibo: ultimaFila.recibo ? Number(ultimaFila.recibo) : null,
           formaPago: ultimaFila.formaPago || null,
         },
@@ -290,7 +323,7 @@ export default function MovimientoCaja() {
         return;
       }
       if (error?.response?.status === 409) { 
-        setCierreActual({ fecha: getHoyLocal() }); 
+        setCierreActual({ fecha: fechaCaja });
       }
       alert(error?.response?.data?.message || error?.response?.data?.msg || "Error al guardar");
     } finally {
@@ -469,8 +502,8 @@ export default function MovimientoCaja() {
 
                   <td className="p-2">
                     <input
-                      type="number"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       className="border p-1 w-full"
                       value={d.cantidad}
                       onChange={(e) => handleCantidadChange(i, e.target.value)}
@@ -490,9 +523,8 @@ export default function MovimientoCaja() {
           <h2 className="text-xl font-bold ">Movimiento de Caja</h2>
           <input
             type="date"
-            value={getHoyLocal()}
-            disabled
-            readOnly
+            value={fechaCaja}
+            onChange={(e) => setFechaCaja(e.target.value || getHoyLocal())}
             className="border"
           />
         </div>
@@ -503,7 +535,7 @@ export default function MovimientoCaja() {
         )}
         {!estadoLoading && cierreActual && (
           <div className="border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            La caja del {formatearFechaLocal(cierreActual.fecha || getHoyLocal())} ya fue cerrada.
+            La caja del {formatearFechaLocal(cierreActual.fecha || fechaCaja)} ya fue cerrada.
             No se pueden agregar movimientos ni generar otro cierre.
           </div>
         )}
@@ -606,9 +638,16 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={row.valor}
-                      onChange={(e) => handleChange(i, "valor", e.target.value)}
+                      onChange={(e) =>
+                        handleChange(
+                          i,
+                          "valor",
+                          normalizarNumeroPositivoTexto(e.target.value),
+                        )
+                      }
                       className="w-full p-1"
                       disabled={row.guardado}
                     />
@@ -698,11 +737,12 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={r.monto}
                       onChange={(e) => {
                         const newData = [...retiros];
-                        newData[i].monto = e.target.value;
+                        newData[i].monto = normalizarNumeroPositivoTexto(e.target.value);
                         setRetiros(newData);
                       }}
                       className="w-full p-1"
