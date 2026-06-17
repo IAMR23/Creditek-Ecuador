@@ -149,12 +149,18 @@ const calcularTotales = ({ movimientos, denominaciones }) => {
     if (m.formaPago === "PENDIENTE") totalPendiente += valor;
   });
 
-  const totalSistema = totalEfectivo + totalTransferencia + totalPendiente;
-  const totalFisico = denominaciones.reduce(
+  totalEfectivo = redondearDosDecimales(totalEfectivo);
+  totalTransferencia = redondearDosDecimales(totalTransferencia);
+  totalPendiente = redondearDosDecimales(totalPendiente);
+
+  const totalSistema = redondearDosDecimales(
+    totalEfectivo + totalTransferencia + totalPendiente,
+  );
+  const totalFisico = redondearDosDecimales(denominaciones.reduce(
     (total, d) => total + (Number(d.valor) || 0) * (Number(d.cantidad) || 0),
     0,
-  );
-  const diferencia = totalFisico - totalEfectivo;
+  ));
+  const diferencia = redondearDosDecimales(totalFisico - totalEfectivo);
 
   return {
     totalFisico,

@@ -55,6 +55,9 @@ const claseDiferencia = (valor) => {
   return "font-semibold text-green-700";
 };
 
+const estadoCuadre = (cierre = {}) =>
+  Number(cierre.diferencia || 0) === 0 ? "CUADRADO" : "DESCUADRADO";
+
 const formatearFecha = (fecha) => {
   if (!fecha) return "";
   const partes = String(fecha).slice(0, 10).split("-");
@@ -720,7 +723,7 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
                   </span>
                 </Td>
                 <Td>
-                  <EstadoBadge estado={cierre.estado} />
+                  <EstadoBadge estado={estadoCuadre(cierre)} />
                 </Td>
                 <Td>
                   <EstadoCierreBadge estado={cierre.estadoCierre} />
@@ -751,7 +754,7 @@ function BarraAccionesCierre({
           Cierre #{cierre.id}
         </span>
         <span className="text-sm text-gray-500">{formatearFecha(cierre.fecha)}</span>
-        <EstadoBadge estado={cierre.estado} />
+        <EstadoBadge estado={estadoCuadre(cierre)} />
         <EstadoCierreBadge estado={cierre.estadoCierre} />
       </div>
 
@@ -993,7 +996,7 @@ function DetalleCierre({ item }) {
             value={formatearMoneda(cierre.diferencia)}
             valueClassName={claseDiferencia(cierre.diferencia)}
           />
-          <Dato label="Cuadre" value={cierre.estado} />
+          <Dato label="Cuadre" value={estadoCuadre(cierre)} />
           <Dato label="Estado cierre" value={cierre.estadoCierre || "CERRADO"} />
           <Dato label="Observacion" value={cierre.observacion || "-"} />
           <Dato
