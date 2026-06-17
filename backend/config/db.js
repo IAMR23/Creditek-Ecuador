@@ -187,6 +187,54 @@ const ensureMovimientoCajaSchema = async (queryInterface, tables) => {
   }
 };
 
+const ensureMarketingSchema = async (queryInterface, tables) => {
+  if (tables.includes("presupuesto_marketing")) {
+    const columnasPresupuestoMarketing =
+      await queryInterface.describeTable("presupuesto_marketing");
+
+    await addColumnIfMissing(queryInterface, "presupuesto_marketing", "fechaInicio", {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    });
+
+    await addColumnIfMissing(queryInterface, "presupuesto_marketing", "fechaFin", {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    });
+
+    if (columnasPresupuestoMarketing.departamentoId) {
+      await queryInterface.changeColumn("presupuesto_marketing", "departamentoId", {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: "agencias",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "RESTRICT",
+      });
+    }
+  }
+
+  if (tables.includes("gastos_marketing")) {
+    const columnasGastosMarketing =
+      await queryInterface.describeTable("gastos_marketing");
+
+    if (columnasGastosMarketing.departamentoId) {
+      await queryInterface.changeColumn("gastos_marketing", "departamentoId", {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: "agencias",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "RESTRICT",
+      });
+    }
+  }
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
@@ -199,6 +247,7 @@ const connectDB = async () => {
 
     await ensureCierreCajaSchema(queryInterface, tables);
     await ensureMovimientoCajaSchema(queryInterface, tables);
+    await ensureMarketingSchema(queryInterface, tables);
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

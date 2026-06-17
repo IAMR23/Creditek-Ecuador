@@ -59,7 +59,6 @@ const MetasDiarias = ({ data, metaPorDefecto = 2 }) => {
     return [...vendedores].sort((a, b) => b.ventas - a.ventas);
   }, [vendedores]);
 
-  // Total ventas
   const totalVentas = useMemo(() => {
     return vendedores.reduce((acc, v) => acc + v.ventas, 0);
   }, [vendedores]);

@@ -63,6 +63,11 @@ export default function Sidebar({ auth }) {
             path: "/metas-comerciales",
           },
           {
+            label: "Costo por Venta Marketing",
+            icon: <DollarSign size={20} />,
+            path: "/costo-venta-marketing",
+          },
+          {
             label: "Reporte Entregas",
             icon: <BarChart3 size={20} />,
             path: "/reporte-entregas",

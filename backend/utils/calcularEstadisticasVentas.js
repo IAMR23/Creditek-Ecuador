@@ -3,6 +3,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     totalVentas: ventas.length,
     indicadorGerenciaTotal: 0,
     indicadorEngancheJavierTotal: 0,
+    precioVentaTotal: 0,
+    margenPorcentualTotal: 0,
 
     porVendedor: {},
     indicadorEngancheJavierPorVendedor: {},
@@ -19,6 +21,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     porTipoModelo: {},
     porSemana: {},
     indicadorGerenciaPorSemana: {},
+    precioVentaPorSemana: {},
+    margenPorcentualPorSemana: {},
   };
 
   const normalizarTexto = (valor) => {
@@ -66,8 +70,20 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     return `${year}-${month}-${day}`;
   };
 
+  const normalizarNumero = (...valores) => {
+    for (const valor of valores) {
+      if (valor === null || valor === undefined || valor === "") continue;
+
+      const numero = Number(String(valor).replace(",", "."));
+      if (Number.isFinite(numero)) return numero;
+    }
+
+    return 0;
+  };
+
   const getInicioSemanaJueves = (fechaInput) => {
-    const fecha = crearFechaLocal(fechaInput) || new Date(new Date().getFullYear(), 0, 1);
+    const fecha =
+      crearFechaLocal(fechaInput) || new Date(new Date().getFullYear(), 0, 1);
     const inicio = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
 
     while (inicio.getDay() !== 4) {
@@ -118,9 +134,13 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     const esEngancheJavier =
       origenNormalizado === "enganche" && observacionNormalizada === "javier";
 
-    const margen = Number(v.margen) || 0;
+    const margen = normalizarNumero(v.margen);
+    const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);
     stats.indicadorGerenciaTotal = Number(
       (stats.indicadorGerenciaTotal + margen).toFixed(2)
+    );
+    stats.precioVentaTotal = Number(
+      (stats.precioVentaTotal + precioVenta).toFixed(2)
     );
 
     // Semana comercial jueves-miercoles calculada desde la fecha real.
@@ -132,6 +152,9 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
         stats.porSemana[key] = (stats.porSemana[key] || 0) + 1;
         stats.indicadorGerenciaPorSemana[key] = Number(
           ((stats.indicadorGerenciaPorSemana[key] || 0) + margen).toFixed(2)
+        );
+        stats.precioVentaPorSemana[key] = Number(
+          ((stats.precioVentaPorSemana[key] || 0) + precioVenta).toFixed(2)
         );
 
         if (esEngancheJavier) {
@@ -206,6 +229,30 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
         (stats.porObservacion[observacion] || 0) + 1;
     }
   });
+
+  const semanasMargen = new Set([
+    ...Object.keys(stats.porSemana),
+    ...Object.keys(stats.indicadorGerenciaPorSemana),
+    ...Object.keys(stats.precioVentaPorSemana),
+  ]);
+
+  semanasMargen.forEach((key) => {
+    const utilidad = Number(stats.indicadorGerenciaPorSemana[key]) || 0;
+    const venta = Number(stats.precioVentaPorSemana[key]) || 0;
+
+    stats.margenPorcentualPorSemana[key] =
+      venta === 0 ? 0 : Number(((utilidad / venta) * 100).toFixed(2));
+  });
+
+  stats.margenPorcentualTotal =
+    stats.precioVentaTotal === 0
+      ? 0
+      : Number(
+          (
+            (stats.indicadorGerenciaTotal / stats.precioVentaTotal) *
+            100
+          ).toFixed(2)
+        );
 
   return stats;
 };

@@ -19,6 +19,7 @@ jest.mock("../../controllers/CierreCaja/cierreCaja", () => ({
   cerrarCaja: (_req, res) => res.json({ ok: true }),
   obtenerCierreCajaPorId: (_req, res) => res.json({ ok: true }),
   obtenerTodosLosCierresCaja: (_req, res) => res.json({ ok: true }),
+  obtenerMisCierresCaja: (_req, res) => res.json({ ok: true }),
   obtenerCierresCajaLegacy: (_req, res) => res.json({ ok: true }),
   obtenerEstadoCierreUsuario: (_req, res) => res.json({ ok: true }),
   obtenerFiltrosCierresCaja: (_req, res) => res.json({ ok: true }),

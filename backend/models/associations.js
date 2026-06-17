@@ -33,6 +33,8 @@ const ReaperturaCierreCaja = require('./CierreCaja/ReaperturaCierreCaja');
 const Task = require('./Task');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
+const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
+const GastoMarketing = require('./Marketing/GastoMarketing');
 require('./UsuarioPermiso');
 require('./UsuarioRol');
 // -------------------- Usuario, Rol, Agencia --------------------
@@ -394,4 +396,26 @@ Dispositivo.hasMany(GestionComercial, {
 GestionComercial.belongsTo(Dispositivo, {
   foreignKey: "dispositivoId",
   as: "dispositivo",
+});
+
+/* MARKETING */
+
+PresupuestoMarketing.belongsTo(Agencia, {
+  foreignKey: "departamentoId",
+  as: "departamento",
+});
+
+Agencia.hasMany(PresupuestoMarketing, {
+  foreignKey: "departamentoId",
+  as: "presupuestosMarketing",
+});
+
+GastoMarketing.belongsTo(Agencia, {
+  foreignKey: "departamentoId",
+  as: "departamento",
+});
+
+Agencia.hasMany(GastoMarketing, {
+  foreignKey: "departamentoId",
+  as: "gastosMarketing",
 });

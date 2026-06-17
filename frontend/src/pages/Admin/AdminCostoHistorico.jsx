@@ -141,6 +141,7 @@ export default function CostosHistoricosCRUD() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
+  const [editOriginal, setEditOriginal] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -189,10 +190,13 @@ export default function CostosHistoricosCRUD() {
   const openCreateModal = () => {
     setForm(emptyForm);
     setEditId(null);
+    setEditOriginal(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (costo) => {
+    const fechaCompra = costo.fechaCompra?.split("T")[0] || "";
+
     setForm({
       modeloId: costo.modeloId || "",
       precioCarga: costo.precioCarga ?? "",
@@ -200,17 +204,29 @@ export default function CostosHistoricosCRUD() {
       costo: costo.costo ?? "",
       margen: costo.margen ?? "",
       margenPorcentual: costo.margenPorcentual ?? "",
-      fechaCompra: costo.fechaCompra?.split("T")[0] || "",
+      fechaCompra,
       nota: costo.nota || "",
     });
     setEditId(costo.id);
+    setEditOriginal({
+      modeloId: String(costo.modeloId || ""),
+      fechaCompra,
+    });
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     if (saving) return;
     setIsModalOpen(false);
+    setEditId(null);
+    setEditOriginal(null);
   };
+
+  const creaNuevoHistorico =
+    Boolean(editId) &&
+    Boolean(editOriginal) &&
+    (String(form.modeloId) !== editOriginal.modeloId ||
+      form.fechaCompra !== editOriginal.fechaCompra);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -226,17 +242,19 @@ export default function CostosHistoricosCRUD() {
         nota: form.nota,
       };
 
-      if (editId) {
+      if (editId && !creaNuevoHistorico) {
         await axios.put(`${API_URL}/costos/${editId}`, payload);
       } else {
         await axios.post(`${API_URL}/costos`, payload);
       }
 
       setIsModalOpen(false);
+      setEditId(null);
+      setEditOriginal(null);
       await fetchData();
       Swal.fire({
         icon: "success",
-        title: "Guardado",
+        title: creaNuevoHistorico ? "Nuevo historico creado" : "Guardado",
         timer: 1200,
         showConfirmButton: false,
       });
@@ -360,6 +378,13 @@ export default function CostosHistoricosCRUD() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
+              {creaNuevoHistorico && (
+                <div className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                  Cambiaste el modelo o la fecha. Al guardar se creara un nuevo
+                  registro historico y el registro anterior se conservara.
+                </div>
+              )}
+
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-gray-700">Modelo</span>
                 <select
@@ -492,7 +517,12 @@ export default function CostosHistoricosCRUD() {
                   disabled={saving}
                   className="inline-flex items-center gap-2 rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60"
                 >
-                  <FaSave /> {saving ? "Guardando..." : "Guardar"}
+                  <FaSave />{" "}
+                  {saving
+                    ? "Guardando..."
+                    : creaNuevoHistorico
+                      ? "Crear nuevo registro"
+                      : "Guardar"}
                 </button>
               </div>
             </form>

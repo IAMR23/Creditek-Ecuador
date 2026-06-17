@@ -144,7 +144,7 @@ connectDB()
     app.use("/marcas", marcas);
     app.use("/modelos", modelos);
     app.use("/dispositivoMarca", dispositivoMarca);
-    app.use("/costos", CostoHistoricoRoutes);
+    app.use("/costos", CostoHistoricoRoutes); 
     app.use("/formaPago", FormaPago);   
     app.use("/origen", OrigenRoutes);   
     app.use("/ventas", VentaRoutes); 
@@ -172,6 +172,7 @@ connectDB()
     app.use("/api/gestion-comercial", require("./routes/Comercial/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
+    app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
 app.use("/api/webhooks", require("./routes/webhookRoutes"));
