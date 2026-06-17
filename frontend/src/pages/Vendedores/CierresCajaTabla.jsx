@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
@@ -58,6 +58,17 @@ const claseDiferencia = (valor) => {
 const estadoCuadre = (cierre = {}) =>
   Number(cierre.diferencia || 0) === 0 ? "CUADRADO" : "DESCUADRADO";
 
+const fueReabiertoPorOtroUsuario = (cierre = {}, usuarioId) =>
+  cierre.estadoCierre === "REABIERTO" &&
+  cierre.reabiertoPorUsuarioId &&
+  String(cierre.reabiertoPorUsuarioId) !== String(usuarioId);
+
+const obtenerUsuarioReaperturaActual = (item = {}) =>
+  (item.reaperturas || []).find(
+    (reapertura) =>
+      !reapertura.recerradoPorUsuarioId && !reapertura.fechaRecierre,
+  )?.reabiertoPor?.nombre;
+
 const formatearFecha = (fecha) => {
   if (!fecha) return "";
   const partes = String(fecha).slice(0, 10).split("-");
@@ -71,7 +82,10 @@ const formatearFechaHora = (fecha) => {
 };
 
 const normalizarNumeroPositivoTexto = (value) => {
-  const normalizado = String(value || "").replace(/,/g, ".");
+  const texto = String(value ?? "");
+  if (texto.includes("-")) return "";
+
+  const normalizado = texto.replace(/,/g, ".");
   const limpio = normalizado.replace(/[^\d.]/g, "");
   const [entero, ...decimales] = limpio.split(".");
 
@@ -82,6 +96,14 @@ const normalizarNumeroPositivoTexto = (value) => {
 
 const normalizarEnteroPositivoTexto = (value) =>
   String(value || "").replace(/\D/g, "");
+
+const tieneValorNoNegativo = (value) => {
+  const texto = String(value ?? "").trim();
+  if (texto === "") return false;
+
+  const numero = Number(texto);
+  return Number.isFinite(numero) && numero >= 0;
+};
 
 const normalizarRol = (rol) =>
   String(rol || "")
@@ -115,7 +137,7 @@ const crearDenominacionesEdit = (denominaciones = []) => {
 const mapMovimientoEdit = (m = {}) => ({
   responsable: m.responsable || "",
   detalle: m.detalle || "",
-  valor: m.valor || "",
+  valor: m.valor ?? "",
   formaPago: m.formaPago || "",
   recibo: m.recibo || "",
   entidad: m.entidad || m.observacion || "",
@@ -142,6 +164,97 @@ const totalDenominaciones = (denominaciones = []) =>
     (total, d) => total + Number(d.valor) * (Number(d.cantidad) || 0),
     0,
   );
+
+const redondearDosDecimales = (valor) => Number((Number(valor) || 0).toFixed(2));
+
+const esMovimientoValido = (movimiento = {}) =>
+  Boolean(
+    movimiento.detalle?.trim() &&
+      tieneValorNoNegativo(movimiento.valor) &&
+      movimiento.formaPago?.trim(),
+  );
+
+const calcularTotalesCierre = ({ movimientos = [], denominaciones = [] }) => {
+  let totalEfectivo = 0;
+  let totalTransferencia = 0;
+  let totalPendiente = 0;
+
+  movimientos.forEach((m) => {
+    const valor = Number(m.valor) || 0;
+    const formaPago = String(m.formaPago || "").trim().toUpperCase();
+
+    if (formaPago === "EFECTIVO") totalEfectivo += valor;
+    if (formaPago === "TRANSFERENCIA") totalTransferencia += valor;
+    if (formaPago === "PENDIENTE") totalPendiente += valor;
+  });
+
+  totalEfectivo = redondearDosDecimales(totalEfectivo);
+  totalTransferencia = redondearDosDecimales(totalTransferencia);
+  totalPendiente = redondearDosDecimales(totalPendiente);
+
+  const totalSistema = redondearDosDecimales(
+    totalEfectivo + totalTransferencia + totalPendiente,
+  );
+  const totalFisico = redondearDosDecimales(totalDenominaciones(denominaciones));
+  const diferencia = redondearDosDecimales(totalFisico - totalEfectivo);
+
+  return {
+    totalFisico,
+    totalEfectivo,
+    totalTransferencia,
+    totalPendiente,
+    totalSistema,
+    diferencia,
+  };
+};
+
+const calcularResumenPorTipo = (movimientos = []) => {
+  const resumenPorTipo = {
+    cuotaEfectivo: 0,
+    cuotaTransferencia: 0,
+    contadoEfectivo: 0,
+    contadoTransferencia: 0,
+    entradaEfectivo: 0,
+    entradaTransferencia: 0,
+    entradaPendiente: 0,
+    alcanceEfectivo: 0,
+    alcanceTransferencia: 0,
+  };
+
+  movimientos.forEach((m) => {
+    const detalle = String(m.detalle || "").trim().toUpperCase();
+    const formaPago = String(m.formaPago || "").trim().toUpperCase();
+    const valor = Number(m.valor) || 0;
+
+    if (detalle === "CUOTA") {
+      if (formaPago === "EFECTIVO") resumenPorTipo.cuotaEfectivo += valor;
+      if (formaPago === "TRANSFERENCIA") resumenPorTipo.cuotaTransferencia += valor;
+    }
+
+    if (detalle === "CONTADO") {
+      if (formaPago === "EFECTIVO") resumenPorTipo.contadoEfectivo += valor;
+      if (formaPago === "TRANSFERENCIA") resumenPorTipo.contadoTransferencia += valor;
+    }
+
+    if (detalle === "ENTRADA") {
+      if (formaPago === "EFECTIVO") resumenPorTipo.entradaEfectivo += valor;
+      if (formaPago === "TRANSFERENCIA") resumenPorTipo.entradaTransferencia += valor;
+      if (formaPago === "PENDIENTE") resumenPorTipo.entradaPendiente += valor;
+    }
+
+    if (detalle === "ALCANCE") {
+      if (formaPago === "EFECTIVO") resumenPorTipo.alcanceEfectivo += valor;
+      if (formaPago === "TRANSFERENCIA") resumenPorTipo.alcanceTransferencia += valor;
+    }
+  });
+
+  return Object.fromEntries(
+    Object.entries(resumenPorTipo).map(([key, value]) => [
+      key,
+      redondearDosDecimales(value),
+    ]),
+  );
+};
 
 const getResumenPorTipo = (resumenPorTipo = {}) => [
   {
@@ -337,6 +450,16 @@ export default function CierresCajaTabla() {
       return;
     }
 
+    if (fueReabiertoPorOtroUsuario(item.cierre, authUser?.id)) {
+      const usuarioReapertura = obtenerUsuarioReaperturaActual(item) || "otro usuario";
+      Swal.fire(
+        "Atencion",
+        `Esta caja fue reabierta por ${usuarioReapertura}. Solo ese usuario puede editarla.`,
+        "warning",
+      );
+      return;
+    }
+
     setSelectedCierreId(item.cierre.id);
     setEditingId(item.cierre.id);
     setEditForm(crearEditForm(item));
@@ -380,9 +503,7 @@ export default function CierresCajaTabla() {
   const guardarEdicion = async () => {
     if (!editingId || !editForm) return;
 
-    const movimientosValidos = editForm.movimientos.filter(
-      (m) => m.detalle?.trim() && Number(m.valor) > 0 && m.formaPago?.trim(),
-    );
+    const movimientosValidos = editForm.movimientos.filter(esMovimientoValido);
 
     if (!movimientosValidos.length) {
       Swal.fire("Atencion", "Debe existir al menos un movimiento valido", "warning");
@@ -573,6 +694,7 @@ export default function CierresCajaTabla() {
                     <BarraAccionesCierre
                       item={selectedItem}
                       isAdmin={isAdmin}
+                      authUserId={authUser?.id}
                       isEditing={editingId === selectedItem.cierre.id}
                       reabrirCierre={reabrirCierre}
                       iniciarEdicion={iniciarEdicion}
@@ -622,14 +744,14 @@ function Th({ children, align = "left" }) {
   const alignClass = align === "center" ? "text-center" : "text-left";
 
   return (
-    <th className={`border px-3 py-2 ${alignClass} font-semibold text-gray-700`}>
+    <th className={`border px-2 py-2 ${alignClass} break-words font-semibold text-gray-700`}>
       {children}
     </th>
   );
 }
 
 function Td({ children }) {
-  return <td className="border px-3 py-2 align-top">{children}</td>;
+  return <td className="border px-2 py-2 align-top break-words">{children}</td>;
 }
 
 function IconButton({ children, title, onClick, tone = "blue" }) {
@@ -682,8 +804,19 @@ function EstadoCierreBadge({ estado }) {
 
 function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
   return (
-    <div className="overflow-x-auto border bg-white">
-      <table className="w-full min-w-[1120px] border-collapse text-sm">
+    <div className="min-w-0 border bg-white">
+      <table className="w-full table-fixed border-collapse text-xs md:text-sm">
+        <colgroup>
+          <col className="w-12" />
+          <col className="w-24" />
+          <col className="w-[11%]" />
+          <col className="w-[14%]" />
+          <col className="w-[9%]" />
+          <col className="w-[9%]" />
+          <col className="w-[10%]" />
+          <col className="w-[10%]" />
+          <col />
+        </colgroup>
         <thead className="bg-gray-100">
           <tr>
             <Th>ID</Th>
@@ -741,11 +874,14 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
 function BarraAccionesCierre({
   item,
   isAdmin,
+  authUserId,
   isEditing,
   reabrirCierre,
   iniciarEdicion,
 }) {
   const { cierre } = item;
+  const reabiertoPorOtro = fueReabiertoPorOtroUsuario(cierre, authUserId);
+  const usuarioReapertura = obtenerUsuarioReaperturaActual(item) || "otro usuario";
 
   return (
     <div className="flex flex-col gap-3 border bg-white p-3 md:flex-row md:items-center md:justify-between">
@@ -770,7 +906,7 @@ function BarraAccionesCierre({
           </button>
         )}
 
-        {isAdmin && cierre.estadoCierre === "REABIERTO" && (
+        {isAdmin && cierre.estadoCierre === "REABIERTO" && !reabiertoPorOtro && (
           <button
             type="button"
             onClick={() => iniciarEdicion(item)}
@@ -780,6 +916,12 @@ function BarraAccionesCierre({
             <Pencil size={16} />
             {isEditing ? "Editando" : "Editar cierre reabierto"}
           </button>
+        )}
+
+        {isAdmin && cierre.estadoCierre === "REABIERTO" && reabiertoPorOtro && (
+          <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+            Reabierta por {usuarioReapertura}. Solo ese usuario puede editarla.
+          </div>
         )}
       </div>
     </div>
@@ -799,40 +941,45 @@ function VistaCierreVendedor({ item }) {
   const usuario = cierre.usuarioAgencia?.usuario?.nombre || "Usuario Desconocido";
 
   return (
-    <div className="flex flex-col items-start gap-2 xl:flex-row">
-      <div className="w-full shrink-0 border bg-gray-50 p-2 xl:w-[500px]">
-        <h2 className="mb-2 text-xl font-bold uppercase">
+    <div className="grid min-w-0 grid-cols-1 items-start gap-2 xl:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]">
+      <div className="min-w-0 border bg-gray-50 p-2">
+        <h2 className="mb-1 text-base font-bold uppercase">
           CUADRE DE CAJA AGENCIA {agencia}
         </h2>
-        <div className="mb-3 text-sm font-semibold uppercase text-gray-700">
+        <div className="mb-2 text-xs font-semibold uppercase text-gray-700">
           {usuario}
         </div>
 
-        <h3 className="font-bold">
+        <h3 className="text-sm font-bold">
           Conteo de Efectivo ({formatearMoneda(totalFisico)})
         </h3>
 
-        <div className="m-2 overflow-hidden rounded-lg border shadow-lg">
-          <table className="w-full text-sm">
+        <div className="mt-2 overflow-hidden rounded border shadow-sm">
+          <table className="w-full table-fixed text-xs">
+            <colgroup>
+              <col className="w-[36%]" />
+              <col className="w-[38%]" />
+              <col />
+            </colgroup>
             <thead>
               <tr>
-                <th className="p-2 text-left">Denominacion</th>
-                <th className="p-2 text-left">Cantidad</th>
-                <th className="p-2 text-left">Total</th>
+                <th className="px-2 py-1.5 text-left">Denominacion</th>
+                <th className="px-2 py-1.5 text-left">Cantidad</th>
+                <th className="px-2 py-1.5 text-left">Total</th>
               </tr>
             </thead>
             <tbody>
               {denominacionesVista.map((d) => (
                 <tr key={d.valor} className="border-t">
-                  <td className="p-2">{formatearMoneda(d.valor)}</td>
-                  <td className="p-2">
+                  <td className="px-2 py-1.5">{formatearMoneda(d.valor)}</td>
+                  <td className="px-2 py-1.5">
                     <input
                       readOnly
                       value={d.cantidad}
-                      className="w-full border bg-white p-1"
+                      className="w-full border bg-white px-1.5 py-1 text-xs"
                     />
                   </td>
-                  <td className="p-2 font-semibold">
+                  <td className="px-2 py-1.5 font-semibold">
                     {formatearMoneda(Number(d.valor) * (Number(d.cantidad) || 0))}
                   </td>
                 </tr>
@@ -842,62 +989,74 @@ function VistaCierreVendedor({ item }) {
         </div>
       </div>
 
-      <div className="flex w-full flex-col gap-2">
-        <div className="flex justify-between p-2">
-          <h2 className="text-xl font-bold">Movimiento de Caja</h2>
-          <input
-            type="date"
-            value={String(cierre.fecha || "").slice(0, 10)}
-            disabled
-            readOnly
-            className="border bg-gray-50 px-2"
-          />
-        </div>
-
-        <div className="border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-          La caja del {formatearFecha(cierre.fecha)} fue cerrada por {usuario}.
-          Estado: {cierre.estadoCierre || "CERRADO"}.
-        </div>
-
-        <div className="w-full border bg-gray-50 p-3 xl:w-fit">
-          <h3 className="mb-2 font-bold">Resumen</h3>
-          <div className="flex flex-wrap items-center gap-4 text-sm">
-            <div>
-              Efectivo: <strong>{formatearMoneda(cierre.totalEfectivo)}</strong>
-            </div>
-            <div>
-              Transferencia:{" "}
-              <strong>{formatearMoneda(cierre.totalTransferencia)}</strong>
-            </div>
-            <div>
-              Pendiente: <strong>{formatearMoneda(cierre.totalPendiente)}</strong>
-            </div>
-            <div className="font-semibold">
-              Efectivo + Transferencia: {formatearMoneda(totalET)}
-            </div>
-            <div className="font-bold">
-              Total General: {formatearMoneda(cierre.totalSistema)}
-            </div>
-            <div className={claseDiferencia(cierre.diferencia)}>
-              Diferencia: {formatearMoneda(cierre.diferencia)}
-            </div>
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="sticky top-20 z-20 space-y-2 bg-gray-50 pb-2 shadow-sm">
+          <div className="flex justify-between p-2">
+            <h2 className="text-xl font-bold">Movimiento de Caja</h2>
+            <input
+              type="date"
+              value={String(cierre.fecha || "").slice(0, 10)}
+              disabled
+              readOnly
+              className="border bg-gray-50 px-2"
+            />
           </div>
-        </div>
 
-        <div className="border bg-gray-50 p-3">
-          <h3 className="mb-2 font-bold">Resumen por Tipo</h3>
-          <div className="flex flex-wrap gap-6 text-sm">
-            {getResumenPorTipo(resumenPorTipo).map((resumen) => (
-              <div key={resumen.key} className="flex min-w-[120px] flex-col">
-                <span className="text-gray-500">{resumen.label}</span>
-                <span className="font-semibold">{formatearMoneda(resumen.value)}</span>
+          <div className="border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            La caja del {formatearFecha(cierre.fecha)} fue cerrada por {usuario}.
+            Estado: {cierre.estadoCierre || "CERRADO"}.
+          </div>
+
+          <div className="w-full min-w-0 border bg-gray-50 p-3">
+            <h3 className="mb-2 font-bold">Resumen</h3>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <div>
+                Efectivo: <strong>{formatearMoneda(cierre.totalEfectivo)}</strong>
               </div>
-            ))}
+              <div>
+                Transferencia:{" "}
+                <strong>{formatearMoneda(cierre.totalTransferencia)}</strong>
+              </div>
+              <div>
+                Pendiente: <strong>{formatearMoneda(cierre.totalPendiente)}</strong>
+              </div>
+              <div className="font-semibold">
+                Efectivo + Transferencia: {formatearMoneda(totalET)}
+              </div>
+              <div className="font-bold">
+                Total General: {formatearMoneda(cierre.totalSistema)}
+              </div>
+              <div className={claseDiferencia(cierre.diferencia)}>
+                Diferencia: {formatearMoneda(cierre.diferencia)}
+              </div>
+            </div>
+          </div>
+
+          <div className="min-w-0 border bg-gray-50 p-3">
+            <h3 className="mb-2 font-bold">Resumen por Tipo</h3>
+            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-3 xl:grid-cols-5">
+              {getResumenPorTipo(resumenPorTipo).map((resumen) => (
+                <div key={resumen.key} className="flex min-w-0 flex-col">
+                  <span className="text-gray-500">{resumen.label}</span>
+                  <span className="font-semibold">{formatearMoneda(resumen.value)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="overflow-auto border bg-gray-50 p-3">
-          <table className="w-full min-w-[980px] text-sm">
+        <div className="min-w-0 border bg-gray-50 p-3">
+          <table className="w-full table-fixed text-xs md:text-sm">
+            <colgroup>
+              <col className="w-10" />
+              <col className="w-[13%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[13%]" />
+              <col className="w-[9%]" />
+              <col className="w-[16%]" />
+              <col />
+            </colgroup>
             <thead className="bg-gray-200">
               <tr>
                 <th>Item</th>
@@ -1166,9 +1325,24 @@ function EditorCierre({
   guardarEdicion,
   cancelarEdicion,
 }) {
-  const totalFisico = editForm.denominaciones.reduce(
-    (total, d) => total + Number(d.valor) * (Number(d.cantidad) || 0),
-    0,
+  const movimientosValidos = useMemo(
+    () => editForm.movimientos.filter(esMovimientoValido),
+    [editForm.movimientos],
+  );
+  const totalesEditor = useMemo(
+    () =>
+      calcularTotalesCierre({
+        movimientos: movimientosValidos,
+        denominaciones: editForm.denominaciones,
+      }),
+    [editForm.denominaciones, movimientosValidos],
+  );
+  const resumenPorTipoEditor = useMemo(
+    () => calcularResumenPorTipo(movimientosValidos),
+    [movimientosValidos],
+  );
+  const totalET = redondearDosDecimales(
+    totalesEditor.totalEfectivo + totalesEditor.totalTransferencia,
   );
   const usuariosEdit = useMemo(() => {
     if (!editForm.agenciaId) return filtros.usuarios || [];
@@ -1291,7 +1465,7 @@ function EditorCierre({
         <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <h3 className="text-sm font-semibold text-gray-900">Denominaciones</h3>
           <span className="text-sm font-bold text-gray-900">
-            {formatearMoneda(totalFisico)}
+            {formatearMoneda(totalesEditor.totalFisico)}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -1331,6 +1505,63 @@ function EditorCierre({
         </div>
       </section>
 
+      <section className="sticky top-20 z-20 border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <h3 className="text-sm font-semibold text-gray-900">Movimiento de caja</h3>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className={claseDiferencia(totalesEditor.diferencia)}>
+              Diferencia: {formatearMoneda(totalesEditor.diferencia)}
+            </span>
+            <span className="font-semibold text-gray-700">
+              {totalesEditor.diferencia === 0 ? "CUADRADO" : "DESCUADRADO"}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          <div>
+            <h4 className="mb-2 text-sm font-bold text-gray-900">Resumen</h4>
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <div>
+                Efectivo:{" "}
+                <strong>{formatearMoneda(totalesEditor.totalEfectivo)}</strong>
+              </div>
+              <div>
+                Transferencia:{" "}
+                <strong>{formatearMoneda(totalesEditor.totalTransferencia)}</strong>
+              </div>
+              <div>
+                Pendiente:{" "}
+                <strong>{formatearMoneda(totalesEditor.totalPendiente)}</strong>
+              </div>
+              <div className="font-semibold">
+                Efectivo + Transferencia: {formatearMoneda(totalET)}
+              </div>
+              <div className="font-bold">
+                Total General: {formatearMoneda(totalesEditor.totalSistema)}
+              </div>
+              <div className={claseDiferencia(totalesEditor.diferencia)}>
+                Diferencia: {formatearMoneda(totalesEditor.diferencia)}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="mb-2 text-sm font-bold text-gray-900">Resumen por tipo</h4>
+            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+              {getResumenPorTipo(resumenPorTipoEditor).map((resumen) => (
+                <div key={resumen.key} className="flex min-w-0 flex-col">
+                  <span className="text-gray-500">{resumen.label}</span>
+                  <span className="font-semibold">
+                    {formatearMoneda(resumen.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="border border-gray-200 bg-white">
         <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
           <h3 className="text-sm font-semibold text-gray-900">Movimientos</h3>
@@ -1343,8 +1574,18 @@ function EditorCierre({
             Agregar
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-sm">
+        <div className="min-w-0">
+          <table className="w-full table-fixed border-collapse text-xs md:text-sm">
+            <colgroup>
+              <col className="w-[14%]" />
+              <col className="w-[13%]" />
+              <col className="w-[9%]" />
+              <col className="w-[13%]" />
+              <col className="w-[9%]" />
+              <col className="w-[15%]" />
+              <col />
+              <col className="w-14" />
+            </colgroup>
             <thead className="bg-gray-100">
               <tr>
                 <Th>Responsable</Th>
@@ -1362,7 +1603,7 @@ function EditorCierre({
                 <tr key={index}>
                   <Td>
                     <input
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.responsable}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "responsable", e.target.value)
@@ -1371,7 +1612,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <select
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.detalle}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "detalle", e.target.value)
@@ -1390,7 +1631,7 @@ function EditorCierre({
                     <input
                       type="text"
                       inputMode="decimal"
-                      className="w-28 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.valor}
                       onChange={(e) =>
                         actualizarLista(
@@ -1404,7 +1645,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <select
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.formaPago}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "formaPago", e.target.value)
@@ -1420,7 +1661,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <input
-                      className="w-24 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.recibo}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "recibo", e.target.value)
@@ -1429,7 +1670,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <input
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.entidad}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "entidad", e.target.value)
@@ -1438,7 +1679,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <input
-                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.observacion}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "observacion", e.target.value)

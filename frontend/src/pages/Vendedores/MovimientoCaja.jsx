@@ -26,7 +26,10 @@ const formatearFechaLocal = (fecha) => {
 };
 
 const normalizarNumeroPositivoTexto = (value) => {
-  const normalizado = String(value || "").replace(/,/g, ".");
+  const texto = String(value ?? "");
+  if (texto.includes("-")) return "";
+
+  const normalizado = texto.replace(/,/g, ".");
   const limpio = normalizado.replace(/[^\d.]/g, "");
   const [entero, ...decimales] = limpio.split(".");
 
@@ -37,6 +40,14 @@ const normalizarNumeroPositivoTexto = (value) => {
 
 const normalizarEnteroPositivoTexto = (value) =>
   String(value || "").replace(/\D/g, "");
+
+const tieneValorNoNegativo = (value) => {
+  const texto = String(value ?? "").trim();
+  if (texto === "") return false;
+
+  const numero = Number(texto);
+  return Number.isFinite(numero) && numero >= 0;
+};
 
 const convertirNumeroDosDecimales = (value) =>
   Number((Number(normalizarNumeroPositivoTexto(value)) || 0).toFixed(2));
@@ -81,7 +92,9 @@ export default function MovimientoCaja() {
 
   const filaEsMovimientoValido = (fila) => {
     return (
-      fila.detalle?.trim() && Number(fila.valor) > 0 && fila.formaPago?.trim()
+      fila.detalle?.trim() &&
+      tieneValorNoNegativo(fila.valor) &&
+      fila.formaPago?.trim()
     );
   };
 
@@ -279,7 +292,7 @@ export default function MovimientoCaja() {
 
       if (
         !ultimaFila.detalle?.trim() ||
-        Number(ultimaFila.valor) <= 0 ||
+        !tieneValorNoNegativo(ultimaFila.valor) ||
         !ultimaFila.formaPago?.trim()
       ) {
         alert("Debe completar detalle, valor y forma de pago");

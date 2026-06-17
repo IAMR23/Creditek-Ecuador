@@ -87,19 +87,34 @@ const normalizarTexto = (valor) => String(valor || "").trim();
 const redondearDosDecimales = (valor) =>
   Number((Number(valor) || 0).toFixed(2));
 
+const fueReabiertoPorOtroUsuario = (cierre = {}, usuarioId) =>
+  cierre.reabiertoPorUsuarioId &&
+  String(cierre.reabiertoPorUsuarioId) !== String(usuarioId);
+
+const tieneValorNoNegativo = (valor) => {
+  const texto = String(valor ?? "").trim();
+  if (texto === "") return false;
+
+  const numero = Number(texto);
+  return Number.isFinite(numero) && numero >= 0;
+};
+
 const esMovimientoValido = (m) =>
   m &&
   typeof m.detalle === "string" &&
   m.detalle.trim() !== "" &&
-  Number(m.valor) > 0 &&
+  tieneValorNoNegativo(m.valor) &&
   typeof m.formaPago === "string" &&
   m.formaPago.trim() !== "";
+
+const normalizarValorMovimiento = (valor) =>
+  tieneValorNoNegativo(valor) ? redondearDosDecimales(valor) : null;
 
 const normalizarMovimiento = (m = {}) => ({
   responsable: normalizarTexto(m.responsable),
   detalle: normalizarTexto(m.detalle),
   entidad: m.entidad ? normalizarTexto(m.entidad) : null,
-  valor: redondearDosDecimales(m.valor),
+  valor: normalizarValorMovimiento(m.valor),
   formaPago: m.formaPago ? normalizarTexto(m.formaPago).toUpperCase() : null,
   recibo:
     m.recibo !== null && m.recibo !== undefined && m.recibo !== ""
@@ -756,6 +771,13 @@ const reabrirCierreCaja = async (req, res) => {
 
     if (cierre.estadoCierre === "REABIERTO") {
       await t.rollback();
+      if (fueReabiertoPorOtroUsuario(cierre, req.user.id)) {
+        return res.status(403).json({
+          message:
+            "La caja ya esta reabierta por otro usuario. Solo ese usuario puede editarla o recerrarla",
+        });
+      }
+
       return res.status(409).json({ message: "El cierre ya se encuentra reabierto" });
     }
 
@@ -837,6 +859,14 @@ const actualizarCierreCajaReabierto = async (req, res) => {
       await t.rollback();
       return res.status(409).json({
         message: "Solo se puede editar un cierre que este reabierto",
+      });
+    }
+
+    if (fueReabiertoPorOtroUsuario(cierre, req.user.id)) {
+      await t.rollback();
+      return res.status(403).json({
+        message:
+          "No puedes editar esta caja porque fue reabierta por otro usuario",
       });
     }
 

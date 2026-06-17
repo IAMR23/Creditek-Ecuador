@@ -14,6 +14,14 @@ const esFechaISOValida = (fecha) =>
 const redondearDosDecimales = (valor) =>
   Number((Number(valor) || 0).toFixed(2));
 
+const tieneValorNoNegativo = (valor) => {
+  const texto = String(valor ?? "").trim();
+  if (texto === "") return false;
+
+  const numero = Number(texto);
+  return Number.isFinite(numero) && numero >= 0;
+};
+
 const resolverUsuarioAgenciaId = async (req) => {
   if (req.user?.usuarioAgenciaId) return req.user.usuarioAgenciaId;
 
@@ -77,7 +85,7 @@ const crearMovimientoTemp = async (req, res) => {
     }
 
     if (!observacion?.trim()) {
-      if (!valor || isNaN(valor) || Number(valor) <= 0) {
+      if (!tieneValorNoNegativo(valor)) {
         return res.status(400).json({
           ok: false,
           message: "Valor inválido",

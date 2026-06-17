@@ -174,6 +174,51 @@ describe("cierreCaja controller", () => {
     expect(res.status).toHaveBeenCalledWith(409);
   });
 
+  test("permite cerrar caja con movimientos de valor cero", async () => {
+    CierreCaja.findOne.mockResolvedValue(null);
+    MovimientoCajaTemp.findAll.mockResolvedValue([]);
+    CierreCaja.create.mockResolvedValue({ id: 102 });
+    MovimientoCaja.bulkCreate.mockResolvedValue([]);
+    MovimientoCajaTemp.destroy.mockResolvedValue(0);
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: {
+        denominaciones: [],
+        movimientosPendientes: [
+          {
+            responsable: "Ana",
+            detalle: "CUOTA",
+            valor: 0,
+            formaPago: "EFECTIVO",
+          },
+        ],
+      },
+    };
+    const res = crearRes();
+
+    await cerrarCaja(req, res);
+
+    expect(CierreCaja.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalEfectivo: 0,
+        totalSistema: 0,
+      }),
+      { transaction },
+    );
+    expect(MovimientoCaja.bulkCreate).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          detalle: "CUOTA",
+          valor: 0,
+          formaPago: "EFECTIVO",
+        }),
+      ],
+      { transaction },
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   test("resuelve usuarioAgenciaId desde usuario y agencia si no viene en el token", async () => {
     UsuarioAgencia.findOne.mockResolvedValue({ id: 44, agenciaId: 3 });
     CierreCaja.findOne.mockResolvedValue(null);
@@ -348,6 +393,28 @@ describe("cierreCaja controller", () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
+  test("no permite reabrir una caja que ya esta reabierta por otro usuario", async () => {
+    const cierre = crearCierre({
+      estadoCierre: "REABIERTO",
+      reabiertoPorUsuarioId: 77,
+    });
+    CierreCaja.findByPk.mockResolvedValue(cierre);
+
+    const req = {
+      params: { id: "1" },
+      user: { id: 99 },
+      body: { motivo: "Intento externo" },
+    };
+    const res = crearRes();
+
+    await reabrirCierreCaja(req, res);
+
+    expect(ReaperturaCierreCaja.create).not.toHaveBeenCalled();
+    expect(cierre.update).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
   test("solo permite editar y recerrar un cierre en estado REABIERTO", async () => {
     CierreCaja.findByPk.mockResolvedValue(crearCierre({ estadoCierre: "CERRADO" }));
 
@@ -367,8 +434,35 @@ describe("cierreCaja controller", () => {
     expect(res.status).toHaveBeenCalledWith(409);
   });
 
+  test("no permite editar una caja reabierta por otro usuario", async () => {
+    const cierre = crearCierre({
+      estadoCierre: "REABIERTO",
+      reabiertoPorUsuarioId: 77,
+    });
+    CierreCaja.findByPk.mockResolvedValue(cierre);
+
+    const req = {
+      params: { id: "1" },
+      user: { id: 99 },
+      body: {
+        movimientos: [{ detalle: "CUOTA", valor: 10, formaPago: "EFECTIVO" }],
+      },
+    };
+    const res = crearRes();
+
+    await actualizarCierreCajaReabierto(req, res);
+
+    expect(MovimientoCaja.destroy).not.toHaveBeenCalled();
+    expect(cierre.update).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
   test("recierra un cierre reabierto y registra quien hizo el recierre", async () => {
-    const cierre = crearCierre({ estadoCierre: "REABIERTO" });
+    const cierre = crearCierre({
+      estadoCierre: "REABIERTO",
+      reabiertoPorUsuarioId: 99,
+    });
     const reapertura = { update: jest.fn().mockResolvedValue(undefined) };
     CierreCaja.findByPk.mockResolvedValueOnce(cierre).mockResolvedValueOnce(cierre);
     ReaperturaCierreCaja.findOne.mockResolvedValue(reapertura);

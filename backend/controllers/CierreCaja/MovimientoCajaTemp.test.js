@@ -1,4 +1,5 @@
 jest.mock("../../models/CierreCaja/MovimientoCajaTemp", () => ({
+  create: jest.fn(),
   destroy: jest.fn(),
 }));
 
@@ -7,7 +8,8 @@ jest.mock("../../models/CierreCaja/CierreCaja", () => ({
 }));
 
 const MovimientoCajaTemp = require("../../models/CierreCaja/MovimientoCajaTemp");
-const { eliminarMovimientoTemp } = require("./MovimientoCajaTemp");
+const CierreCaja = require("../../models/CierreCaja/CierreCaja");
+const { crearMovimientoTemp, eliminarMovimientoTemp } = require("./MovimientoCajaTemp");
 
 const crearRes = () => ({
   status: jest.fn().mockReturnThis(),
@@ -17,6 +19,56 @@ const crearRes = () => ({
 describe("MovimientoCajaTemp controller", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test("permite crear movimientos temporales con valor cero", async () => {
+    CierreCaja.findOne.mockResolvedValue(null);
+    MovimientoCajaTemp.create.mockResolvedValue({ id: 1, valor: 0 });
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11 },
+      body: {
+        responsable: "Ana",
+        detalle: "CUOTA",
+        valor: "0",
+        formaPago: "EFECTIVO",
+      },
+    };
+    const res = crearRes();
+
+    await crearMovimientoTemp(req, res);
+
+    expect(MovimientoCajaTemp.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usuarioAgenciaId: 11,
+        detalle: "CUOTA",
+        valor: 0,
+        formaPago: "EFECTIVO",
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      data: { id: 1, valor: 0 },
+    });
+  });
+
+  test("rechaza movimientos temporales con valor negativo", async () => {
+    CierreCaja.findOne.mockResolvedValue(null);
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11 },
+      body: {
+        detalle: "CUOTA",
+        valor: "-1",
+        formaPago: "EFECTIVO",
+      },
+    };
+    const res = crearRes();
+
+    await crearMovimientoTemp(req, res);
+
+    expect(MovimientoCajaTemp.create).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   test("elimina movimientos temporales solo si pertenecen al usuario-agencia autenticado", async () => {
