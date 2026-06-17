@@ -22,6 +22,7 @@ const MovimientoCajaTemp = sequelize.define(
       allowNull: true,
     },
     recibo: DataTypes.STRING,
+    entidad: DataTypes.STRING,
     observacion: DataTypes.STRING,
     estado: DataTypes.STRING,
   },

@@ -75,6 +75,11 @@ const ensureCierreCajaSchema = async (queryInterface, tables) => {
     allowNull: true,
   });
 
+  await addColumnIfMissing(queryInterface, "cierre_caja", "observacionContabilidad", {
+    type: Sequelize.STRING,
+    allowNull: true,
+  });
+
 await addColumnIfMissing(queryInterface, "cierre_caja", "estadoCierre", {
   type: Sequelize.ENUM("CERRADO", "REABIERTO", "ANULADO"),
   allowNull: false,
@@ -166,6 +171,22 @@ await addColumnIfMissing(queryInterface, "cierre_caja", "estadoCierre", {
   `);
 };
 
+const ensureMovimientoCajaSchema = async (queryInterface, tables) => {
+  if (tables.includes("movimiento_caja_temp")) {
+    await addColumnIfMissing(queryInterface, "movimiento_caja_temp", "entidad", {
+      type: Sequelize.STRING,
+      allowNull: true,
+    });
+  }
+
+  if (tables.includes("movimientos_caja")) {
+    await addColumnIfMissing(queryInterface, "movimientos_caja", "entidad", {
+      type: Sequelize.STRING,
+      allowNull: true,
+    });
+  }
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
@@ -177,6 +198,7 @@ const connectDB = async () => {
     const tables = await queryInterface.showAllTables();
 
     await ensureCierreCajaSchema(queryInterface, tables);
+    await ensureMovimientoCajaSchema(queryInterface, tables);
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

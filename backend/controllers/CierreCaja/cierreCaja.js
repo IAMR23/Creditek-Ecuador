@@ -64,6 +64,24 @@ const resolverRelacionUsuarioAgencia = async (req, transaction = null) => {
   };
 };
 
+const resolverRelacionPorUsuarioAgencia = async ({
+  usuarioId,
+  agenciaId,
+  transaction = null,
+}) => {
+  if (!usuarioId || !agenciaId) return null;
+
+  return UsuarioAgencia.findOne({
+    where: {
+      usuarioId: Number(usuarioId),
+      agenciaId: Number(agenciaId),
+      activo: true,
+    },
+    attributes: ["id", "usuarioId", "agenciaId"],
+    transaction,
+  });
+};
+
 const normalizarTexto = (valor) => String(valor || "").trim();
 
 const redondearDosDecimales = (valor) =>
@@ -412,6 +430,7 @@ const cerrarCaja = async (req, res) => {
         fechaCreacion: ahora,
         fechaModificacion: ahora,
         observacion: cierre.observacion || "",
+        observacionContabilidad: cierre.observacionContabilidad || "",
         estadoCierre: "CERRADO",
         ...totales,
       },
@@ -815,6 +834,61 @@ const actualizarCierreCajaReabierto = async (req, res) => {
       });
     }
 
+    const fechaCierre = cierrePayload.fecha !== undefined
+      ? cierrePayload.fecha
+      : cierre.fecha;
+    const usuarioIdCierre = cierrePayload.usuarioId !== undefined
+      ? Number(cierrePayload.usuarioId)
+      : Number(cierre.usuarioId);
+    const agenciaIdCierre = cierrePayload.agenciaId !== undefined
+      ? Number(cierrePayload.agenciaId)
+      : Number(cierre.agenciaId || 0);
+    const debeActualizarRelacion =
+      cierrePayload.usuarioId !== undefined || cierrePayload.agenciaId !== undefined;
+
+    if (!esFechaISOValida(fechaCierre)) {
+      await t.rollback();
+      return res.status(400).json({ message: "Fecha de cierre invalida" });
+    }
+
+    if (!usuarioIdCierre || (debeActualizarRelacion && !agenciaIdCierre)) {
+      await t.rollback();
+      return res.status(400).json({ message: "Debe indicar usuario y agencia del cierre" });
+    }
+
+    const cierreDuplicado = await CierreCaja.findOne({
+      where: {
+        id: { [Op.ne]: cierre.id },
+        usuarioId: usuarioIdCierre,
+        fecha: fechaCierre,
+        estadoCierre: { [Op.in]: ESTADOS_CIERRE_ACTIVOS },
+      },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    if (cierreDuplicado) {
+      await t.rollback();
+      return res.status(409).json({
+        message: "Ya existe un cierre de caja activo para este usuario en esta fecha",
+      });
+    }
+
+    const relacion = debeActualizarRelacion
+      ? await resolverRelacionPorUsuarioAgencia({
+          usuarioId: usuarioIdCierre,
+          agenciaId: agenciaIdCierre,
+          transaction: t,
+        })
+      : null;
+
+    if (debeActualizarRelacion && !relacion) {
+      await t.rollback();
+      return res.status(400).json({
+        message: "El usuario seleccionado no tiene una relacion activa con la agencia seleccionada",
+      });
+    }
+
     const denominaciones = normalizarDenominaciones(req.body.denominaciones || []);
     const retiros = normalizarRetiros(req.body.retiros || []);
     const totales = calcularTotales({ movimientos, denominaciones });
@@ -865,7 +939,13 @@ const actualizarCierreCajaReabierto = async (req, res) => {
 
     await cierre.update(
       {
+        fecha: fechaCierre,
+        usuarioId: usuarioIdCierre,
+        ...(agenciaIdCierre && { agenciaId: agenciaIdCierre }),
+        ...(relacion && { usuarioAgenciaId: relacion.id }),
         observacion: cierrePayload.observacion ?? cierre.observacion,
+        observacionContabilidad:
+          cierrePayload.observacionContabilidad ?? cierre.observacionContabilidad,
         estadoCierre: "CERRADO",
         recerradoPorUsuarioId: req.user.id,
         fechaRecierre,

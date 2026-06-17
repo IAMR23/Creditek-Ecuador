@@ -56,6 +56,11 @@ const CierreCaja = sequelize.define(
       allowNull: true,
     },
 
+    observacionContabilidad: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     totalFisico: { 
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

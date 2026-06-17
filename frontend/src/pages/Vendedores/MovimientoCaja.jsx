@@ -13,6 +13,7 @@ const filaVacia = {
   valor: "",
   formaPago: "",
   recibo: "",
+  entidad: "",
   observacion: "",
   guardado: false,
 };
@@ -34,6 +35,9 @@ const normalizarNumeroPositivoTexto = (value) => {
   return `${entero}.${decimales.join("").slice(0, 2)}`;
 };
 
+const normalizarEnteroPositivoTexto = (value) =>
+  String(value || "").replace(/\D/g, "");
+
 const convertirNumeroDosDecimales = (value) =>
   Number((Number(normalizarNumeroPositivoTexto(value)) || 0).toFixed(2));
 
@@ -45,17 +49,17 @@ export default function MovimientoCaja() {
   const [cierreActual, setCierreActual] = useState(null);
   const [fechaCaja, setFechaCaja] = useState(getHoyLocal());
   const denominacionesBase = [
-    { denominacion: 100, cantidad: 0, total: 0 },
-    { denominacion: 50, cantidad: 0, total: 0 },
-    { denominacion: 20, cantidad: 0, total: 0 },
-    { denominacion: 10, cantidad: 0, total: 0 },
-    { denominacion: 5, cantidad: 0, total: 0 },
-    { denominacion: 1, cantidad: 0, total: 0 },
-    { denominacion: 0.5, cantidad: 0, total: 0 },
-    { denominacion: 0.25, cantidad: 0, total: 0 },
-    { denominacion: 0.1, cantidad: 0, total: 0 },
-        { denominacion: 0.05, cantidad: 0, total: 0 },
-    { denominacion: 0.01, cantidad: 0, total: 0 },
+    { denominacion: 100, cantidad: "", total: 0 },
+    { denominacion: 50, cantidad: "", total: 0 },
+    { denominacion: 20, cantidad: "", total: 0 },
+    { denominacion: 10, cantidad: "", total: 0 },
+    { denominacion: 5, cantidad: "", total: 0 },
+    { denominacion: 1, cantidad: "", total: 0 },
+    { denominacion: 0.5, cantidad: "", total: 0 },
+    { denominacion: 0.25, cantidad: "", total: 0 },
+    { denominacion: 0.1, cantidad: "", total: 0 },
+        { denominacion: 0.05, cantidad: "", total: 0 },
+    { denominacion: 0.01, cantidad: "", total: 0 },
   ];
 
   const [detalles, setDetalles] = useState(denominacionesBase);
@@ -65,7 +69,7 @@ export default function MovimientoCaja() {
   const handleCantidadChange = (index, cantidad) => {
     const newDetalles = [...detalles];
 
-    const cantidadNormalizada = normalizarNumeroPositivoTexto(cantidad);
+    const cantidadNormalizada = normalizarEnteroPositivoTexto(cantidad);
     const cant = Number(cantidadNormalizada) || 0;
     const denom = newDetalles[index].denominacion;
 
@@ -158,6 +162,7 @@ export default function MovimientoCaja() {
         .map((row) => ({
           responsable: row.responsable || "",
           detalle: row.detalle || "",
+          entidad: row.entidad || "",
           valor: convertirNumeroDosDecimales(row.valor),
           formaPago: row.formaPago || null,
           recibo: row.recibo ? Number(row.recibo) : null,
@@ -227,6 +232,8 @@ export default function MovimientoCaja() {
         } else {
           const mapped = data.map((item) => ({
             ...item,
+            entidad: item.entidad || item.observacion || "",
+            observacion: item.entidad ? item.observacion || "" : "",
             recibo: item.recibo || "",
             guardado: true,
           }));
@@ -256,6 +263,15 @@ export default function MovimientoCaja() {
   useEffect(() => {
     cargarEstadoCierre(fechaCaja);
   }, [fechaCaja]);
+
+  const handleFilaKeyDown = (event, index, row) => {
+    if (event.key !== "Enter") return;
+    if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (loading || cierreActual || row.guardado || index !== rows.length - 1) return;
+
+    event.preventDefault();
+    agregarFila();
+  };
 
   const agregarFila = async () => {
     try {
@@ -503,7 +519,7 @@ export default function MovimientoCaja() {
                   <td className="p-2">
                     <input
                       type="text"
-                      inputMode="decimal"
+                      inputMode="numeric"
                       className="border p-1 w-full"
                       value={d.cantidad}
                       onChange={(e) => handleCantidadChange(i, e.target.value)}
@@ -588,6 +604,7 @@ export default function MovimientoCaja() {
                 <th>Valor</th>
                 <th>Forma Pago</th>
                 <th>Recibo</th>
+                <th>Cliente</th>
                 <th>Observación</th>
                 <th>Acciones</th>
               </tr>
@@ -604,6 +621,7 @@ export default function MovimientoCaja() {
                       onChange={(e) =>
                         handleChange(i, "responsable", e.target.value)
                       }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
                     />
                   </td>
@@ -615,6 +633,7 @@ export default function MovimientoCaja() {
                       onChange={(e) =>
                         handleChange(i, "detalle", e.target.value)
                       }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
                     >
                       <option value="">-- Seleccionar --</option>
@@ -648,6 +667,7 @@ export default function MovimientoCaja() {
                           normalizarNumeroPositivoTexto(e.target.value),
                         )
                       }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
                       disabled={row.guardado}
                     />
@@ -659,6 +679,7 @@ export default function MovimientoCaja() {
                       onChange={(e) =>
                         handleChange(i, "formaPago", e.target.value)
                       }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
                       disabled={row.guardado}
                     >
@@ -677,6 +698,19 @@ export default function MovimientoCaja() {
                       onChange={(e) =>
                         handleChange(i, "recibo", e.target.value)
                       }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
+                      className="w-full p-1"
+                    />
+                  </td>
+
+                  <td>
+                    <input
+                      disabled={row.guardado}
+                      value={row.entidad}
+                      onChange={(e) =>
+                        handleChange(i, "entidad", e.target.value)
+                      }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
                     />
                   </td>
@@ -688,6 +722,7 @@ export default function MovimientoCaja() {
                       onChange={(e) =>
                         handleChange(i, "observacion", e.target.value)
                       }
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
                     />
                   </td>

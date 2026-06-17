@@ -35,6 +35,7 @@ const movimientoVacio = {
   valor: "",
   formaPago: "",
   recibo: "",
+  entidad: "",
   observacion: "",
 };
 
@@ -45,6 +46,14 @@ const retiroVacio = {
 };
 
 const formatearMoneda = (valor) => `$${Number(valor || 0).toFixed(2)}`;
+
+const claseDiferencia = (valor) => {
+  const diferencia = Number(valor) || 0;
+
+  if (diferencia < 0) return "font-semibold text-red-700";
+  if (diferencia > 0) return "font-semibold text-green-700";
+  return "font-semibold text-green-700";
+};
 
 const formatearFecha = (fecha) => {
   if (!fecha) return "";
@@ -57,6 +66,19 @@ const formatearFechaHora = (fecha) => {
   if (!fecha) return "-";
   return new Date(fecha).toLocaleString("es-EC");
 };
+
+const normalizarNumeroPositivoTexto = (value) => {
+  const normalizado = String(value || "").replace(/,/g, ".");
+  const limpio = normalizado.replace(/[^\d.]/g, "");
+  const [entero, ...decimales] = limpio.split(".");
+
+  if (!decimales.length) return entero;
+
+  return `${entero}.${decimales.join("").slice(0, 2)}`;
+};
+
+const normalizarEnteroPositivoTexto = (value) =>
+  String(value || "").replace(/\D/g, "");
 
 const normalizarRol = (rol) =>
   String(rol || "")
@@ -75,12 +97,15 @@ const uniqueById = (items) => {
 
 const crearDenominacionesEdit = (denominaciones = []) => {
   const existentes = new Map(
-    denominaciones.map((d) => [Number(d.valor), Number(d.cantidad) || 0]),
+    denominaciones.map((d) => [Number(d.valor), d.cantidad]),
   );
 
   return DENOMINACIONES_BASE.map((valor) => ({
     valor,
-    cantidad: existentes.get(Number(valor)) || 0,
+    cantidad:
+      Number(existentes.get(Number(valor))) > 0
+        ? normalizarEnteroPositivoTexto(existentes.get(Number(valor)))
+        : "",
   }));
 };
 
@@ -90,11 +115,16 @@ const mapMovimientoEdit = (m = {}) => ({
   valor: m.valor || "",
   formaPago: m.formaPago || "",
   recibo: m.recibo || "",
-  observacion: m.observacion || "",
+  entidad: m.entidad || m.observacion || "",
+  observacion: m.entidad ? m.observacion || "" : "",
 });
 
 const crearEditForm = (item) => ({
+  fecha: String(item.cierre?.fecha || "").slice(0, 10),
+  agenciaId: item.cierre?.agenciaId || item.cierre?.usuarioAgencia?.agenciaId || "",
+  usuarioId: item.cierre?.usuarioId || item.cierre?.usuarioAgencia?.usuarioId || "",
   observacion: item.cierre?.observacion || "",
+  observacionContabilidad: item.cierre?.observacionContabilidad || "",
   denominaciones: crearDenominacionesEdit(item.denominaciones || []),
   movimientos: (item.movimientos || []).map(mapMovimientoEdit),
   retiros: (item.retiros || []).map((r) => ({
@@ -356,12 +386,21 @@ export default function CierresCajaTabla() {
       return;
     }
 
+    if (!editForm.fecha || !editForm.agenciaId || !editForm.usuarioId) {
+      Swal.fire("Atencion", "Debe seleccionar fecha, agencia y usuario", "warning");
+      return;
+    }
+
     setSaving(true);
 
     try {
       await axios.put(`${API_URL}/api/contabilidad/cierre-caja/${editingId}`, {
         cierre: {
+          fecha: editForm.fecha,
+          agenciaId: Number(editForm.agenciaId),
+          usuarioId: Number(editForm.usuarioId),
           observacion: editForm.observacion,
+          observacionContabilidad: editForm.observacionContabilidad,
         },
         denominaciones: editForm.denominaciones
           .filter((d) => Number(d.cantidad) > 0)
@@ -375,6 +414,7 @@ export default function CierresCajaTabla() {
           valor: Number(m.valor),
           formaPago: m.formaPago,
           recibo: m.recibo || null,
+          entidad: m.entidad || "",
           observacion: m.observacion || "",
         })),
         retiros: editForm.retiros
@@ -538,6 +578,7 @@ export default function CierresCajaTabla() {
                     {editingId === selectedItem.cierre.id && editForm ? (
                       <EditorCierre
                         editForm={editForm}
+                        filtros={filtros}
                         saving={saving}
                         actualizarEditForm={actualizarEditForm}
                         actualizarLista={actualizarLista}
@@ -639,7 +680,7 @@ function EstadoCierreBadge({ estado }) {
 function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
   return (
     <div className="overflow-x-auto border bg-white">
-      <table className="w-full min-w-[900px] border-collapse text-sm">
+      <table className="w-full min-w-[1120px] border-collapse text-sm">
         <thead className="bg-gray-100">
           <tr>
             <Th>ID</Th>
@@ -650,6 +691,7 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
             <Th>Diferencia</Th>
             <Th>Cuadre</Th>
             <Th>Estado</Th>
+            <Th>Observacion contabilidad</Th>
           </tr>
         </thead>
         <tbody>
@@ -672,11 +714,7 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
                 <Td>{formatearMoneda(cierre.totalFisico)}</Td>
                 <Td>
                   <span
-                    className={
-                      Number(cierre.diferencia) === 0
-                        ? "font-semibold text-green-700"
-                        : "font-semibold text-red-700"
-                    }
+                    className={claseDiferencia(cierre.diferencia)}
                   >
                     {formatearMoneda(cierre.diferencia)}
                   </span>
@@ -687,6 +725,7 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
                 <Td>
                   <EstadoCierreBadge estado={cierre.estadoCierre} />
                 </Td>
+                <Td>{cierre.observacionContabilidad || "-"}</Td>
               </tr>
             );
           })}
@@ -836,7 +875,7 @@ function VistaCierreVendedor({ item }) {
             <div className="font-bold">
               Total General: {formatearMoneda(cierre.totalSistema)}
             </div>
-            <div className="font-bold">
+            <div className={claseDiferencia(cierre.diferencia)}>
               Diferencia: {formatearMoneda(cierre.diferencia)}
             </div>
           </div>
@@ -864,6 +903,7 @@ function VistaCierreVendedor({ item }) {
                 <th>Valor</th>
                 <th>Forma Pago</th>
                 <th>Recibo</th>
+                <th>Cliente</th>
                 <th>Observacion</th>
               </tr>
             </thead>
@@ -877,7 +917,8 @@ function VistaCierreVendedor({ item }) {
                     <td className="p-1 font-semibold">{formatearMoneda(row.valor)}</td>
                     <td className="p-1">{row.formaPago || "-"}</td>
                     <td className="p-1">{row.recibo || "-"}</td>
-                    <td className="p-1">{row.observacion || "-"}</td>
+                    <td className="p-1">{row.entidad || row.observacion || "-"}</td>
+                    <td className="p-1">{row.entidad ? row.observacion || "-" : "-"}</td>
                   </tr>
                 ))
               ) : (
@@ -947,10 +988,18 @@ function DetalleCierre({ item }) {
           <Dato label="Transferencia" value={formatearMoneda(cierre.totalTransferencia)} />
           <Dato label="Pendiente" value={formatearMoneda(cierre.totalPendiente)} />
           <Dato label="Sistema" value={formatearMoneda(cierre.totalSistema)} />
-          <Dato label="Diferencia" value={formatearMoneda(cierre.diferencia)} />
+          <Dato
+            label="Diferencia"
+            value={formatearMoneda(cierre.diferencia)}
+            valueClassName={claseDiferencia(cierre.diferencia)}
+          />
           <Dato label="Cuadre" value={cierre.estado} />
           <Dato label="Estado cierre" value={cierre.estadoCierre || "CERRADO"} />
           <Dato label="Observacion" value={cierre.observacion || "-"} />
+          <Dato
+            label="Observacion contabilidad"
+            value={cierre.observacionContabilidad || "-"}
+          />
         </div>
       </section>
 
@@ -977,11 +1026,11 @@ function DetalleCierre({ item }) {
   );
 }
 
-function Dato({ label, value }) {
+function Dato({ label, value, valueClassName = "text-sm font-semibold text-gray-900" }) {
   return (
     <div className="border bg-white p-3">
       <div className="text-xs font-medium uppercase text-gray-500">{label}</div>
-      <div className="mt-1 break-words text-sm font-semibold text-gray-900">{value || "-"}</div>
+      <div className={`mt-1 break-words ${valueClassName}`}>{value || "-"}</div>
     </div>
   );
 }
@@ -1008,7 +1057,7 @@ function TablaMovimientos({ movimientos }) {
   return (
     <TablaSimple
       title="Movimientos"
-      headers={["#", "Responsable", "Detalle", "Valor", "Forma Pago", "Recibo", "Observacion"]}
+      headers={["#", "Responsable", "Detalle", "Valor", "Forma Pago", "Recibo", "Cliente", "Observacion"]}
     >
       {movimientos?.length ? (
         movimientos.map((m, index) => (
@@ -1019,7 +1068,8 @@ function TablaMovimientos({ movimientos }) {
             <Td>{formatearMoneda(m.valor)}</Td>
             <Td>{m.formaPago || "-"}</Td>
             <Td>{m.recibo || "-"}</Td>
-            <Td>{m.observacion || "-"}</Td>
+            <Td>{m.entidad || m.observacion || "-"}</Td>
+            <Td>{m.entidad ? m.observacion || "-" : "-"}</Td>
           </tr>
         ))
       ) : (
@@ -1104,6 +1154,7 @@ function FilaVacia({ colSpan, text }) {
 
 function EditorCierre({
   editForm,
+  filtros,
   saving,
   actualizarEditForm,
   actualizarLista,
@@ -1116,25 +1167,35 @@ function EditorCierre({
     (total, d) => total + Number(d.valor) * (Number(d.cantidad) || 0),
     0,
   );
+  const usuariosEdit = useMemo(() => {
+    if (!editForm.agenciaId) return filtros.usuarios || [];
+
+    return uniqueById(
+      (filtros.relaciones || [])
+        .filter((relacion) => String(relacion.agenciaId) === String(editForm.agenciaId))
+        .map((relacion) => relacion.usuario),
+    );
+  }, [editForm.agenciaId, filtros.relaciones, filtros.usuarios]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <label className="w-full text-sm font-medium text-gray-700">
-          Observacion
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={editForm.observacion}
-            onChange={(e) => actualizarEditForm("observacion", e.target.value)}
-          />
-        </label>
+    <div className="space-y-4">
+      <div className="border border-gray-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">
+              Editar cierre de caja
+            </h3>
+            <p className="text-xs text-gray-500">
+              Ajusta los datos operativos, movimientos y observacion contable.
+            </p>
+          </div>
 
-        <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={guardarEdicion}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60"
           >
             <Save size={18} />
             {saving ? "Guardando" : "Guardar y cerrar"}
@@ -1143,7 +1204,7 @@ function EditorCierre({
             type="button"
             onClick={cancelarEdicion}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-60"
           >
             <X size={18} />
             Cancelar
@@ -1151,11 +1212,86 @@ function EditorCierre({
         </div>
       </div>
 
-      <section>
-        <h3 className="mb-2 text-base font-bold">
-          Denominaciones ({formatearMoneda(totalFisico)})
-        </h3>
-        <div className="overflow-x-auto border bg-white">
+        <div className="grid gap-4 p-4 xl:grid-cols-[1fr_360px]">
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="text-sm font-medium text-gray-700">
+              Fecha
+              <input
+                type="date"
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={editForm.fecha}
+                onChange={(e) => actualizarEditForm("fecha", e.target.value)}
+              />
+            </label>
+
+            <label className="text-sm font-medium text-gray-700">
+              Agencia
+              <select
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={editForm.agenciaId}
+                onChange={(e) => {
+                  actualizarEditForm("agenciaId", e.target.value);
+                  actualizarEditForm("usuarioId", "");
+                }}
+              >
+                <option value="">Seleccionar</option>
+                {(filtros.agencias || []).map((agencia) => (
+                  <option key={agencia.id} value={agencia.id}>
+                    {agencia.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm font-medium text-gray-700">
+              Usuario
+              <select
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                value={editForm.usuarioId}
+                onChange={(e) => actualizarEditForm("usuarioId", e.target.value)}
+                disabled={!editForm.agenciaId}
+              >
+                <option value="">Seleccionar</option>
+                {usuariosEdit.map((usuario) => (
+                  <option key={usuario.id} value={usuario.id}>
+                    {usuario.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="md:col-span-3 text-sm font-medium text-gray-700">
+              Observacion interna
+              <input
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={editForm.observacion}
+                onChange={(e) => actualizarEditForm("observacion", e.target.value)}
+              />
+            </label>
+          </div>
+
+          <label className="text-sm font-medium text-gray-700">
+            Observacion contabilidad
+            <textarea
+              className="mt-1 min-h-32 w-full resize-y rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={editForm.observacionContabilidad}
+              onChange={(e) =>
+                actualizarEditForm("observacionContabilidad", e.target.value)
+              }
+            />
+          </label>
+        </div>
+      </div>
+
+
+      <section className="border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <h3 className="text-sm font-semibold text-gray-900">Denominaciones</h3>
+          <span className="text-sm font-bold text-gray-900">
+            {formatearMoneda(totalFisico)}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead className="bg-gray-100">
               <tr>
@@ -1170,12 +1306,17 @@ function EditorCierre({
                   <Td>{formatearMoneda(d.valor)}</Td>
                   <Td>
                     <input
-                      type="number"
-                      min="0"
-                      className="w-28 rounded border px-2 py-1"
+                      type="text"
+                      inputMode="numeric"
+                      className="w-28 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={d.cantidad}
                       onChange={(e) =>
-                        actualizarLista("denominaciones", index, "cantidad", e.target.value)
+                        actualizarLista(
+                          "denominaciones",
+                          index,
+                          "cantidad",
+                          normalizarEnteroPositivoTexto(e.target.value),
+                        )
                       }
                     />
                   </Td>
@@ -1187,19 +1328,19 @@ function EditorCierre({
         </div>
       </section>
 
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-base font-bold">Movimientos</h3>
+      <section className="border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <h3 className="text-sm font-semibold text-gray-900">Movimientos</h3>
           <button
             type="button"
             onClick={() => agregarItem("movimientos", { ...movimientoVacio })}
-            className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             <Plus size={16} />
             Agregar
           </button>
         </div>
-        <div className="overflow-x-auto border bg-white">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-sm">
             <thead className="bg-gray-100">
               <tr>
@@ -1208,6 +1349,7 @@ function EditorCierre({
                 <Th>Valor</Th>
                 <Th>Forma Pago</Th>
                 <Th>Recibo</Th>
+                <Th>Cliente</Th>
                 <Th>Observacion</Th>
                 <Th align="center">Accion</Th>
               </tr>
@@ -1217,7 +1359,7 @@ function EditorCierre({
                 <tr key={index}>
                   <Td>
                     <input
-                      className="w-full rounded border px-2 py-1"
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.responsable}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "responsable", e.target.value)
@@ -1226,7 +1368,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <select
-                      className="w-full rounded border px-2 py-1"
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.detalle}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "detalle", e.target.value)
@@ -1243,17 +1385,23 @@ function EditorCierre({
 
                   <Td>
                     <input
-                      type="number"
-                      className="w-28 rounded border px-2 py-1"
+                      type="text"
+                      inputMode="decimal"
+                      className="w-28 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.valor}
                       onChange={(e) =>
-                        actualizarLista("movimientos", index, "valor", e.target.value)
+                        actualizarLista(
+                          "movimientos",
+                          index,
+                          "valor",
+                          normalizarNumeroPositivoTexto(e.target.value),
+                        )
                       }
                     />
                   </Td>
                   <Td>
                     <select
-                      className="w-full rounded border px-2 py-1"
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.formaPago}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "formaPago", e.target.value)
@@ -1269,7 +1417,7 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <input
-                      className="w-24 rounded border px-2 py-1"
+                      className="w-24 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.recibo}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "recibo", e.target.value)
@@ -1278,7 +1426,16 @@ function EditorCierre({
                   </Td>
                   <Td>
                     <input
-                      className="w-full rounded border px-2 py-1"
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={m.entidad}
+                      onChange={(e) =>
+                        actualizarLista("movimientos", index, "entidad", e.target.value)
+                      }
+                    />
+                  </Td>
+                  <Td>
+                    <input
+                      className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={m.observacion}
                       onChange={(e) =>
                         actualizarLista("movimientos", index, "observacion", e.target.value)
@@ -1303,19 +1460,19 @@ function EditorCierre({
         </div>
       </section>
 
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-base font-bold">Retiros</h3>
+      <section className="border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <h3 className="text-sm font-semibold text-gray-900">Retiros</h3>
           <button
             type="button"
             onClick={() => agregarItem("retiros", { ...retiroVacio })}
-            className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             <Plus size={16} />
             Agregar
           </button>
         </div>
-        <div className="overflow-x-auto border bg-white">
+        <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead className="bg-gray-100">
               <tr>
@@ -1332,7 +1489,7 @@ function EditorCierre({
                     <Td>
                       <input
                         type="number"
-                        className="w-32 rounded border px-2 py-1"
+                        className="w-32 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         value={r.monto}
                         onChange={(e) =>
                           actualizarLista("retiros", index, "monto", e.target.value)
@@ -1341,7 +1498,7 @@ function EditorCierre({
                     </Td>
                     <Td>
                       <input
-                        className="w-full rounded border px-2 py-1"
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         value={r.motivo}
                         onChange={(e) =>
                           actualizarLista("retiros", index, "motivo", e.target.value)
@@ -1350,7 +1507,7 @@ function EditorCierre({
                     </Td>
                     <Td>
                       <input
-                        className="w-full rounded border px-2 py-1"
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         value={r.autorizadoPor}
                         onChange={(e) =>
                           actualizarLista("retiros", index, "autorizadoPor", e.target.value)
@@ -1377,6 +1534,8 @@ function EditorCierre({
           </table>
         </div>
       </section>
+
+
     </div>
   );
 }

@@ -60,7 +60,7 @@ const crearMovimientoTemp = async (req, res) => {
       });
     }
 
-    const { responsable, detalle, valor, formaPago, recibo, observacion } = req.body;
+    const { responsable, detalle, valor, formaPago, recibo, entidad, observacion } = req.body;
 
     if (!detalle?.trim() && !observacion?.trim()) {
       return res.status(400).json({
@@ -92,6 +92,7 @@ const crearMovimientoTemp = async (req, res) => {
       valor: redondearDosDecimales(valor),
       formaPago: formaPago?.trim() || null,
       recibo,
+      entidad: entidad?.trim() || null,
       observacion,
       estado: "ACTIVO",
     });

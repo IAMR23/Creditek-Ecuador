@@ -187,6 +187,11 @@ export default function MisCierresCaja() {
                       <span>Sistema: {formatearMoneda(cierre.totalSistema)}</span>
                       <span>Fisico: {formatearMoneda(cierre.totalFisico)}</span>
                     </div>
+                    {cierre.observacionContabilidad && (
+                      <div className="mt-2 line-clamp-2 text-xs text-gray-600">
+                        Contabilidad: {cierre.observacionContabilidad}
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -235,6 +240,15 @@ function DetalleCierre({ item }) {
         <Resumen label="Fisico" value={cierre.totalFisico} />
         <Resumen label="Diferencia" value={cierre.diferencia} />
       </div>
+
+      <section className="rounded border border-gray-200 bg-gray-50 p-3">
+        <h3 className="text-sm font-semibold text-gray-800">
+          Observacion contabilidad
+        </h3>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+          {cierre.observacionContabilidad || "Sin observacion contable."}
+        </p>
+      </section>
 
       <TablaDenominaciones denominaciones={item.denominaciones || []} />
       <TablaRetiros retiros={item.retiros || []} />
