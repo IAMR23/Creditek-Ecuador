@@ -4,7 +4,7 @@ const Marca = require("../models/Marca");
 
 exports.crearModelo = async (req, res) => {
   try {
-    const { nombre, descripcion, activo, marcaId } = req.body;
+    const { nombre, identificadorUph, descripcion, activo, marcaId } = req.body;
 
     // Validar que la marca exista
     const marcaExistente = await Marca.findByPk(marcaId);
@@ -14,7 +14,7 @@ exports.crearModelo = async (req, res) => {
 
     const nuevoModelo = await Modelo.create({
       nombre,
-      descripcion,
+      identificadorUph: identificadorUph ?? descripcion,
       activo: activo ?? true,
       marcaId,
     });
@@ -62,7 +62,7 @@ exports.obtenerModelo = async (req, res) => {
 exports.actualizarModelo = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre, descripcion, activo, marcaId } = req.body;
+    const { nombre, identificadorUph, descripcion, activo, marcaId } = req.body;
 
     const modeloExistente = await Modelo.findByPk(id);
     if (!modeloExistente) {
@@ -79,7 +79,8 @@ exports.actualizarModelo = async (req, res) => {
     }
 
     modeloExistente.nombre = nombre ?? modeloExistente.nombre;
-    modeloExistente.descripcion = descripcion ?? modeloExistente.descripcion;
+    modeloExistente.identificadorUph =
+      identificadorUph ?? descripcion ?? modeloExistente.identificadorUph;
     modeloExistente.activo = activo ?? modeloExistente.activo;
 
     await modeloExistente.save();

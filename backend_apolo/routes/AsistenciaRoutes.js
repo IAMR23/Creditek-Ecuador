@@ -43,6 +43,24 @@ const normalizarObservacion = (observacion) => {
   return limpia ? limpia : null;
 };
 
+const validarFechaISO = (fecha) => /^\d{4}-\d{2}-\d{2}$/.test(String(fecha));
+
+const obtenerFechasEnRango = (fechaInicio, fechaFin) => {
+  const fechas = [];
+  const cursor = new Date(`${fechaInicio}T00:00:00`);
+  const limite = new Date(`${fechaFin}T00:00:00`);
+
+  while (cursor <= limite) {
+    const year = cursor.getFullYear();
+    const month = String(cursor.getMonth() + 1).padStart(2, "0");
+    const day = String(cursor.getDate()).padStart(2, "0");
+    fechas.push(`${year}-${month}-${day}`);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return fechas;
+};
+
 router.get("/agencias", async (req, res) => {
   try {
     const { mes, agenciaId } = req.query;
@@ -179,6 +197,107 @@ router.post("/", async (req, res) => {
     return res.status(201).json(record);
   } catch (error) {
     return res.status(500).json({ message: "Error al guardar asistencia", error });
+  }
+});
+
+router.post("/masivo", async (req, res) => {
+  try {
+    const {
+      agenciaId,
+      usuarioAgenciaIds,
+      fechaInicio,
+      fechaFin,
+      estado,
+      observacion,
+    } = req.body;
+
+    const observacionNormalizada = normalizarObservacion(observacion);
+    const estadoNormalizado = !estado || estado === "libre" ? null : estado;
+
+    if (!agenciaId) {
+      return res.status(400).json({ message: "agenciaId es obligatorio." });
+    }
+
+    if (!Array.isArray(usuarioAgenciaIds) || usuarioAgenciaIds.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "usuarioAgenciaIds debe contener al menos un usuario." });
+    }
+
+    if (!validarFechaISO(fechaInicio) || !validarFechaISO(fechaFin)) {
+      return res
+        .status(400)
+        .json({ message: "fechaInicio y fechaFin deben tener formato YYYY-MM-DD." });
+    }
+
+    if (fechaInicio > fechaFin) {
+      return res
+        .status(400)
+        .json({ message: "fechaInicio no puede ser mayor que fechaFin." });
+    }
+
+    if (estadoNormalizado && !ESTADOS_VALIDOS.has(estadoNormalizado)) {
+      return res.status(400).json({ message: "Estado de asistencia inválido." });
+    }
+
+    const usuarioAgencias = await UsuarioAgencia.findAll({
+      where: {
+        id: { [Op.in]: usuarioAgenciaIds },
+        agenciaId,
+        activo: true,
+      },
+      attributes: ["id"],
+    });
+
+    if (usuarioAgencias.length !== usuarioAgenciaIds.length) {
+      return res.status(400).json({
+        message:
+          "Uno o más usuarioAgenciaIds no existen, no pertenecen a la agencia o están inactivos.",
+      });
+    }
+
+    const fechas = obtenerFechasEnRango(fechaInicio, fechaFin);
+    const idsValidos = usuarioAgencias.map((ua) => ua.id);
+
+    if (!estadoNormalizado && !observacionNormalizada) {
+      await Asistencia.destroy({
+        where: {
+          usuarioAgenciaId: { [Op.in]: idsValidos },
+          fecha: { [Op.in]: fechas },
+        },
+      });
+
+      return res.json({
+        ok: true,
+        message: "Asistencias eliminadas correctamente.",
+        totalUsuarios: idsValidos.length,
+        totalFechas: fechas.length,
+      });
+    }
+
+    await Promise.all(
+      idsValidos.flatMap((usuarioAgenciaId) =>
+        fechas.map((fecha) =>
+          Asistencia.upsert({
+            usuarioAgenciaId,
+            fecha,
+            estado: estadoNormalizado,
+            observacion: observacionNormalizada,
+          })
+        )
+      )
+    );
+
+    return res.json({
+      ok: true,
+      message: "Asistencias masivas registradas correctamente.",
+      totalUsuarios: idsValidos.length,
+      totalFechas: fechas.length,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Error al guardar asistencias masivas", error });
   }
 });
 

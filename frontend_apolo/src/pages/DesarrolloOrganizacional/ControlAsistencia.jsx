@@ -52,6 +52,13 @@ const getTodayMonth = () => {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`
 }
 
+const getTodayDateISO = () => {
+  const today = new Date()
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(
+    today.getDate()
+  ).padStart(2, "0")}`
+}
+
 const getFechasDelMes = (mes) => {
   const [year, month] = mes.split("-").map(Number)
   const totalDias = new Date(year, month, 0).getDate()
@@ -102,6 +109,17 @@ const escapeHtml = (value = "") =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;")
 
+const ESTADO_OPTIONS_HTML = `
+  <option value="asistencia">Asistencia</option>
+  <option value="falta_justificada">Falta justificada</option>
+  <option value="falta_injustificada">Falta injustificada</option>
+  <option value="atraso">Atraso</option>
+  <option value="salida">Salida</option>
+  <option value="pago">Pago</option>
+  <option value="capacitacion">Capacitacion</option>
+  <option value="libre">Libre / Sin registro</option>
+`
+
 export default function ControlAsistencia() {
   const [mes, setMes] = useState(getTodayMonth())
   const [agenciaId, setAgenciaId] = useState("")
@@ -110,6 +128,7 @@ export default function ControlAsistencia() {
   const [search, setSearch] = useState("")
 
   const fechas = useMemo(() => getFechasDelMes(mes), [mes])
+  const todayDate = getTodayDateISO()
 
   const cargarAsistencia = async () => {
     setLoading(true)
@@ -187,6 +206,129 @@ export default function ControlAsistencia() {
         err.response?.data?.message || "No se pudo guardar la asistencia",
         "error"
       )
+    }
+  }
+
+  const guardarAsistenciaMasiva = async ({
+    agenciaActual,
+    usuarios,
+  }) => {
+    const fechaMin = fechas[0]?.fecha
+    const fechaMax = fechas[fechas.length - 1]?.fecha
+
+    if (!fechaMin || !fechaMax || !usuarios.length) return
+
+    const modalId = `observacion-masiva-${agenciaActual.id}`
+
+    const { isConfirmed, value } = await Swal.fire({
+      title: "Registrar asistencia masiva",
+      html: `
+        <div class="space-y-3 text-left">
+          <div class="text-sm text-slate-600">
+            <strong>${escapeHtml(agenciaActual.nombre)}</strong><br />
+            Se aplicará a ${usuarios.length} usuario(s) visibles.
+          </div>
+          <div>
+            <label for="swal-estado-masivo" class="mb-1 block text-sm font-medium text-slate-700">
+              Estado
+            </label>
+            <select id="swal-estado-masivo" class="swal2-select !grid !w-full !m-0">
+              ${ESTADO_OPTIONS_HTML}
+            </select>
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label for="swal-fecha-inicio" class="mb-1 block text-sm font-medium text-slate-700">
+                Desde
+              </label>
+              <input id="swal-fecha-inicio" type="date" class="swal2-input !grid !w-full !m-0" min="${fechaMin}" max="${fechaMax}" value="${fechaMin}" />
+            </div>
+            <div>
+              <label for="swal-fecha-fin" class="mb-1 block text-sm font-medium text-slate-700">
+                Hasta
+              </label>
+              <input id="swal-fecha-fin" type="date" class="swal2-input !grid !w-full !m-0" min="${fechaMin}" max="${fechaMax}" value="${fechaMax}" />
+            </div>
+          </div>
+          <div>
+            <label for="${modalId}" class="mb-1 block text-sm font-medium text-slate-700">
+              Observacion
+            </label>
+            <textarea
+              id="${modalId}"
+              class="swal2-textarea !grid !w-full !m-0 !h-28"
+              placeholder="Opcional. Se guardará la misma observacion para todos"
+            ></textarea>
+          </div>
+        </div>
+      `,
+      didOpen: () => {
+        const estadoInput = document.getElementById("swal-estado-masivo")
+        if (estadoInput) estadoInput.value = "asistencia"
+      },
+      preConfirm: () => {
+        const estadoInput = document.getElementById("swal-estado-masivo")
+        const fechaInicioInput = document.getElementById("swal-fecha-inicio")
+        const fechaFinInput = document.getElementById("swal-fecha-fin")
+        const observacionInput = document.getElementById(modalId)
+
+        const fechaInicio = fechaInicioInput?.value || ""
+        const fechaFin = fechaFinInput?.value || ""
+
+        if (!fechaInicio || !fechaFin) {
+          Swal.showValidationMessage("Debes seleccionar el rango de fechas.")
+          return false
+        }
+
+        if (fechaInicio > fechaFin) {
+          Swal.showValidationMessage("La fecha inicial no puede ser mayor que la final.")
+          return false
+        }
+
+        return {
+          estado: estadoInput?.value || "asistencia",
+          fechaInicio,
+          fechaFin,
+          observacion: observacionInput?.value || "",
+        }
+      },
+      showCancelButton: true,
+      confirmButtonText: "Aplicar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#16a34a",
+      width: 620,
+    })
+
+    if (!isConfirmed) return
+
+    try {
+      setLoading(true)
+      await api.post("/asistencias/masivo", {
+        agenciaId: agenciaActual.id,
+        usuarioAgenciaIds: usuarios.map((usuario) => usuario.usuarioAgenciaId),
+        fechaInicio: value.fechaInicio,
+        fechaFin: value.fechaFin,
+        estado: value.estado,
+        observacion: value.observacion,
+      })
+
+      await cargarAsistencia()
+
+      Swal.fire({
+        icon: "success",
+        title: "Asistencia masiva registrada",
+        text: `Se actualizó ${usuarios.length} usuario(s) en ${agenciaActual.nombre}.`,
+        timer: 1800,
+        showConfirmButton: false,
+      })
+    } catch (err) {
+      Swal.fire(
+        "Error",
+        err.response?.data?.message || "No se pudo guardar la asistencia masiva",
+        "error"
+      )
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -340,7 +482,9 @@ export default function ControlAsistencia() {
                 {fechas.map((item) => (
                   <th
                     key={item.fecha}
-                    className="min-w-[34px] border border-black px-1 py-1 text-center"
+                    className={`min-w-[34px] border border-black px-1 py-1 text-center ${
+                      item.fecha === todayDate ? "bg-orange-300 text-black" : ""
+                    }`}
                   >
                     {item.label}
                   </th>
@@ -375,7 +519,21 @@ export default function ControlAsistencia() {
                         colSpan={fechas.length + 1}
                         className="border border-black px-2 py-1 font-bold uppercase"
                       >
-                        {agencia.nombre}
+                        <div className="flex items-center justify-between gap-3">
+                          <span>{agencia.nombre}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              guardarAsistenciaMasiva({
+                                agenciaActual: agencia,
+                                usuarios: agencia.usuarios || [],
+                              })
+                            }
+                            className="rounded bg-black px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-800"
+                          >
+                            Carga masiva
+                          </button>
+                        </div>
                       </td>
                     </tr>
 
@@ -425,7 +583,7 @@ export default function ControlAsistencia() {
                                 className={`relative h-6 min-w-[34px] cursor-pointer border border-black text-center font-bold ${
                                   ESTADOS[estado]?.className ||
                                   "bg-green-400 text-black"
-                                }`}
+                                } ${item.fecha === todayDate ? "ring-2 ring-inset ring-orange-500" : ""}`}
                               >
                                 {tieneObservacion ? (
                                   <span className="absolute right-0 top-0 h-0 w-0 border-l-[10px] border-l-transparent border-t-[10px] border-t-red-600" />

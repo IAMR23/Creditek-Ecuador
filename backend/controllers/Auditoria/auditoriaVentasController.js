@@ -124,7 +124,7 @@ exports.obtenerReporteAuditoria = async ({
           required: true,
         }),
         include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre"] },
+          { model: Modelo, as: "modelo", attributes: ["nombre", "identificadorUph"] },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
@@ -263,7 +263,7 @@ exports.obtenerReporte = async ({
           {
             model: Modelo,
             as: "modelo",
-            attributes: ["nombre"],
+            attributes: ["nombre", "identificadorUph"],
           },
           {
             model: DispositivoMarca,
@@ -405,7 +405,7 @@ exports.obtenerReporteGerencia = async ({
           required: true,
         }),
         include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre"] },
+          { model: Modelo, as: "modelo", attributes: ["nombre", "identificadorUph"] },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
@@ -500,6 +500,7 @@ exports.formatearReporte = (ventas) => {
         tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
+        identificadorUph: detalle.modelo?.identificadorUph || "",
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         precioSistema: detalle.precioUnitario || "",
@@ -605,7 +606,7 @@ exports.obtenerVentaPorId = async (req, res) => {
           model: DetalleVenta,
           as: "detalleVenta",
           include: [
-            { model: Modelo, as: "modelo", attributes: ["id", "nombre"] },
+            { model: Modelo, as: "modelo", attributes: ["id", "nombre", "identificadorUph"] },
             {
               model: DispositivoMarca,
               as: "dispositivoMarca",

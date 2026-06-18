@@ -202,6 +202,18 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
       allowNull: true,
     });
 
+    await addColumnIfMissing(queryInterface, "presupuesto_marketing", "tipoModulo", {
+      type: Sequelize.STRING,
+      allowNull: false,
+      defaultValue: "MARKETING",
+    });
+
+    await sequelize.query(`
+      UPDATE presupuesto_marketing
+      SET "tipoModulo" = 'MARKETING'
+      WHERE "tipoModulo" IS NULL;
+    `);
+
     if (columnasPresupuestoMarketing.departamentoId) {
       await queryInterface.changeColumn("presupuesto_marketing", "departamentoId", {
         type: Sequelize.INTEGER,
@@ -213,12 +225,29 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
         onUpdate: "CASCADE",
         onDelete: "RESTRICT",
       });
+
+      await sequelize.query(`
+        ALTER TABLE presupuesto_marketing
+        ALTER COLUMN "departamentoId" DROP NOT NULL;
+      `);
     }
   }
 
   if (tables.includes("gastos_marketing")) {
     const columnasGastosMarketing =
       await queryInterface.describeTable("gastos_marketing");
+
+    await addColumnIfMissing(queryInterface, "gastos_marketing", "tipoModulo", {
+      type: Sequelize.STRING,
+      allowNull: false,
+      defaultValue: "MARKETING",
+    });
+
+    await sequelize.query(`
+      UPDATE gastos_marketing
+      SET "tipoModulo" = 'MARKETING'
+      WHERE "tipoModulo" IS NULL;
+    `);
 
     if (columnasGastosMarketing.departamentoId) {
       await queryInterface.changeColumn("gastos_marketing", "departamentoId", {
@@ -231,6 +260,11 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
         onUpdate: "CASCADE",
         onDelete: "RESTRICT",
       });
+
+      await sequelize.query(`
+        ALTER TABLE gastos_marketing
+        ALTER COLUMN "departamentoId" DROP NOT NULL;
+      `);
     }
   }
 };

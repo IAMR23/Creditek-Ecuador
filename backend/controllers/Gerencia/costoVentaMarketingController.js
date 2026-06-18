@@ -1,12 +1,36 @@
 const { Op } = require("sequelize");
 const PresupuestoMarketing = require("../../models/Marketing/PresupuestoMarketing");
 const GastoMarketing = require("../../models/Marketing/GastoMarketing");
+const Entrega = require("../../models/Entrega");
 const auditoriaVentasController = require("../Auditoria/auditoriaVentasController");
 const {
   calcularEstadisticasVentas,
 } = require("../../utils/calcularEstadisticasVentas");
 
-const CATEGORIAS_GASTO = ["REDES", "VOLANTES", "CAMISETAS", "GLOBOS", "OTROS"];
+const TIPO_MODULO_MARKETING = "MARKETING";
+const TIPO_MODULO_ENTREGAS = "ENTREGAS";
+const TIPOS_MODULO = [TIPO_MODULO_MARKETING, TIPO_MODULO_ENTREGAS];
+const CATEGORIAS_GASTO_MARKETING = [
+  "REDES",
+  "VOLANTES",
+  "CAMISETAS",
+  "GLOBOS",
+  "OTROS",
+];
+const CATEGORIAS_GASTO_ENTREGAS = [
+  "GASOLINA",
+  "PEAJES",
+  "ALIMENTACION",
+  "HOSPEDAJE",
+  "LLANTAS",
+  "MANTENIMIENTO",
+  "PARQUEADERO",
+  "OTROS",
+];
+const CATEGORIAS_GASTO_POR_MODULO = {
+  [TIPO_MODULO_MARKETING]: CATEGORIAS_GASTO_MARKETING,
+  [TIPO_MODULO_ENTREGAS]: CATEGORIAS_GASTO_ENTREGAS,
+};
 const DIA_INICIO_SEMANA = 4; // Jueves. La semana operativa cierra miercoles.
 
 const redondear = (valor) => Number((Number(valor) || 0).toFixed(2));
@@ -80,6 +104,11 @@ const parseDecimalNoNegativo = (valor, campo) => {
   return { value: Number(numero.toFixed(2)) };
 };
 
+const normalizarTipoModulo = (tipoModulo) => {
+  const tipo = String(tipoModulo || TIPO_MODULO_MARKETING).trim().toUpperCase();
+  return TIPOS_MODULO.includes(tipo) ? tipo : null;
+};
+
 const validarFecha = (fecha, campo = "fecha") => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ""))) {
     return { error: `${campo} debe tener formato YYYY-MM-DD` };
@@ -129,7 +158,9 @@ const resolverSemanaDesdeQuery = (query) => {
 };
 
 const obtenerWherePresupuesto = (query) => {
-  const where = {};
+  const where = {
+    tipoModulo: normalizarTipoModulo(query.tipoModulo) || TIPO_MODULO_MARKETING,
+  };
 
   if (query.activo !== undefined) where.activo = String(query.activo) === "true";
 
@@ -143,7 +174,9 @@ const obtenerWherePresupuesto = (query) => {
 };
 
 const obtenerWhereGastos = (query) => {
-  const where = {};
+  const where = {
+    tipoModulo: normalizarTipoModulo(query.tipoModulo) || TIPO_MODULO_MARKETING,
+  };
 
   if (query.categoria && query.categoria !== "TODAS") {
     where.categoria = String(query.categoria).toUpperCase();
@@ -160,6 +193,9 @@ const obtenerWhereGastos = (query) => {
 const validarPresupuestoPayload = async (body) => {
   const semana = resolverSemanaOperativa(body);
   if (semana.error) return semana;
+
+  const tipoModulo = normalizarTipoModulo(body.tipoModulo);
+  if (!tipoModulo) return { error: "tipoModulo invalido" };
 
   const presupuesto = parseDecimalNoNegativo(
     body.presupuestoAsignado,
@@ -179,6 +215,7 @@ const validarPresupuestoPayload = async (body) => {
       presupuestoAsignado: presupuesto.value,
       metaVentas: metaVentas.value,
       descripcion: body.descripcion?.trim() || null,
+      tipoModulo,
       activo: body.activo ?? true,
     },
   };
@@ -188,8 +225,11 @@ const validarGastoPayload = async (body) => {
   const fecha = validarFecha(body.fecha);
   if (fecha.error) return fecha;
 
+  const tipoModulo = normalizarTipoModulo(body.tipoModulo);
+  if (!tipoModulo) return { error: "tipoModulo invalido" };
+
   const categoria = String(body.categoria || "").trim().toUpperCase();
-  if (!CATEGORIAS_GASTO.includes(categoria)) {
+  if (!CATEGORIAS_GASTO_POR_MODULO[tipoModulo].includes(categoria)) {
     return { error: "categoria invalida" };
   }
 
@@ -202,17 +242,19 @@ const validarGastoPayload = async (body) => {
       categoria,
       descripcion: body.descripcion?.trim() || null,
       monto: monto.value,
+      tipoModulo,
     },
   };
 };
 
 const validarDuplicadoPresupuesto = async (
-  { fechaInicio, fechaFin },
+  { fechaInicio, fechaFin, tipoModulo },
   excludeId,
 ) => {
   const where = {
     fechaInicio,
     fechaFin,
+    tipoModulo,
     activo: true,
   };
 
@@ -237,7 +279,22 @@ const contarVentasRealizadasGerencia = async ({
   return Number(estadisticas.totalVentas || 0);
 };
 
-exports.CATEGORIAS_GASTO = CATEGORIAS_GASTO;
+const contarEntregasRealizadasGerencia = async ({
+  fechaInicio,
+  fechaFin,
+}) => {
+  const entregas = await Entrega.count({
+    where: {
+      estado: "Entregado",
+      fecha: { [Op.between]: [fechaInicio, fechaFin] },
+    },
+  });
+
+  return Number(entregas || 0);
+};
+
+exports.CATEGORIAS_GASTO_MARKETING = CATEGORIAS_GASTO_MARKETING;
+exports.CATEGORIAS_GASTO_ENTREGAS = CATEGORIAS_GASTO_ENTREGAS;
 exports.resolverSemanaOperativa = resolverSemanaOperativa;
 
 exports.listarPresupuestos = async (req, res) => {
@@ -432,6 +489,7 @@ exports.obtenerReporteCostoVenta = async (req, res) => {
       where: {
         fechaInicio: semana.fechaInicio,
         fechaFin: semana.fechaFin,
+        tipoModulo: TIPO_MODULO_MARKETING,
         activo: true,
       },
       order: [["id", "DESC"]],
@@ -441,6 +499,7 @@ exports.obtenerReporteCostoVenta = async (req, res) => {
       (await GastoMarketing.sum("monto", {
         where: {
           fecha: { [Op.between]: [semana.fechaInicio, semana.fechaFin] },
+          tipoModulo: TIPO_MODULO_MARKETING,
         },
       })) || 0,
     );
@@ -484,6 +543,132 @@ exports.obtenerReporteCostoVenta = async (req, res) => {
     });
   } catch (error) {
     console.error("Error generando reporte costo venta:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+exports.obtenerReporteCostoEntrega = async (req, res) => {
+  try {
+    const semana = resolverSemanaDesdeQuery(req.query);
+    if (semana.error) {
+      return res.status(400).json({ message: semana.error });
+    }
+
+    const presupuesto = await PresupuestoMarketing.findOne({
+      where: {
+        fechaInicio: semana.fechaInicio,
+        fechaFin: semana.fechaFin,
+        tipoModulo: TIPO_MODULO_ENTREGAS,
+        activo: true,
+      },
+      order: [["id", "DESC"]],
+    });
+
+    const gastoReal = redondear(
+      (await GastoMarketing.sum("monto", {
+        where: {
+          fecha: { [Op.between]: [semana.fechaInicio, semana.fechaFin] },
+          tipoModulo: TIPO_MODULO_ENTREGAS,
+        },
+      })) || 0,
+    );
+
+    const presupuestoAsignado = redondear(presupuesto?.presupuestoAsignado || 0);
+    const metaEntregas = Number(presupuesto?.metaVentas || 0);
+    const diferencia = redondear(presupuestoAsignado - gastoReal);
+    const porcentajeEjecucion =
+      presupuestoAsignado === 0
+        ? 0
+        : redondear((gastoReal / presupuestoAsignado) * 100);
+    const entregasRealizadas = await contarEntregasRealizadasGerencia({
+      fechaInicio: semana.fechaInicio,
+      fechaFin: semana.fechaFin,
+    });
+    const costoPorEntregaReal =
+      entregasRealizadas === 0 ? 0 : redondear(gastoReal / entregasRealizadas);
+    const costoPorEntregaObjetivo =
+      metaEntregas === 0 ? 0 : redondear(presupuestoAsignado / metaEntregas);
+    const diferenciaPorEntrega = redondear(
+      costoPorEntregaReal - costoPorEntregaObjetivo,
+    );
+    const estado = !presupuesto
+      ? "SIN_DATOS"
+      : gastoReal > presupuestoAsignado
+        ? "EXCEDIDO"
+        : "DENTRO_PRESUPUESTO";
+
+    res.json({
+      fechaInicio: semana.fechaInicio,
+      fechaFin: semana.fechaFin,
+      presupuestoAsignado,
+      gastoReal,
+      diferencia,
+      porcentajeEjecucion,
+      entregasRealizadas,
+      metaEntregas,
+      costoPorEntregaReal,
+      costoPorEntregaObjetivo,
+      diferenciaPorEntrega,
+      estado,
+    });
+  } catch (error) {
+    console.error("Error generando reporte costo entrega:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+exports.obtenerReporteCostoEntregaTotal = async (req, res) => {
+  try {
+    const fechaInicio = validarFecha(req.query.fechaInicio, "fechaInicio");
+    if (fechaInicio.error) {
+      return res.status(400).json({ message: fechaInicio.error });
+    }
+
+    const fechaFin = validarFecha(req.query.fechaFin, "fechaFin");
+    if (fechaFin.error) {
+      return res.status(400).json({ message: fechaFin.error });
+    }
+
+    if (fechaInicio.value > fechaFin.value) {
+      return res.status(400).json({
+        message: "fechaInicio no puede ser mayor que fechaFin",
+      });
+    }
+
+    const rangoFechas = {
+      [Op.between]: [fechaInicio.value, fechaFin.value],
+    };
+
+    const gastoReal = redondear(
+      (await GastoMarketing.sum("monto", {
+        where: {
+          fecha: rangoFechas,
+          tipoModulo: TIPO_MODULO_ENTREGAS,
+        },
+      })) || 0,
+    );
+
+    const entregasRealizadas = await Entrega.count({
+      where: {
+        estado: "Entregado",
+        fecha: rangoFechas,
+      },
+    });
+
+    const costoPorEntregaTotal =
+      entregasRealizadas === 0
+        ? 0
+        : redondear(gastoReal / entregasRealizadas);
+
+    res.json({
+      fechaInicio: fechaInicio.value,
+      fechaFin: fechaFin.value,
+      gastoReal,
+      entregasRealizadas: Number(entregasRealizadas || 0),
+      costoPorEntregaTotal,
+    });
+  } catch (error) {
+    console.error("Error generando reporte total costo entrega:", error);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };

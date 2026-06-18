@@ -36,6 +36,11 @@ const GastoMarketing = sequelize.define(
       allowNull: false,
       defaultValue: 0,
     },
+    tipoModulo: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "MARKETING",
+    },
   },
   {
     tableName: "gastos_marketing",

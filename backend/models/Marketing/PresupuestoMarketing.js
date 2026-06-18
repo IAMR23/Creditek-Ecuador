@@ -49,6 +49,11 @@ const PresupuestoMarketing = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    tipoModulo: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "MARKETING",
+    },
     activo: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

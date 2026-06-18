@@ -10,6 +10,11 @@ router.use(authenticate);
 router.use(requirePermission("Gerencia", "Administracion"));
 
 router.get("/reporte-costo-venta", controller.obtenerReporteCostoVenta);
+router.get("/reporte-costo-entrega", controller.obtenerReporteCostoEntrega);
+router.get(
+  "/reporte-costo-entrega-total",
+  controller.obtenerReporteCostoEntregaTotal,
+);
 
 router.post("/presupuesto-marketing", controller.crearPresupuesto);
 router.get("/presupuesto-marketing", controller.listarPresupuestos);

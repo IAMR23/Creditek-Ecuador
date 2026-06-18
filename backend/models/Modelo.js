@@ -15,9 +15,10 @@ const Modelo = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    descripcion: {
+    identificadorUph: {
       type: DataTypes.TEXT,
       allowNull: true,
+      field: "descripcion",
     },
     activo: {
       type: DataTypes.BOOLEAN,
@@ -25,10 +26,10 @@ const Modelo = sequelize.define(
     },
 
     PVP1: {
-  type: DataTypes.DOUBLE,
-  allowNull: false,
-  defaultValue: 0,
-},
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+      defaultValue: 0,
+    },
 
     // 🔥 La relación correcta (UN modelo pertenece a UNA combinación dispositivo-marca)
     dispositivoMarcaId: {
