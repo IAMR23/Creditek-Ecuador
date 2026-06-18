@@ -68,6 +68,11 @@ export default function Sidebar({ auth }) {
             path: "/costo-venta-marketing",
           },
           {
+            label: "Costo por Entrega",
+            icon: <PackageCheck size={20} />,
+            path: "/costo-entrega-marketing",
+          },
+          {
             label: "Reporte Entregas",
             icon: <BarChart3 size={20} />,
             path: "/reporte-entregas",

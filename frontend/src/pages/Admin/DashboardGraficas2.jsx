@@ -20,6 +20,7 @@ const COLORS = {
   gerencia: "#2563eb",
   enganche: "#16a34a",
   costo: "#f59e0b",
+  costoEntrega: "#0891b2",
   margenPorcentual: "#7c3aed",
 };
 
@@ -154,13 +155,18 @@ function CopyButton({ onClick }) {
   );
 }
 
-export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
+export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin }) {
   const [dataCostoVenta, setDataCostoVenta] = useState([]);
+  const [dataCostoEntrega, setDataCostoEntrega] = useState([]);
+  const [costoEntregaTotal, setCostoEntregaTotal] = useState(null);
   const [loadingCostoVenta, setLoadingCostoVenta] = useState(false);
+  const [loadingCostoEntrega, setLoadingCostoEntrega] = useState(false);
+  const [loadingCostoEntregaTotal, setLoadingCostoEntregaTotal] = useState(false);
   const refEnganche = useRef(null);
   const refSemana = useRef(null);
   const refGerencia = useRef(null);
   const refCostoVenta = useRef(null);
+  const refCostoEntrega = useRef(null);
   const refMargenPorcentual = useRef(null);
 
   const dataSemana = useMemo(
@@ -198,65 +204,135 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
   useEffect(() => {
     let cancelado = false;
 
-    const cargarCostoVentaSemanal = async () => {
+    const cargarCostoEntregaTotal = async () => {
+      if (!fechaInicio || !fechaFin) {
+        setCostoEntregaTotal(null);
+        return;
+      }
+
+      setLoadingCostoEntregaTotal(true);
+
+      try {
+        const { data } = await axios.get(
+          `${API_URL}/api/gerencia/reporte-costo-entrega-total`,
+          {
+            params: {
+              fechaInicio,
+              fechaFin,
+            },
+          },
+        );
+
+        if (!cancelado) {
+          setCostoEntregaTotal(data);
+        }
+      } catch (error) {
+        console.error("Error cargando costo por entrega total:", error);
+
+        if (!cancelado) {
+          setCostoEntregaTotal(null);
+          Swal.fire(
+            "Error",
+            "No se pudo cargar el costo por entrega total.",
+            "error",
+          );
+        }
+      } finally {
+        if (!cancelado) {
+          setLoadingCostoEntregaTotal(false);
+        }
+      }
+    };
+
+    const cargarCostosSemanales = async () => {
       if (!dataSemana.length) {
         setDataCostoVenta([]);
+        setDataCostoEntrega([]);
         return;
       }
 
       setLoadingCostoVenta(true);
+      setLoadingCostoEntrega(true);
 
       try {
-        const resultados = await Promise.all(
-          dataSemana.map(async (semana) => {
-            const inicioSemana = getFechaInicioSemana(
-              semana.semanaNumero,
-              fechaInicio,
-            );
-            const { data } = await axios.get(
-              `${API_URL}/api/gerencia/reporte-costo-venta`,
-              {
-                params: {
-                  fechaInicio: inicioSemana,
+        const [costoVenta, costoEntrega] = await Promise.all([
+          Promise.all(
+            dataSemana.map(async (semana) => {
+              const inicioSemana = getFechaInicioSemana(
+                semana.semanaNumero,
+                fechaInicio,
+              );
+              const { data } = await axios.get(
+                `${API_URL}/api/gerencia/reporte-costo-venta`,
+                {
+                  params: {
+                    fechaInicio: inicioSemana,
+                  },
                 },
-              },
-            );
+              );
 
-            return {
-              name: semana.name,
-              semanaNumero: semana.semanaNumero,
-              costoPorVenta: Number(data.costoPorVentaReal) || 0,
-            };
-          }),
-        );
+              return {
+                name: semana.name,
+                semanaNumero: semana.semanaNumero,
+                costoPorVenta: Number(data.costoPorVentaReal) || 0,
+              };
+            }),
+          ),
+          Promise.all(
+            dataSemana.map(async (semana) => {
+              const inicioSemana = getFechaInicioSemana(
+                semana.semanaNumero,
+                fechaInicio,
+              );
+              const { data } = await axios.get(
+                `${API_URL}/api/gerencia/reporte-costo-entrega`,
+                {
+                  params: {
+                    fechaInicio: inicioSemana,
+                  },
+                },
+              );
+
+              return {
+                name: semana.name,
+                semanaNumero: semana.semanaNumero,
+                costoPorEntrega: Number(data.costoPorEntregaReal) || 0,
+              };
+            }),
+          ),
+        ]);
 
         if (!cancelado) {
-          setDataCostoVenta(resultados);
+          setDataCostoVenta(costoVenta);
+          setDataCostoEntrega(costoEntrega);
         }
       } catch (error) {
-        console.error("Error cargando costo por venta semanal:", error);
+        console.error("Error cargando costos semanales:", error);
 
         if (!cancelado) {
           setDataCostoVenta([]);
+          setDataCostoEntrega([]);
           Swal.fire(
             "Error",
-            "No se pudo cargar el indicador de costo por venta.",
+            "No se pudieron cargar los indicadores de costo por venta y entrega.",
             "error",
           );
         }
       } finally {
         if (!cancelado) {
           setLoadingCostoVenta(false);
+          setLoadingCostoEntrega(false);
         }
       }
     };
 
-    cargarCostoVentaSemanal();
+    cargarCostoEntregaTotal();
+    cargarCostosSemanales();
 
     return () => {
       cancelado = true;
     };
-  }, [dataSemana, fechaInicio]);
+  }, [dataSemana, fechaFin, fechaInicio]);
 
   const copiarGrafico = async (ref, nombre) => {
     if (!ref.current) return;
@@ -304,7 +380,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
 
   return (
     <div className="grid grid-cols-1 gap-6 mt-6 lg:grid-cols-2 xl:grid-cols-12">
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Total Ventas</h3>
 
         <p className="text-4xl font-bold text-blue-800">
@@ -312,7 +388,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Indicador Gerencia</h3>
 
         <p className="text-4xl font-bold text-blue-800">
@@ -320,11 +396,27 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-4">
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Enganche Javier</h3>
 
         <p className="text-4xl font-bold text-green-700">
           {Number(estadisticas.indicadorEngancheJavierTotal) || 0}
+        </p>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
+        <h3 className="text-gray-500 text-sm">Costo por Entrega Total</h3>
+
+        <p className="text-4xl font-bold text-cyan-700">
+          {loadingCostoEntregaTotal
+            ? "..."
+            : moneyFormatter.format(
+                Number(costoEntregaTotal?.costoPorEntregaTotal) || 0,
+              )}
+        </p>
+        <p className="mt-2 text-xs text-gray-500">
+          {Number(costoEntregaTotal?.entregasRealizadas || 0)} entregas ·{" "}
+          {moneyFormatter.format(Number(costoEntregaTotal?.gastoReal) || 0)} gastos
         </p>
       </div>
 
@@ -339,7 +431,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </div>
 
         <div ref={refEnganche} className="bg-white rounded-xl">
-          <h4 className="font-semibold mb-3">Ventas Enganche Javier por Semana</h4>
           <ResponsiveContainer width="100%" height={650}>
             <LineChart
               data={dataEngancheJavier}
@@ -414,7 +505,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </div>
 
         <div ref={refGerencia} className="bg-white rounded-xl">
-          <h4 className="font-semibold mb-3">Indicador Gerencia por Semana</h4>
           <ResponsiveContainer width="100%" height={650}>
             <LineChart
               data={dataIndicadorGerencia}
@@ -462,7 +552,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </div>
 
         <div ref={refMargenPorcentual} className="bg-white rounded-xl">
-          <h4 className="font-semibold mb-3">Margen Porcentual por Semana</h4>
           <ResponsiveContainer width="100%" height={650}>
             <LineChart
               data={dataMargenPorcentual}
@@ -505,7 +594,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
         </div>
 
         <div ref={refCostoVenta} className="bg-white rounded-xl">
-          <h4 className="font-semibold mb-3">Costo por Venta por Semana</h4>
           {loadingCostoVenta ? (
             <div className="flex h-[650px] items-center justify-center text-gray-500">
               Cargando costo por venta...
@@ -521,6 +609,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
                 <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
 
                 <YAxis
+                  reversed
                   domain={minDataDomain}
                   tickFormatter={(value) => moneyFormatter.format(value)}
                 />
@@ -535,6 +624,57 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio }) {
                   dataKey="costoPorVenta"
                   name="Costo por venta"
                   stroke={COLORS.costo}
+                  strokeWidth={3}
+                  dot={{ r: 6 }}
+                  activeDot={{ r: 10 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">Costo por Entrega por Semana</h3>
+          <CopyButton
+            onClick={() =>
+              copiarGrafico(refCostoEntrega, "Costo por Entrega por Semana")
+            }
+          />
+        </div>
+
+        <div ref={refCostoEntrega} className="bg-white rounded-xl">
+          {loadingCostoEntrega ? (
+            <div className="flex h-[650px] items-center justify-center text-gray-500">
+              Cargando costo por entrega...
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={650}>
+              <LineChart
+                data={dataCostoEntrega}
+                margin={{ top: 20, right: 12, left: 22, bottom: 110 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+                <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
+
+                <YAxis
+                  reversed
+                  domain={minDataDomain}
+                  tickFormatter={(value) => moneyFormatter.format(value)}
+                />
+
+                <Tooltip
+                  {...tooltipStyle}
+                  formatter={(value) => moneyFormatter.format(Number(value) || 0)}
+                />
+
+                <Line
+                  type="linear"
+                  dataKey="costoPorEntrega"
+                  name="Costo por entrega"
+                  stroke={COLORS.costoEntrega}
                   strokeWidth={3}
                   dot={{ r: 6 }}
                   activeDot={{ r: 10 }}

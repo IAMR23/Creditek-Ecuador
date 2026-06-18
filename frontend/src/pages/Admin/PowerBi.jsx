@@ -345,6 +345,7 @@ export default function Powerbi() {
 <DashboardGraficas2
   estadisticas={estadisticas}
   fechaInicio={fechaInicio}
+  fechaFin={fechaFin}
 />
       )}
     </div>

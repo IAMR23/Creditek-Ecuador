@@ -40,6 +40,7 @@ export const ROUTE_PERMISSIONS = {
   "/powerbi": "Gerencia",
   "/metas-comerciales": "Gerencia",
   "/costo-venta-marketing": "Gerencia",
+  "/costo-entrega-marketing": "Gerencia",
   "/reporte-entregas": "Gerencia",
   "/revision-gestiones": "Gerencia",
   "/revision-gestiones-comercial": "Gerencia",

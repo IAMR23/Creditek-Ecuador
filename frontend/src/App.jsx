@@ -53,6 +53,7 @@ import VentasAuditoria from "./pages/Auditoria/VentasAuditoria";
 import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
 import Goleadores from "./pages/Marketing/Goleadores";
 import CostoVentaMarketing from "./pages/Marketing/CostoVentaMarketing";
+import CostoEntregaMarketing from "./pages/Marketing/CostoEntregaMarketing";
 import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
 import EditarVentaCompletaAuditoria from "./pages/Vendedores/EditarVentaCompletaAuditoria";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
@@ -303,6 +304,10 @@ useEffect(() => {
                 <Route
                   path="costo-venta-marketing"
                   element={protect(<CostoVentaMarketing />, "/costo-venta-marketing")}
+                />
+                <Route
+                  path="costo-entrega-marketing"
+                  element={protect(<CostoEntregaMarketing />, "/costo-entrega-marketing")}
                 />
                 <Route
                   path="entregas-pendientes"

@@ -134,7 +134,7 @@ export default function VentaAuditoria() {
           <div className="grid md:grid-cols-2 gap-4 mb-3">
             <input
               className={inputStyle}
-              value={`Modelo: ${detalle.modelo?.nombre}`}
+              value={`Modelo: ${detalle.modelo?.nombre || ""} | UPH: ${detalle.modelo?.identificadorUph || "-"}`}
               readOnly
             />
             <input

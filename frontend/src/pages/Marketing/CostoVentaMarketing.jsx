@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { API_URL } from "../../../config";
 
-const categoriasGasto = ["REDES", "VOLANTES", "CAMISETAS", "GLOBOS", "OTROS"];
 const DIA_INICIO_SEMANA = 4;
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -55,9 +54,9 @@ const normalizarInicioSemana = (fecha) => {
 
 const inicioSemanaActual = normalizarInicioSemana(dateToISO(new Date()));
 
-const gastoInicial = (fechaInicio) => ({
+const gastoInicial = (fechaInicio, categoria = "REDES") => ({
   fecha: fechaInicio || inicioSemanaActual,
-  categoria: "REDES",
+  categoria,
   descripcion: "",
   monto: "",
 });
@@ -87,78 +86,17 @@ const estadoClass = (estado) => {
   return "border-gray-200 bg-gray-50 text-gray-700";
 };
 
-export default function CostoVentaMarketing() {
-  const [fechaInicio, setFechaInicio] = useState(inicioSemanaActual);
-  const fechaFin = useMemo(
-    () => dateToISO(sumarDias(fechaToLocalDate(fechaInicio), 6)),
-    [fechaInicio],
-  );
-  const [presupuestoActual, setPresupuestoActual] = useState(null);
-  const [presupuestoForm, setPresupuestoForm] = useState(presupuestoInicial);
-  const [gastos, setGastos] = useState([]);
-  const [gastoForm, setGastoForm] = useState(gastoInicial(inicioSemanaActual));
-  const [editGastoId, setEditGastoId] = useState(null);
-  const [reporte, setReporte] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [savingPresupuesto, setSavingPresupuesto] = useState(false);
-  const [savingGasto, setSavingGasto] = useState(false);
-
-  const cargarDatos = useCallback(async () => {
-    if (!fechaInicio) return;
-
-    setLoading(true);
-
-    try {
-      const params = new URLSearchParams({
-        fechaInicio,
-        fechaFin,
-      });
-
-      const [presupuestoRes, gastosRes, reporteRes] = await Promise.all([
-        axios.get(
-          `${API_URL}/api/gerencia/presupuesto-marketing?${params.toString()}&activo=true`,
-        ),
-        axios.get(`${API_URL}/api/gerencia/gastos-marketing?${params.toString()}`),
-        axios.get(`${API_URL}/api/gerencia/reporte-costo-venta?${params.toString()}`),
-      ]);
-
-      const presupuesto = presupuestoRes.data?.[0] || null;
-      setPresupuestoActual(presupuesto);
-      setPresupuestoForm(
-        presupuesto
-          ? {
-              presupuestoAsignado: presupuesto.presupuestoAsignado ?? "",
-              metaVentas: presupuesto.metaVentas ?? "",
-              descripcion: presupuesto.descripcion || "",
-            }
-          : presupuestoInicial,
-      );
-      setGastos(gastosRes.data || []);
-      setReporte(reporteRes.data || null);
-    } catch (error) {
-      console.error(error);
-      const message =
-        error.response?.data?.message || "No se pudo cargar el modulo de marketing.";
-      Swal.fire("Error", message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [fechaFin, fechaInicio]);
-
-  useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
-
-  useEffect(() => {
-    if (!editGastoId) {
-      setGastoForm(gastoInicial(fechaInicio));
-    }
-  }, [editGastoId, fechaInicio]);
-
-  const indicadores = useMemo(() => {
-    const data = reporte || {};
-
-    return [
+const reporteConfig = {
+  venta: {
+    titulo: "Costo por Venta / Presupuesto de Marketing",
+    descripcion: "Control semanal de presupuesto, gastos reales y costo por venta.",
+    endpoint: "reporte-costo-venta",
+    tipoModulo: "MARKETING",
+    categoriasGasto: ["REDES", "VOLANTES", "CAMISETAS", "GLOBOS", "OTROS"],
+    metaLabel: "Meta de ventas",
+    reporteDescripcion:
+      "Calculo automatico con presupuesto, gasto real y ventas de Gerencia.",
+    indicadores: (data) => [
       {
         label: "Presupuesto asignado",
         value: formatMoney(data.presupuestoAsignado),
@@ -199,8 +137,150 @@ export default function CostoVentaMarketing() {
         value: formatMoney(data.diferenciaPorVenta),
         warn: Number(data.diferenciaPorVenta) > 0,
       },
-    ];
-  }, [reporte]);
+    ],
+  },
+  entrega: {
+    titulo: "Costo por Entrega / Presupuesto de Entregas",
+    descripcion:
+      "Control semanal de presupuesto operativo, gastos reales y costo por entrega.",
+    endpoint: "reporte-costo-entrega",
+    tipoModulo: "ENTREGAS",
+    categoriasGasto: [
+      "GASOLINA",
+      "PEAJES",
+      "ALIMENTACION",
+      "HOSPEDAJE",
+      "LLANTAS",
+      "MANTENIMIENTO",
+      "PARQUEADERO",
+      "OTROS",
+    ],
+    metaLabel: "Meta de entregas",
+    reporteDescripcion:
+      "Calculo automatico con presupuesto operativo, gasto real y entregas con estado Entregado.",
+    indicadores: (data) => [
+      {
+        label: "Presupuesto asignado",
+        value: formatMoney(data.presupuestoAsignado),
+        warn: false,
+      },
+      {
+        label: "Gasto real",
+        value: formatMoney(data.gastoReal),
+        warn: data.estado === "EXCEDIDO",
+      },
+      {
+        label: "Diferencia",
+        value: formatMoney(data.diferencia),
+        warn: Number(data.diferencia) < 0,
+      },
+      {
+        label: "% ejecucion presupuesto",
+        value: formatPercent(data.porcentajeEjecucion),
+        warn: Number(data.porcentajeEjecucion) > 100,
+      },
+      {
+        label: "Entregas realizadas",
+        value: Number(data.entregasRealizadas || 0),
+        warn: false,
+      },
+      {
+        label: "Costo por entrega real",
+        value: formatMoney(data.costoPorEntregaReal),
+        warn: false,
+      },
+      {
+        label: "Costo por entrega objetivo",
+        value: formatMoney(data.costoPorEntregaObjetivo),
+        warn: false,
+      },
+      {
+        label: "Diferencia por entrega",
+        value: formatMoney(data.diferenciaPorEntrega),
+        warn: Number(data.diferenciaPorEntrega) > 0,
+      },
+    ],
+  },
+};
+
+export function CostoMarketing({ tipo = "venta" }) {
+  const config = reporteConfig[tipo] || reporteConfig.venta;
+  const categoriaInicial = config.categoriasGasto[0];
+  const [fechaInicio, setFechaInicio] = useState(inicioSemanaActual);
+  const fechaFin = useMemo(
+    () => dateToISO(sumarDias(fechaToLocalDate(fechaInicio), 6)),
+    [fechaInicio],
+  );
+  const [presupuestoActual, setPresupuestoActual] = useState(null);
+  const [presupuestoForm, setPresupuestoForm] = useState(presupuestoInicial);
+  const [gastos, setGastos] = useState([]);
+  const [gastoForm, setGastoForm] = useState(
+    gastoInicial(inicioSemanaActual, categoriaInicial),
+  );
+  const [editGastoId, setEditGastoId] = useState(null);
+  const [reporte, setReporte] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [savingPresupuesto, setSavingPresupuesto] = useState(false);
+  const [savingGasto, setSavingGasto] = useState(false);
+
+  const cargarDatos = useCallback(async () => {
+    if (!fechaInicio) return;
+
+    setLoading(true);
+
+    try {
+      const params = new URLSearchParams({
+        fechaInicio,
+        fechaFin,
+        tipoModulo: config.tipoModulo,
+      });
+
+      const [presupuestoRes, gastosRes, reporteRes] = await Promise.all([
+        axios.get(
+          `${API_URL}/api/gerencia/presupuesto-marketing?${params.toString()}&activo=true`,
+        ),
+        axios.get(`${API_URL}/api/gerencia/gastos-marketing?${params.toString()}`),
+        axios.get(`${API_URL}/api/gerencia/${config.endpoint}?${params.toString()}`),
+      ]);
+
+      const presupuesto = presupuestoRes.data?.[0] || null;
+      setPresupuestoActual(presupuesto);
+      setPresupuestoForm(
+        presupuesto
+          ? {
+              presupuestoAsignado: presupuesto.presupuestoAsignado ?? "",
+              metaVentas: presupuesto.metaVentas ?? "",
+              descripcion: presupuesto.descripcion || "",
+            }
+          : presupuestoInicial,
+      );
+      setGastos(gastosRes.data || []);
+      setReporte(reporteRes.data || null);
+    } catch (error) {
+      console.error(error);
+      const message =
+        error.response?.data?.message || "No se pudo cargar el modulo de marketing.";
+      Swal.fire("Error", message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [config.endpoint, config.tipoModulo, fechaFin, fechaInicio]);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
+
+  useEffect(() => {
+    if (!editGastoId) {
+      setGastoForm(gastoInicial(fechaInicio, categoriaInicial));
+    }
+  }, [categoriaInicial, editGastoId, fechaInicio]);
+
+  const indicadores = useMemo(() => {
+    const data = reporte || {};
+
+    return config.indicadores(data);
+  }, [config, reporte]);
 
   const handlePresupuestoChange = (field, value) => {
     setPresupuestoForm((prev) => ({
@@ -238,6 +318,7 @@ export default function CostoVentaMarketing() {
             : presupuestoForm.presupuestoAsignado,
         metaVentas: presupuestoForm.metaVentas === "" ? 0 : presupuestoForm.metaVentas,
         descripcion: presupuestoForm.descripcion,
+        tipoModulo: config.tipoModulo,
       };
 
       if (presupuestoActual?.id) {
@@ -276,6 +357,7 @@ export default function CostoVentaMarketing() {
         categoria: gastoForm.categoria,
         descripcion: gastoForm.descripcion,
         monto: gastoForm.monto === "" ? 0 : gastoForm.monto,
+        tipoModulo: config.tipoModulo,
       };
 
       if (editGastoId) {
@@ -288,7 +370,7 @@ export default function CostoVentaMarketing() {
       }
 
       setEditGastoId(null);
-      setGastoForm(gastoInicial(fechaInicio));
+      setGastoForm(gastoInicial(fechaInicio, categoriaInicial));
       await cargarDatos();
       Swal.fire({
         icon: "success",
@@ -309,7 +391,7 @@ export default function CostoVentaMarketing() {
     setEditGastoId(gasto.id);
     setGastoForm({
       fecha: gasto.fecha || fechaInicio,
-      categoria: gasto.categoria || "REDES",
+      categoria: gasto.categoria || categoriaInicial,
       descripcion: gasto.descripcion || "",
       monto: gasto.monto ?? "",
     });
@@ -317,7 +399,7 @@ export default function CostoVentaMarketing() {
 
   const cancelarEdicionGasto = () => {
     setEditGastoId(null);
-    setGastoForm(gastoInicial(fechaInicio));
+    setGastoForm(gastoInicial(fechaInicio, categoriaInicial));
   };
 
   const eliminarGasto = async (gasto) => {
@@ -354,10 +436,10 @@ export default function CostoVentaMarketing() {
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Costo por Venta / Presupuesto de Marketing
+            {config.titulo}
           </h1>
           <p className="text-sm text-gray-600">
-            Control semanal de presupuesto, gastos reales y costo por venta.
+            {config.descripcion}
           </p>
         </div>
 
@@ -445,7 +527,7 @@ export default function CostoVentaMarketing() {
 
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-gray-700">
-              Meta de ventas
+              {config.metaLabel}
             </span>
             <input
               type="number"
@@ -516,7 +598,7 @@ export default function CostoVentaMarketing() {
               onChange={(event) => handleGastoChange("categoria", event.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
             >
-              {categoriasGasto.map((categoria) => (
+              {config.categoriasGasto.map((categoria) => (
                 <option key={categoria} value={categoria}>
                   {categoria}
                 </option>
@@ -642,7 +724,7 @@ export default function CostoVentaMarketing() {
           <div>
             <h2 className="text-lg font-bold text-gray-900">Reporte final</h2>
             <p className="text-sm text-gray-600">
-              Calculo automatico con presupuesto, gasto real y ventas de Gerencia.
+              {config.reporteDescripcion}
             </p>
           </div>
           <span
@@ -676,4 +758,8 @@ export default function CostoVentaMarketing() {
       </section>
     </div>
   );
+}
+
+export default function CostoVentaMarketing() {
+  return <CostoMarketing tipo="venta" />;
 }

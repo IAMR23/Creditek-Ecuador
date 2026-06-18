@@ -1,12 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { Link } from "react-router-dom"; // para navegar a otro componente
+import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { Eye, FileText, Trash } from "lucide-react";
 import Swal from "sweetalert2";
 
 const STORAGE_KEY = "ventas_auditoria_filtros";
+
+const TABLE_COLUMNS = [
+  "Fecha",
+  "Cedula",
+  "Cliente",
+  "Agencia",
+  "Vendedor",
+  "Origen",
+  "Dispositivo",
+  "Modelo",
+  "Identificador UPH",
+  "Precio Venta",
+  "Precio Vendedor",
+  "Diferencia",
+  "Precio Unitario",
+  "Forma Pago",
+  "Entrada",
+  "Alcance",
+  "Estado",
+  "Observacion",
+];
 
 const obtenerFiltrosGuardados = () => {
   try {
@@ -36,16 +57,26 @@ const getPrecioVendedorClass = (precioVendedorValue, precioVentaValue) => {
     return "";
   }
 
-  if (precioVendedor > precioVenta) {
-    return " text-green-600 font-bold";
-  }
-
-  if (precioVendedor < precioVenta) {
-    return " text-red-600 font-bold";
-  }
-
+  if (precioVendedor > precioVenta) return " text-green-600 font-bold";
+  if (precioVendedor < precioVenta) return " text-red-600 font-bold";
   return " text-gray-700 font-semibold";
 };
+
+const getEstadoBadge = (estado) =>
+  estado === "Activo"
+    ? "bg-green-100 text-green-700 border-green-200"
+    : "bg-red-100 text-red-700 border-red-200";
+
+const escaparHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const obtenerNombreSeleccionado = (items, id) =>
+  items.find((item) => String(item.id) === String(id))?.nombre || "Todos";
 
 export default function VentasAuditoria() {
   const filtrosGuardados = obtenerFiltrosGuardados();
@@ -78,6 +109,26 @@ export default function VentasAuditoria() {
   );
   const [estado, setEstado] = useState(filtrosGuardados.estado || "");
 
+  const resumen = useMemo(() => {
+    const totalVenta = filas.reduce(
+      (acc, fila) => acc + toNumber(fila["Precio Vendedor"]),
+      0,
+    );
+    const diferencias = filas.reduce(
+      (acc, fila) => acc + toNumber(fila.Diferencia),
+      0,
+    );
+    const activas = filas.filter((fila) => fila.Estado === "Activo").length;
+
+    return {
+      registros: filas.length,
+      activas,
+      desactivadas: filas.length - activas,
+      totalVenta: Number(totalVenta.toFixed(2)),
+      diferencias: Number(diferencias.toFixed(2)),
+    };
+  }, [filas]);
+
   const cargarUsuarios = async () => {
     try {
       const res = await axios.get(`${API_URL}/usuarios`);
@@ -94,13 +145,11 @@ export default function VentasAuditoria() {
       setAgencias(res.data || []);
     } catch (error) {
       console.error("Error cargando agencias:", error);
-
       Swal.fire({
         icon: "error",
         title: "Error",
         text: "No se pudieron cargar las agencias.",
       });
-
       setAgencias([]);
     }
   };
@@ -184,33 +233,15 @@ export default function VentasAuditoria() {
         fechaFin,
       });
 
-      if (agenciaId && agenciaId !== "todas") {
-        params.append("agenciaId", agenciaId);
-      }
-
-      if (vendedorId && vendedorId !== "todos") {
-        params.append("vendedorId", vendedorId);
-      }
-
-      if (modeloId && modeloId !== "todos") {
-        params.append("modeloId", modeloId);
-      }
-
-      if (cierreCaja && cierreCaja !== "todos") {
-        params.append("cierreCaja", cierreCaja);
-      }
-
-      if (origenId && origenId !== "todos") {
-        params.append("origenId", origenId);
-      }
-
+      if (agenciaId && agenciaId !== "todas") params.append("agenciaId", agenciaId);
+      if (vendedorId && vendedorId !== "todos") params.append("vendedorId", vendedorId);
+      if (modeloId && modeloId !== "todos") params.append("modeloId", modeloId);
+      if (cierreCaja && cierreCaja !== "todos") params.append("cierreCaja", cierreCaja);
+      if (origenId && origenId !== "todos") params.append("origenId", origenId);
       if (dispositivoId && dispositivoId !== "todos") {
         params.append("dispositivoId", dispositivoId);
       }
-
-      if (estado && estado !== "todos") {
-        params.append("estado", estado);
-      }
+      if (estado && estado !== "todos") params.append("estado", estado);
 
       const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
       const { data } = await axios.get(url);
@@ -218,7 +249,6 @@ export default function VentasAuditoria() {
       if (!data.ok) return;
 
       const ventas = data.ventas || [];
-
       const resultado = ventas.map((venta) => {
         const precioVenta = toMoney(venta.precioVenta);
         const precioVendedor = toMoney(venta.precioVendedor);
@@ -238,6 +268,7 @@ export default function VentasAuditoria() {
           Observacion: venta.observaciones ?? "",
           Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
           Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
+          "Identificador UPH": venta.identificadorUph ?? "",
           "Precio Venta": precioVenta,
           "Precio Vendedor": precioVendedor,
           Diferencia: diferencia,
@@ -277,17 +308,6 @@ export default function VentasAuditoria() {
     usuarioInfo,
   ]);
 
-  const escaparHtml = (value) =>
-    String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-
-  const obtenerNombreSeleccionado = (items, id) =>
-    items.find((item) => String(item.id) === String(id))?.nombre || "Todos";
-
   const generarReportePdf = () => {
     if (!filas.length) {
       Swal.fire({
@@ -298,7 +318,6 @@ export default function VentasAuditoria() {
       return;
     }
 
-    const columnas = Object.keys(filas[0]).filter((key) => key !== "id");
     const filtros = [
       ["Fecha inicio", fechaInicio || "Todas"],
       ["Fecha fin", fechaFin || "Todas"],
@@ -323,7 +342,7 @@ export default function VentasAuditoria() {
         (fila, index) => `
           <tr>
             <td>${index + 1}</td>
-            ${columnas.map((columna) => `<td>${escaparHtml(fila[columna])}</td>`).join("")}
+            ${TABLE_COLUMNS.map((columna) => `<td>${escaparHtml(fila[columna] ?? "")}</td>`).join("")}
           </tr>
         `,
       )
@@ -358,7 +377,7 @@ export default function VentasAuditoria() {
             .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; font-size: 10px; margin: 10px 0 12px; }
             .summary { font-size: 11px; margin-bottom: 8px; }
             table { width: 100%; border-collapse: collapse; font-size: 8px; }
-            th { background: #166534; color: white; }
+            th { background: #1f2937; color: white; }
             th, td { border: 1px solid #d1d5db; padding: 4px; text-align: left; vertical-align: top; }
             tr:nth-child(even) td { background: #f9fafb; }
           </style>
@@ -371,7 +390,7 @@ export default function VentasAuditoria() {
             <thead>
               <tr>
                 <th>#</th>
-                ${columnas.map((columna) => `<th>${escaparHtml(columna)}</th>`).join("")}
+                ${TABLE_COLUMNS.map((columna) => `<th>${escaparHtml(columna)}</th>`).join("")}
               </tr>
             </thead>
             <tbody>${filasHtml}</tbody>
@@ -388,265 +407,355 @@ export default function VentasAuditoria() {
     ventana.document.close();
   };
 
-
   const desactivarVenta = async (id) => {
-
-  const confirm = await Swal.fire({
-    title: "¿Desactivar venta?",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "Sí, desactivar",
-  });
-
-  if (!confirm.isConfirmed) return;
-
-  try {
-    await axios.put(`${API_URL}/ventas/${id}`, {
-      activo: false,
+    const confirm = await Swal.fire({
+      title: "Desactivar venta?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Si, desactivar",
     });
 
-    setFilas((prev) =>
-      prev.map((fila) =>
-        fila.id === id ? { ...fila, Estado: "Desactivada" } : fila
-      )
-    );
+    if (!confirm.isConfirmed) return;
 
-  } catch (error) {
-    console.error(error);
-  }
-};
+    try {
+      await axios.put(`${API_URL}/ventas/${id}`, {
+        activo: false,
+      });
 
+      setFilas((prev) =>
+        prev.map((fila) =>
+          fila.id === id ? { ...fila, Estado: "Desactivada" } : fila,
+        ),
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const renderCell = (fila, key) => {
+    const val = fila[key];
+
+    if (key === "Modelo") {
+      return (
+        <div className="min-w-44">
+          <div className="font-semibold text-gray-900">{val || "-"}</div>
+          <div className="text-xs text-gray-500">
+            UPH: {fila["Identificador UPH"] || "-"}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "Identificador UPH") {
+      return (
+        <span className="inline-flex rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+          {val || "-"}
+        </span>
+      );
+    }
+
+    if (key === "Estado") {
+      return (
+        <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${getEstadoBadge(val)}`}>
+          {val}
+        </span>
+      );
+    }
+
+    return val || "-";
+  };
+
+  const getCellClass = (fila, key) => {
+    let clase = "px-3 py-2 align-top text-gray-700";
+
+    if (key === "Precio Venta") {
+      clase += " text-right font-semibold text-blue-700";
+    }
+
+    if (key === "Precio Vendedor") {
+      clase += `${getPrecioVendedorClass(fila[key], fila["Precio Venta"])} text-right`;
+    }
+
+    if (key === "Diferencia") {
+      const diferencia = Number(fila[key]) || 0;
+      clase += " text-right";
+      if (diferencia !== 0) {
+        clase += diferencia > 0 ? " text-red-600 font-bold" : " text-green-600 font-semibold";
+      } else {
+        clase += " text-gray-600 font-semibold";
+      }
+    }
+
+    if (["Precio Unitario", "Entrada", "Alcance"].includes(key)) {
+      clase += " text-right tabular-nums";
+    }
+
+    if (key === "Observacion") {
+      clase += " max-w-64 whitespace-normal";
+    } else {
+      clase += " whitespace-nowrap";
+    }
+
+    return clase;
+  };
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Ventas Auditoria</h1>
-
-      <div className="flex flex-wrap gap-4 mb-4 items-end">
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <label className="block text-sm font-medium">Fecha Inicio</label>
-          <input
-            type="date"
-            className="border px-2 py-1 rounded"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Fecha Fin</label>
-          <input
-            type="date"
-            className="border px-2 py-1 rounded"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Agencia</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={agenciaId}
-            onChange={(e) => setAgenciaId(e.target.value)}
-          >
-            <option value="">Todas</option>
-            {agencias.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Vendedor</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={vendedorId}
-            onChange={(e) => setVendedorId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Modelo</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={modeloId}
-            onChange={(e) => setModeloId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {modelos.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.dispositivoMarca?.marca?.nombre
-                  ? `${m.dispositivoMarca.marca.nombre} ${m.nombre}`
-                  : m.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Cierre de caja</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={cierreCaja}
-            onChange={(e) => setCierreCaja(e.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="CONTADO">Contado</option>
-            <option value="CREDITV">CrediTV</option>
-            <option value="UPHONE">Uphone</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Origen</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={origenId}
-            onChange={(e) => setOrigenId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {origenes.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Dispositivo</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={dispositivoId}
-            onChange={(e) => setDispositivoId(e.target.value)}
-          >
-            <option value="">Todos</option>
-            {dispositivos.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium">Estado</label>
-          <select
-            className="border px-2 py-1 rounded"
-            value={estado}
-            onChange={(e) => setEstado(e.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="activo">Activo</option>
-            <option value="desactivada">Desactivada</option>
-          </select>
+          <h1 className="text-2xl font-bold text-gray-900">Ventas Auditoria</h1>
+          <p className="text-sm text-gray-600">
+            Revision de ventas con precios, diferencias y referencia UPH por modelo.
+          </p>
         </div>
 
         <button
           type="button"
           onClick={generarReportePdf}
-          className="flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded hover:bg-red-800"
+          className="inline-flex items-center justify-center gap-2 rounded bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
         >
           <FileText size={18} />
           PDF
         </button>
       </div>
 
-      {error && <p className="text-red-500 font-semibold mb-3">{error}</p>}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Metric label="Registros" value={resumen.registros} />
+        <Metric label="Activas" value={resumen.activas} tone="green" />
+        <Metric label="Desactivadas" value={resumen.desactivadas} tone="red" />
+        <Metric label="Total Venta" value={`$${resumen.totalVenta.toFixed(2)}`} tone="blue" />
+        <Metric label="Diferencia" value={`$${resumen.diferencias.toFixed(2)}`} tone="slate" />
+      </div>
+
+      <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-bold text-gray-900">Filtros</h2>
+          <span className="text-xs text-gray-500">
+            Los cambios se guardan para tu proxima consulta
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <FiltroFecha label="Fecha Inicio" value={fechaInicio} onChange={setFechaInicio} />
+          <FiltroFecha label="Fecha Fin" value={fechaFin} onChange={setFechaFin} />
+
+          <FiltroSelect
+            label="Agencia"
+            value={agenciaId}
+            onChange={setAgenciaId}
+            options={agencias}
+            emptyLabel="Todas"
+          />
+
+          <FiltroSelect
+            label="Vendedor"
+            value={vendedorId}
+            onChange={setVendedorId}
+            options={usuarios}
+            emptyLabel="Todos"
+          />
+
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700">Modelo</span>
+            <select
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              value={modeloId}
+              onChange={(e) => setModeloId(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {modelos.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.dispositivoMarca?.marca?.nombre
+                    ? `${m.dispositivoMarca.marca.nombre} ${m.nombre}`
+                    : m.nombre}
+                  {m.identificadorUph ? ` - UPH ${m.identificadorUph}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700">Cierre de caja</span>
+            <select
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              value={cierreCaja}
+              onChange={(e) => setCierreCaja(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="CONTADO">Contado</option>
+              <option value="CREDITV">CrediTV</option>
+              <option value="UPHONE">Uphone</option>
+            </select>
+          </label>
+
+          <FiltroSelect
+            label="Origen"
+            value={origenId}
+            onChange={setOrigenId}
+            options={origenes}
+            emptyLabel="Todos"
+          />
+
+          <FiltroSelect
+            label="Dispositivo"
+            value={dispositivoId}
+            onChange={setDispositivoId}
+            options={dispositivos}
+            emptyLabel="Todos"
+          />
+
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700">Estado</span>
+            <select
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              value={estado}
+              onChange={(e) => setEstado(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="activo">Activo</option>
+              <option value="desactivada">Desactivada</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      {error && <p className="mb-3 font-semibold text-red-500">{error}</p>}
 
       {loading ? (
-        <p>Cargando...</p>
+        <div className="rounded border border-gray-200 bg-white p-8 text-center text-gray-500">
+          Cargando ventas...
+        </div>
       ) : (
-        <table className="min-w-[1100px] border border-gray-300">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="p-2 border">#</th> 
-              {Object.keys(filas[0] || {}).map((key) => (
-                <th key={key} className="p-2 border">
-                  {key}
-                </th>
-              ))}
-              <th className="p-2 border">Acciones</th>
-            </tr>
-          </thead>
+        <section className="max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Resultados</h2>
+              <span className="text-xs text-gray-500">
+                {filas.length} ventas encontradas
+              </span>
+            </div>
+          </div>
 
-          <tbody>
-            {filas.map((f, i) => (
-              <tr key={f.id ?? i}>
-                <td className="p-2 border font-semibold text-center">
-                  {i + 1}
-                </td>
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[1720px] border-collapse text-xs">
+              <thead className="sticky top-0 z-10 bg-gray-100 text-left uppercase text-gray-600">
+                <tr>
+                  <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-100 px-3 py-2 text-center">
+                    #
+                  </th>
+                  {TABLE_COLUMNS.map((key) => (
+                    <th key={key} className="border-b border-gray-200 px-3 py-2">
+                      {key}
+                    </th>
+                  ))}
+                  <th className="border-b border-gray-200 px-3 py-2 text-center">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
 
-                {Object.entries(f).map(([key, val], j) => {
-                  let clase = "p-2 border";
-
-                  if (key === "Precio Sistema") {
-                    clase += " text-blue-600 font-semibold";
-                  }
-
-                  if (key === "Precio Venta") {
-                    clase += " text-blue-600 font-semibold";
-                  }
-
-                  if (key === "Precio Vendedor") {
-                    clase += getPrecioVendedorClass(val, f["Precio Venta"]);
-                  }
-
-                  if (key === "Diferencia") {
-                    const diferencia = Number(val) || 0;
-                    if (diferencia !== 0) {
-                      clase += diferencia > 0 ? " text-red-600 font-bold" : " text-green-600 font-semibold";
-                    } else {
-                      clase += " text-gray-600 font-semibold";
-                    }
-                  }
-
-                  if (key === "Estado") {
-                    if (val === "Activo") {
-                      clase += " text-green-600 font-semibold";
-                    } else {
-                      clase += " text-red-600 font-bold";
-                    }
-                  }
-
-                  return (
-                    <td key={j} className={clase}>
-                      {val}
+              <tbody>
+                {filas.map((f, i) => (
+                  <tr key={f.id ?? i} className="border-b border-gray-100 hover:bg-blue-50/40">
+                    <td className="sticky left-0 z-10 bg-white px-3 py-2 text-center font-semibold text-gray-700">
+                      {i + 1}
                     </td>
-                  );
-                })}
 
-                <td className="text-center">
-                  <div className="flex justify-center items-center gap-1">
-                    <Link
-                      to={`/ventas-auditoria/${f.id}`}
-                      className="text-white hover:underline font-semibold p-2 bg-green-700 rounded-xl"
-                    >
-                      <Eye size={18} />
-                    </Link>
+                    {TABLE_COLUMNS.map((key) => (
+                      <td key={key} className={getCellClass(f, key)}>
+                        {renderCell(f, key)}
+                      </td>
+                    ))}
 
-                    <button
-                      onClick={() => desactivarVenta(f.id)}
-                      className="text-white hover:underline font-semibold p-2 bg-red-700 rounded-xl"
+                    <td className="px-3 py-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Link
+                          to={`/ventas-auditoria/${f.id}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
+                          title="Ver detalle"
+                        >
+                          <Eye size={17} />
+                        </Link>
+
+                        <button
+                          type="button"
+                          onClick={() => desactivarVenta(f.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
+                          title="Desactivar venta"
+                        >
+                          <Trash size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+
+                {filas.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={TABLE_COLUMNS.length + 2}
+                      className="px-3 py-10 text-center text-gray-500"
                     >
-                      <Trash size={18} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      No hay ventas para los filtros seleccionados
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
+    </div>
+  );
+}
+
+function FiltroFecha({ label, value, onChange }) {
+  return (
+    <label className="block">
+      <span className="block text-sm font-medium text-gray-700">{label}</span>
+      <input
+        type="date"
+        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
+function FiltroSelect({ label, value, onChange, options, emptyLabel }) {
+  return (
+    <label className="block">
+      <span className="block text-sm font-medium text-gray-700">{label}</span>
+      <select
+        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{emptyLabel}</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.nombre}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Metric({ label, value, tone = "gray" }) {
+  const tones = {
+    gray: "border-gray-200 bg-white text-gray-900",
+    green: "border-green-200 bg-green-50 text-green-800",
+    red: "border-red-200 bg-red-50 text-red-800",
+    blue: "border-blue-200 bg-blue-50 text-blue-800",
+    slate: "border-slate-200 bg-slate-50 text-slate-800",
+  };
+
+  return (
+    <div className={`rounded-lg border p-3 shadow-sm ${tones[tone]}`}>
+      <div className="text-xs font-semibold uppercase opacity-70">{label}</div>
+      <div className="mt-1 text-xl font-bold">{value}</div>
     </div>
   );
 }
