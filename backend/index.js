@@ -173,6 +173,7 @@ connectDB()
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
+    app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
 app.use("/api/webhooks", require("./routes/webhookRoutes"));

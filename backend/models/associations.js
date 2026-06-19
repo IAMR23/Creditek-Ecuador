@@ -35,6 +35,10 @@ const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
 const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
 const GastoMarketing = require('./Marketing/GastoMarketing');
+const ConciliacionLote = require('./ConciliacionLote');
+const ConciliacionPdfImportacion = require('./ConciliacionPdfImportacion');
+const ConciliacionModeloTv = require('./ConciliacionModeloTv');
+const ConciliacionModeloCelular = require('./ConciliacionModeloCelular');
 require('./UsuarioPermiso');
 require('./UsuarioRol');
 // -------------------- Usuario, Rol, Agencia --------------------
@@ -418,4 +422,46 @@ GastoMarketing.belongsTo(Agencia, {
 Agencia.hasMany(GastoMarketing, {
   foreignKey: "departamentoId",
   as: "gastosMarketing",
+});
+
+/* CONCILIACION PDF */
+
+ConciliacionLote.hasMany(ConciliacionPdfImportacion, {
+  foreignKey: "loteImportacionId",
+  as: "importaciones",
+});
+
+ConciliacionPdfImportacion.belongsTo(ConciliacionLote, {
+  foreignKey: "loteImportacionId",
+  as: "lote",
+});
+
+Usuario.hasMany(ConciliacionLote, {
+  foreignKey: "usuarioId",
+  as: "conciliacionLotes",
+});
+
+ConciliacionLote.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+
+ConciliacionModeloTv.belongsTo(Modelo, {
+  foreignKey: "modeloRveId",
+  as: "modeloRve",
+});
+
+Modelo.hasMany(ConciliacionModeloTv, {
+  foreignKey: "modeloRveId",
+  as: "mapeosConciliacionTv",
+});
+
+ConciliacionModeloCelular.belongsTo(Modelo, {
+  foreignKey: "modeloRveId",
+  as: "modeloRve",
+});
+
+Modelo.hasMany(ConciliacionModeloCelular, {
+  foreignKey: "modeloRveId",
+  as: "mapeosConciliacionCelular",
 });

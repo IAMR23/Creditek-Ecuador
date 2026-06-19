@@ -8,16 +8,9 @@ const Dispositivo = require("../models/Dispositivo");
 
 const tieneCampo = (objeto, campo) => Object.prototype.hasOwnProperty.call(objeto, campo);
 
-const leerIdentificadorUph = (body) => {
-  if (tieneCampo(body, "identificadorUph")) return body.identificadorUph;
-  if (tieneCampo(body, "descripcion")) return body.descripcion;
-  return undefined;
-};
-
 router.post("/", async (req, res) => {
   try {
     const { nombre, activo, dispositivoMarcaId } = req.body;
-    const identificadorUph = leerIdentificadorUph(req.body);
 
     const existeDM = await DispositivoMarca.findByPk(dispositivoMarcaId);
     if (!existeDM) {
@@ -26,7 +19,6 @@ router.post("/", async (req, res) => {
 
     const nuevo = await Modelo.create({
       nombre,
-      identificadorUph,
       activo: activo ?? true,
       dispositivoMarcaId,
     });
@@ -131,7 +123,6 @@ router.get("/:id", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { nombre, activo, dispositivoMarcaId } = req.body;
-    const identificadorUph = leerIdentificadorUph(req.body);
 
     const modelo = await Modelo.findByPk(req.params.id);
     if (!modelo) {
@@ -150,12 +141,6 @@ router.put("/:id", async (req, res) => {
     if (tieneCampo(req.body, "activo")) cambios.activo = activo;
     if (tieneCampo(req.body, "dispositivoMarcaId")) {
       cambios.dispositivoMarcaId = dispositivoMarcaId;
-    }
-    if (
-      tieneCampo(req.body, "identificadorUph") ||
-      tieneCampo(req.body, "descripcion")
-    ) {
-      cambios.identificadorUph = identificadorUph;
     }
 
     await modelo.update(cambios);

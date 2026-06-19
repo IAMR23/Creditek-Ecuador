@@ -1,0 +1,8 @@
+{
+  "ignore": [
+    "uploads/**",
+    "python_processors/**/__pycache__/**",
+    "python_processors/**/*.pyc"
+  ],
+  "ext": "js,json"
+}

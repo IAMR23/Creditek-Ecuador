@@ -15,11 +15,6 @@ const Modelo = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    identificadorUph: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-      field: "descripcion",
-    },
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,

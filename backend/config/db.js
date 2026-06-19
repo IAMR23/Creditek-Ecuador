@@ -301,6 +301,30 @@ const connectDB = async () => {
         type: Sequelize.DECIMAL(10, 2),
         allowNull: true,
       });
+
+      await addColumnIfMissing(queryInterface, "detalle_ventas", "referenciaPdf", {
+        type: Sequelize.STRING,
+        allowNull: true,
+      });
+
+      const detalleVentaColumns = await queryInterface.describeTable("detalle_ventas");
+      const columnasReferenciaAntiguas = ["codigoPdf", "imeiPdf"].filter(
+        (column) => detalleVentaColumns[column],
+      );
+
+      if (columnasReferenciaAntiguas.length > 0) {
+        const valoresReferencia = [
+          'NULLIF("referenciaPdf", \'\')',
+          ...columnasReferenciaAntiguas.map((column) => `NULLIF("${column}", '')`),
+          "NULL",
+        ].join(", ");
+
+        await sequelize.query(`
+          UPDATE detalle_ventas
+          SET "referenciaPdf" = COALESCE(${valoresReferencia})
+          WHERE "referenciaPdf" IS NULL OR "referenciaPdf" = '';
+        `);
+      }
     }
 
     if (tables.includes("costo_historicos")) {

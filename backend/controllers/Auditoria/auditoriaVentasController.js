@@ -1,5 +1,11 @@
 const Agencia = require("../../models/Agencia");
+const fs = require("fs/promises");
+const fsSync = require("fs");
+const path = require("path");
+const { spawn } = require("child_process");
 const Cliente = require("../../models/Cliente");
+const ConciliacionModeloCelular = require("../../models/ConciliacionModeloCelular");
+const ConciliacionModeloTv = require("../../models/ConciliacionModeloTv");
 const Dispositivo = require("../../models/Dispositivo");
 const DispositivoMarca = require("../../models/DispositivoMarca");
 const FormaPago = require("../../models/FormaPago");
@@ -15,6 +21,8 @@ const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
+
+const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 
 exports.obtenerReporteAuditoria = async ({
   fechaInicio,
@@ -109,6 +117,8 @@ exports.obtenerReporteAuditoria = async ({
         model: DetalleVenta,
         as: "detalleVenta",
         attributes: [
+          "id",
+          "modeloId",
           "precioUnitario",
           "precioVenta",
           "precioVendedor",
@@ -117,6 +127,7 @@ exports.obtenerReporteAuditoria = async ({
           "alcance",
           "contrato",
           "cierreCaja",
+          "referenciaPdf",
         ],
         ...((Object.keys(whereDetalleVenta).length > 0 ||
           (dispositivoId && dispositivoId !== "todos")) && {
@@ -124,7 +135,7 @@ exports.obtenerReporteAuditoria = async ({
           required: true,
         }),
         include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre", "identificadorUph"] },
+          { model: Modelo, as: "modelo", attributes: ["nombre"] },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
@@ -263,7 +274,7 @@ exports.obtenerReporte = async ({
           {
             model: Modelo,
             as: "modelo",
-            attributes: ["nombre", "identificadorUph"],
+            attributes: ["nombre"],
           },
           {
             model: DispositivoMarca,
@@ -405,7 +416,7 @@ exports.obtenerReporteGerencia = async ({
           required: true,
         }),
         include: [
-          { model: Modelo, as: "modelo", attributes: ["nombre", "identificadorUph"] },
+          { model: Modelo, as: "modelo", attributes: ["nombre"] },
           {
             model: DispositivoMarca,
             as: "dispositivoMarca",
@@ -454,6 +465,385 @@ const normalizarEstadoActivo = (estado) => {
   return null;
 };
 
+const normalizarTexto = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+const normalizarCodigoPdf = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+
+const toNumero = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(String(value).replace(",", "."));
+  return Number.isFinite(number) ? Number(number.toFixed(2)) : null;
+};
+
+const normalizarFecha = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (dmy) {
+    const day = dmy[1].padStart(2, "0");
+    const month = dmy[2].padStart(2, "0");
+    const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().split("T")[0];
+  }
+
+  return raw;
+};
+
+const levenshtein = (left, right) => {
+  const a = normalizarTexto(left);
+  const b = normalizarTexto(right);
+
+  if (!a && !b) return 0;
+  if (!a || !b) return Math.max(a.length, b.length);
+
+  const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j += 1) matrix[0][j] = j;
+
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
+};
+
+const similitudTexto = (left, right) => {
+  const a = normalizarTexto(left);
+  const b = normalizarTexto(right);
+  const maxLength = Math.max(a.length, b.length);
+
+  if (!maxLength) return 0;
+  return Math.round((1 - levenshtein(a, b) / maxLength) * 100);
+};
+
+const getPythonBin = () =>
+  process.env.PYTHON_BIN ||
+  process.env.PYTHON_PATH ||
+  (process.platform === "win32" ? "python" : "python3");
+
+const runPythonProcessor = ({ tipo, inputDir, outputFile }) =>
+  new Promise((resolve, reject) => {
+    const scriptPath = path.join(
+      __dirname,
+      "..",
+      "..",
+      "python_processors",
+      "main_processor.py",
+    );
+    const child = spawn(
+      getPythonBin(),
+      [scriptPath, "--tipo", tipo, "--input", inputDir, "--output", outputFile],
+      {
+        cwd: path.join(__dirname, "..", ".."),
+        env: {
+          ...process.env,
+          PYTHONDONTWRITEBYTECODE: "1",
+        },
+        windowsHide: true,
+      },
+    );
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, PYTHON_TIMEOUT_MS);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timer);
+
+      if (timedOut) {
+        return reject(new Error("Tiempo agotado procesando los PDFs"));
+      }
+
+      if (code !== 0) {
+        return reject(
+          new Error(stderr.trim() || stdout.trim() || "El procesador Python fallo"),
+        );
+      }
+
+      resolve({ stdout, stderr });
+    });
+  });
+
+const readJsonIfExists = async (filePath) => {
+  if (!fsSync.existsSync(filePath)) return null;
+  const content = await fs.readFile(filePath, "utf8");
+  return JSON.parse(content);
+};
+
+const getModeloMapeado = async ({ tipo, codigoPdf }) => {
+  const codigoNormalizado = normalizarCodigoPdf(codigoPdf);
+  const ModeloMapeo = tipo === "TV" ? ConciliacionModeloTv : ConciliacionModeloCelular;
+
+  if (!codigoNormalizado) return null;
+
+  return ModeloMapeo.findOne({
+    where: {
+      codigoNormalizado,
+      estado: "MAPEADO",
+    },
+  });
+};
+
+const getValorVentasPdf = (record) => {
+  const detectado =
+    record.valor_ventas_detectado === true ||
+    record.precio_vendedor_detectado === true;
+
+  if (!detectado) return null;
+
+  return toNumero(record.valor_ventas ?? record.precio_vendedor ?? record.precio);
+};
+
+const flattenVentasAuditoria = (ventas) => {
+  const filas = [];
+
+  ventas.forEach((venta) => {
+    venta.detalleVenta?.forEach((detalle) => {
+      filas.push({
+        venta,
+        detalle,
+        id: venta.id,
+        detalleVentaId: detalle.id,
+        modeloId: detalle.modeloId,
+        fecha: normalizarFecha(venta.fecha),
+        cliente: venta.cliente?.cliente || "",
+        precioVendedor: toNumero(detalle.precioVendedor),
+        entrada: toNumero(detalle.entrada),
+      });
+    });
+  });
+
+  return filas;
+};
+
+const crearFilaPdfSinMatch = ({ record, tipo, mapeo, observacionError }) => ({
+  id: null,
+  activo: false,
+  fecha: "",
+  local: "",
+  origen: record.origen || "",
+  nombre: "",
+  cedula: "",
+  vendedor: "",
+  tipo,
+  marca: "",
+  modelo: mapeo?.modeloRveNombre || record.modelo_normalizado || "",
+  formaPago: "",
+  precioVenta: "",
+  precioVendedor: "",
+  entrada: "",
+  alcance: "",
+  observaciones: "",
+  contrato: record.factura || "",
+  referenciaPdf: tipo === "TV" ? record.codigo_pdf || "" : record.imei || "",
+  clientePdf: record.cliente || "",
+  fechaPdf: normalizarFecha(record.fecha),
+  precioVendedorPdf: getValorVentasPdf(record),
+  entradaPdf:
+    record.entrada_detectada === false ? null : toNumero(record.entrada),
+  similitudCliente: 0,
+  observacionError,
+});
+
+const construirObservacionesAuditoria = ({ record, ventaMatch, tipo }) => {
+  const errores = [];
+  const precioDetectado =
+    record.valor_ventas_detectado === true ||
+    record.precio_vendedor_detectado === true;
+  const entradaDetectada = record.entrada_detectada !== false;
+  const precioPdf = getValorVentasPdf(record);
+  const entradaPdf = entradaDetectada ? toNumero(record.entrada) : null;
+  const precioRve = ventaMatch.precioVendedor;
+  const entradaRve = ventaMatch.entrada;
+
+  if (!precioDetectado || precioPdf === null) {
+    errores.push("VALOR_VENTAS_PDF_NO_DETECTADO");
+  } else if (precioRve === null || Math.abs(precioPdf - precioRve) > 0.01) {
+    errores.push(
+      `PRECIO_VENDEDOR_DIFERENTE VENTAS_PDF:${precioPdf ?? "-"} RVE:${precioRve ?? "-"}`,
+    );
+  }
+
+  if (!entradaDetectada || entradaPdf === null) {
+    errores.push("ENTRADA_PDF_NO_DETECTADA");
+  } else if (entradaRve === null || Math.abs(entradaPdf - entradaRve) > 0.01) {
+    errores.push(`ENTRADA_DIFERENTE PDF:${entradaPdf} RVE:${entradaRve ?? "-"}`);
+  }
+
+  if (tipo === "CELULAR" && !record.imei) {
+    errores.push("IMEI_PDF_NO_DETECTADO");
+  }
+
+  return errores.length ? errores.join("; ") : "OK";
+};
+
+const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
+  const ventasFlatten = flattenVentasAuditoria(ventas);
+  const resultadosBase = exports.formatearReporte(ventas).map((fila) => ({
+    ...fila,
+    referenciaPdf: fila.referenciaPdf || "",
+    clientePdf: "",
+    fechaPdf: "",
+    precioVendedorPdf: null,
+    entradaPdf: null,
+    similitudCliente: "",
+    observacionError: "NO_EN_PDF",
+  }));
+  const resultadosPorDetalle = new Map(
+    resultadosBase.map((fila) => [Number(fila.detalleVentaId), fila]),
+  );
+  const filasPdfSinVenta = [];
+  const errores = [];
+
+  for (const record of registrosPdf) {
+    const codigoPdf = record.codigo_pdf || "";
+    const mapeo = await getModeloMapeado({ tipo, codigoPdf });
+
+    if (!mapeo?.modeloRveId) {
+      filasPdfSinVenta.push(
+        crearFilaPdfSinMatch({
+          record,
+          tipo,
+          mapeo,
+          observacionError: `MODELO_NO_MAPEADO: ${codigoPdf || "SIN_CODIGO"}`,
+        }),
+      );
+      continue;
+    }
+
+    const fechaPdf = normalizarFecha(record.fecha);
+    const candidatos = ventasFlatten
+      .filter((venta) => Number(venta.modeloId) === Number(mapeo.modeloRveId))
+      .map((venta) => ({
+        ...venta,
+        fechaOk: fechaPdf ? venta.fecha === fechaPdf : false,
+        similitudCliente: similitudTexto(record.cliente, venta.cliente),
+      }))
+      .sort((a, b) => b.similitudCliente - a.similitudCliente);
+
+    const match = candidatos.find(
+      (venta) => venta.fechaOk && venta.similitudCliente >= 85,
+    );
+
+    if (!match) {
+      const mejor = candidatos[0];
+      const detalleError = [];
+
+      if (!fechaPdf) detalleError.push("FECHA_PDF_NO_DETECTADA");
+      else if (!candidatos.some((venta) => venta.fechaOk)) {
+        detalleError.push(`FECHA_NO_COINCIDE PDF:${fechaPdf}`);
+      }
+
+      if (!mejor || mejor.similitudCliente < 85) {
+        detalleError.push(
+          `CLIENTE_NO_COINCIDE similitud:${mejor?.similitudCliente || 0}%`,
+        );
+      }
+
+      filasPdfSinVenta.push(
+        crearFilaPdfSinMatch({
+          record,
+          tipo,
+          mapeo,
+          observacionError: detalleError.join("; ") || "VENTA_NO_ENCONTRADA",
+        }),
+      );
+      continue;
+    }
+
+    if (tipo === "CELULAR" && record.imei) {
+      await DetalleVenta.update(
+        { referenciaPdf: record.imei },
+        { where: { id: match.detalleVentaId } },
+      );
+    }
+
+    if (tipo === "TV" && codigoPdf) {
+      await DetalleVenta.update(
+        { referenciaPdf: codigoPdf },
+        { where: { id: match.detalleVentaId } },
+      );
+    }
+
+    const filaBase =
+      resultadosPorDetalle.get(Number(match.detalleVentaId)) ||
+      exports.formatearReporte([match.venta]).find(
+        (venta) => venta.detalleVentaId === match.detalleVentaId,
+      );
+    const observacionError = construirObservacionesAuditoria({
+      record,
+      ventaMatch: match,
+      tipo,
+    });
+
+    resultadosPorDetalle.set(Number(match.detalleVentaId), {
+      ...filaBase,
+      referenciaPdf:
+        tipo === "TV"
+          ? codigoPdf || filaBase?.referenciaPdf || ""
+          : record.imei || filaBase?.referenciaPdf || "",
+      clientePdf: record.cliente || "",
+      fechaPdf,
+      precioVendedorPdf: getValorVentasPdf(record),
+      entradaPdf:
+        record.entrada_detectada === false ? null : toNumero(record.entrada),
+      similitudCliente: match.similitudCliente,
+      observacionError,
+    });
+  }
+
+  return {
+    resultados: [...resultadosPorDetalle.values(), ...filasPdfSinVenta],
+    errores,
+  };
+};
+
 
 const obtenerDiaSemana = (fecha) => {
   const dias = [
@@ -483,6 +873,8 @@ exports.formatearReporte = (ventas) => {
 
       filas.push({
         id: venta.id,
+        detalleVentaId: detalle.id,
+        modeloId: detalle.modeloId,
         activo: venta.activo,
         semana: venta.semana || null,
         dia: obtenerDiaSemana(new Date(venta.fecha)),
@@ -500,7 +892,7 @@ exports.formatearReporte = (ventas) => {
         tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
-        identificadorUph: detalle.modelo?.identificadorUph || "",
+        referenciaPdf: detalle.referenciaPdf || "",
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         precioSistema: detalle.precioUnitario || "",
@@ -606,7 +998,7 @@ exports.obtenerVentaPorId = async (req, res) => {
           model: DetalleVenta,
           as: "detalleVenta",
           include: [
-            { model: Modelo, as: "modelo", attributes: ["id", "nombre", "identificadorUph"] },
+            { model: Modelo, as: "modelo", attributes: ["id", "nombre"] },
             {
               model: DispositivoMarca,
               as: "dispositivoMarca",
@@ -674,5 +1066,108 @@ exports.obtenerVentaPorId = async (req, res) => {
   } catch (error) {
     console.error("Error obteniendo venta por ID:", error);
     return res.status(500).json({ ok: false, error: error.message });
+  }
+};
+
+exports.auditarVentasDesdePdf = async (req, res) => {
+  const tempRoot = req.auditoriaTempRoot;
+
+  try {
+    const tipo = String(req.body.tipo || "").trim().toUpperCase();
+
+    if (!["TV", "CELULAR"].includes(tipo)) {
+      return res.status(400).json({
+        ok: false,
+        message: "tipo debe ser TV o CELULAR",
+      });
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debes subir al menos un PDF",
+      });
+    }
+
+    const outputDir = path.join(tempRoot, "resultado");
+    const outputFile = path.join(outputDir, "resultado.json");
+    let processError = null;
+
+    try {
+      await runPythonProcessor({
+        tipo,
+        inputDir: req.auditoriaInputDir,
+        outputFile,
+      });
+    } catch (error) {
+      processError = error;
+    }
+
+    const resultado = await readJsonIfExists(outputFile);
+
+    if (!resultado) {
+      throw processError || new Error("No se genero resultado.json");
+    }
+
+    if (processError || !resultado.ok) {
+      return res.status(422).json({
+        ok: false,
+        message:
+          processError?.message ||
+          resultado.errores?.[0]?.detalle ||
+          "No se pudieron procesar los PDFs",
+        resultado,
+      });
+    }
+
+    const ventas = await exports.obtenerReporteAuditoria({
+      fechaInicio: req.body.fechaInicio,
+      fechaFin: req.body.fechaFin,
+      agenciaId: req.body.agenciaId,
+      vendedorId: req.body.vendedorId,
+      modeloId: req.body.modeloId,
+      cierreCaja: req.body.cierreCaja,
+      origenId: req.body.origenId,
+      dispositivoId: req.body.dispositivoId,
+      estado: req.body.estado,
+    });
+
+    const registrosPdf = Array.isArray(resultado.registros_validos)
+      ? resultado.registros_validos
+      : [];
+    const auditoria = await auditarRegistrosPdf({
+      tipo,
+      registrosPdf,
+      ventas,
+    });
+
+    return res.json({
+      ok: true,
+      tipo,
+      resumen: {
+        pdfsProcesados: resultado.pdfs_procesados || 0,
+        registrosPdf: registrosPdf.length,
+        ventasComparadas: auditoria.resultados.length,
+        erroresDetectados: auditoria.resultados.filter(
+          (fila) => fila.observacionError && fila.observacionError !== "OK",
+        ).length,
+        erroresExtraccion: Array.isArray(resultado.errores)
+          ? resultado.errores.length
+          : 0,
+      },
+      ventas: auditoria.resultados,
+      errores: resultado.errores || [],
+    });
+  } catch (error) {
+    console.error("Error auditando ventas desde PDF:", error);
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Error al auditar PDFs",
+    });
+  } finally {
+    if (tempRoot) {
+      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    }
   }
 };
