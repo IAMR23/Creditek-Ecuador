@@ -76,6 +76,15 @@ const getFechasDelMes = (mes) => {
   })
 }
 
+const getDayOfWeekFromISO = (fecha) => {
+  const [year, month, day] = fecha.split("-").map(Number)
+  return new Date(year, month - 1, day).getDay()
+}
+
+const esInicioSemanaOperativa = (fecha) => getDayOfWeekFromISO(fecha) === 4
+
+const esCierreSemanaOperativa = (fecha) => getDayOfWeekFromISO(fecha) === 3
+
 const normalizarRegistro = (registro) => {
   if (!registro) {
     return { estado: "libre", observacion: "" }
@@ -483,7 +492,13 @@ export default function ControlAsistencia() {
                   <th
                     key={item.fecha}
                     className={`min-w-[34px] border border-black px-1 py-1 text-center ${
-                      item.fecha === todayDate ? "bg-orange-300 text-black" : ""
+                      item.fecha === todayDate
+                        ? "bg-orange-300 text-black"
+                        : esInicioSemanaOperativa(item.fecha)
+                        ? "bg-yellow-400 text-black"
+                        : esCierreSemanaOperativa(item.fecha)
+                        ? "bg-yellow-500 text-black"
+                        : ""
                     }`}
                   >
                     {item.label}
@@ -559,6 +574,12 @@ export default function ControlAsistencia() {
                             const tieneObservacion = Boolean(
                               registro.observacion?.trim()
                             )
+                            const esInicioSemana = esInicioSemanaOperativa(
+                              item.fecha
+                            )
+                            const esCierreSemana = esCierreSemanaOperativa(
+                              item.fecha
+                            )
                             const titulo = tieneObservacion
                               ? `${ESTADOS[estado]?.nombre || "Libre"}\nObservacion: ${
                                   registro.observacion
@@ -583,7 +604,19 @@ export default function ControlAsistencia() {
                                 className={`relative h-6 min-w-[34px] cursor-pointer border border-black text-center font-bold ${
                                   ESTADOS[estado]?.className ||
                                   "bg-green-400 text-black"
-                                } ${item.fecha === todayDate ? "ring-2 ring-inset ring-orange-500" : ""}`}
+                                } ${
+                                  item.fecha === todayDate
+                                    ? "ring-2 ring-inset ring-orange-500"
+                                    : ""
+                                } ${
+                                  esInicioSemana
+                                    ? "border-l-[3px] border-l-slate-700 brightness-95"
+                                    : ""
+                                } ${
+                                  esCierreSemana
+                                    ? "border-r-[3px] border-r-slate-700 brightness-95"
+                                    : ""
+                                }`}
                               >
                                 {tieneObservacion ? (
                                   <span className="absolute right-0 top-0 h-0 w-0 border-l-[10px] border-l-transparent border-t-[10px] border-t-red-600" />

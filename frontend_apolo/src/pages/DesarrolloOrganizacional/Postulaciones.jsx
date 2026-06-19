@@ -5,6 +5,7 @@ import { api } from "../../api/client";
 import ModalDetalle from "../../components/PostulacionDetalle";
 
 const dash = "-";
+const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 
 const getDatos = (postulacion) => postulacion?.formulario?.datos_personales || {};
 const getVivienda = (postulacion) => postulacion?.formulario?.vivienda_actual || {};
@@ -24,8 +25,18 @@ export default function Postulaciones() {
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [resumen, setResumen] = useState({ total: 0, noLeidas: 0 });
 
   const total = useMemo(() => postulaciones.length, [postulaciones]);
+
+  const actualizarResumen = async () => {
+    try {
+      const res = await api.get("/api/postulaciones/resumen");
+      setResumen(res.data?.data || { total: 0, noLeidas: 0 });
+    } catch {
+      // La vista principal puede seguir funcionando aunque falle el resumen.
+    }
+  };
 
   const fetchPostulaciones = async () => {
     try {
@@ -34,6 +45,8 @@ export default function Postulaciones() {
       const res = await api.get("/api/postulaciones");
       setPostulaciones(res.data.data || []);
       setCedula("");
+      await actualizarResumen();
+      window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
     } catch (err) {
       const message = err.response?.data?.message || "Error cargando postulaciones";
       setError(message);
@@ -53,12 +66,54 @@ export default function Postulaciones() {
       setError("");
       const res = await api.get(`/api/postulaciones/cedula/${encodeURIComponent(cedulaLimpia)}`);
       setPostulaciones(res.data.data ? [res.data.data] : []);
+      await actualizarResumen();
     } catch {
       setPostulaciones([]);
       setError("No se encontro una postulacion con esa cedula");
       Swal.fire("Sin resultados", "No se encontro una postulacion con esa cedula", "info");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const verPostulacion = async (postulacion) => {
+    setSelected(postulacion);
+
+    if (postulacion.leida) return;
+
+    try {
+      const res = await api.patch(`/api/postulaciones/${postulacion.id}/leida`);
+      const postulacionActualizada = res.data?.data;
+      const resumenActualizado = res.data?.resumen;
+
+      setPostulaciones((prev) =>
+        prev.map((item) =>
+          item.id === postulacion.id
+            ? {
+                ...item,
+                leida: true,
+                leidaAt: postulacionActualizada?.leidaAt || new Date().toISOString(),
+              }
+            : item
+        )
+      );
+
+      if (selected?.id === postulacion.id) {
+        setSelected((prev) =>
+          prev
+            ? {
+                ...prev,
+                leida: true,
+                leidaAt: postulacionActualizada?.leidaAt || new Date().toISOString(),
+              }
+            : prev
+        );
+      }
+
+      if (resumenActualizado) setResumen(resumenActualizado);
+      window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
+    } catch {
+      // Si falla el marcado, igual permitimos ver el detalle.
     }
   };
 
@@ -84,6 +139,8 @@ export default function Postulaciones() {
       await api.delete(`/api/postulaciones/${postulacion.id}`);
       setPostulaciones((prev) => prev.filter((item) => item.id !== postulacion.id));
       setSelected((prev) => (prev?.id === postulacion.id ? null : prev));
+      await actualizarResumen();
+      window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
       Swal.fire("Eliminada", "La postulacion fue eliminada correctamente", "success");
     } catch (err) {
       const message = err.response?.data?.message || "No se pudo eliminar la postulacion";
@@ -111,6 +168,9 @@ export default function Postulaciones() {
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               {total} registro{total === 1 ? "" : "s"} disponible{total === 1 ? "" : "s"}.
+            </p>
+            <p className="mt-1 text-sm font-medium text-red-600">
+              {resumen.noLeidas} no leida{resumen.noLeidas === 1 ? "" : "s"}.
             </p>
           </div>
 
@@ -182,6 +242,7 @@ export default function Postulaciones() {
                     <th className="px-4 py-3">Ciudad</th>
                     <th className="px-4 py-3">Vivienda</th>
                     <th className="px-4 py-3">Trabajos</th>
+                    <th className="px-4 py-3">Estado</th>
                     <th className="px-4 py-3">Fecha</th>
                     <th className="px-4 py-3 text-right">Accion</th>
                   </tr>
@@ -221,13 +282,24 @@ export default function Postulaciones() {
                           {vivienda.tipoVivienda || dash}
                         </td>
                         <td className="px-4 py-3 text-slate-700">{trabajos}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                              p.leida
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {p.leida ? "Leida" : "No leida"}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-slate-700">
                           {formatDate(p.createdAt)}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
                             <button
-                              onClick={() => setSelected(p)}
+                              onClick={() => verPostulacion(p)}
                               className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
                             >
                               <Eye size={16} />

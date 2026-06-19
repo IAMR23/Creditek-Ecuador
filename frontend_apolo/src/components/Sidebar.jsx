@@ -1,10 +1,17 @@
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Building2, ClipboardList, FileText, Shield, Users, UsersRound } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
+import { api } from "../api/client";
+
+const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 
 export default function Sidebar() {
   const auth = useContext(AuthContext);
+  const [resumenPostulaciones, setResumenPostulaciones] = useState({
+    total: 0,
+    noLeidas: 0,
+  });
 
   const linkClass = ({ isActive }) =>
     [
@@ -14,8 +21,39 @@ export default function Sidebar() {
         : "text-slate-700 hover:bg-white border border-transparent hover:border-slate-200",
     ].join(" ");
 
+  useEffect(() => {
+    let active = true;
+
+    const cargarResumen = async () => {
+      try {
+        const res = await api.get("/api/postulaciones/resumen");
+        if (!active) return;
+        setResumenPostulaciones(
+          res.data?.data || {
+            total: 0,
+            noLeidas: 0,
+          }
+        );
+      } catch {
+        if (!active) return;
+      }
+    };
+
+    cargarResumen();
+
+    const intervalId = window.setInterval(cargarResumen, 30000);
+    const onUpdated = () => cargarResumen();
+    window.addEventListener(POSTULACIONES_EVENT, onUpdated);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener(POSTULACIONES_EVENT, onUpdated);
+    };
+  }, []);
+
   return (
-    <aside className="w-full md:w-72 bg-white/80 backdrop-blur border-r border-slate-200 flex flex-col">
+    <aside className="w-full bg-white/80 backdrop-blur border-r border-slate-200 flex flex-col md:fixed md:inset-y-0 md:left-0 md:z-40 md:h-screen md:w-64 md:overflow-y-auto">
       <div className="p-5 border-b border-slate-200">
         <div className="flex items-baseline gap-3">
           <div className="text-2xl font-extrabold tracking-tight">
@@ -58,7 +96,15 @@ export default function Sidebar() {
 
         <NavLink to="/postulaciones" className={linkClass}>
           <FileText size={18} />
-          Postulaciones
+          <span className="flex flex-1 items-center gap-2">
+            Postulaciones
+            {resumenPostulaciones.noLeidas > 0 ? (
+              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            ) : null}
+          </span>
+          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">
+            {resumenPostulaciones.total}
+          </span>
         </NavLink>
       </nav>
 

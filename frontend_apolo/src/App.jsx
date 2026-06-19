@@ -28,7 +28,7 @@ export default function App() {
           <ProtectedRoute>
             <div className="min-h-screen flex flex-col md:flex-row">
               <Sidebar />
-              <main className="flex-1">
+              <main className="flex-1 md:ml-64">
                 <div className="p-6 lg:p-10">
                   <Routes>
                     <Route path="/" element={<Navigate to="/usuarios" replace />} />
