@@ -98,6 +98,15 @@ const normalizePayload = (data = {}) => {
   return payload;
 };
 
+const buildResumen = async () => {
+  const [total, noLeidas] = await Promise.all([
+    Postulacion.count(),
+    Postulacion.count({ where: { leida: false } }),
+  ]);
+
+  return { total, noLeidas };
+};
+
 const validatePayload = (payload) => {
   const errors = [];
   const datos = payload.datos_personales || {};
@@ -139,6 +148,7 @@ router.post("/", async (req, res) => {
       nombre: datos.nombreCompleto || null,
       cedula: datos.cedula || null,
       telefono: datos.telefono || null,
+      leida: false,
       formulario: payloadFinal,
     });
 
@@ -154,6 +164,25 @@ router.post("/", async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al guardar postulacion",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/resumen", auth, async (_req, res) => {
+  try {
+    const resumen = await buildResumen();
+
+    return res.json({
+      ok: true,
+      data: resumen,
+    });
+  } catch (error) {
+    console.error("Error obteniendo resumen de postulaciones:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener resumen de postulaciones",
       error: error.message,
     });
   }
@@ -175,6 +204,44 @@ router.get("/", auth, async (_req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al obtener postulaciones",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/leida", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    if (!postulacion.leida) {
+      postulacion.leida = true;
+      postulacion.leidaAt = new Date();
+      await postulacion.save();
+    }
+
+    const resumen = await buildResumen();
+
+    return res.json({
+      ok: true,
+      message: "Postulacion marcada como leida",
+      data: postulacion,
+      resumen,
+    });
+  } catch (error) {
+    console.error("Error marcando postulacion como leida:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al marcar la postulacion como leida",
       error: error.message,
     });
   }

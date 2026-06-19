@@ -21,6 +21,15 @@ const Postulacion = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    leida: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    leidaAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     formulario: {
       type: DataTypes.JSONB,
       allowNull: false,
