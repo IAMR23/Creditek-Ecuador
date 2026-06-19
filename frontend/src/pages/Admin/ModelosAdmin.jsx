@@ -6,7 +6,6 @@ import { API_URL } from "../../../config";
 
 const emptyForm = {
   nombre: "",
-  identificadorUph: "",
   activo: true,
   dispositivoMarcaId: "",
 };
@@ -66,7 +65,6 @@ export default function ModelosAdmin() {
       const coincideBusqueda =
         !busqueda ||
         normalizar(modelo.nombre).includes(busqueda) ||
-        normalizar(modelo.identificadorUph || modelo.descripcion).includes(busqueda) ||
         normalizar(getDispositivoNombre(modelo)).includes(busqueda) ||
         normalizar(getMarcaNombre(modelo)).includes(busqueda);
 
@@ -150,7 +148,6 @@ export default function ModelosAdmin() {
 
     const payload = {
       nombre,
-      identificadorUph: form.identificadorUph.trim() || null,
       activo: form.activo,
       dispositivoMarcaId,
     };
@@ -181,7 +178,6 @@ export default function ModelosAdmin() {
     setEditingId(modelo.id);
     setForm({
       nombre: modelo.nombre || "",
-      identificadorUph: modelo.identificadorUph || modelo.descripcion || "",
       activo: Boolean(modelo.activo),
       dispositivoMarcaId:
         modelo.dispositivoMarcaId || modelo.dispositivoMarca?.id || "",
@@ -201,7 +197,7 @@ export default function ModelosAdmin() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Modelos</h1>
           <div className="mt-1 text-sm text-gray-600">
-            Catalogo operativo por dispositivo, marca e identificador UPH.
+            Catalogo operativo por dispositivo y marca.
           </div>
         </div>
 
@@ -256,7 +252,7 @@ export default function ModelosAdmin() {
                     setFilters({ ...filters, busqueda: e.target.value })
                   }
                   className="w-full px-2 py-2 text-sm outline-none"
-                  placeholder="Modelo, UPH, marca..."
+                  placeholder="Modelo, dispositivo, marca..."
                 />
               </div>
             </label>
@@ -298,17 +294,15 @@ export default function ModelosAdmin() {
           <div className="max-h-[calc(100vh-320px)] min-h-[360px] overflow-auto rounded border border-gray-200">
             <table className="w-full table-fixed border-collapse text-sm">
               <colgroup>
-                <col className="w-[26%]" />
+                <col className="w-[34%]" />
+                <col className="w-[24%]" />
                 <col className="w-[22%]" />
-                <col className="w-[18%]" />
-                <col className="w-[16%]" />
-                <col className="w-[10%]" />
+                <col className="w-[12%]" />
                 <col className="w-[8%]" />
               </colgroup>
               <thead className="bg-gray-100 text-left text-xs uppercase text-gray-600">
                 <tr>
                   <th className="px-3 py-2">Modelo</th>
-                  <th className="px-3 py-2">Identificador UPH</th>
                   <th className="px-3 py-2">Dispositivo</th>
                   <th className="px-3 py-2">Marca</th>
                   <th className="px-3 py-2">Estado</th>
@@ -323,12 +317,6 @@ export default function ModelosAdmin() {
                         {modelo.nombre}
                       </div>
                       <div className="text-xs text-gray-500">ID #{modelo.id}</div>
-                    </td>
-                    <td
-                      className="truncate px-3 py-2 align-top text-gray-700"
-                      title={modelo.identificadorUph || modelo.descripcion || "-"}
-                    >
-                      {modelo.identificadorUph || modelo.descripcion || "-"}
                     </td>
                     <td
                       className="truncate px-3 py-2 align-top"
@@ -361,7 +349,7 @@ export default function ModelosAdmin() {
                 ))}
                 {modelosFiltrados.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
+                    <td colSpan={5} className="px-3 py-8 text-center text-gray-500">
                       No hay modelos para los filtros seleccionados
                     </td>
                   </tr>
@@ -449,20 +437,6 @@ function ModeloFormModal({
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               placeholder="Ej. A15 128GB"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-gray-700">
-              Identificador UPH
-            </span>
-            <input
-              value={form.identificadorUph}
-              onChange={(e) =>
-                setForm({ ...form, identificadorUph: e.target.value })
-              }
-              className="w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Codigo o referencia interna"
             />
           </label>
 

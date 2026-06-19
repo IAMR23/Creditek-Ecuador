@@ -3,30 +3,36 @@ import axios from "axios";
 import { API_URL } from "../../../config";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import { Eye, FileText, Trash } from "lucide-react";
+import { AlertTriangle, Eye, FileText, RefreshCw, Trash, Upload } from "lucide-react";
 import Swal from "sweetalert2";
 
 const STORAGE_KEY = "ventas_auditoria_filtros";
 
 const TABLE_COLUMNS = [
   "Fecha",
+  "Fecha PDF",
   "Cedula",
   "Cliente",
+  "Cliente PDF",
+  "Similitud Cliente",
   "Agencia",
   "Vendedor",
   "Origen",
   "Dispositivo",
   "Modelo",
-  "Identificador UPH",
+  "Codigo / IMEI PDF",
   "Precio Venta",
   "Precio Vendedor",
+  "Ventas PDF",
   "Diferencia",
   "Precio Unitario",
   "Forma Pago",
   "Entrada",
+  "Entrada PDF",
   "Alcance",
   "Estado",
   "Observacion",
+  "Observacion Error",
 ];
 
 const obtenerFiltrosGuardados = () => {
@@ -65,7 +71,9 @@ const getPrecioVendedorClass = (precioVendedorValue, precioVentaValue) => {
 const getEstadoBadge = (estado) =>
   estado === "Activo"
     ? "bg-green-100 text-green-700 border-green-200"
-    : "bg-red-100 text-red-700 border-red-200";
+    : estado === "Sin venta"
+      ? "bg-slate-100 text-slate-700 border-slate-200"
+      : "bg-red-100 text-red-700 border-red-200";
 
 const escaparHtml = (value) =>
   String(value ?? "")
@@ -77,6 +85,49 @@ const escaparHtml = (value) =>
 
 const obtenerNombreSeleccionado = (items, id) =>
   items.find((item) => String(item.id) === String(id))?.nombre || "Todos";
+
+const mapVentaAuditoria = (venta) => {
+  const precioVenta = toMoney(venta.precioVenta);
+  const precioVendedor = toMoney(venta.precioVendedor);
+  const diferencia =
+    precioVenta !== "" || precioVendedor !== ""
+      ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
+      : "";
+
+  return {
+    id: venta.id,
+    Fecha: venta.fecha ?? "",
+    "Fecha PDF": venta.fechaPdf ?? "",
+    Cedula: venta.cedula ?? "",
+    Cliente: venta.nombre ?? "",
+    "Cliente PDF": venta.clientePdf ?? "",
+    "Similitud Cliente":
+      venta.similitudCliente !== undefined && venta.similitudCliente !== null
+        ? `${venta.similitudCliente}%`
+        : "",
+    Agencia: venta.local ?? "",
+    Vendedor: venta.vendedor ?? "",
+    Origen: venta.origen ?? "",
+    Observacion: venta.observaciones ?? "",
+    Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
+    Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
+    "Codigo / IMEI PDF": venta.referenciaPdf ?? "",
+    "Precio Venta": precioVenta,
+    "Precio Vendedor": precioVendedor,
+    "Ventas PDF": toMoney(venta.precioVendedorPdf),
+    Diferencia: diferencia,
+    "Precio Unitario":
+      venta.precioVendedor != null
+        ? Number((venta.precioVendedor / 1.15).toFixed(2))
+        : "",
+    "Forma Pago": venta.formaPago ?? "",
+    Entrada: venta.entrada ?? "",
+    "Entrada PDF": toMoney(venta.entradaPdf),
+    Alcance: venta.alcance ?? "",
+    Estado: venta.id ? (venta.activo ? "Activo" : "Desactivada") : "Sin venta",
+    "Observacion Error": venta.observacionError ?? "",
+  };
+};
 
 export default function VentasAuditoria() {
   const filtrosGuardados = obtenerFiltrosGuardados();
@@ -108,6 +159,10 @@ export default function VentasAuditoria() {
     filtrosGuardados.cierreCaja || "",
   );
   const [estado, setEstado] = useState(filtrosGuardados.estado || "");
+  const [pdfTipo, setPdfTipo] = useState("TV");
+  const [pdfFiles, setPdfFiles] = useState([]);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfResumen, setPdfResumen] = useState(null);
 
   const resumen = useMemo(() => {
     const totalVenta = filas.reduce(
@@ -249,41 +304,10 @@ export default function VentasAuditoria() {
       if (!data.ok) return;
 
       const ventas = data.ventas || [];
-      const resultado = ventas.map((venta) => {
-        const precioVenta = toMoney(venta.precioVenta);
-        const precioVendedor = toMoney(venta.precioVendedor);
-        const diferencia =
-          precioVenta !== "" || precioVendedor !== ""
-            ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
-            : "";
-
-        return {
-          id: venta.id,
-          Fecha: venta.fecha ?? "",
-          Cedula: venta.cedula ?? "",
-          Cliente: venta.nombre ?? "",
-          Agencia: venta.local ?? "",
-          Vendedor: venta.vendedor ?? "",
-          Origen: venta.origen ?? "",
-          Observacion: venta.observaciones ?? "",
-          Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
-          Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
-          "Identificador UPH": venta.identificadorUph ?? "",
-          "Precio Venta": precioVenta,
-          "Precio Vendedor": precioVendedor,
-          Diferencia: diferencia,
-          "Precio Unitario":
-            venta.precioVendedor != null
-              ? Number((venta.precioVendedor / 1.15).toFixed(2))
-              : "",
-          "Forma Pago": venta.formaPago ?? "",
-          Entrada: venta.entrada ?? "",
-          Alcance: venta.alcance ?? "",
-          Estado: venta.activo ? "Activo" : "Desactivada",
-        };
-      });
+      const resultado = ventas.map(mapVentaAuditoria);
 
       setFilas(resultado);
+      setPdfResumen(null);
     } catch (error) {
       console.error(error);
     } finally {
@@ -307,6 +331,64 @@ export default function VentasAuditoria() {
     estado,
     usuarioInfo,
   ]);
+
+  const handlePdfFiles = (event) => {
+    setPdfFiles(Array.from(event.target.files || []));
+    setPdfResumen(null);
+  };
+
+  const auditarPdfs = async (event) => {
+    event.preventDefault();
+
+    if (!pdfFiles.length) {
+      return Swal.fire("Atencion", "Selecciona al menos un PDF", "warning");
+    }
+
+    const formData = new FormData();
+    formData.append("tipo", pdfTipo);
+    formData.append("fechaInicio", fechaInicio || "");
+    formData.append("fechaFin", fechaFin || "");
+    formData.append("agenciaId", agenciaId || "");
+    formData.append("vendedorId", vendedorId || "");
+    formData.append("modeloId", modeloId || "");
+    formData.append("cierreCaja", cierreCaja || "");
+    formData.append("origenId", origenId || "");
+    formData.append("dispositivoId", dispositivoId || "");
+    formData.append("estado", estado || "");
+    pdfFiles.forEach((file) => formData.append("pdfs", file));
+
+    try {
+      setPdfLoading(true);
+      const { data } = await axios.post(
+        `${API_URL}/auditoria/ventas/importar-pdf`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        },
+      );
+
+      if (!data.ok) return;
+
+      setFilas((data.ventas || []).map(mapVentaAuditoria));
+      setPdfResumen(data.resumen || null);
+
+      Swal.fire(
+        "Listo",
+        `PDFs auditados. Errores detectados: ${data.resumen?.erroresDetectados ?? 0}`,
+        "success",
+      );
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudieron auditar los PDFs",
+        "error",
+      );
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const generarReportePdf = () => {
     if (!filas.length) {
@@ -439,24 +521,30 @@ export default function VentasAuditoria() {
       return (
         <div className="min-w-44">
           <div className="font-semibold text-gray-900">{val || "-"}</div>
-          <div className="text-xs text-gray-500">
-            UPH: {fila["Identificador UPH"] || "-"}
-          </div>
         </div>
-      );
-    }
-
-    if (key === "Identificador UPH") {
-      return (
-        <span className="inline-flex rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-          {val || "-"}
-        </span>
       );
     }
 
     if (key === "Estado") {
       return (
         <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${getEstadoBadge(val)}`}>
+          {val}
+        </span>
+      );
+    }
+
+    if (key === "Observacion Error") {
+      if (!val) return "-";
+
+      const ok = val === "OK";
+      return (
+        <span
+          className={`inline-flex rounded border px-2 py-1 text-xs font-semibold ${
+            ok
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
           {val}
         </span>
       );
@@ -486,11 +574,15 @@ export default function VentasAuditoria() {
       }
     }
 
-    if (["Precio Unitario", "Entrada", "Alcance"].includes(key)) {
+    if (
+      ["Precio Unitario", "Entrada", "Entrada PDF", "Alcance", "Ventas PDF"].includes(
+        key,
+      )
+    ) {
       clase += " text-right tabular-nums";
     }
 
-    if (key === "Observacion") {
+    if (key === "Observacion" || key === "Observacion Error") {
       clase += " max-w-64 whitespace-normal";
     } else {
       clase += " whitespace-nowrap";
@@ -505,7 +597,7 @@ export default function VentasAuditoria() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Ventas Auditoria</h1>
           <p className="text-sm text-gray-600">
-            Revision de ventas con precios, diferencias y referencia UPH por modelo.
+            Revision de ventas con precios, diferencias y referencias de PDF.
           </p>
         </div>
 
@@ -568,7 +660,6 @@ export default function VentasAuditoria() {
                   {m.dispositivoMarca?.marca?.nombre
                     ? `${m.dispositivoMarca.marca.nombre} ${m.nombre}`
                     : m.nombre}
-                  {m.identificadorUph ? ` - UPH ${m.identificadorUph}` : ""}
                 </option>
               ))}
             </select>
@@ -619,6 +710,90 @@ export default function VentasAuditoria() {
         </div>
       </section>
 
+      <form
+        onSubmit={auditarPdfs}
+        className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+      >
+        <div className="mb-3 flex items-center gap-2">
+          <AlertTriangle size={18} className="text-amber-600" />
+          <h2 className="text-sm font-bold text-gray-900">
+            Auditoria desde PDFs
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr_auto] lg:items-end">
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700">
+              Tipo PDF
+            </span>
+            <select
+              value={pdfTipo}
+              onChange={(event) => {
+                setPdfTipo(event.target.value);
+                setPdfFiles([]);
+                setPdfResumen(null);
+              }}
+              disabled={pdfLoading}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+            >
+              <option value="TV">TV</option>
+              <option value="CELULAR">Celular</option>
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700">
+              PDFs
+            </span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              multiple
+              onChange={handlePdfFiles}
+              disabled={pdfLoading}
+              className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white hover:file:bg-gray-800 disabled:bg-gray-100"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={pdfLoading || !pdfFiles.length}
+            className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {pdfLoading ? (
+              <RefreshCw className="animate-spin" size={16} />
+            ) : (
+              <Upload size={16} />
+            )}
+            {pdfLoading ? "Auditando..." : "Auditar PDFs"}
+          </button>
+        </div>
+
+        {pdfFiles.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pdfFiles.map((file) => (
+              <span
+                key={`${file.name}-${file.size}-${file.lastModified}`}
+                className="inline-flex max-w-full items-center gap-2 rounded border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700"
+              >
+                <FileText size={14} className="shrink-0" />
+                <span className="max-w-[280px] truncate">{file.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {pdfResumen && (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+            <MiniStat label="PDFs" value={pdfResumen.pdfsProcesados} />
+            <MiniStat label="Registros PDF" value={pdfResumen.registrosPdf} />
+            <MiniStat label="Comparados" value={pdfResumen.ventasComparadas} />
+            <MiniStat label="Errores" value={pdfResumen.erroresDetectados} tone="red" />
+            <MiniStat label="Extraccion" value={pdfResumen.erroresExtraccion} tone="amber" />
+          </div>
+        )}
+      </form>
+
       {error && <p className="mb-3 font-semibold text-red-500">{error}</p>}
 
       {loading ? (
@@ -637,7 +812,7 @@ export default function VentasAuditoria() {
           </div>
 
           <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[1720px] border-collapse text-xs">
+            <table className="w-full min-w-[2100px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-gray-100 text-left uppercase text-gray-600">
                 <tr>
                   <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-100 px-3 py-2 text-center">
@@ -669,22 +844,30 @@ export default function VentasAuditoria() {
 
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <Link
-                          to={`/ventas-auditoria/${f.id}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
-                          title="Ver detalle"
-                        >
-                          <Eye size={17} />
-                        </Link>
+                        {f.id ? (
+                          <>
+                            <Link
+                              to={`/ventas-auditoria/${f.id}`}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
+                              title="Ver detalle"
+                            >
+                              <Eye size={17} />
+                            </Link>
 
-                        <button
-                          type="button"
-                          onClick={() => desactivarVenta(f.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
-                          title="Desactivar venta"
-                        >
-                          <Trash size={17} />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={() => desactivarVenta(f.id)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
+                              title="Desactivar venta"
+                            >
+                              <Trash size={17} />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs font-semibold text-gray-400">
+                            Sin venta
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -756,6 +939,21 @@ function Metric({ label, value, tone = "gray" }) {
     <div className={`rounded-lg border p-3 shadow-sm ${tones[tone]}`}>
       <div className="text-xs font-semibold uppercase opacity-70">{label}</div>
       <div className="mt-1 text-xl font-bold">{value}</div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone = "gray" }) {
+  const tones = {
+    gray: "border-gray-200 bg-gray-50 text-gray-800",
+    red: "border-red-200 bg-red-50 text-red-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${tones[tone] || tones.gray}`}>
+      <div className="font-semibold uppercase opacity-70">{label}</div>
+      <div className="mt-0.5 text-base font-bold">{value ?? 0}</div>
     </div>
   );
 }

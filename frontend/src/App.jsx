@@ -88,6 +88,7 @@ import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 import Powerbi from "./pages/Admin/PowerBi";
+import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
 function App() {
@@ -268,6 +269,7 @@ useEffect(() => {
                   element={protect(<RevisionGestionesComercial />, "/revision-gestiones-comercial")}
                 />
                 <Route path="bdd-ventas" element={protect(<BDDVentas />, "/bdd-ventas")} />
+                <Route path="conciliacion-facturas" element={protect(<ConciliacionFacturas />, "/conciliacion-facturas")} />
                 <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
                 <Route
                   path="entrega-logistica/:id"

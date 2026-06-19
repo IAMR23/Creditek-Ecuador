@@ -93,6 +93,11 @@ export default function Sidebar({ auth }) {
             path: "/bdd-ventas",
           },
           {
+            label: "Conciliacion Facturas",
+            icon: <ClipboardList size={20} />,
+            path: "/conciliacion-facturas",
+          },
+          {
             label: "Bonos",
             icon: <LucideTicketPercent size={20} />,
             path: "/bonos",
