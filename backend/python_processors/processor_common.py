@@ -44,7 +44,8 @@ def clean_dataframe(df):
             axis=1,
         )
     ]
-    return df.replace("", pd.NA).dropna(how="all").fillna("")
+    df = df.replace("", pd.NA).dropna(how="all").fillna("")
+    return merge_client_continuation_rows(df)
 
 
 def extract_tables_from_pdf(pdf_path):
@@ -120,6 +121,68 @@ def get_first(row, aliases):
             return clean_cell(value)
 
     return ""
+
+
+def get_first_key(row, aliases):
+    alias_set = {normalize_header(alias) for alias in aliases}
+
+    for key, value in row.items():
+        if normalize_header(key) in alias_set and clean_cell(value):
+            return key
+
+    for key, value in row.items():
+        normalized_key = normalize_header(key)
+        if any(alias in normalized_key for alias in alias_set) and clean_cell(value):
+            return key
+
+    return None
+
+
+def is_client_continuation_row(row):
+    if not get_first(row, COMMON_ALIASES["cliente"]):
+        return False
+
+    required_record_fields = [
+        "factura",
+        "fecha",
+        "codigo_pdf",
+        "imei",
+        "precio",
+        "precio_vendedor",
+        "valor_ventas",
+        "entrada",
+    ]
+
+    return all(not get_first(row, COMMON_ALIASES[field]) for field in required_record_fields)
+
+
+def merge_client_continuation_rows(df):
+    import pandas as pd
+
+    if df.empty:
+        return df
+
+    merged_rows = []
+
+    for _, raw_row in df.iterrows():
+        row = row_to_dict(raw_row)
+
+        if merged_rows and is_client_continuation_row(row):
+            continuation_key = get_first_key(row, COMMON_ALIASES["cliente"])
+            previous_key = (
+                get_first_key(merged_rows[-1], COMMON_ALIASES["cliente"])
+                or continuation_key
+            )
+            continuation_value = get_first(row, COMMON_ALIASES["cliente"])
+            previous_value = clean_cell(merged_rows[-1].get(previous_key, ""))
+            merged_rows[-1][previous_key] = clean_cell(
+                f"{previous_value} {continuation_value}"
+            )
+            continue
+
+        merged_rows.append(row)
+
+    return pd.DataFrame(merged_rows, columns=df.columns).fillna("")
 
 
 def to_int(value, default=1):

@@ -127,6 +127,7 @@ exports.obtenerReporteAuditoria = async ({
           "alcance",
           "contrato",
           "cierreCaja",
+          "formaPagoId",
           "referenciaPdf",
         ],
         ...((Object.keys(whereDetalleVenta).length > 0 ||
@@ -474,6 +475,37 @@ const normalizarTexto = (value) =>
     .trim()
     .toLowerCase();
 
+const esFormaPagoCredito = (fila) =>
+  Number(fila.formaPagoId) === 1 || normalizarTexto(fila.formaPago).includes("credito");
+
+const esDispositivoDelTipoPdf = (fila, tipo) => {
+  const dispositivo = normalizarTexto(fila.tipo);
+
+  if (tipo === "TV") {
+    return (
+      dispositivo === "tv" ||
+      dispositivo.includes("televisor") ||
+      dispositivo.includes("television")
+    );
+  }
+
+  if (tipo === "CELULAR") {
+    return (
+      dispositivo.includes("celular") ||
+      dispositivo.includes("telefono") ||
+      dispositivo.includes("smartphone")
+    );
+  }
+
+  return true;
+};
+
+const contarDispositivosCreditoRve = ({ tipo, ventas }) =>
+  exports
+    .formatearReporte(ventas)
+    .filter((fila) => esFormaPagoCredito(fila) && esDispositivoDelTipoPdf(fila, tipo))
+    .length;
+
 const normalizarCodigoPdf = (value) =>
   String(value || "")
     .normalize("NFD")
@@ -495,17 +527,28 @@ const normalizarFecha = (value) => {
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (dmy) {
-    const day = dmy[1].padStart(2, "0");
-    const month = dmy[2].padStart(2, "0");
-    const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
-    return `${year}-${month}-${day}`;
+  const numericDate = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+.*)?$/);
+  if (numericDate) {
+    const first = Number(numericDate[1]);
+    const second = Number(numericDate[2]);
+    const year = numericDate[3].length === 2 ? `20${numericDate[3]}` : numericDate[3];
+    const isDayFirst = first > 12 && second <= 12;
+    const monthNumber = isDayFirst ? second : first;
+    const dayNumber = isDayFirst ? first : second;
+
+    if (monthNumber >= 1 && monthNumber <= 12 && dayNumber >= 1 && dayNumber <= 31) {
+      const day = String(dayNumber).padStart(2, "0");
+      const month = String(monthNumber).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
   }
 
   const parsed = new Date(raw);
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().split("T")[0];
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   return raw;
@@ -535,13 +578,65 @@ const levenshtein = (left, right) => {
   return matrix[a.length][b.length];
 };
 
+const tokenizarTexto = (value) =>
+  normalizarTexto(value)
+    .split(" ")
+    .filter(Boolean);
+
+const normalizarTextoOrdenado = (value) => tokenizarTexto(value).sort().join(" ");
+
+const similitudPorTokens = (left, right) => {
+  const tokensA = new Set(tokenizarTexto(left));
+  const tokensB = new Set(tokenizarTexto(right));
+
+  if (!tokensA.size && !tokensB.size) return 0;
+
+  let interseccion = 0;
+  tokensA.forEach((token) => {
+    if (tokensB.has(token)) interseccion += 1;
+  });
+
+  const totalUnico = new Set([...tokensA, ...tokensB]).size;
+  return Math.round((interseccion / totalUnico) * 100);
+};
+
+const similitudPorNombreIncompleto = (left, right) => {
+  const tokensA = new Set(tokenizarTexto(left));
+  const tokensB = new Set(tokenizarTexto(right));
+  const minimoTokens = Math.min(tokensA.size, tokensB.size);
+
+  if (minimoTokens < 2) return 0;
+
+  let interseccion = 0;
+  tokensA.forEach((token) => {
+    if (tokensB.has(token)) interseccion += 1;
+  });
+
+  const faltantes = Math.max(tokensA.size, tokensB.size) - interseccion;
+  return faltantes <= 1 && interseccion === minimoTokens ? 100 : 0;
+};
+
 const similitudTexto = (left, right) => {
   const a = normalizarTexto(left);
   const b = normalizarTexto(right);
   const maxLength = Math.max(a.length, b.length);
 
   if (!maxLength) return 0;
-  return Math.round((1 - levenshtein(a, b) / maxLength) * 100);
+
+  const similitudOriginal = Math.round((1 - levenshtein(a, b) / maxLength) * 100);
+  const aOrdenado = normalizarTextoOrdenado(left);
+  const bOrdenado = normalizarTextoOrdenado(right);
+  const maxLengthOrdenado = Math.max(aOrdenado.length, bOrdenado.length);
+  const similitudOrdenada = maxLengthOrdenado
+    ? Math.round((1 - levenshtein(aOrdenado, bOrdenado) / maxLengthOrdenado) * 100)
+    : 0;
+
+  return Math.max(
+    similitudOriginal,
+    similitudOrdenada,
+    similitudPorTokens(left, right),
+    similitudPorNombreIncompleto(left, right),
+  );
 };
 
 const getPythonBin = () =>
@@ -653,6 +748,7 @@ const flattenVentasAuditoria = (ventas) => {
         modeloId: detalle.modeloId,
         fecha: normalizarFecha(venta.fecha),
         cliente: venta.cliente?.cliente || "",
+        referenciaPdf: detalle.referenciaPdf || "",
         precioVendedor: toNumero(detalle.precioVendedor),
         entrada: toNumero(detalle.entrada),
       });
@@ -740,6 +836,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
   );
   const filasPdfSinVenta = [];
   const errores = [];
+  const detallesCelularAsignados = new Set();
 
   for (const record of registrosPdf) {
     const codigoPdf = record.codigo_pdf || "";
@@ -767,12 +864,30 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       }))
       .sort((a, b) => b.similitudCliente - a.similitudCliente);
 
-    const match = candidatos.find(
+    const candidatosDisponibles =
+      tipo === "CELULAR"
+        ? candidatos.filter(
+            (venta) => !detallesCelularAsignados.has(Number(venta.detalleVentaId)),
+          )
+        : candidatos;
+
+    const matchPorImei =
+      tipo === "CELULAR" && record.imei
+        ? candidatosDisponibles.find(
+            (venta) =>
+              venta.fechaOk &&
+              venta.similitudCliente >= 85 &&
+              normalizarCodigoPdf(venta.referenciaPdf) ===
+                normalizarCodigoPdf(record.imei),
+          )
+        : null;
+
+    const match = matchPorImei || candidatosDisponibles.find(
       (venta) => venta.fechaOk && venta.similitudCliente >= 85,
     );
 
     if (!match) {
-      const mejor = candidatos[0];
+      const mejor = candidatosDisponibles[0] || candidatos[0];
       const detalleError = [];
 
       if (!fechaPdf) detalleError.push("FECHA_PDF_NO_DETECTADA");
@@ -786,6 +901,14 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
         );
       }
 
+      if (
+        tipo === "CELULAR" &&
+        candidatos.length > 0 &&
+        candidatosDisponibles.length === 0
+      ) {
+        detalleError.push("DETALLE_RVE_YA_ASIGNADO_A_OTRO_IMEI");
+      }
+
       filasPdfSinVenta.push(
         crearFilaPdfSinMatch({
           record,
@@ -795,6 +918,10 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
         }),
       );
       continue;
+    }
+
+    if (tipo === "CELULAR") {
+      detallesCelularAsignados.add(Number(match.detalleVentaId));
     }
 
     if (tipo === "CELULAR" && record.imei) {
@@ -868,7 +995,7 @@ exports.formatearReporte = (ventas) => {
   ventas.forEach((venta) => {
     venta.detalleVenta?.forEach((detalle) => {
       const fechaISO = venta.fecha
-        ? new Date(venta.fecha).toISOString().split("T")[0]
+        ? normalizarFecha(venta.fecha)
         : "";
 
       filas.push({
@@ -893,6 +1020,7 @@ exports.formatearReporte = (ventas) => {
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
         referenciaPdf: detalle.referenciaPdf || "",
+        formaPagoId: detalle.formaPagoId || null,
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",
         precioSistema: detalle.precioUnitario || "",
@@ -1136,6 +1264,10 @@ exports.auditarVentasDesdePdf = async (req, res) => {
     const registrosPdf = Array.isArray(resultado.registros_validos)
       ? resultado.registros_validos
       : [];
+    const totalRegistrosPdf = Number(resultado.total_registros) || registrosPdf.length;
+    const dispositivosCreditoPdf = totalRegistrosPdf;
+    const dispositivosCreditoRve = contarDispositivosCreditoRve({ tipo, ventas });
+    const diferenciaCredito = dispositivosCreditoRve - dispositivosCreditoPdf;
     const auditoria = await auditarRegistrosPdf({
       tipo,
       registrosPdf,
@@ -1147,7 +1279,12 @@ exports.auditarVentasDesdePdf = async (req, res) => {
       tipo,
       resumen: {
         pdfsProcesados: resultado.pdfs_procesados || 0,
-        registrosPdf: registrosPdf.length,
+        registrosPdf: totalRegistrosPdf,
+        registrosPdfValidos: registrosPdf.length,
+        dispositivosCreditoPdf,
+        dispositivosCreditoRve,
+        diferenciaCredito,
+        criterioCreditoRve: "formaPago credito",
         ventasComparadas: auditoria.resultados.length,
         erroresDetectados: auditoria.resultados.filter(
           (fila) => fila.observacionError && fila.observacionError !== "OK",

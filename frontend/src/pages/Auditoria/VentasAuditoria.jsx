@@ -86,6 +86,14 @@ const escaparHtml = (value) =>
 const obtenerNombreSeleccionado = (items, id) =>
   items.find((item) => String(item.id) === String(id))?.nombre || "Todos";
 
+const getDiferenciaCreditoTone = (value) =>
+  Number(value || 0) === 0 ? "green" : "red";
+
+const esFilaConIncidencia = (fila) => {
+  const observacion = String(fila["Observacion Error"] || "").trim().toUpperCase();
+  return Boolean(observacion && observacion !== "OK");
+};
+
 const mapVentaAuditoria = (venta) => {
   const precioVenta = toMoney(venta.precioVenta);
   const precioVendedor = toMoney(venta.precioVendedor);
@@ -96,6 +104,7 @@ const mapVentaAuditoria = (venta) => {
 
   return {
     id: venta.id,
+    detalleVentaId: venta.detalleVentaId,
     Fecha: venta.fecha ?? "",
     "Fecha PDF": venta.fechaPdf ?? "",
     Cedula: venta.cedula ?? "",
@@ -163,6 +172,7 @@ export default function VentasAuditoria() {
   const [pdfFiles, setPdfFiles] = useState([]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfResumen, setPdfResumen] = useState(null);
+  const [vistaResultados, setVistaResultados] = useState("todos");
 
   const resumen = useMemo(() => {
     const totalVenta = filas.reduce(
@@ -183,6 +193,14 @@ export default function VentasAuditoria() {
       diferencias: Number(diferencias.toFixed(2)),
     };
   }, [filas]);
+
+  const filasVisibles = useMemo(
+    () =>
+      vistaResultados === "errores"
+        ? filas.filter(esFilaConIncidencia)
+        : filas,
+    [filas, vistaResultados],
+  );
 
   const cargarUsuarios = async () => {
     try {
@@ -308,6 +326,7 @@ export default function VentasAuditoria() {
 
       setFilas(resultado);
       setPdfResumen(null);
+      setVistaResultados("todos");
     } catch (error) {
       console.error(error);
     } finally {
@@ -376,7 +395,7 @@ export default function VentasAuditoria() {
 
       Swal.fire(
         "Listo",
-        `PDFs auditados. Errores detectados: ${data.resumen?.erroresDetectados ?? 0}`,
+        `PDF: ${data.resumen?.dispositivosCreditoPdf ?? 0} | RVE credito: ${data.resumen?.dispositivosCreditoRve ?? 0} | Diferencia: ${data.resumen?.diferenciaCredito ?? 0}`,
         "success",
       );
     } catch (error) {
@@ -391,11 +410,11 @@ export default function VentasAuditoria() {
   };
 
   const generarReportePdf = () => {
-    if (!filas.length) {
+    if (!filasVisibles.length) {
       Swal.fire({
         icon: "info",
         title: "Sin datos",
-        text: "No hay ventas para generar el reporte.",
+        text: "No hay ventas para generar el reporte con la vista seleccionada.",
       });
       return;
     }
@@ -419,7 +438,7 @@ export default function VentasAuditoria() {
       ],
     ];
 
-    const filasHtml = filas
+    const filasHtml = filasVisibles
       .map(
         (fila, index) => `
           <tr>
@@ -466,7 +485,7 @@ export default function VentasAuditoria() {
         </head>
         <body>
           <h1>Reporte Ventas Auditoria</h1>
-          <div class="summary">Total de registros: ${filas.length}</div>
+          <div class="summary">Total de registros: ${filasVisibles.length}</div>
           <div class="meta">${filtrosHtml}</div>
           <table>
             <thead>
@@ -784,11 +803,24 @@ export default function VentasAuditoria() {
         )}
 
         {pdfResumen && (
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs md:grid-cols-4 xl:grid-cols-8">
             <MiniStat label="PDFs" value={pdfResumen.pdfsProcesados} />
-            <MiniStat label="Registros PDF" value={pdfResumen.registrosPdf} />
+            <MiniStat label="Creditos PDF" value={pdfResumen.dispositivosCreditoPdf ?? pdfResumen.registrosPdf} tone="blue" />
+            <MiniStat label="Creditos RVE" value={pdfResumen.dispositivosCreditoRve} tone="slate" />
+            <MiniStat
+              label="Dif. creditos"
+              value={pdfResumen.diferenciaCredito}
+              tone={getDiferenciaCreditoTone(pdfResumen.diferenciaCredito)}
+            />
+            <MiniStat label="Validos PDF" value={pdfResumen.registrosPdfValidos ?? pdfResumen.registrosPdf} />
             <MiniStat label="Comparados" value={pdfResumen.ventasComparadas} />
-            <MiniStat label="Errores" value={pdfResumen.erroresDetectados} tone="red" />
+            <MiniStat
+              label="Errores"
+              value={pdfResumen.erroresDetectados}
+              tone="red"
+              active={vistaResultados === "errores"}
+              onClick={() => setVistaResultados("errores")}
+            />
             <MiniStat label="Extraccion" value={pdfResumen.erroresExtraccion} tone="amber" />
           </div>
         )}
@@ -806,9 +838,21 @@ export default function VentasAuditoria() {
             <div>
               <h2 className="text-sm font-bold text-gray-900">Resultados</h2>
               <span className="text-xs text-gray-500">
-                {filas.length} ventas encontradas
+                {filasVisibles.length} de {filas.length} registros
               </span>
             </div>
+
+            <label className="flex items-center gap-2 text-xs font-semibold text-gray-600">
+              Vista
+              <select
+                value={vistaResultados}
+                onChange={(event) => setVistaResultados(event.target.value)}
+                className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="todos">Todos</option>
+                <option value="errores">Solo errores</option>
+              </select>
+            </label>
           </div>
 
           <div className="max-w-full overflow-x-auto">
@@ -830,8 +874,11 @@ export default function VentasAuditoria() {
               </thead>
 
               <tbody>
-                {filas.map((f, i) => (
-                  <tr key={f.id ?? i} className="border-b border-gray-100 hover:bg-blue-50/40">
+                {filasVisibles.map((f, i) => (
+                  <tr
+                    key={`${f.id ?? "sin-venta"}-${f.detalleVentaId ?? i}`}
+                    className="border-b border-gray-100 hover:bg-blue-50/40"
+                  >
                     <td className="sticky left-0 z-10 bg-white px-3 py-2 text-center font-semibold text-gray-700">
                       {i + 1}
                     </td>
@@ -873,13 +920,13 @@ export default function VentasAuditoria() {
                   </tr>
                 ))}
 
-                {filas.length === 0 && (
+                {filasVisibles.length === 0 && (
                   <tr>
                     <td
                       colSpan={TABLE_COLUMNS.length + 2}
                       className="px-3 py-10 text-center text-gray-500"
                     >
-                      No hay ventas para los filtros seleccionados
+                      No hay registros para la vista seleccionada
                     </td>
                   </tr>
                 )}
@@ -943,15 +990,33 @@ function Metric({ label, value, tone = "gray" }) {
   );
 }
 
-function MiniStat({ label, value, tone = "gray" }) {
+function MiniStat({ label, value, tone = "gray", active = false, onClick }) {
   const tones = {
     gray: "border-gray-200 bg-gray-50 text-gray-800",
     red: "border-red-200 bg-red-50 text-red-700",
     amber: "border-amber-200 bg-amber-50 text-amber-800",
+    green: "border-green-200 bg-green-50 text-green-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
   };
 
+  const className = `rounded border px-3 py-2 text-left transition ${
+    tones[tone] || tones.gray
+  } ${active ? "ring-2 ring-blue-400" : ""} ${
+    onClick ? "cursor-pointer hover:brightness-95" : ""
+  }`;
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        <div className="font-semibold uppercase opacity-70">{label}</div>
+        <div className="mt-0.5 text-base font-bold">{value ?? 0}</div>
+      </button>
+    );
+  }
+
   return (
-    <div className={`rounded border px-3 py-2 ${tones[tone] || tones.gray}`}>
+    <div className={className}>
       <div className="font-semibold uppercase opacity-70">{label}</div>
       <div className="mt-0.5 text-base font-bold">{value ?? 0}</div>
     </div>
