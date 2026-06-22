@@ -31,6 +31,7 @@ const Denominacion = require('./CierreCaja/Denominacion');
 const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const ReaperturaCierreCaja = require('./CierreCaja/ReaperturaCierreCaja');
 const Task = require('./Task');
+const SistemaTarea = require('./SistemaTarea');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
 const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
@@ -377,6 +378,15 @@ Usuario.hasMany(Task, { foreignKey: "assignedTo", as: "assignedTasks" });
 
 Task.belongsTo(Usuario, { foreignKey: "createdBy", as: "creator" });
 Task.belongsTo(Usuario, { foreignKey: "assignedTo", as: "assignee" });
+
+Usuario.hasMany(SistemaTarea, {
+  foreignKey: "creadoPorId",
+  as: "sistemaTareasCreadas",
+});
+SistemaTarea.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
 
 /* GESTIONES COMERCIALES */
 

@@ -52,6 +52,16 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-5">
+          <label for="telefono" class="label">Telefono</label>
+          <input
+            id="telefono"
+            name="telefono"
+            class="input"
+            type="tel"
+          />
+        </div>
+
+        <div class="mt-5">
           <label for="edadCumplida" class="label">Edad cumplida</label>
           <input
             id="edadCumplida"
@@ -129,7 +139,11 @@ import FormProgress from "../../components/FormProgress.astro";
             </label>
           </div>
 
-          <div class="mt-5">
+          <p id="quitoSkipNotice" class="helper mt-3 hidden">
+            Si naciste en Quito, pasa directamente a la seccion 2, en Informacion de Vivienda actual.
+          </p>
+
+          <div id="otraCiudadNacimientoWrap" class="mt-5 hidden">
             <label for="otraCiudadNacimiento" class="label">
               Otra ciudad
             </label>
@@ -142,10 +156,21 @@ import FormProgress from "../../components/FormProgress.astro";
             />
           </div>
         </div>
+
+        <div class="mt-5">
+          <label for="direccion" class="label">Direccion</label>
+          <input
+            id="direccion"
+            name="direccion"
+            class="input"
+            type="text"
+            placeholder="Ingrese su direccion actual"
+          />
+        </div>
       </section>
 
       <!-- 2. Residencia en Quito -->
-      <section class="form-section mt-10">
+      <section id="residenciaQuitoSection" class="form-section mt-10">
         <h3>2. Residencia en Quito</h3>
 
         <p class="helper mt-2">
@@ -263,30 +288,6 @@ import FormProgress from "../../components/FormProgress.astro";
               type="text"
             />
           </div>
-
-          <div class="mt-5">
-            <label for="viviendaPrestadaQuien" class="label">
-              Si es prestada, especifique quién
-            </label>
-            <input
-              id="viviendaPrestadaQuien"
-              name="viviendaPrestadaQuien"
-              class="input"
-              type="text"
-            />
-          </div>
-
-          <div class="mt-5">
-            <label for="viviendaOtraEspecifique" class="label">
-              Si es otra, especifique
-            </label>
-            <input
-              id="viviendaOtraEspecifique"
-              name="viviendaOtraEspecifique"
-              class="input"
-              type="text"
-            />
-          </div>
         </div>
       </section>
 
@@ -296,70 +297,46 @@ import FormProgress from "../../components/FormProgress.astro";
 
         <p class="label mt-5">¿Con quién vive actualmente?</p>
 
-        <div class="table-wrapper mt-4">
-          <table class="form-table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Teléfono</th>
-                <th>Pariente</th>
-                <th>Edad</th>
-                <th>Ocupación</th>
-                <th>Título o Profesión</th>
-              </tr>
-            </thead>
-            <tbody>
-              {
-                [1, 2, 3, 4, 5].map((i) => (
-                  <tr>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`convive${i}_nombre`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`convive${i}_telefono`}
-                        type="tel"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`convive${i}_pariente`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`convive${i}_edad`}
-                        type="number"
-                        min="0"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`convive${i}_ocupacion`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`convive${i}_tituloProfesion`}
-                        type="text"
-                      />
-                    </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
+        <div class="family-grid mt-4">
+          {
+            [1, 2, 3, 4, 5].map((i) => (
+              <div class="family-card">
+                <p class="family-card-title">Persona {i}</p>
+
+                <div class="family-fields">
+                  <div>
+                    <label class="label" for={`convive${i}_nombre`}>Nombre</label>
+                    <input id={`convive${i}_nombre`} class="input" name={`convive${i}_nombre`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`convive${i}_telefono`}>Telefono</label>
+                    <input id={`convive${i}_telefono`} class="input" name={`convive${i}_telefono`} type="tel" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`convive${i}_pariente`}>Pariente</label>
+                    <input id={`convive${i}_pariente`} class="input" name={`convive${i}_pariente`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`convive${i}_edad`}>Edad</label>
+                    <input id={`convive${i}_edad`} class="input" name={`convive${i}_edad`} type="number" min="0" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`convive${i}_ocupacion`}>Ocupacion</label>
+                    <input id={`convive${i}_ocupacion`} class="input" name={`convive${i}_ocupacion`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`convive${i}_tituloProfesion`}>Titulo o Profesion</label>
+                    <input id={`convive${i}_tituloProfesion`} class="input" name={`convive${i}_tituloProfesion`} type="text" />
+                  </div>
+                </div>
+              </div>
+            ))
+          }
         </div>
       </section>
 
@@ -399,80 +376,47 @@ import FormProgress from "../../components/FormProgress.astro";
           </p>
         </div>
 
-        <div class="table-wrapper mt-6">
-          <table class="form-table">
-            <thead>
-              <tr>
-                <th>Empresa / Lugar de trabajo</th>
-                <th>Cargo / Actividad realizada</th>
-                <th>Tiempo trabajado</th>
-                <th>Motivo de salida</th>
-                <th>Nombre del jefe o encargado</th>
-                <th>Teléfono de referencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              {
-                [1, 2, 3, 4, 5].map((i) => (
-                  <tr>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`trabajo${i}_empresa`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`trabajo${i}_cargoActividad`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`trabajo${i}_tiempoTrabajado`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`trabajo${i}_motivoSalida`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`trabajo${i}_jefeEncargado`}
-                        type="text"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        class="table-input"
-                        name={`trabajo${i}_telefonoReferencia`}
-                        type="tel"
-                      />
-                    </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </div>
+        <div class="work-grid mt-6">
+          {
+            [1, 2, 3, 4, 5].map((i) => (
+              <div class="work-card">
+                <p class="work-card-title">Trabajo {i}</p>
 
-        <label class="check-row mt-5">
-          <input
-            id="sinExperienciaLaboral"
-            name="sinExperienciaLaboral"
-            type="checkbox"
-            value="Si"
-          />
-          <span>No tengo experiencia laboral previa</span>
-        </label>
+                <div class="work-fields">
+                  <div>
+                    <label class="label" for={`trabajo${i}_empresa`}>Empresa / Lugar de trabajo</label>
+                    <input id={`trabajo${i}_empresa`} class="input" name={`trabajo${i}_empresa`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`trabajo${i}_cargoActividad`}>Cargo / Actividad realizada</label>
+                    <input id={`trabajo${i}_cargoActividad`} class="input" name={`trabajo${i}_cargoActividad`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`trabajo${i}_tiempoTrabajado`}>Tiempo trabajado</label>
+                    <input id={`trabajo${i}_tiempoTrabajado`} class="input" name={`trabajo${i}_tiempoTrabajado`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`trabajo${i}_motivoSalida`}>Motivo de salida</label>
+                    <input id={`trabajo${i}_motivoSalida`} class="input" name={`trabajo${i}_motivoSalida`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`trabajo${i}_jefeEncargado`}>Nombre del jefe o encargado</label>
+                    <input id={`trabajo${i}_jefeEncargado`} class="input" name={`trabajo${i}_jefeEncargado`} type="text" />
+                  </div>
+
+                  <div>
+                    <label class="label" for={`trabajo${i}_telefonoReferencia`}>Telefono de referencia</label>
+                    <input id={`trabajo${i}_telefonoReferencia`} class="input" name={`trabajo${i}_telefonoReferencia`} type="tel" />
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
       </section>
 
       <!-- 6. Observaciones adicionales -->
@@ -691,6 +635,42 @@ import FormProgress from "../../components/FormProgress.astro";
     background: #ffffff;
   }
 
+  .family-grid,
+  .work-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .family-card,
+  .work-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 1rem;
+    background: #ffffff;
+    padding: 1rem;
+  }
+
+  .family-card-title,
+  .work-card-title {
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #047857;
+  }
+
+  .family-fields,
+  .work-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .family-fields,
+    .work-fields {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .status-box {
     max-width: 920px;
     margin: 0 auto 1rem;
@@ -716,21 +696,6 @@ import FormProgress from "../../components/FormProgress.astro";
   .field-error {
     border-color: #ef4444 !important;
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
-  }
-
-  .check-row {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    color: #374151;
-    font-size: 0.9rem;
-    font-weight: 600;
-  }
-
-  .check-row input {
-    width: 1rem;
-    height: 1rem;
-    accent-color: #059669;
   }
 
   /* ===== NOTA ===== */
@@ -807,6 +772,15 @@ import FormProgress from "../../components/FormProgress.astro";
   const step1 = document.getElementById("step1") as HTMLDivElement;
   const step2 = document.getElementById("step2") as HTMLDivElement;
   const step3 = document.getElementById("step3") as HTMLDivElement;
+  const residenciaQuitoSection = document.getElementById(
+    "residenciaQuitoSection",
+  ) as HTMLElement | null;
+  const otraCiudadNacimientoWrap = document.getElementById(
+    "otraCiudadNacimientoWrap",
+  ) as HTMLElement | null;
+  const quitoSkipNotice = document.getElementById(
+    "quitoSkipNotice",
+  ) as HTMLElement | null;
 
   const nextStep1Btn = document.getElementById(
     "nextStep1",
@@ -848,6 +822,35 @@ import FormProgress from "../../components/FormProgress.astro";
     return field?.value || "";
   };
 
+  const updateCiudadNacimientoView = () => {
+    const ciudadNacimiento = getCheckedValue("ciudadNacimiento");
+    const esQuito = ciudadNacimiento === "Quito";
+    const esOtra = ciudadNacimiento === "Otra";
+
+    quitoSkipNotice?.classList.toggle("hidden", !esQuito);
+    otraCiudadNacimientoWrap?.classList.toggle("hidden", !esOtra);
+    residenciaQuitoSection?.classList.toggle("hidden", esQuito);
+
+    if (!esOtra) {
+      const otraCiudad = jobForm.elements.namedItem(
+        "otraCiudadNacimiento",
+      ) as HTMLInputElement | null;
+      if (otraCiudad) otraCiudad.value = "";
+    }
+
+    if (esQuito) {
+      const tiempoResidencia = jobForm.elements.namedItem(
+        "tiempoResidenciaQuito",
+      ) as HTMLInputElement | null;
+      const motivoSalida = jobForm.elements.namedItem(
+        "motivoSalidaCiudadNatal",
+      ) as HTMLTextAreaElement | null;
+
+      if (tiempoResidencia) tiempoResidencia.value = "";
+      if (motivoSalida) motivoSalida.value = "";
+    }
+  };
+
   const clearStatus = () => {
     formStatus.textContent = "";
     formStatus.className = "status-box hidden";
@@ -873,18 +876,6 @@ import FormProgress from "../../components/FormProgress.astro";
 
   const hasData = (obj: Record<string, string>) =>
     Object.values(obj).some((value) => value !== "");
-
-  const hasTrabajo = () =>
-    [1, 2, 3, 4, 5].some((i) =>
-      [
-        `trabajo${i}_empresa`,
-        `trabajo${i}_cargoActividad`,
-        `trabajo${i}_tiempoTrabajado`,
-        `trabajo${i}_motivoSalida`,
-        `trabajo${i}_jefeEncargado`,
-        `trabajo${i}_telefonoReferencia`,
-      ].some((name) => getValue(name)),
-    );
 
   const validateStep = (step: number) => {
     clearErrors();
@@ -930,20 +921,6 @@ import FormProgress from "../../components/FormProgress.astro";
       return false;
     }
 
-    if (step === 3) {
-      const sinExperiencia = (
-        jobForm.elements.namedItem("sinExperienciaLaboral") as HTMLInputElement
-      )?.checked;
-
-      if (!hasTrabajo() && !sinExperiencia) {
-        showStatus(
-          "Registra al menos una experiencia laboral o marca que no tienes experiencia previa.",
-          "error",
-        );
-        return false;
-      }
-    }
-
     clearStatus();
     return true;
   };
@@ -975,11 +952,13 @@ import FormProgress from "../../components/FormProgress.astro";
       datos_personales: {
         nombreCompleto: getValue("nombreCompleto"),
         cedula: getValue("cedula"),
+        telefono: getValue("telefono"),
         edadCumplida: getValue("edadCumplida"),
         numeroHijos: getValue("numeroHijos"),
         estadoCivil: getCheckedValue("estadoCivil"),
         ciudadNacimiento: getCheckedValue("ciudadNacimiento"),
         otraCiudadNacimiento: getValue("otraCiudadNacimiento"),
+        direccion: getValue("direccion"),
       },
       residencia_quito: {
         tiempoResidenciaQuito: getValue("tiempoResidenciaQuito"),
@@ -988,22 +967,21 @@ import FormProgress from "../../components/FormProgress.astro";
       vivienda_actual: {
         tipoVivienda: getCheckedValue("tipoVivienda"),
         viviendaFamiliarQuien: getValue("viviendaFamiliarQuien"),
-        viviendaPrestadaQuien: getValue("viviendaPrestadaQuien"),
-        viviendaOtraEspecifique: getValue("viviendaOtraEspecifique"),
       },
       personas_con_quien_vive,
       historial_laboral,
       observaciones: {
         logrosVida: getValue("logrosVida"),
         observacionesAdicionales: getValue("observacionesAdicionales"),
-        sinExperienciaLaboral: (
-          jobForm.elements.namedItem("sinExperienciaLaboral") as HTMLInputElement
-        )?.checked
-          ? "Si"
-          : "No",
       },
     };
   };
+
+  jobForm
+    .querySelectorAll('input[name="ciudadNacimiento"]')
+    .forEach((field) => field.addEventListener("change", updateCiudadNacimientoView));
+
+  updateCiudadNacimientoView();
 
   nextStep1Btn?.addEventListener("click", () => {
     if (validateStep(1)) showStep(2);
@@ -1043,7 +1021,7 @@ import FormProgress from "../../components/FormProgress.astro";
     try {
       const res = await fetch(
      `https://apiapolo.creditek-ecuador.com/api/postulaciones`,
-   //    `http://localhost:5030/api/postulaciones`,
+      // `http://localhost:5030/api/postulaciones`,
         {
           method: "POST",
           headers: {

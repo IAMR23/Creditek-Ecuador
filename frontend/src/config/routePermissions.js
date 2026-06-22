@@ -24,6 +24,10 @@ export const SIDEBAR_SECTION_PERMISSIONS = [
     descripcion: "Acceso a la seccion Desarrollo Organizacional del sidebar",
   },
   {
+    permission: "Sistemas",
+    descripcion: "Acceso a la seccion Sistemas del sidebar",
+  },
+  {
     permission: "Administracion",
     descripcion: "Acceso a la seccion Administracion del sidebar",
   },
@@ -68,6 +72,8 @@ export const ROUTE_PERMISSIONS = {
   "/ventas-auditoria": "Auditoria",
 
   "/postulaciones": "Desarrollo Organizacional",
+
+  "/sistemas/tareas": ["Sistemas", "Administracion"],
 
   "/usuarios": "Administracion",
   "/rol": "Administracion",
@@ -121,6 +127,7 @@ export const ROUTE_REDIRECT_ORDER = [
   "/ventas-auditoria",
   "/revisar-cajas",
   "/postulaciones",
+  "/sistemas/tareas",
   "/usuarios",
   "/marcas",
 ];

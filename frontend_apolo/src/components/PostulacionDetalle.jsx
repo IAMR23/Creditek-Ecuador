@@ -10,12 +10,11 @@ const labels = {
   estadoCivil: "Estado civil",
   ciudadNacimiento: "Ciudad de nacimiento",
   otraCiudadNacimiento: "Otra ciudad",
+  direccion: "Direccion",
   tiempoResidenciaQuito: "Tiempo de residencia en Quito",
   motivoSalidaCiudadNatal: "Motivo de salida de ciudad natal",
   tipoVivienda: "Tipo de vivienda",
   viviendaFamiliarQuien: "Vivienda familiar de",
-  viviendaPrestadaQuien: "Vivienda prestada por",
-  viviendaOtraEspecifique: "Otra vivienda",
   nombre: "Nombre",
   telefono: "Telefono",
   pariente: "Pariente",
@@ -30,7 +29,6 @@ const labels = {
   telefonoReferencia: "Telefono de referencia",
   logrosVida: "Logros alcanzados en su vida",
   observacionesAdicionales: "Observaciones adicionales",
-  sinExperienciaLaboral: "Sin experiencia laboral",
   fecha_envio: "Fecha de envio",
   origen: "Origen",
   version_formulario: "Version del formulario",
@@ -135,11 +133,13 @@ export default function ModalDetalle({ postulacion, onClose }) {
               order={[
                 "nombreCompleto",
                 "cedula",
+                "telefono",
                 "edadCumplida",
                 "numeroHijos",
                 "estadoCivil",
                 "ciudadNacimiento",
                 "otraCiudadNacimiento",
+                "direccion",
               ]}
             />
           </Section>
@@ -151,7 +151,7 @@ export default function ModalDetalle({ postulacion, onClose }) {
           <Section title="Vivienda actual">
             <FieldGrid
               data={vivienda}
-              order={["tipoVivienda", "viviendaFamiliarQuien", "viviendaPrestadaQuien", "viviendaOtraEspecifique"]}
+              order={["tipoVivienda", "viviendaFamiliarQuien"]}
             />
           </Section>
 
@@ -176,7 +176,7 @@ export default function ModalDetalle({ postulacion, onClose }) {
           <Section title="Observaciones e informacion adicional">
             <FieldGrid
               data={observaciones}
-              order={["logrosVida", "observacionesAdicionales", "sinExperienciaLaboral"]}
+              order={["logrosVida", "observacionesAdicionales"]}
             />
           </Section>
 

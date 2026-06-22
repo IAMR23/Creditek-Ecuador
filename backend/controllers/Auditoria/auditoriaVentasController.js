@@ -6,6 +6,7 @@ const { spawn } = require("child_process");
 const Cliente = require("../../models/Cliente");
 const ConciliacionModeloCelular = require("../../models/ConciliacionModeloCelular");
 const ConciliacionModeloTv = require("../../models/ConciliacionModeloTv");
+const CostoHistorico = require("../../models/CostoHistorico");
 const Dispositivo = require("../../models/Dispositivo");
 const DispositivoMarca = require("../../models/DispositivoMarca");
 const FormaPago = require("../../models/FormaPago");
@@ -521,6 +522,17 @@ const toNumero = (value) => {
   return Number.isFinite(number) ? Number(number.toFixed(2)) : null;
 };
 
+const toNumeroRequerido = (value, fallback, fieldName) => {
+  const valueToParse = value === undefined ? fallback : value;
+  const number = toNumero(valueToParse);
+
+  if (number === null) {
+    throw new Error(`${fieldName} no es valido`);
+  }
+
+  return number;
+};
+
 const normalizarFecha = (value) => {
   if (!value) return "";
   const raw = String(value).trim();
@@ -579,16 +591,27 @@ const levenshtein = (left, right) => {
   return matrix[a.length][b.length];
 };
 
-const tokenizarTexto = (value) =>
+const conectoresNombre = new Set([
+  "de",
+  "del",
+  "la",
+  "las",
+  "los",
+  "el",
+  "y",
+]);
+
+const tokenizarTexto = (value, { ignorarConectores = false } = {}) =>
   normalizarTexto(value)
     .split(" ")
-    .filter(Boolean);
+    .filter((token) => token && (!ignorarConectores || !conectoresNombre.has(token)));
 
-const normalizarTextoOrdenado = (value) => tokenizarTexto(value).sort().join(" ");
+const normalizarTextoOrdenado = (value, options) =>
+  tokenizarTexto(value, options).sort().join(" ");
 
-const similitudPorTokens = (left, right) => {
-  const tokensA = new Set(tokenizarTexto(left));
-  const tokensB = new Set(tokenizarTexto(right));
+const similitudPorTokens = (left, right, options) => {
+  const tokensA = new Set(tokenizarTexto(left, options));
+  const tokensB = new Set(tokenizarTexto(right, options));
 
   if (!tokensA.size && !tokensB.size) return 0;
 
@@ -601,9 +624,9 @@ const similitudPorTokens = (left, right) => {
   return Math.round((interseccion / totalUnico) * 100);
 };
 
-const similitudPorNombreIncompleto = (left, right) => {
-  const tokensA = new Set(tokenizarTexto(left));
-  const tokensB = new Set(tokenizarTexto(right));
+const similitudPorNombreIncompleto = (left, right, options) => {
+  const tokensA = new Set(tokenizarTexto(left, options));
+  const tokensB = new Set(tokenizarTexto(right, options));
   const minimoTokens = Math.min(tokensA.size, tokensB.size);
 
   if (minimoTokens < 2) return 0;
@@ -627,16 +650,37 @@ const similitudTexto = (left, right) => {
   const similitudOriginal = Math.round((1 - levenshtein(a, b) / maxLength) * 100);
   const aOrdenado = normalizarTextoOrdenado(left);
   const bOrdenado = normalizarTextoOrdenado(right);
+  const aOrdenadoSinConectores = normalizarTextoOrdenado(left, {
+    ignorarConectores: true,
+  });
+  const bOrdenadoSinConectores = normalizarTextoOrdenado(right, {
+    ignorarConectores: true,
+  });
   const maxLengthOrdenado = Math.max(aOrdenado.length, bOrdenado.length);
+  const maxLengthOrdenadoSinConectores = Math.max(
+    aOrdenadoSinConectores.length,
+    bOrdenadoSinConectores.length,
+  );
   const similitudOrdenada = maxLengthOrdenado
     ? Math.round((1 - levenshtein(aOrdenado, bOrdenado) / maxLengthOrdenado) * 100)
+    : 0;
+  const similitudOrdenadaSinConectores = maxLengthOrdenadoSinConectores
+    ? Math.round(
+        (1 -
+          levenshtein(aOrdenadoSinConectores, bOrdenadoSinConectores) /
+            maxLengthOrdenadoSinConectores) *
+          100,
+      )
     : 0;
 
   return Math.max(
     similitudOriginal,
     similitudOrdenada,
+    similitudOrdenadaSinConectores,
     similitudPorTokens(left, right),
+    similitudPorTokens(left, right, { ignorarConectores: true }),
     similitudPorNombreIncompleto(left, right),
+    similitudPorNombreIncompleto(left, right, { ignorarConectores: true }),
   );
 };
 
@@ -736,6 +780,12 @@ const getValorVentasPdf = (record) => {
   return toNumero(record.valor_ventas ?? record.precio_vendedor ?? record.precio);
 };
 
+const getReferenciaRecordPdf = ({ tipo, record }) =>
+  tipo === "TV" ? record.codigo_pdf || "" : record.imei || "";
+
+const getNombreModeloPdf = ({ record, mapeo, codigoPdf }) =>
+  mapeo?.modeloRveNombre || record.modelo_normalizado || codigoPdf || "-";
+
 const flattenVentasAuditoria = (ventas) => {
   const filas = [];
 
@@ -749,6 +799,8 @@ const flattenVentasAuditoria = (ventas) => {
         modeloId: detalle.modeloId,
         fecha: normalizarFecha(venta.fecha),
         cliente: venta.cliente?.cliente || "",
+        tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
+        modelo: detalle.modelo?.nombre || "",
         referenciaPdf: detalle.referenciaPdf || "",
         precioVendedor: toNumero(detalle.precioVendedor),
         entrada: toNumero(detalle.entrada),
@@ -787,6 +839,25 @@ const crearFilaPdfSinMatch = ({ record, tipo, mapeo, observacionError }) => ({
   similitudCliente: 0,
   observacionError,
 });
+
+const construirObservacionModeloDiferente = ({ record, ventaMatch, tipo, mapeo, codigoPdf }) => {
+  const observaciones = [
+    `MODELO_DIFERENTE PDF:${getNombreModeloPdf({ record, mapeo, codigoPdf })} RVE:${
+      ventaMatch.modelo || "-"
+    }`,
+  ];
+  const observacionValores = construirObservacionesAuditoria({
+    record,
+    ventaMatch,
+    tipo,
+  });
+
+  if (observacionValores !== "OK") {
+    observaciones.push(observacionValores);
+  }
+
+  return observaciones.join("; ");
+};
 
 const construirObservacionesAuditoria = ({ record, ventaMatch, tipo }) => {
   const errores = [];
@@ -841,6 +912,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
   for (const record of registrosPdf) {
     const codigoPdf = record.codigo_pdf || "";
+    const referenciaRecordPdf = getReferenciaRecordPdf({ tipo, record });
     const mapeo = await getModeloMapeado({ tipo, codigoPdf });
 
     if (!mapeo?.modeloRveId) {
@@ -888,6 +960,86 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
     );
 
     if (!match) {
+      const detalleCelularYaAsignado =
+        tipo === "CELULAR" &&
+        candidatos.length > 0 &&
+        candidatosDisponibles.length === 0;
+      const candidatosModeloDiferente = ventasFlatten
+        .filter(
+          (venta) =>
+            Number(venta.modeloId) !== Number(mapeo.modeloRveId) &&
+            esDispositivoDelTipoPdf(venta, tipo),
+        )
+        .map((venta) => ({
+          ...venta,
+          fechaOk: fechaPdf ? venta.fecha === fechaPdf : false,
+          referenciaOk: Boolean(
+            referenciaRecordPdf &&
+              normalizarCodigoPdf(venta.referenciaPdf) ===
+                normalizarCodigoPdf(referenciaRecordPdf),
+          ),
+          similitudCliente: similitudTexto(record.cliente, venta.cliente),
+        }))
+        .sort((a, b) => {
+          if (a.referenciaOk !== b.referenciaOk) return a.referenciaOk ? -1 : 1;
+          if (a.fechaOk !== b.fechaOk) return a.fechaOk ? -1 : 1;
+          return b.similitudCliente - a.similitudCliente;
+        });
+      const candidatosModeloDiferenteDisponibles =
+        tipo === "CELULAR"
+          ? candidatosModeloDiferente.filter(
+              (venta) => !detallesCelularAsignados.has(Number(venta.detalleVentaId)),
+            )
+          : candidatosModeloDiferente;
+      const matchModeloDiferentePorReferencia = referenciaRecordPdf
+        ? candidatosModeloDiferenteDisponibles.find(
+            (venta) => venta.fechaOk && venta.similitudCliente >= 85 && venta.referenciaOk,
+          )
+        : null;
+      const matchModeloDiferente =
+        matchModeloDiferentePorReferencia ||
+        candidatosModeloDiferenteDisponibles.find(
+          (venta) => venta.fechaOk && venta.similitudCliente >= 85,
+        );
+
+      if (!detalleCelularYaAsignado && matchModeloDiferente) {
+        if (tipo === "CELULAR") {
+          detallesCelularAsignados.add(Number(matchModeloDiferente.detalleVentaId));
+        }
+
+        if (referenciaRecordPdf) {
+          await DetalleVenta.update(
+            { referenciaPdf: referenciaRecordPdf },
+            { where: { id: matchModeloDiferente.detalleVentaId } },
+          );
+        }
+
+        const filaBase =
+          resultadosPorDetalle.get(Number(matchModeloDiferente.detalleVentaId)) ||
+          exports.formatearReporte([matchModeloDiferente.venta]).find(
+            (venta) => venta.detalleVentaId === matchModeloDiferente.detalleVentaId,
+          );
+
+        resultadosPorDetalle.set(Number(matchModeloDiferente.detalleVentaId), {
+          ...filaBase,
+          referenciaPdf: referenciaRecordPdf || filaBase?.referenciaPdf || "",
+          clientePdf: record.cliente || "",
+          fechaPdf,
+          precioVendedorPdf: getValorVentasPdf(record),
+          entradaPdf:
+            record.entrada_detectada === false ? null : toNumero(record.entrada),
+          similitudCliente: matchModeloDiferente.similitudCliente,
+          observacionError: construirObservacionModeloDiferente({
+            record,
+            ventaMatch: matchModeloDiferente,
+            tipo,
+            mapeo,
+            codigoPdf,
+          }),
+        });
+        continue;
+      }
+
       const mejor = candidatosDisponibles[0] || candidatos[0];
       const detalleError = [];
 
@@ -902,11 +1054,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
         );
       }
 
-      if (
-        tipo === "CELULAR" &&
-        candidatos.length > 0 &&
-        candidatosDisponibles.length === 0
-      ) {
+      if (detalleCelularYaAsignado) {
         detalleError.push("DETALLE_RVE_YA_ASIGNADO_A_OTRO_IMEI");
       }
 
@@ -927,14 +1075,14 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
     if (tipo === "CELULAR" && record.imei) {
       await DetalleVenta.update(
-        { referenciaPdf: record.imei },
+        { referenciaPdf: referenciaRecordPdf },
         { where: { id: match.detalleVentaId } },
       );
     }
 
     if (tipo === "TV" && codigoPdf) {
       await DetalleVenta.update(
-        { referenciaPdf: codigoPdf },
+        { referenciaPdf: referenciaRecordPdf },
         { where: { id: match.detalleVentaId } },
       );
     }
@@ -952,10 +1100,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
     resultadosPorDetalle.set(Number(match.detalleVentaId), {
       ...filaBase,
-      referenciaPdf:
-        tipo === "TV"
-          ? codigoPdf || filaBase?.referenciaPdf || ""
-          : record.imei || filaBase?.referenciaPdf || "",
+      referenciaPdf: referenciaRecordPdf || filaBase?.referenciaPdf || "",
       clientePdf: record.cliente || "",
       fechaPdf,
       precioVendedorPdf: getValorVentasPdf(record),
@@ -1307,5 +1452,191 @@ exports.auditarVentasDesdePdf = async (req, res) => {
     if (tempRoot) {
       await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
     }
+  }
+};
+
+exports.actualizarDetalleVentaAuditoria = async (req, res) => {
+  const { detalleVentaId } = req.params;
+  const {
+    modeloId,
+    precioVendedor,
+    entrada,
+    alcance,
+    observacion,
+    observacionDetalle,
+  } = req.body;
+  const transaction = await sequelize.transaction();
+
+  try {
+    const detalleDB = await DetalleVenta.findByPk(detalleVentaId, {
+      transaction,
+      include: [
+        {
+          model: Venta,
+          as: "venta",
+          attributes: ["id", "fecha", "observacion"],
+        },
+        {
+          model: FormaPago,
+          as: "formaPago",
+          attributes: ["id", "nombre"],
+        },
+      ],
+    });
+
+    if (!detalleDB) {
+      await transaction.rollback();
+      return res.status(404).json({
+        ok: false,
+        message: "Detalle de venta no encontrado",
+      });
+    }
+
+    const modeloIdFinal = Number(modeloId || detalleDB.modeloId);
+    if (!Number.isFinite(modeloIdFinal) || modeloIdFinal <= 0) {
+      throw new Error("Modelo no valido");
+    }
+
+    const modeloDB = await Modelo.findByPk(modeloIdFinal, {
+      transaction,
+      include: [
+        {
+          model: DispositivoMarca,
+          as: "dispositivoMarca",
+          include: [
+            { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+            { model: Marca, as: "marca", attributes: ["id", "nombre"] },
+          ],
+        },
+      ],
+    });
+
+    if (!modeloDB) {
+      throw new Error("Modelo no existe");
+    }
+
+    const fechaVenta = normalizarFecha(detalleDB.venta?.fecha);
+    const costoDB = await CostoHistorico.findOne({
+      where: {
+        modeloId: modeloIdFinal,
+        ...(fechaVenta && {
+          fechaCompra: {
+            [Op.lte]: fechaVenta,
+          },
+        }),
+      },
+      order: [
+        ["fechaCompra", "DESC"],
+        ["id", "DESC"],
+      ],
+      transaction,
+    });
+
+    if (!costoDB) {
+      throw new Error(
+        "No existe costo historico para este modelo, comunicate con Sistemas",
+      );
+    }
+
+    const formaPagoDB =
+      detalleDB.formaPago ||
+      (await FormaPago.findByPk(detalleDB.formaPagoId, { transaction }));
+
+    if (!formaPagoDB) {
+      throw new Error("Forma de pago no existe");
+    }
+
+    const usarPrecioCarga = esFormaPagoCredito({
+      formaPagoId: formaPagoDB.id,
+      formaPago: formaPagoDB.nombre,
+    });
+    const precioHistorico = usarPrecioCarga
+      ? Number(costoDB.precioCarga)
+      : Number(costoDB.precioContado);
+
+    if (!Number.isFinite(precioHistorico) || precioHistorico <= 0) {
+      throw new Error(
+        usarPrecioCarga
+          ? "No existe precio carga para este modelo en costo historico"
+          : "No existe precio contado para este modelo en costo historico",
+      );
+    }
+
+    const precioVendedorFinal = toNumeroRequerido(
+      precioVendedor,
+      detalleDB.precioVendedor,
+      "Precio vendedor",
+    );
+    const entradaFinal = toNumeroRequerido(entrada, detalleDB.entrada, "Entrada");
+    const alcanceFinal = toNumeroRequerido(alcance, detalleDB.alcance, "Alcance");
+    const costo = Number(costoDB.costo) || 0;
+    const margen = Number((precioVendedorFinal + alcanceFinal - costo).toFixed(2));
+    const dispositivoMarca = modeloDB.dispositivoMarca;
+    const dispositivoId = Number(dispositivoMarca?.dispositivoId);
+
+    let cierreCaja = "CONTADO";
+    if (Number(formaPagoDB.id) === 1) {
+      if (dispositivoId === 1) cierreCaja = "CREDITV";
+      if (dispositivoId === 2) cierreCaja = "UPHONE";
+    }
+
+    await detalleDB.update(
+      {
+        precioUnitario: precioHistorico,
+        precioVenta: precioHistorico,
+        precioVendedor: precioVendedorFinal,
+        margen,
+        costo,
+        dispositivoMarcaId: modeloDB.dispositivoMarcaId,
+        modeloId: modeloIdFinal,
+        entrada: entradaFinal,
+        alcance: alcanceFinal,
+        cierreCaja,
+        ...(observacionDetalle !== undefined && { observacionDetalle }),
+      },
+      { transaction },
+    );
+
+    if (observacion !== undefined && detalleDB.venta) {
+      await detalleDB.venta.update({ observacion }, { transaction });
+    }
+
+    await transaction.commit();
+
+    return res.json({
+      ok: true,
+      message: "Detalle actualizado correctamente",
+      detalle: {
+        id: detalleDB.id,
+        modeloId: modeloIdFinal,
+        modelo: modeloDB.nombre,
+        marca: dispositivoMarca?.marca?.nombre || "",
+        dispositivo: dispositivoMarca?.dispositivo?.nombre || "",
+        precioVenta: precioHistorico,
+        precioVendedor: precioVendedorFinal,
+        precioUnitario: precioHistorico,
+        entrada: entradaFinal,
+        alcance: alcanceFinal,
+        margen,
+        costo,
+        cierreCaja,
+        observacionDetalle:
+          observacionDetalle !== undefined
+            ? observacionDetalle
+            : detalleDB.observacionDetalle,
+      },
+      venta: {
+        id: detalleDB.ventaId,
+        observacion:
+          observacion !== undefined ? observacion : detalleDB.venta?.observacion || "",
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Error actualizando detalle desde auditoria:", error);
+    return res.status(400).json({
+      ok: false,
+      message: error.message || "No se pudo actualizar el detalle",
+    });
   }
 };

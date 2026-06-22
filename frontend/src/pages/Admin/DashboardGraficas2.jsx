@@ -10,6 +10,8 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
   CartesianGrid,
 } from "recharts";
 import { FaCopy } from "react-icons/fa";
@@ -22,6 +24,7 @@ const COLORS = {
   costo: "#f59e0b",
   costoEntrega: "#0891b2",
   margenPorcentual: "#7c3aed",
+  tareasFinalizadas: "#db2777",
 };
 
 const crearFechaLocal = (fechaStr) => {
@@ -128,6 +131,23 @@ const moneyFormatter = new Intl.NumberFormat("es-EC", {
 
 const percentFormatter = (value) => `${Number(value || 0).toFixed(2)}%`;
 
+const formatFechaCorta = (fechaStr) => {
+  const fecha = crearFechaLocal(fechaStr);
+  if (!fecha) return fechaStr || "";
+
+  return fecha.toLocaleDateString("es-EC", {
+    month: "short",
+    day: "2-digit",
+  });
+};
+
+const toTareasFinalizadasArray = (items = []) =>
+  (items || []).map((item) => ({
+    fecha: item.fecha,
+    name: formatFechaCorta(item.fecha),
+    tareasFinalizadas: Number(item.tareasFinalizadas) || 0,
+  }));
+
 const tooltipStyle = {
   contentStyle: {
     borderRadius: "10px",
@@ -168,6 +188,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
   const refCostoVenta = useRef(null);
   const refCostoEntrega = useRef(null);
   const refMargenPorcentual = useRef(null);
+  const refTareasFinalizadas = useRef(null);
 
   const dataSemana = useMemo(
     () => toSemanaArray(estadisticas?.porSemana, fechaInicio),
@@ -199,6 +220,11 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         fechaInicio,
       ),
     [estadisticas?.indicadorEngancheJavierPorSemana, fechaInicio],
+  );
+
+  const dataTareasFinalizadas = useMemo(
+    () => toTareasFinalizadasArray(estadisticas?.tareasFinalizadasPorFecha),
+    [estadisticas?.tareasFinalizadasPorFecha],
   );
 
   useEffect(() => {
@@ -420,6 +446,14 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         </p>
       </div>
 
+      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
+        <h3 className="text-gray-500 text-sm">Tareas Finalizadas</h3>
+
+        <p className="text-4xl font-bold text-pink-700">
+          {Number(estadisticas.totalTareasFinalizadas) || 0}
+        </p>
+      </div>
+
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Ventas Enganche Javier por Semana</h3>
@@ -581,6 +615,44 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
                 activeDot={{ r: 10 }}
               />
             </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">Tareas Finalizadas por Fecha</h3>
+          <CopyButton
+            onClick={() =>
+              copiarGrafico(refTareasFinalizadas, "Tareas Finalizadas por Fecha")
+            }
+          />
+        </div>
+
+        <div ref={refTareasFinalizadas} className="bg-white rounded-xl">
+          <ResponsiveContainer width="100%" height={650}>
+            <BarChart
+              data={dataTareasFinalizadas}
+              margin={{ top: 20, right: 12, left: 10, bottom: 110 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+              <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
+
+              <YAxis allowDecimals={false} domain={minDataDomain} />
+
+              <Tooltip
+                {...tooltipStyle}
+                labelFormatter={(_, payload) => payload?.[0]?.payload?.fecha || ""}
+              />
+
+              <Bar
+                dataKey="tareasFinalizadas"
+                name="Tareas finalizadas"
+                fill={COLORS.tareasFinalizadas}
+                radius={[8, 8, 0, 0]}
+              />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>

@@ -18,6 +18,9 @@ const formatDate = (date) => {
   });
 };
 
+const thClass = "px-1.5 py-2 text-[10px] font-bold leading-tight md:px-2 lg:text-xs";
+const tdClass = "min-w-0 break-words px-1.5 py-2 text-[10px] leading-tight text-slate-700 md:px-2 lg:text-xs";
+
 export default function Postulaciones() {
   const [postulaciones, setPostulaciones] = useState([]);
   const [cedula, setCedula] = useState("");
@@ -230,21 +233,38 @@ export default function Postulaciones() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-[1120px] w-full text-left text-sm">
+            <div className="overflow-hidden">
+              <table className="w-full table-fixed text-left text-[10px] leading-tight lg:text-xs">
+                <colgroup>
+                  <col className="w-[14%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[4%]" />
+                  <col className="w-[4%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[6%]" />
+                </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
-                    <th className="px-4 py-3">Aspirante</th>
-                    <th className="px-4 py-3">Cedula</th>
-                    <th className="px-4 py-3">Edad</th>
-                    <th className="px-4 py-3">Hijos</th>
-                    <th className="px-4 py-3">Estado civil</th>
-                    <th className="px-4 py-3">Ciudad</th>
-                    <th className="px-4 py-3">Vivienda</th>
-                    <th className="px-4 py-3">Trabajos</th>
-                    <th className="px-4 py-3">Estado</th>
-                    <th className="px-4 py-3">Fecha</th>
-                    <th className="px-4 py-3 text-right">Accion</th>
+                    <th className={thClass}>Aspirante</th>
+                    <th className={thClass}>Cedula</th>
+                    <th className={thClass}>Telefono</th>
+                    <th className={thClass}>Edad</th>
+                    <th className={thClass}>Hijos</th>
+                    <th className={thClass}>Estado civil</th>
+                    <th className={thClass}>Ciudad</th>
+                    <th className={thClass}>Direccion</th>
+                    <th className={thClass}>Vivienda</th>
+                    <th className={thClass}>Trab.</th>
+                    <th className={thClass}>Estado</th>
+                    <th className={thClass}>Fecha</th>
+                    <th className={`${thClass} text-right`}>Accion</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -255,36 +275,42 @@ export default function Postulaciones() {
 
                     return (
                       <tr key={p.id} className="transition hover:bg-slate-50">
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-900">
+                        <td className={tdClass}>
+                          <div className="min-w-0 break-words font-semibold text-slate-900">
                             {datos.nombreCompleto || p.nombre || dash}
                           </div>
                           <div className="text-xs text-slate-500">ID #{p.id}</div>
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
                           {datos.cedula || p.cedula || dash}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
+                          {datos.telefono || p.telefono || dash}
+                        </td>
+                        <td className={tdClass}>
                           {datos.edadCumplida || dash}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
                           {datos.numeroHijos || dash}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
                           {datos.estadoCivil || dash}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
                           {datos.ciudadNacimiento === "Otra"
                             ? datos.otraCiudadNacimiento || "Otra"
                             : datos.ciudadNacimiento || dash}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
+                          {datos.direccion || dash}
+                        </td>
+                        <td className={tdClass}>
                           {vivienda.tipoVivienda || dash}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{trabajos}</td>
-                        <td className="px-4 py-3">
+                        <td className={tdClass}>{trabajos}</td>
+                        <td className={tdClass}>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            className={`inline-block rounded-full px-1.5 py-1 text-[10px] font-bold leading-none ${
                               p.leida
                                 ? "bg-emerald-100 text-emerald-700"
                                 : "bg-red-100 text-red-700"
@@ -293,25 +319,27 @@ export default function Postulaciones() {
                             {p.leida ? "Leida" : "No leida"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className={tdClass}>
                           {formatDate(p.createdAt)}
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-2">
+                        <td className={`${tdClass} text-right`}>
+                          <div className="flex justify-end gap-1">
                             <button
                               onClick={() => verPostulacion(p)}
-                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-white transition hover:bg-slate-700"
+                              aria-label="Ver postulacion"
+                              title="Ver"
                             >
-                              <Eye size={16} />
-                              Ver
+                              <Eye size={14} />
                             </button>
                             <button
                               onClick={() => eliminarPostulacion(p)}
                               disabled={deletingId === p.id}
-                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label="Eliminar postulacion"
+                              title={deletingId === p.id ? "Eliminando" : "Eliminar"}
                             >
-                              <Trash2 size={16} />
-                              {deletingId === p.id ? "Eliminando" : "Eliminar"}
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>

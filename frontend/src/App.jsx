@@ -81,6 +81,7 @@ import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTab
 import BDDVentas from "./pages/Admin/BDDVentas";
 import Bonos from "./pages/Admin/Bonos";
 import TasksPage from "./pages/Tareas/TaskPage";
+import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
 import { TaskNotificationProvider } from "./context/TaskNotificationContext";
@@ -349,6 +350,10 @@ useEffect(() => {
                 <Route path="revisar-cajas" element={protect(<CierresCajaTabla />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
                 <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />
+                <Route
+                  path="sistemas/tareas"
+                  element={protect(<GestionTareasSistemas />, "/sistemas/tareas")}
+                />
               </Route>
 
               <Route

@@ -19,6 +19,7 @@ import {
   Gift,
   ShieldCheck,
   LucideTicketPercent,
+  MonitorCog,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { FaTasks } from "react-icons/fa";
@@ -42,6 +43,7 @@ export default function Sidebar({ auth }) {
     contabilidad: false,
     Auditoria: false,
     DesarrolloOrganizacional: true,
+    Sistemas: false,
     admin: false,
     catalogos: false,
   });
@@ -171,7 +173,7 @@ export default function Sidebar({ auth }) {
         ],
       },
 
-            DesarrolloOrganizacional: {
+      DesarrolloOrganizacional: {
         title: "Desarrollo Organizacional",
         items: [
           {
@@ -180,6 +182,17 @@ export default function Sidebar({ auth }) {
             path: "/postulaciones",
           },
        
+        ],
+      },
+
+      Sistemas: {
+        title: "Sistemas",
+        items: [
+          {
+            label: "Gestion de Tareas",
+            icon: <MonitorCog size={20} />,
+            path: "/sistemas/tareas",
+          },
         ],
       },
 

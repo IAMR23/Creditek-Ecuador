@@ -7,6 +7,7 @@ const path = require("path");
 const multer = require("multer");
 const router = express.Router();
 const auditoriaVentasController = require("../../controllers/Auditoria/auditoriaVentasController");
+const tareasSistemasController = require("../../controllers/Sistemas/tareasController");
 const { calcularEstadisticasVentas, comiteCompras } = require("../../utils/calcularEstadisticasVentas");
 
 const uploadRoot =
@@ -111,6 +112,11 @@ router.post(
   auditoriaVentasController.auditarVentasDesdePdf,
 );
 
+router.patch(
+  "/ventas/detalle/:detalleVentaId",
+  auditoriaVentasController.actualizarDetalleVentaAuditoria,
+);
+
 router.get("/informe", async (req, res) => {
   try {
     const { fechaInicio, fechaFin, agenciaId, vendedorId   , observacion} = req.query;
@@ -147,6 +153,16 @@ router.get("/ventas2", async (req, res) => {
     const reporte = auditoriaVentasController.formatearReporte(ventas);
 
     const estadisticas = calcularEstadisticasVentas(reporte , fechaInicio);
+    estadisticas.tareasFinalizadasPorFecha =
+      await tareasSistemasController.obtenerTareasFinalizadasPorFecha({
+        fechaInicio,
+        fechaFin,
+      });
+    estadisticas.totalTareasFinalizadas =
+      estadisticas.tareasFinalizadasPorFecha.reduce(
+        (acc, item) => acc + (Number(item.tareasFinalizadas) || 0),
+        0,
+      );
  
     res.json({ ok: true, estadisticas});
   } catch (error) {

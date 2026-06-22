@@ -3,7 +3,18 @@ import axios from "axios";
 import { API_URL } from "../../../config";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import { AlertTriangle, Eye, FileText, RefreshCw, Trash, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  Eye,
+  FileText,
+  Pencil,
+  RefreshCw,
+  Save,
+  Search,
+  Trash,
+  Upload,
+  X,
+} from "lucide-react";
 import Swal from "sweetalert2";
 
 const STORAGE_KEY = "ventas_auditoria_filtros";
@@ -55,6 +66,26 @@ const toMoney = (value) => {
   return Number.isFinite(number) ? Number(number.toFixed(2)) : "";
 };
 
+const normalizarBusqueda = (value) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const normalizarDecimalInput = (value) => String(value ?? "").replace(",", ".");
+
+const esDecimalEditable = (value) => /^\d*\.?\d{0,2}$/.test(value);
+
+const getModeloLabel = (modelo) =>
+  modelo.dispositivoMarca?.marca?.nombre
+    ? `${modelo.dispositivoMarca.marca.nombre} ${modelo.nombre}`
+    : modelo.nombre;
+
+const getFilaEditableId = (fila) =>
+  fila.detalleVentaId ? String(fila.detalleVentaId) : "";
+
 const getPrecioVendedorClass = (precioVendedorValue, precioVentaValue) => {
   const precioVenta = Number(precioVentaValue);
   const precioVendedor = Number(precioVendedorValue);
@@ -89,9 +120,29 @@ const obtenerNombreSeleccionado = (items, id) =>
 const getDiferenciaCreditoTone = (value) =>
   Number(value || 0) === 0 ? "green" : "red";
 
+const formatearDiferenciaPrecio = (value) => {
+  const diferencia = Number(value);
+  if (!Number.isFinite(diferencia) || diferencia === 0) return "-";
+  return Number(Math.abs(diferencia).toFixed(2));
+};
+
+const getValorColumnaReporte = (fila, columna) =>
+  columna === "Diferencia"
+    ? formatearDiferenciaPrecio(fila[columna])
+    : fila[columna] ?? "";
+
 const esFilaConIncidencia = (fila) => {
   const observacion = String(fila["Observacion Error"] || "").trim().toUpperCase();
   return Boolean(observacion && observacion !== "OK");
+};
+
+const coincideBusquedaCliente = (fila, busqueda) => {
+  const termino = normalizarBusqueda(busqueda);
+  if (!termino) return true;
+
+  return ["Cliente", "Cliente PDF", "Cedula"].some((key) =>
+    normalizarBusqueda(fila[key]).includes(termino),
+  );
 };
 
 const mapVentaAuditoria = (venta) => {
@@ -105,6 +156,7 @@ const mapVentaAuditoria = (venta) => {
   return {
     id: venta.id,
     detalleVentaId: venta.detalleVentaId,
+    modeloId: venta.modeloId ?? "",
     Fecha: venta.fecha ?? "",
     "Fecha PDF": venta.fechaPdf ?? "",
     Cedula: venta.cedula ?? "",
@@ -173,34 +225,45 @@ export default function VentasAuditoria() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfResumen, setPdfResumen] = useState(null);
   const [vistaResultados, setVistaResultados] = useState("todos");
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [filaEditandoId, setFilaEditandoId] = useState("");
+  const [edicionFila, setEdicionFila] = useState({});
+  const [guardandoFilaId, setGuardandoFilaId] = useState("");
 
-  const resumen = useMemo(() => {
-    const totalVenta = filas.reduce(
-      (acc, fila) => acc + toNumber(fila["Precio Vendedor"]),
-      0,
-    );
-    const diferencias = filas.reduce(
-      (acc, fila) => acc + toNumber(fila.Diferencia),
-      0,
-    );
-    const activas = filas.filter((fila) => fila.Estado === "Activo").length;
-
-    return {
-      registros: filas.length,
-      activas,
-      desactivadas: filas.length - activas,
-      totalVenta: Number(totalVenta.toFixed(2)),
-      diferencias: Number(diferencias.toFixed(2)),
-    };
-  }, [filas]);
+  const filasFiltradasPorCliente = useMemo(
+    () => filas.filter((fila) => coincideBusquedaCliente(fila, busquedaCliente)),
+    [filas, busquedaCliente],
+  );
 
   const filasVisibles = useMemo(
     () =>
       vistaResultados === "errores"
-        ? filas.filter(esFilaConIncidencia)
-        : filas,
-    [filas, vistaResultados],
+        ? filasFiltradasPorCliente.filter(esFilaConIncidencia)
+        : filasFiltradasPorCliente,
+    [filasFiltradasPorCliente, vistaResultados],
   );
+
+  const resumen = useMemo(() => {
+    const totalVenta = filasFiltradasPorCliente.reduce(
+      (acc, fila) => acc + toNumber(fila["Precio Vendedor"]),
+      0,
+    );
+    const diferencias = filasFiltradasPorCliente.reduce(
+      (acc, fila) => acc + toNumber(fila.Diferencia),
+      0,
+    );
+    const activas = filasFiltradasPorCliente.filter(
+      (fila) => fila.Estado === "Activo",
+    ).length;
+
+    return {
+      registros: filasFiltradasPorCliente.length,
+      activas,
+      desactivadas: filasFiltradasPorCliente.length - activas,
+      totalVenta: Number(totalVenta.toFixed(2)),
+      diferencias: Number(diferencias.toFixed(2)),
+    };
+  }, [filasFiltradasPorCliente]);
 
   const cargarUsuarios = async () => {
     try {
@@ -327,6 +390,8 @@ export default function VentasAuditoria() {
       setFilas(resultado);
       setPdfResumen(null);
       setVistaResultados("todos");
+      setFilaEditandoId("");
+      setEdicionFila({});
     } catch (error) {
       console.error(error);
     } finally {
@@ -392,6 +457,8 @@ export default function VentasAuditoria() {
 
       setFilas((data.ventas || []).map(mapVentaAuditoria));
       setPdfResumen(data.resumen || null);
+      setFilaEditandoId("");
+      setEdicionFila({});
 
       Swal.fire(
         "Listo",
@@ -428,6 +495,7 @@ export default function VentasAuditoria() {
       ["Cierre de caja", cierreCaja || "Todos"],
       ["Origen", obtenerNombreSeleccionado(origenes, origenId)],
       ["Dispositivo", obtenerNombreSeleccionado(dispositivos, dispositivoId)],
+      ["Cliente / Cedula", busquedaCliente.trim() || "Todos"],
       [
         "Estado",
         estado === "activo"
@@ -443,7 +511,10 @@ export default function VentasAuditoria() {
         (fila, index) => `
           <tr>
             <td>${index + 1}</td>
-            ${TABLE_COLUMNS.map((columna) => `<td>${escaparHtml(fila[columna] ?? "")}</td>`).join("")}
+            ${TABLE_COLUMNS.map(
+              (columna) =>
+                `<td>${escaparHtml(getValorColumnaReporte(fila, columna))}</td>`,
+            ).join("")}
           </tr>
         `,
       )
@@ -533,8 +604,202 @@ export default function VentasAuditoria() {
     }
   };
 
+  const iniciarEdicionFila = (fila) => {
+    if (!fila.detalleVentaId) {
+      Swal.fire("Sin venta", "Esta fila no tiene detalle de RVE para editar.", "info");
+      return;
+    }
+
+    setFilaEditandoId(getFilaEditableId(fila));
+    setEdicionFila({
+      modeloId: fila.modeloId || "",
+      precioVendedor: fila["Precio Vendedor"] ?? "",
+      entrada: fila.Entrada ?? "",
+      alcance: fila.Alcance ?? "",
+      observacion: fila.Observacion ?? "",
+    });
+  };
+
+  const cancelarEdicionFila = () => {
+    setFilaEditandoId("");
+    setEdicionFila({});
+  };
+
+  const actualizarCampoEdicion = (field, value) => {
+    setEdicionFila((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const aplicarDetalleActualizado = (fila, data) => {
+    const detalle = data.detalle || {};
+    const precioVenta = toMoney(detalle.precioVenta);
+    const precioVendedor = toMoney(detalle.precioVendedor);
+    const modelo = `${detalle.marca ?? ""} ${detalle.modelo ?? ""}`.trim();
+
+    return {
+      ...fila,
+      modeloId: detalle.modeloId ?? fila.modeloId,
+      Modelo: modelo ? modelo.toUpperCase() : fila.Modelo,
+      Dispositivo: detalle.dispositivo
+        ? String(detalle.dispositivo).toUpperCase()
+        : fila.Dispositivo,
+      "Precio Venta": precioVenta,
+      "Precio Vendedor": precioVendedor,
+      Diferencia:
+        precioVenta !== "" || precioVendedor !== ""
+          ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
+          : "",
+      "Precio Unitario":
+        detalle.precioVendedor != null
+          ? Number((Number(detalle.precioVendedor) / 1.15).toFixed(2))
+          : fila["Precio Unitario"],
+      Entrada: detalle.entrada ?? fila.Entrada,
+      Alcance: detalle.alcance ?? fila.Alcance,
+      Observacion: data.venta?.observacion ?? fila.Observacion,
+    };
+  };
+
+  const guardarEdicionFila = async (fila) => {
+    if (!fila.detalleVentaId) return;
+
+    if (!edicionFila.modeloId) {
+      Swal.fire("Modelo requerido", "Selecciona un modelo para guardar.", "warning");
+      return;
+    }
+
+    const camposNumericos = ["precioVendedor", "entrada", "alcance"];
+    const campoVacio = camposNumericos.find(
+      (field) => edicionFila[field] === "" || edicionFila[field] === null,
+    );
+
+    if (campoVacio) {
+      Swal.fire("Campos incompletos", "Precio vendedor, entrada y alcance son requeridos.", "warning");
+      return;
+    }
+
+    const filaId = getFilaEditableId(fila);
+    setGuardandoFilaId(filaId);
+
+    try {
+      const { data } = await axios.patch(
+        `${API_URL}/auditoria/ventas/detalle/${fila.detalleVentaId}`,
+        {
+          modeloId: edicionFila.modeloId,
+          precioVendedor: edicionFila.precioVendedor,
+          entrada: edicionFila.entrada,
+          alcance: edicionFila.alcance,
+          observacion: edicionFila.observacion,
+        },
+      );
+
+      if (!data.ok) return;
+
+      setFilas((prev) =>
+        prev.map((item) =>
+          item.detalleVentaId === fila.detalleVentaId
+            ? aplicarDetalleActualizado(item, data)
+            : item,
+        ),
+      );
+      cancelarEdicionFila();
+      Swal.fire({
+        icon: "success",
+        title: "Fila actualizada",
+        timer: 1400,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo actualizar la fila.",
+        "error",
+      );
+    } finally {
+      setGuardandoFilaId("");
+    }
+  };
+
   const renderCell = (fila, key) => {
     const val = fila[key];
+    const editando = filaEditandoId === getFilaEditableId(fila);
+
+    if (editando && key === "Modelo") {
+      return (
+        <select
+          value={edicionFila.modeloId}
+          onChange={(event) => actualizarCampoEdicion("modeloId", event.target.value)}
+          className="min-w-64 rounded border border-blue-300 bg-white px-2 py-1 text-xs font-semibold text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        >
+          <option value="">Selecciona modelo</option>
+          {modelos.map((modelo) => (
+            <option key={modelo.id} value={modelo.id}>
+              {getModeloLabel(modelo)}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (editando && key === "Precio Vendedor") {
+      return (
+        <input
+          type="text"
+          value={edicionFila.precioVendedor}
+          onChange={(event) => {
+            const value = normalizarDecimalInput(event.target.value);
+            if (esDecimalEditable(value)) {
+              actualizarCampoEdicion("precioVendedor", value);
+            }
+          }}
+          className="w-24 rounded border border-blue-300 px-2 py-1 text-right text-xs font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        />
+      );
+    }
+
+    if (editando && key === "Entrada") {
+      return (
+        <input
+          type="text"
+          value={edicionFila.entrada}
+          onChange={(event) => {
+            const value = normalizarDecimalInput(event.target.value);
+            if (esDecimalEditable(value)) {
+              actualizarCampoEdicion("entrada", value);
+            }
+          }}
+          className="w-24 rounded border border-blue-300 px-2 py-1 text-right text-xs font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        />
+      );
+    }
+
+    if (editando && key === "Alcance") {
+      return (
+        <input
+          type="text"
+          value={edicionFila.alcance}
+          onChange={(event) => {
+            const value = normalizarDecimalInput(event.target.value);
+            if (esDecimalEditable(value)) {
+              actualizarCampoEdicion("alcance", value);
+            }
+          }}
+          className="w-24 rounded border border-blue-300 px-2 py-1 text-right text-xs font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        />
+      );
+    }
+
+    if (editando && key === "Observacion") {
+      return (
+        <input
+          type="text"
+          value={edicionFila.observacion}
+          onChange={(event) => actualizarCampoEdicion("observacion", event.target.value)}
+          className="min-w-56 rounded border border-blue-300 px-2 py-1 text-xs font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        />
+      );
+    }
 
     if (key === "Modelo") {
       return (
@@ -567,6 +832,10 @@ export default function VentasAuditoria() {
           {val}
         </span>
       );
+    }
+
+    if (key === "Diferencia") {
+      return formatearDiferenciaPrecio(val);
     }
 
     return val || "-";
@@ -676,9 +945,7 @@ export default function VentasAuditoria() {
               <option value="">Todos</option>
               {modelos.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.dispositivoMarca?.marca?.nombre
-                    ? `${m.dispositivoMarca.marca.nombre} ${m.nombre}`
-                    : m.nombre}
+                  {getModeloLabel(m)}
                 </option>
               ))}
             </select>
@@ -834,25 +1101,55 @@ export default function VentasAuditoria() {
         </div>
       ) : (
         <section className="max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-sm font-bold text-gray-900">Resultados</h2>
               <span className="text-xs text-gray-500">
-                {filasVisibles.length} de {filas.length} registros
+                {filasVisibles.length} de {filasFiltradasPorCliente.length} registros
+                {busquedaCliente.trim() ? ` (${filas.length} total)` : ""}
               </span>
             </div>
 
-            <label className="flex items-center gap-2 text-xs font-semibold text-gray-600">
-              Vista
-              <select
-                value={vistaResultados}
-                onChange={(event) => setVistaResultados(event.target.value)}
-                className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="todos">Todos</option>
-                <option value="errores">Solo errores</option>
-              </select>
-            </label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="block text-xs font-semibold text-gray-600">
+                <span className="mb-1 block">Cliente / Cedula</span>
+                <div className="relative">
+                  <Search
+                    size={15}
+                    className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+                  <input
+                    type="search"
+                    value={busquedaCliente}
+                    onChange={(event) => setBusquedaCliente(event.target.value)}
+                    placeholder="Nombre o cedula"
+                    className="w-full rounded border border-gray-300 bg-white py-1.5 pl-8 pr-8 text-xs font-medium text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:w-72"
+                  />
+                  {busquedaCliente && (
+                    <button
+                      type="button"
+                      onClick={() => setBusquedaCliente("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded text-gray-400 hover:text-gray-700"
+                      aria-label="Limpiar busqueda"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </label>
+
+              <label className="block text-xs font-semibold text-gray-600">
+                <span className="mb-1 block">Vista</span>
+                <select
+                  value={vistaResultados}
+                  onChange={(event) => setVistaResultados(event.target.value)}
+                  className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:w-auto"
+                >
+                  <option value="todos">Todos</option>
+                  <option value="errores">Solo errores</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div className="max-w-full overflow-x-auto">
@@ -877,7 +1174,9 @@ export default function VentasAuditoria() {
                 {filasVisibles.map((f, i) => (
                   <tr
                     key={`${f.id ?? "sin-venta"}-${f.detalleVentaId ?? i}`}
-                    className="border-b border-gray-100 hover:bg-blue-50/40"
+                    className={`border-b border-gray-100 hover:bg-blue-50/40 ${
+                      filaEditandoId === getFilaEditableId(f) ? "bg-blue-50/60" : ""
+                    }`}
                   >
                     <td className="sticky left-0 z-10 bg-white px-3 py-2 text-center font-semibold text-gray-700">
                       {i + 1}
@@ -892,24 +1191,61 @@ export default function VentasAuditoria() {
                     <td className="px-3 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
                         {f.id ? (
-                          <>
-                            <Link
-                              to={`/ventas-auditoria/${f.id}`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
-                              title="Ver detalle"
-                            >
-                              <Eye size={17} />
-                            </Link>
+                          filaEditandoId === getFilaEditableId(f) ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => guardarEdicionFila(f)}
+                                disabled={guardandoFilaId === getFilaEditableId(f)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                                title="Guardar cambios"
+                              >
+                                {guardandoFilaId === getFilaEditableId(f) ? (
+                                  <RefreshCw className="animate-spin" size={16} />
+                                ) : (
+                                  <Save size={16} />
+                                )}
+                              </button>
 
-                            <button
-                              type="button"
-                              onClick={() => desactivarVenta(f.id)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
-                              title="Desactivar venta"
-                            >
-                              <Trash size={17} />
-                            </button>
-                          </>
+                              <button
+                                type="button"
+                                onClick={cancelarEdicionFila}
+                                disabled={guardandoFilaId === getFilaEditableId(f)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded bg-gray-500 text-white hover:bg-gray-600 disabled:opacity-60"
+                                title="Cancelar edicion"
+                              >
+                                <X size={16} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => iniciarEdicionFila(f)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded bg-amber-500 text-white hover:bg-amber-600"
+                                title="Editar fila"
+                              >
+                                <Pencil size={16} />
+                              </button>
+
+                              <Link
+                                to={`/ventas-auditoria/${f.id}`}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
+                                title="Ver detalle"
+                              >
+                                <Eye size={17} />
+                              </Link>
+
+                              <button
+                                type="button"
+                                onClick={() => desactivarVenta(f.id)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
+                                title="Desactivar venta"
+                              >
+                                <Trash size={17} />
+                              </button>
+                            </>
+                          )
                         ) : (
                           <span className="text-xs font-semibold text-gray-400">
                             Sin venta

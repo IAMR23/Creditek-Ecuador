@@ -25,11 +25,13 @@ const buildFromFlatPayload = (data) => ({
   datos_personales: clean({
     nombreCompleto: data.nombreCompleto,
     cedula: data.cedula,
+    telefono: data.telefono,
     edadCumplida: data.edadCumplida,
     numeroHijos: data.numeroHijos,
     estadoCivil: data.estadoCivil,
     ciudadNacimiento: data.ciudadNacimiento,
     otraCiudadNacimiento: data.otraCiudadNacimiento,
+    direccion: data.direccion,
     provinciaNacimiento: data.provinciaNacimiento,
   }),
   residencia_quito: clean({
@@ -39,8 +41,6 @@ const buildFromFlatPayload = (data) => ({
   vivienda_actual: clean({
     tipoVivienda: data.tipoVivienda,
     viviendaFamiliarQuien: data.viviendaFamiliarQuien,
-    viviendaPrestadaQuien: data.viviendaPrestadaQuien,
-    viviendaOtraEspecifique: data.viviendaOtraEspecifique,
   }),
   personas_con_quien_vive: [1, 2, 3, 4, 5]
     .map((i) =>
@@ -69,7 +69,6 @@ const buildFromFlatPayload = (data) => ({
   observaciones: clean({
     logrosVida: data.logrosVida,
     observacionesAdicionales: data.observacionesAdicionales,
-    sinExperienciaLaboral: data.sinExperienciaLaboral,
     firmaAspirante: data.firmaAspirante,
     fechaFormulario: data.fechaFormulario,
   }),
@@ -82,10 +81,18 @@ const normalizePayload = (data = {}) => {
     ? {
         datos_personales: clean(data.datos_personales),
         residencia_quito: clean(data.residencia_quito),
-        vivienda_actual: clean(data.vivienda_actual),
+        vivienda_actual: clean({
+          tipoVivienda: data.vivienda_actual?.tipoVivienda,
+          viviendaFamiliarQuien: data.vivienda_actual?.viviendaFamiliarQuien,
+        }),
         personas_con_quien_vive: normalizeArray(data.personas_con_quien_vive),
         historial_laboral: normalizeArray(data.historial_laboral),
-        observaciones: clean(data.observaciones),
+        observaciones: clean({
+          logrosVida: data.observaciones?.logrosVida,
+          observacionesAdicionales: data.observaciones?.observacionesAdicionales,
+          firmaAspirante: data.observaciones?.firmaAspirante,
+          fechaFormulario: data.observaciones?.fechaFormulario,
+        }),
       }
     : buildFromFlatPayload(data);
 
@@ -111,7 +118,6 @@ const validatePayload = (payload) => {
   const errors = [];
   const datos = payload.datos_personales || {};
   const vivienda = payload.vivienda_actual || {};
-  const observaciones = payload.observaciones || {};
 
   if (!datos.nombreCompleto) errors.push("Nombre completo es obligatorio");
   if (!datos.cedula) errors.push("Cedula es obligatoria");
@@ -121,11 +127,6 @@ const validatePayload = (payload) => {
     errors.push("Debe especificar la ciudad de nacimiento");
   }
   if (!vivienda.tipoVivienda) errors.push("Tipo de vivienda es obligatorio");
-
-  const sinExperiencia = String(observaciones.sinExperienciaLaboral || "").toLowerCase() === "si";
-  if (!sinExperiencia && payload.historial_laboral.length === 0) {
-    errors.push("Debe registrar al menos una experiencia laboral o indicar que no tiene experiencia");
-  }
 
   return errors;
 };

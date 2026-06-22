@@ -269,6 +269,22 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
   }
 };
 
+const ensureSistemasTareasSchema = async (queryInterface, tables) => {
+  if (!tables.includes("sistemas_tareas")) return;
+
+  await addColumnIfMissing(queryInterface, "sistemas_tareas", "finalizadoEn", {
+    type: Sequelize.DATE,
+    allowNull: true,
+  });
+
+  await sequelize.query(`
+    UPDATE sistemas_tareas
+    SET "finalizadoEn" = COALESCE("finalizadoEn", "updatedAt", NOW())
+    WHERE estado = 'finalizado'
+      AND "finalizadoEn" IS NULL;
+  `);
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
@@ -282,6 +298,7 @@ const connectDB = async () => {
     await ensureCierreCajaSchema(queryInterface, tables);
     await ensureMovimientoCajaSchema(queryInterface, tables);
     await ensureMarketingSchema(queryInterface, tables);
+    await ensureSistemasTareasSchema(queryInterface, tables);
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {
