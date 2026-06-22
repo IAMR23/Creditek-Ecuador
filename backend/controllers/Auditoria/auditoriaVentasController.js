@@ -411,6 +411,7 @@ exports.obtenerReporteGerencia = async ({
           "contrato",
           "cierreCaja",
           "margen",
+          "costo",
         ],
         ...(Object.keys(whereDetalleVenta).length > 0 && {
           where: whereDetalleVenta,

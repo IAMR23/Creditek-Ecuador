@@ -4,6 +4,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     indicadorGerenciaTotal: 0,
     indicadorEngancheJavierTotal: 0,
     precioVentaTotal: 0,
+    costoTotal: 0,
     margenPorcentualTotal: 0,
 
     porVendedor: {},
@@ -22,6 +23,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     porSemana: {},
     indicadorGerenciaPorSemana: {},
     precioVentaPorSemana: {},
+    costoPorSemana: {},
     margenPorcentualPorSemana: {},
   };
 
@@ -136,12 +138,14 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
 
     const margen = normalizarNumero(v.margen);
     const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);
+    const costo = normalizarNumero(v.costo);
     stats.indicadorGerenciaTotal = Number(
       (stats.indicadorGerenciaTotal + margen).toFixed(2)
     );
     stats.precioVentaTotal = Number(
       (stats.precioVentaTotal + precioVenta).toFixed(2)
     );
+    stats.costoTotal = Number((stats.costoTotal + costo).toFixed(2));
 
     // Semana comercial jueves-miercoles calculada desde la fecha real.
     if (v.fecha) {
@@ -155,6 +159,9 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
         );
         stats.precioVentaPorSemana[key] = Number(
           ((stats.precioVentaPorSemana[key] || 0) + precioVenta).toFixed(2)
+        );
+        stats.costoPorSemana[key] = Number(
+          ((stats.costoPorSemana[key] || 0) + costo).toFixed(2)
         );
 
         if (esEngancheJavier) {
@@ -233,23 +240,23 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   const semanasMargen = new Set([
     ...Object.keys(stats.porSemana),
     ...Object.keys(stats.indicadorGerenciaPorSemana),
-    ...Object.keys(stats.precioVentaPorSemana),
+    ...Object.keys(stats.costoPorSemana),
   ]);
 
   semanasMargen.forEach((key) => {
     const utilidad = Number(stats.indicadorGerenciaPorSemana[key]) || 0;
-    const venta = Number(stats.precioVentaPorSemana[key]) || 0;
+    const costo = Number(stats.costoPorSemana[key]) || 0;
 
     stats.margenPorcentualPorSemana[key] =
-      venta === 0 ? 0 : Number(((utilidad / venta) * 100).toFixed(2));
+      costo === 0 ? 0 : Number(((utilidad / costo) * 100).toFixed(2));
   });
 
   stats.margenPorcentualTotal =
-    stats.precioVentaTotal === 0
+    stats.costoTotal === 0
       ? 0
       : Number(
           (
-            (stats.indicadorGerenciaTotal / stats.precioVentaTotal) *
+            (stats.indicadorGerenciaTotal / stats.costoTotal) *
             100
           ).toFixed(2)
         );
