@@ -42,6 +42,7 @@ export const VENDEDOR_PERMISSION = "Vendedor";
 export const ROUTE_PERMISSIONS = {
   "/dashboard": "Gerencia",
   "/powerbi": "Gerencia",
+  "/ghl/oportunidades-matriz": "Gerencia",
   "/metas-comerciales": "Gerencia",
   "/costo-venta-marketing": "Gerencia",
   "/costo-entrega-marketing": "Gerencia",

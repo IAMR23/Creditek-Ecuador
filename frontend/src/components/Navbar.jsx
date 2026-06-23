@@ -59,7 +59,7 @@ const handleLogoClick = () => {
             >
               <span className="animate-pulse shrink-0">RVE</span>
               <img
-                src="./logo.png"
+                src="/logo.png"
                 alt="logo"
                 className="w-20 sm:w-24 md:w-28 h-auto object-contain"
               />

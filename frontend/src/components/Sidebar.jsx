@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   LucideTicketPercent,
   MonitorCog,
+  Table2,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { FaTasks } from "react-icons/fa";
@@ -95,7 +96,7 @@ export default function Sidebar({ auth }) {
             path: "/bdd-ventas",
           },
           {
-            label: "Conciliacion Facturas",
+            label: "Normalizacion dispositivos",
             icon: <ClipboardList size={20} />,
             path: "/conciliacion-facturas",
           },
@@ -109,6 +110,11 @@ export default function Sidebar({ auth }) {
             label: "Power BI",
             icon: <BarChart3 size={20} />,
             path: "/powerbi",
+          },
+          {
+            label: "Matriz GHL",
+            icon: <Table2 size={20} />,
+            path: "/ghl/oportunidades-matriz",
           },
         ],
       },

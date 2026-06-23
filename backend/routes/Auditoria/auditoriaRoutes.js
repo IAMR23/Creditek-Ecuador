@@ -140,14 +140,22 @@ router.get("/informe", async (req, res) => {
   
 router.get("/ventas2", async (req, res) => {
   try {
-    const { fechaInicio, fechaFin, agenciaId, vendedorId , cierreCaja  } = req.query;
+    const {
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      cierreCaja,
+      observacion,
+    } = req.query;
 
     const ventas = await auditoriaVentasController.obtenerReporteGerencia({
       fechaInicio,
       fechaFin,
       agenciaId,
       vendedorId,
-      cierreCaja
+      cierreCaja,
+      observacion,
     });
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);
@@ -158,8 +166,13 @@ router.get("/ventas2", async (req, res) => {
         fechaInicio,
         fechaFin,
       });
+    estadisticas.tareasFinalizadasPorSemana =
+      await tareasSistemasController.obtenerTareasFinalizadasPorSemana({
+        fechaInicio,
+        fechaFin,
+      });
     estadisticas.totalTareasFinalizadas =
-      estadisticas.tareasFinalizadasPorFecha.reduce(
+      estadisticas.tareasFinalizadasPorSemana.reduce(
         (acc, item) => acc + (Number(item.tareasFinalizadas) || 0),
         0,
       );

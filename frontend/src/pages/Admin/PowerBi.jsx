@@ -1,14 +1,104 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
 
-const STORAGE_KEY = "dashboard_filtros";
+const STORAGE_KEY = "powerbi_filtros";
+const SEMANAS_POWERBI = 13;
+const DIAS_RANGO_POWERBI = SEMANAS_POWERBI * 7 - 1;
+
+const crearFechaLocal = (fecha) => {
+  if (fecha instanceof Date) {
+    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  }
+
+  const [year, month, day] = String(fecha || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  return new Date(year, month - 1, day);
+};
+
+const formatearFechaLocal = (fecha) => {
+  const date = crearFechaLocal(fecha);
+  if (!date) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const sumarDias = (fecha, dias) => {
+  const date = crearFechaLocal(fecha);
+  if (!date) return null;
+
+  date.setDate(date.getDate() + dias);
+  return date;
+};
+
+const getInicioSemanaJueves = (fecha) => {
+  const inicio = crearFechaLocal(fecha);
+  if (!inicio) return null;
+
+  while (inicio.getDay() !== 4) {
+    inicio.setDate(inicio.getDate() - 1);
+  }
+
+  return inicio;
+};
+
+const getFinSemanaMiercoles = (fecha) => {
+  const inicio = getInicioSemanaJueves(fecha);
+  if (!inicio) return null;
+
+  return sumarDias(inicio, 6);
+};
+
+const construirRango13SemanasDesdeFin = (fechaReferencia = new Date()) => {
+  const fechaFin = getFinSemanaMiercoles(fechaReferencia);
+  const fechaInicio = sumarDias(fechaFin, -DIAS_RANGO_POWERBI);
+
+  return {
+    fechaInicio: formatearFechaLocal(fechaInicio),
+    fechaFin: formatearFechaLocal(fechaFin),
+  };
+};
+
+const esRango13SemanasOperativas = (fechaInicio, fechaFin) => {
+  const inicio = crearFechaLocal(fechaInicio);
+  const fin = crearFechaLocal(fechaFin);
+
+  if (!inicio || !fin || inicio > fin) return false;
+  if (inicio.getDay() !== 4 || fin.getDay() !== 3) return false;
+
+  const msPorDia = 24 * 60 * 60 * 1000;
+  const diferenciaDias = Math.round((fin - inicio) / msPorDia);
+
+  return diferenciaDias === DIAS_RANGO_POWERBI;
+};
+
+const getRangoInicialPowerBi = (filtrosGuardados = {}) => {
+  if (
+    esRango13SemanasOperativas(
+      filtrosGuardados.fechaInicio,
+      filtrosGuardados.fechaFin,
+    )
+  ) {
+    return {
+      fechaInicio: filtrosGuardados.fechaInicio,
+      fechaFin: filtrosGuardados.fechaFin,
+    };
+  }
+
+  return construirRango13SemanasDesdeFin();
+};
 
 export default function Powerbi() {
   const filtrosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  const rangoInicial = getRangoInicialPowerBi(filtrosGuardados);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,11 +113,11 @@ export default function Powerbi() {
   const [openAgencias, setOpenAgencias] = useState(false);
 
   const [fechaInicio, setFechaInicio] = useState(
-    filtrosGuardados.fechaInicio || "2026-01-01"
+    rangoInicial.fechaInicio
   );
 
   const [fechaFin, setFechaFin] = useState(
-    filtrosGuardados.fechaFin || new Date().toLocaleDateString("en-CA")
+    rangoInicial.fechaFin
   );
 
   const [agenciaId, setAgenciaId] = useState(
@@ -45,6 +135,20 @@ export default function Powerbi() {
   const [cierreCajaTipo, setCierreCajaTipo] = useState(
     filtrosGuardados.cierreCajaTipo || ""
   );
+
+  const [observacion, setObservacion] = useState(
+    filtrosGuardados.observacion || ""
+  );
+
+  const observaciones = useMemo(() => {
+    const items = new Set(Object.keys(estadisticas?.porObservacion || {}));
+
+    if (observacion) {
+      items.add(observacion);
+    }
+
+    return Array.from(items).sort((a, b) => a.localeCompare(b, "es"));
+  }, [estadisticas?.porObservacion, observacion]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -71,9 +175,10 @@ export default function Powerbi() {
         agenciaId,
         vendedorId,
         cierreCajaTipo,
+        observacion,
       })
     );
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo]);
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo, observacion]);
 
   const cargarUsuarios = async () => {
     try {
@@ -116,12 +221,50 @@ export default function Powerbi() {
     setAgenciaId([]);
   };
 
+  const actualizarFechaInicio = (value) => {
+    const inicio = getInicioSemanaJueves(value);
+
+    if (!inicio) {
+      setFechaInicio(value);
+      return;
+    }
+
+    setFechaInicio(formatearFechaLocal(inicio));
+    setFechaFin(formatearFechaLocal(sumarDias(inicio, DIAS_RANGO_POWERBI)));
+  };
+
+  const actualizarFechaFin = (value) => {
+    const fin = getFinSemanaMiercoles(value);
+
+    if (!fin) {
+      setFechaFin(value);
+      return;
+    }
+
+    setFechaInicio(formatearFechaLocal(sumarDias(fin, -DIAS_RANGO_POWERBI)));
+    setFechaFin(formatearFechaLocal(fin));
+  };
+
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       Swal.fire(
         "Fechas invalidas",
         "La fecha de inicio no puede ser mayor que la fecha de fin",
+        "warning",
+      );
+      return;
+    }
+
+    if (
+      fechaInicio &&
+      fechaFin &&
+      !esRango13SemanasOperativas(fechaInicio, fechaFin)
+    ) {
+      setError("El rango debe cubrir exactamente 13 semanas operativas");
+      Swal.fire(
+        "Rango invalido",
+        "Selecciona un rango exacto de 13 semanas, de jueves a miercoles",
         "warning",
       );
       return;
@@ -142,6 +285,7 @@ export default function Powerbi() {
 
       if (vendedorId) params.append("vendedorId", vendedorId);
       if (cierreCajaTipo) params.append("cierreCaja", cierreCajaTipo);
+      if (observacion.trim()) params.append("observacion", observacion.trim());
 
       const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
       const { data } = await axios.get(url);
@@ -171,6 +315,7 @@ export default function Powerbi() {
     agenciaId,
     vendedorId,
     cierreCajaTipo,
+    observacion,
     usuarioInfo,
   ]);
 
@@ -192,7 +337,7 @@ export default function Powerbi() {
               type="date"
               className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
               value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
+              onChange={(e) => actualizarFechaInicio(e.target.value)}
             />
           </div>
 
@@ -204,7 +349,7 @@ export default function Powerbi() {
               type="date"
               className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
               value={fechaFin}
-              onChange={(e) => setFechaFin(e.target.value)}
+              onChange={(e) => actualizarFechaFin(e.target.value)}
             />
           </div>
 
@@ -332,6 +477,24 @@ export default function Powerbi() {
               <option value="CONTADO">Contado</option>
               <option value="CREDITV">CrediTV</option>
               <option value="UPHONE">Uphone</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="mb-1.5 text-sm font-medium text-gray-700">
+              Observaciones
+            </label>
+            <select
+              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              value={observacion}
+              onChange={(e) => setObservacion(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {observaciones.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
             </select>
           </div>
         </div>

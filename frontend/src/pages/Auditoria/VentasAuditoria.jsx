@@ -3,10 +3,12 @@ import axios from "axios";
 import { API_URL } from "../../../config";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
+import * as XLSX from "xlsx";
 import {
   AlertTriangle,
   Eye,
   FileText,
+  FileSpreadsheet,
   Pencil,
   RefreshCw,
   Save,
@@ -18,6 +20,8 @@ import {
 import Swal from "sweetalert2";
 
 const STORAGE_KEY = "ventas_auditoria_filtros";
+
+const getHoyLocal = () => new Date().toLocaleDateString("en-CA");
 
 const TABLE_COLUMNS = [
   "Fecha",
@@ -192,7 +196,7 @@ const mapVentaAuditoria = (venta) => {
 
 export default function VentasAuditoria() {
   const filtrosGuardados = obtenerFiltrosGuardados();
-  const hoyLocal = new Date().toLocaleDateString("en-CA");
+  const hoyLocal = getHoyLocal();
 
   const [filas, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -399,6 +403,25 @@ export default function VentasAuditoria() {
     }
   };
 
+  const limpiarFiltros = () => {
+    const hoy = getHoyLocal();
+
+    setFechaInicio(hoy);
+    setFechaFin(hoy);
+    setAgenciaId("");
+    setVendedorId("");
+    setModeloId("");
+    setCierreCaja("");
+    setOrigenId("");
+    setDispositivoId("");
+    setEstado("");
+    setBusquedaCliente("");
+    setVistaResultados("todos");
+    setPdfResumen(null);
+    setFilaEditandoId("");
+    setEdicionFila({});
+  };
+
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
@@ -577,6 +600,69 @@ export default function VentasAuditoria() {
       </html>
     `);
     ventana.document.close();
+  };
+
+  const exportarExcel = () => {
+    if (!filasVisibles.length) {
+      Swal.fire({
+        icon: "info",
+        title: "Sin datos",
+        text: "No hay ventas para exportar con la vista seleccionada.",
+      });
+      return;
+    }
+
+    const filasExcel = filasVisibles.map((fila, index) => {
+      const row = { "#": index + 1 };
+
+      TABLE_COLUMNS.forEach((columna) => {
+        row[columna] = getValorColumnaReporte(fila, columna);
+      });
+
+      return row;
+    });
+
+    const filtrosExcel = [
+      ["Filtro", "Valor"],
+      ["Fecha inicio", fechaInicio || "Todas"],
+      ["Fecha fin", fechaFin || "Todas"],
+      ["Agencia", obtenerNombreSeleccionado(agencias, agenciaId)],
+      ["Vendedor", obtenerNombreSeleccionado(usuarios, vendedorId)],
+      ["Modelo", obtenerNombreSeleccionado(modelos, modeloId)],
+      ["Cierre de caja", cierreCaja || "Todos"],
+      ["Origen", obtenerNombreSeleccionado(origenes, origenId)],
+      ["Dispositivo", obtenerNombreSeleccionado(dispositivos, dispositivoId)],
+      ["Cliente / Cedula", busquedaCliente.trim() || "Todos"],
+      [
+        "Estado",
+        estado === "activo"
+          ? "Activo"
+          : estado === "desactivada"
+            ? "Desactivada"
+            : "Todos",
+      ],
+      ["Vista", vistaResultados === "errores" ? "Solo errores" : "Todos"],
+      ["Registros exportados", filasVisibles.length],
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(filasExcel);
+    worksheet["!cols"] = [
+      { wch: 6 },
+      ...TABLE_COLUMNS.map((columna) => ({
+        wch: Math.max(14, Math.min(36, columna.length + 8)),
+      })),
+    ];
+
+    const filtrosSheet = XLSX.utils.aoa_to_sheet(filtrosExcel);
+    filtrosSheet["!cols"] = [{ wch: 22 }, { wch: 36 }];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas Auditoria");
+    XLSX.utils.book_append_sheet(workbook, filtrosSheet, "Filtros");
+
+    const desde = fechaInicio || "todas";
+    const hasta = fechaFin || "todas";
+    XLSX.writeFile(workbook, `Ventas_Auditoria_${desde}_a_${hasta}.xlsx`);
   };
 
   const desactivarVenta = async (id) => {
@@ -889,14 +975,25 @@ export default function VentasAuditoria() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={generarReportePdf}
-          className="inline-flex items-center justify-center gap-2 rounded bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
-        >
-          <FileText size={18} />
-          PDF
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={exportarExcel}
+            className="inline-flex items-center justify-center gap-2 rounded bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
+          >
+            <FileSpreadsheet size={18} />
+            Excel
+          </button>
+
+          <button
+            type="button"
+            onClick={generarReportePdf}
+            className="inline-flex items-center justify-center gap-2 rounded bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800"
+          >
+            <FileText size={18} />
+            PDF
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
@@ -910,9 +1007,14 @@ export default function VentasAuditoria() {
       <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold text-gray-900">Filtros</h2>
-          <span className="text-xs text-gray-500">
-            Los cambios se guardan para tu proxima consulta
-          </span>
+          <button
+            type="button"
+            onClick={limpiarFiltros}
+            className="inline-flex items-center justify-center gap-2 rounded border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <X size={14} />
+            Limpiar
+          </button>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">

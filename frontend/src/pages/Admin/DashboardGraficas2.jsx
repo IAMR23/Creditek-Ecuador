@@ -10,8 +10,6 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  BarChart,
-  Bar,
   CartesianGrid,
 } from "recharts";
 import { FaCopy } from "react-icons/fa";
@@ -24,7 +22,7 @@ const COLORS = {
   costo: "#f59e0b",
   costoEntrega: "#0891b2",
   margenPorcentual: "#7c3aed",
-  tareasFinalizadas: "#db2777",
+  tareasFinalizadas: "#2563eb",
 };
 
 const crearFechaLocal = (fechaStr) => {
@@ -141,12 +139,38 @@ const formatFechaCorta = (fechaStr) => {
   });
 };
 
-const toTareasFinalizadasArray = (items = []) =>
-  (items || []).map((item) => ({
-    fecha: item.fecha,
-    name: formatFechaCorta(item.fecha),
-    tareasFinalizadas: Number(item.tareasFinalizadas) || 0,
-  }));
+const formatRangoFechaCorta = (fechaInicio, fechaFin) => {
+  const inicio = formatFechaCorta(fechaInicio);
+  const fin = formatFechaCorta(fechaFin);
+
+  if (!inicio && !fin) return "";
+  if (!inicio) return fin;
+  if (!fin) return inicio;
+
+  return `${inicio} - ${fin}`;
+};
+
+const toTareasFinalizadasSemanaArray = (items = [], fechaInicio = "2026-01-01") =>
+  (items || [])
+    .map((item) => {
+      const semanaNumero =
+        Number(item.semanaNumero) ||
+        Number(String(item.semana || "").replace(/\D/g, ""));
+      const rango =
+        (semanaNumero ? getRangoSemana(semanaNumero, fechaInicio) : "") ||
+        formatRangoFechaCorta(item.fechaInicio, item.fechaFin);
+
+      return {
+        semana: item.semana || `Semana ${semanaNumero}`,
+        semanaNumero,
+        fechaInicio: item.fechaInicio,
+        fechaFin: item.fechaFin,
+        rango,
+        name: rango,
+        tareasFinalizadas: Number(item.tareasFinalizadas) || 0,
+      };
+    })
+    .sort((a, b) => a.semanaNumero - b.semanaNumero);
 
 const tooltipStyle = {
   contentStyle: {
@@ -223,8 +247,12 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
   );
 
   const dataTareasFinalizadas = useMemo(
-    () => toTareasFinalizadasArray(estadisticas?.tareasFinalizadasPorFecha),
-    [estadisticas?.tareasFinalizadasPorFecha],
+    () =>
+      toTareasFinalizadasSemanaArray(
+        estadisticas?.tareasFinalizadasPorSemana,
+        fechaInicio,
+      ),
+    [estadisticas?.tareasFinalizadasPorSemana, fechaInicio],
   );
 
   useEffect(() => {
@@ -423,7 +451,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       </div>
 
       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
-        <h3 className="text-gray-500 text-sm">Enganche Javier</h3>
+        <h3 className="text-gray-500 text-sm">Ventas Javier</h3>
 
         <p className="text-4xl font-bold text-green-700">
           {Number(estadisticas.indicadorEngancheJavierTotal) || 0}
@@ -446,20 +474,20 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         </p>
       </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
+{/*       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
         <h3 className="text-gray-500 text-sm">Tareas Finalizadas</h3>
 
         <p className="text-4xl font-bold text-pink-700">
           {Number(estadisticas.totalTareasFinalizadas) || 0}
         </p>
-      </div>
+      </div> */}
 
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold">Ventas Enganche Javier por Semana</h3>
+          <h3 className="font-semibold">Ventas Javier por Semana</h3>
           <CopyButton
             onClick={() =>
-              copiarGrafico(refEnganche, "Ventas Enganche Javier por Semana")
+              copiarGrafico(refEnganche, "Ventas Javier por Semana")
             }
           />
         </div>
@@ -502,7 +530,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         </div>
 
         <div ref={refSemana} className="bg-white rounded-xl">
-          <h4 className="font-semibold mb-3">Ventas por Semana</h4>
 
           <ResponsiveContainer width="100%" height={650}>
             <LineChart
@@ -618,45 +645,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
           </ResponsiveContainer>
         </div>
       </div>
-
-      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-semibold">Tareas Finalizadas por Fecha</h3>
-          <CopyButton
-            onClick={() =>
-              copiarGrafico(refTareasFinalizadas, "Tareas Finalizadas por Fecha")
-            }
-          />
-        </div>
-
-        <div ref={refTareasFinalizadas} className="bg-white rounded-xl">
-          <ResponsiveContainer width="100%" height={650}>
-            <BarChart
-              data={dataTareasFinalizadas}
-              margin={{ top: 20, right: 12, left: 10, bottom: 110 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-
-              <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
-
-              <YAxis allowDecimals={false} domain={minDataDomain} />
-
-              <Tooltip
-                {...tooltipStyle}
-                labelFormatter={(_, payload) => payload?.[0]?.payload?.fecha || ""}
-              />
-
-              <Bar
-                dataKey="tareasFinalizadas"
-                name="Tareas finalizadas"
-                fill={COLORS.tareasFinalizadas}
-                radius={[8, 8, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Costo por Venta por Semana</h3>
@@ -756,6 +744,48 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
           )}
         </div>
       </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">Tareas Finalizadas por Semana</h3>
+          <CopyButton
+            onClick={() =>
+              copiarGrafico(refTareasFinalizadas, "Tareas Finalizadas por Semana")
+            }
+          />
+        </div>
+
+        <div ref={refTareasFinalizadas} className="bg-white rounded-xl">
+          <ResponsiveContainer width="100%" height={650}>
+            <LineChart
+              data={dataTareasFinalizadas}
+              margin={{ top: 20, right: 12, left: 10, bottom: 110 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+              <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
+
+              <YAxis allowDecimals={false} domain={minDataDomain} />
+
+              <Tooltip
+                {...tooltipStyle}
+                labelFormatter={(_, payload) => payload?.[0]?.payload?.rango || ""}
+              />
+
+              <Line
+                type="linear"
+                dataKey="tareasFinalizadas"
+                name="Tareas finalizadas"
+                stroke={COLORS.tareasFinalizadas}
+                strokeWidth={3}
+                dot={{ r: 6 }}
+                activeDot={{ r: 10 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
     </div>
   );
 }

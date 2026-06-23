@@ -17,7 +17,7 @@ async function enviarNotificacion(task) {
     `🔔 [${new Date().toISOString()}] Tarea: ${task.title} → Usuario ${task.assignedTo}`
   );
 }
-
+ 
 // 🚀 CRON PRINCIPAL (cada minuto)
 function startTaskCron() {
   cron.schedule("* * * * *", async () => {

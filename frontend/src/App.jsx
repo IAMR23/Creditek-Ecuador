@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { jwtDecode } from "jwt-decode";
 
 import Navbar from "./components/Navbar";
@@ -92,6 +92,9 @@ import Powerbi from "./pages/Admin/PowerBi";
 import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
+
+const GhlOportunidadesMatriz = lazy(() => import("./pages/GHL/OportunidadesMatriz"));
+
 function App() {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
@@ -253,6 +256,15 @@ useEffect(() => {
                 <Route index element={<Navigate to={defaultRoute} replace />} />
                 <Route path="dashboard" element={protect(<Dashboard />, "/dashboard")} />
                 <Route path="powerbi" element={protect(<Powerbi />, "/powerbi")} />
+                <Route
+                  path="ghl/oportunidades-matriz"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}>
+                      <GhlOportunidadesMatriz />
+                    </Suspense>,
+                    "/ghl/oportunidades-matriz",
+                  )}
+                />
                 <Route path="ventas-completas" element={protect(<VentasCompletas />, "/ventas-completas")} />
                 <Route path="usuarios" element={protect(<Usuarios />, "/usuarios")} />
                 <Route path="agencias" element={protect(<Agencias />, "/agencias")} />

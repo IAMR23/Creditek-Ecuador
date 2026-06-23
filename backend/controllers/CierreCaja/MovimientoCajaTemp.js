@@ -120,6 +120,35 @@ const crearMovimientoTemp = async (req, res) => {
   }
 };
 
+const validarPayloadMovimiento = (body = {}) => {
+  const { responsable, detalle, valor, formaPago, recibo, entidad, observacion } = body;
+
+  if (!detalle?.trim() && !observacion?.trim()) {
+    return { error: "Detalle requerido" };
+  }
+
+  if (!formaPago?.trim() && !observacion?.trim()) {
+    return { error: "Debe seleccionar forma de pago o escribir una observacion" };
+  }
+
+  if (!observacion?.trim() && !tieneValorNoNegativo(valor)) {
+    return { error: "Valor invalido" };
+  }
+
+  return {
+    data: {
+      responsable: responsable?.trim() || null,
+      detalle: detalle?.trim() || null,
+      valor: redondearDosDecimales(valor),
+      formaPago: formaPago?.trim() || null,
+      recibo: recibo || null,
+      entidad: entidad?.trim() || null,
+      observacion: observacion?.trim() || null,
+      estado: "ACTIVO",
+    },
+  };
+};
+
 const obtenerMovimientosTemp = async (req, res) => {
   try {
     const usuarioAgenciaId = await resolverUsuarioAgenciaId(req);
@@ -147,6 +176,76 @@ const obtenerMovimientosTemp = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al obtener movimientos",
+    });
+  }
+};
+
+const actualizarMovimientoTemp = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const usuarioAgenciaId = await resolverUsuarioAgenciaId(req);
+
+    if (!usuarioAgenciaId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Usuario no identificado",
+      });
+    }
+
+    const fechaMovimiento = esFechaISOValida(req.body?.fecha)
+      ? req.body.fecha
+      : obtenerFechaEcuador();
+
+    const cierreExistente = await CierreCaja.findOne({
+      where: {
+        usuarioId: req.user.id,
+        fecha: fechaMovimiento,
+        estadoCierre: { [Op.in]: ["CERRADO", "REABIERTO"] },
+      },
+    });
+
+    if (cierreExistente) {
+      return res.status(409).json({
+        ok: false,
+        message: "La caja de la fecha seleccionada ya fue cerrada para este usuario",
+      });
+    }
+
+    const validacion = validarPayloadMovimiento(req.body);
+    if (validacion.error) {
+      return res.status(400).json({
+        ok: false,
+        message: validacion.error,
+      });
+    }
+
+    const movimiento = await MovimientoCajaTemp.findOne({
+      where: {
+        id,
+        usuarioAgenciaId,
+        estado: "ACTIVO",
+      },
+    });
+
+    if (!movimiento) {
+      return res.status(404).json({
+        ok: false,
+        message: "Movimiento no encontrado",
+      });
+    }
+
+    await movimiento.update(validacion.data);
+
+    return res.json({
+      ok: true,
+      data: movimiento,
+      message: "Movimiento actualizado",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al actualizar movimiento",
     });
   }
 };
@@ -206,6 +305,7 @@ const limpiarMovimientosTemp = async (usuarioAgenciaId, transaction = null) => {
 module.exports = {
   crearMovimientoTemp,
   obtenerMovimientosTemp,
+  actualizarMovimientoTemp,
   eliminarMovimientoTemp,
   limpiarMovimientosTemp,
 };

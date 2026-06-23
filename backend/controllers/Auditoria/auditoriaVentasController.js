@@ -324,6 +324,7 @@ exports.obtenerReporteGerencia = async ({
   agenciaId,
   vendedorId,
   cierreCaja,
+  observacion,
 }) => {
   const whereVenta = {
     activo: true,
@@ -340,6 +341,12 @@ exports.obtenerReporteGerencia = async ({
     whereVenta.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
   } else if (fechaFin) {
     whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+  }
+
+  if (observacion && observacion !== "todas") {
+    whereVenta.observacion = {
+      [Op.iLike]: `%${observacion}%`,
+    };
   }
 
   const whereDetalleVenta = {};
@@ -1042,13 +1049,23 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
       const mejor = candidatosDisponibles[0] || candidatos[0];
       const detalleError = [];
+      const clientePdfDetectado = Boolean(normalizarTexto(record.cliente));
+      const clienteExisteEnRve =
+        clientePdfDetectado &&
+        ventasFlatten.some(
+          (venta) => similitudTexto(record.cliente, venta.cliente) >= 85,
+        );
 
       if (!fechaPdf) detalleError.push("FECHA_PDF_NO_DETECTADA");
       else if (!candidatos.some((venta) => venta.fechaOk)) {
         detalleError.push(`FECHA_NO_COINCIDE PDF:${fechaPdf}`);
       }
 
-      if (!mejor || mejor.similitudCliente < 85) {
+      if (!clientePdfDetectado) {
+        detalleError.push("CLIENTE_PDF_NO_DETECTADO");
+      } else if (!clienteExisteEnRve) {
+        detalleError.push(`CLIENTE_PDF_NO_EXISTE_EN_RVE: ${record.cliente}`);
+      } else if (!mejor || mejor.similitudCliente < 85) {
         detalleError.push(
           `CLIENTE_NO_COINCIDE similitud:${mejor?.similitudCliente || 0}%`,
         );

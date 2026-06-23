@@ -177,7 +177,8 @@ connectDB()
     app.use("/api/tareas", require("./routes/Sistemas/tareasRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
-app.use("/api/webhooks", require("./routes/webhookRoutes"));
+    app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
+    app.use("/api/webhooks", require("./routes/webhookRoutes"));
     console.log(
       "Carpeta uploads que Express está usando:",
       path.join(__dirname, "uploads")

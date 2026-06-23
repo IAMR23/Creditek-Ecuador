@@ -1,6 +1,7 @@
 jest.mock("../../models/CierreCaja/MovimientoCajaTemp", () => ({
   create: jest.fn(),
   destroy: jest.fn(),
+  findOne: jest.fn(),
 }));
 
 jest.mock("../../models/CierreCaja/CierreCaja", () => ({
@@ -9,7 +10,11 @@ jest.mock("../../models/CierreCaja/CierreCaja", () => ({
 
 const MovimientoCajaTemp = require("../../models/CierreCaja/MovimientoCajaTemp");
 const CierreCaja = require("../../models/CierreCaja/CierreCaja");
-const { crearMovimientoTemp, eliminarMovimientoTemp } = require("./MovimientoCajaTemp");
+const {
+  actualizarMovimientoTemp,
+  crearMovimientoTemp,
+  eliminarMovimientoTemp,
+} = require("./MovimientoCajaTemp");
 
 const crearRes = () => ({
   status: jest.fn().mockReturnThis(),
@@ -88,6 +93,58 @@ describe("MovimientoCajaTemp controller", () => {
     expect(res.json).toHaveBeenCalledWith({
       ok: true,
       message: "Movimiento eliminado",
+    });
+  });
+
+  test("actualiza movimientos temporales activos del usuario-agencia autenticado", async () => {
+    CierreCaja.findOne.mockResolvedValue(null);
+    const movimiento = {
+      id: 25,
+      update: jest.fn().mockResolvedValue(),
+    };
+    MovimientoCajaTemp.findOne.mockResolvedValue(movimiento);
+
+    const req = {
+      params: { id: "25" },
+      user: { id: 7, usuarioAgenciaId: 11 },
+      body: {
+        fecha: "2026-06-23",
+        responsable: "Raul",
+        detalle: "CUOTA",
+        valor: "18.30",
+        formaPago: "EFECTIVO",
+        recibo: 555,
+        entidad: "Cliente",
+        observacion: "Editado",
+      },
+    };
+    const res = crearRes();
+
+    await actualizarMovimientoTemp(req, res);
+
+    expect(MovimientoCajaTemp.findOne).toHaveBeenCalledWith({
+      where: {
+        id: "25",
+        usuarioAgenciaId: 11,
+        estado: "ACTIVO",
+      },
+    });
+    expect(movimiento.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responsable: "Raul",
+        detalle: "CUOTA",
+        valor: 18.3,
+        formaPago: "EFECTIVO",
+        recibo: 555,
+        entidad: "Cliente",
+        observacion: "Editado",
+        estado: "ACTIVO",
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      data: movimiento,
+      message: "Movimiento actualizado",
     });
   });
 });

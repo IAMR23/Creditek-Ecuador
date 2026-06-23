@@ -59,6 +59,7 @@ services:
       API_TOKEN: ${API_TOKEN}
       GHL_LOCATION_ID: ${GHL_LOCATION_ID}
       GHL_TOKEN: ${GHL_TOKEN}
+      GHL_PIPELINE_ID: ${GHL_PIPELINE_ID}
       GHL_BASE_URL: ${GHL_BASE_URL}
       DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}
     volumes:

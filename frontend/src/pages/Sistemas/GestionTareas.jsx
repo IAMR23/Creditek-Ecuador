@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import {
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
+  Filter,
   Pencil,
   Play,
   Plus,
@@ -38,6 +41,12 @@ const formInicial = {
   titulo: "",
   descripcion: "",
   fechaInicio: new Date().toLocaleDateString("en-CA"),
+};
+
+const filtrosIniciales = {
+  fechaInicio: "",
+  fechaFin: "",
+  estado: "",
 };
 
 const getToken = () => localStorage.getItem("token");
@@ -91,23 +100,80 @@ export default function GestionTareas() {
   const [tareaEditando, setTareaEditando] = useState(null);
   const [form, setForm] = useState(formInicial);
   const [now, setNow] = useState(Date.now());
+  const [filtros, setFiltros] = useState(filtrosIniciales);
+  const [pagina, setPagina] = useState(1);
+  const [limite, setLimite] = useState(10);
+  const [paginacion, setPaginacion] = useState({
+    pagina: 1,
+    limite: 10,
+    total: 0,
+    totalPaginas: 1,
+  });
+  const [resumen, setResumen] = useState({
+    total: 0,
+    pendientes: 0,
+    enProgreso: 0,
+    finalizadas: 0,
+  });
+  const [filtroError, setFiltroError] = useState("");
 
-  const resumen = useMemo(() => {
-    const total = tareas.length;
-    const pendientes = tareas.filter((tarea) => tarea.status === "pendiente").length;
-    const enProgreso = tareas.filter((tarea) => tarea.status === "en_progreso").length;
-    const finalizadas = tareas.filter((tarea) => isFinalizada(tarea)).length;
+  const rangoPaginacion = useMemo(() => {
+    if (!paginacion.total) return { desde: 0, hasta: 0 };
 
-    return { total, pendientes, enProgreso, finalizadas };
-  }, [tareas]);
+    const desde = (paginacion.pagina - 1) * paginacion.limite + 1;
+    const hasta = Math.min(paginacion.pagina * paginacion.limite, paginacion.total);
 
-  const cargarTareas = async () => {
+    return { desde, hasta };
+  }, [paginacion]);
+
+  const cargarTareas = async (paginaSolicitada = pagina) => {
+    if (
+      filtros.fechaInicio &&
+      filtros.fechaFin &&
+      filtros.fechaInicio > filtros.fechaFin
+    ) {
+      setFiltroError("La fecha de inicio no puede ser mayor que la fecha fin");
+      setTareas([]);
+      setPaginacion((prev) => ({ ...prev, total: 0, totalPaginas: 1 }));
+      setResumen({
+        total: 0,
+        pendientes: 0,
+        enProgreso: 0,
+        finalizadas: 0,
+      });
+      return;
+    }
+
     try {
+      setFiltroError("");
       setLoading(true);
       const { data } = await axios.get(`${API_URL}/api/tareas`, {
         headers: getAuthHeaders(),
+        params: {
+          page: paginaSolicitada,
+          limit: limite,
+          ...(filtros.fechaInicio && { fechaInicio: filtros.fechaInicio }),
+          ...(filtros.fechaFin && { fechaFin: filtros.fechaFin }),
+          ...(filtros.estado && { estado: filtros.estado }),
+        },
       });
       setTareas(data.tareas || []);
+      setResumen(
+        data.resumen || {
+          total: 0,
+          pendientes: 0,
+          enProgreso: 0,
+          finalizadas: 0,
+        },
+      );
+      setPaginacion(
+        data.paginacion || {
+          pagina: paginaSolicitada,
+          limite,
+          total: data.tareas?.length || 0,
+          totalPaginas: 1,
+        },
+      );
     } catch (error) {
       Swal.fire(
         "Error",
@@ -121,7 +187,7 @@ export default function GestionTareas() {
 
   useEffect(() => {
     cargarTareas();
-  }, []);
+  }, [pagina, limite, filtros.fechaInicio, filtros.fechaFin, filtros.estado]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
@@ -150,6 +216,21 @@ export default function GestionTareas() {
     setForm(formInicial);
   };
 
+  const actualizarFiltro = (campo, value) => {
+    setPagina(1);
+    setFiltros((prev) => ({ ...prev, [campo]: value }));
+  };
+
+  const limpiarFiltros = () => {
+    setPagina(1);
+    setFiltros(filtrosIniciales);
+  };
+
+  const cambiarLimite = (value) => {
+    setPagina(1);
+    setLimite(Number(value));
+  };
+
   const guardarTarea = async (event) => {
     event.preventDefault();
 
@@ -173,14 +254,11 @@ export default function GestionTareas() {
             headers: getAuthHeaders(),
           });
 
-      const { data } = await request;
-      const tarea = data.tarea;
-
-      setTareas((prev) =>
-        tareaEditando
-          ? prev.map((item) => (item.id === tarea.id ? tarea : item))
-          : [tarea, ...prev],
-      );
+      await request;
+      if (!tareaEditando) {
+        setPagina(1);
+      }
+      await cargarTareas(tareaEditando ? pagina : 1);
       cerrarModal();
       Swal.fire({
         icon: "success",
@@ -199,19 +277,15 @@ export default function GestionTareas() {
     }
   };
 
-  const reemplazarTarea = (tarea) => {
-    setTareas((prev) => prev.map((item) => (item.id === tarea.id ? tarea : item)));
-  };
-
   const ejecutarAccion = async (tarea, accion) => {
     try {
       setAccionId(`${tarea.id}-${accion}`);
-      const { data } = await axios.patch(
+      await axios.patch(
         `${API_URL}/api/tareas/${tarea.id}/${accion}`,
         {},
         { headers: getAuthHeaders() },
       );
-      reemplazarTarea(data.tarea);
+      await cargarTareas(pagina);
     } catch (error) {
       Swal.fire(
         "Error",
@@ -226,12 +300,12 @@ export default function GestionTareas() {
   const cambiarEstado = async (tarea, estado) => {
     try {
       setAccionId(`${tarea.id}-estado`);
-      const { data } = await axios.patch(
+      await axios.patch(
         `${API_URL}/api/tareas/${tarea.id}/estado`,
         { estado },
         { headers: getAuthHeaders() },
       );
-      reemplazarTarea(data.tarea);
+      await cargarTareas(pagina);
     } catch (error) {
       Swal.fire(
         "Error",
@@ -259,7 +333,12 @@ export default function GestionTareas() {
       await axios.delete(`${API_URL}/api/tareas/${tarea.id}`, {
         headers: getAuthHeaders(),
       });
-      setTareas((prev) => prev.filter((item) => item.id !== tarea.id));
+
+      if (tareas.length === 1 && pagina > 1) {
+        setPagina((prev) => prev - 1);
+      } else {
+        await cargarTareas(pagina);
+      }
     } catch (error) {
       Swal.fire(
         "Error",
@@ -337,9 +416,100 @@ export default function GestionTareas() {
         <Metric label="Finalizadas" value={resumen.finalizadas} tone="green" />
       </div>
 
+      <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
+          <Filter size={16} />
+          Filtros
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">
+              Fecha inicio
+            </span>
+            <input
+              type="date"
+              value={filtros.fechaInicio}
+              onChange={(event) =>
+                actualizarFiltro("fechaInicio", event.target.value)
+              }
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">
+              Fecha fin
+            </span>
+            <input
+              type="date"
+              value={filtros.fechaFin}
+              onChange={(event) => actualizarFiltro("fechaFin", event.target.value)}
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">
+              Estado
+            </span>
+            <select
+              value={filtros.estado}
+              onChange={(event) => actualizarFiltro("estado", event.target.value)}
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="">Todos</option>
+              {ESTADOS.map((estado) => (
+                <option key={estado.value} value={estado.value}>
+                  {estado.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-gray-600">
+              Registros por pagina
+            </span>
+            <select
+              value={limite}
+              onChange={(event) => cambiarLimite(event.target.value)}
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              {[10, 25, 50, 100].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              className="inline-flex w-full items-center justify-center gap-2 rounded border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <X size={16} />
+              Limpiar
+            </button>
+          </div>
+        </div>
+
+        {filtroError && (
+          <div className="mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+            {filtroError}
+          </div>
+        )}
+      </section>
+
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-4 py-3">
+        <div className="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
           <h2 className="text-sm font-bold text-gray-900">Listado de tareas</h2>
+          <span className="text-xs font-semibold text-gray-500">
+            Mostrando {rangoPaginacion.desde}-{rangoPaginacion.hasta} de{" "}
+            {paginacion.total}
+          </span>
         </div>
 
         <div className="max-w-full overflow-x-auto">
@@ -369,7 +539,7 @@ export default function GestionTareas() {
               ) : tareas.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-10 text-center text-gray-500">
-                    No hay tareas registradas
+                    No hay tareas con los filtros seleccionados
                   </td>
                 </tr>
               ) : (
@@ -465,6 +635,36 @@ export default function GestionTareas() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm font-semibold text-gray-600">
+            Pagina {paginacion.pagina} de {paginacion.totalPaginas}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPagina((prev) => Math.max(1, prev - 1))}
+              disabled={loading || paginacion.pagina <= 1}
+              className="inline-flex items-center gap-2 rounded border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPagina((prev) => Math.min(paginacion.totalPaginas, prev + 1))
+              }
+              disabled={loading || paginacion.pagina >= paginacion.totalPaginas}
+              className="inline-flex items-center gap-2 rounded border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </section>
 

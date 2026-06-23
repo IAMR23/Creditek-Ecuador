@@ -73,20 +73,85 @@ const findTarea = async (id) =>
     include: includeUsuarios,
   });
 
+const parsePositiveInt = (value, fallback, max = 100) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+};
+
+const buildWhereListadoTareas = ({ estado, fechaInicio, fechaFin }) => {
+  const where = {};
+  const estadoNormalizado = normalizarEstado(estado);
+
+  if (estadoNormalizado) {
+    where.estado = estadoNormalizado;
+  }
+
+  if (fechaInicio && fechaFin) {
+    where.fechaInicio = { [Op.between]: [fechaInicio, fechaFin] };
+  } else if (fechaInicio) {
+    where.fechaInicio = { [Op.gte]: fechaInicio };
+  } else if (fechaFin) {
+    where.fechaInicio = { [Op.lte]: fechaFin };
+  }
+
+  return where;
+};
+
+const obtenerResumenTareas = async (where) => {
+  const whereBase = { ...where };
+  delete whereBase.estado;
+
+  const [total, pendientes, enProgreso, finalizadas] = await Promise.all([
+    SistemaTarea.count({ where: whereBase }),
+    SistemaTarea.count({ where: { ...whereBase, estado: "pendiente" } }),
+    SistemaTarea.count({ where: { ...whereBase, estado: "en_progreso" } }),
+    SistemaTarea.count({ where: { ...whereBase, estado: "finalizado" } }),
+  ]);
+
+  return {
+    total,
+    pendientes,
+    enProgreso,
+    finalizadas,
+  };
+};
+
 exports.listarTareas = async (req, res) => {
   try {
-    const tareas = await SistemaTarea.findAll({
-      include: includeUsuarios,
-      order: [
-        ["estado", "ASC"],
-        ["fechaInicio", "DESC"],
-        ["createdAt", "DESC"],
-      ],
-    });
+    const pagina = parsePositiveInt(req.query.page || req.query.pagina, 1);
+    const limite = parsePositiveInt(req.query.limit || req.query.limite, 10, 100);
+    const offset = (pagina - 1) * limite;
+    const where = buildWhereListadoTareas(req.query);
+
+    const [{ rows: tareas, count }, resumen] = await Promise.all([
+      SistemaTarea.findAndCountAll({
+        where,
+        include: includeUsuarios,
+        limit: limite,
+        offset,
+        distinct: true,
+        order: [
+          ["estado", "ASC"],
+          ["fechaInicio", "DESC"],
+          ["createdAt", "DESC"],
+        ],
+      }),
+      obtenerResumenTareas(where),
+    ]);
+
+    const totalPaginas = Math.max(1, Math.ceil(count / limite));
 
     return res.json({
       ok: true,
       tareas: tareas.map(serializarTarea),
+      resumen,
+      paginacion: {
+        pagina,
+        limite,
+        total: count,
+        totalPaginas,
+      },
     });
   } catch (error) {
     console.error("Error listando tareas de sistemas:", error);
@@ -109,9 +174,32 @@ const formatearFechaLocal = (date) => {
 };
 
 const crearFechaLocal = (fecha) => {
-  const [year, month, day] = String(fecha || "").split("-").map(Number);
+  if (fecha instanceof Date) {
+    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+  }
+
+  const soloFecha = String(fecha || "").split("T")[0];
+  const [year, month, day] = soloFecha.split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
+};
+
+const getInicioSemanaJueves = (fechaInput) => {
+  const fecha =
+    crearFechaLocal(fechaInput) || new Date(new Date().getFullYear(), 0, 1);
+  const inicio = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
+
+  while (inicio.getDay() !== 4) {
+    inicio.setDate(inicio.getDate() - 1);
+  }
+
+  return inicio;
+};
+
+const sumarDias = (fecha, dias) => {
+  const resultado = new Date(fecha);
+  resultado.setDate(resultado.getDate() + dias);
+  return resultado;
 };
 
 const listarRangoFechas = (fechaInicio, fechaFin) => {
@@ -131,7 +219,51 @@ const listarRangoFechas = (fechaInicio, fechaFin) => {
   return fechas;
 };
 
-exports.obtenerTareasFinalizadasPorFecha = async ({ fechaInicio, fechaFin }) => {
+const listarRangoSemanas = (fechaInicio, fechaFin) => {
+  const fin = crearFechaLocal(fechaFin);
+
+  if (!fechaInicio || !fin) return [];
+
+  const inicio = getInicioSemanaJueves(fechaInicio);
+
+  if (inicio > fin) return [];
+
+  const semanas = [];
+  const cursor = new Date(inicio);
+  let semanaNumero = 1;
+
+  while (cursor <= fin) {
+    const inicioSemana = new Date(cursor);
+    const finSemana = sumarDias(inicioSemana, 6);
+
+    semanas.push({
+      semana: `Semana ${semanaNumero}`,
+      semanaNumero,
+      fechaInicio: formatearFechaLocal(inicioSemana),
+      fechaFin: formatearFechaLocal(finSemana),
+    });
+
+    cursor.setDate(cursor.getDate() + 7);
+    semanaNumero += 1;
+  }
+
+  return semanas;
+};
+
+const getSemanaComercial = (fechaInput, fechaInicio) => {
+  const fecha = crearFechaLocal(formatearFechaLocal(fechaInput));
+  if (!fecha) return null;
+
+  const inicioSemanas = getInicioSemanaJueves(fechaInicio || fecha);
+  const msPorDia = 24 * 60 * 60 * 1000;
+  const diferenciaDias = Math.floor((fecha - inicioSemanas) / msPorDia);
+
+  if (diferenciaDias < 0) return null;
+
+  return Math.floor(diferenciaDias / 7) + 1;
+};
+
+const buildWhereTareasFinalizadas = ({ fechaInicio, fechaFin }) => {
   const where = {
     estado: "finalizado",
     finalizadoEn: { [Op.ne]: null },
@@ -149,6 +281,12 @@ exports.obtenerTareasFinalizadasPorFecha = async ({ fechaInicio, fechaFin }) => 
   } else if (fechaFin) {
     where.finalizadoEn = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
   }
+
+  return where;
+};
+
+exports.obtenerTareasFinalizadasPorFecha = async ({ fechaInicio, fechaFin }) => {
+  const where = buildWhereTareasFinalizadas({ fechaInicio, fechaFin });
 
   const tareas = await SistemaTarea.findAll({
     where,
@@ -168,6 +306,52 @@ exports.obtenerTareasFinalizadasPorFecha = async ({ fechaInicio, fechaFin }) => 
   return fechas.map((fecha) => ({
     fecha,
     tareasFinalizadas: conteo[fecha] || 0,
+  }));
+};
+
+exports.obtenerTareasFinalizadasPorSemana = async ({ fechaInicio, fechaFin }) => {
+  const where = buildWhereTareasFinalizadas({ fechaInicio, fechaFin });
+
+  const tareas = await SistemaTarea.findAll({
+    where,
+    attributes: ["id", "finalizadoEn"],
+    order: [["finalizadoEn", "ASC"]],
+  });
+
+  const conteo = tareas.reduce((acc, tarea) => {
+    const semanaNumero = getSemanaComercial(
+      tarea.finalizadoEn,
+      fechaInicio || tarea.finalizadoEn,
+    );
+
+    if (!semanaNumero) return acc;
+
+    const key = `Semana ${semanaNumero}`;
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const semanas =
+    fechaInicio && fechaFin
+      ? listarRangoSemanas(fechaInicio, fechaFin)
+      : Object.keys(conteo)
+          .map((semana) => {
+            const semanaNumero = Number(String(semana).replace(/\D/g, ""));
+            const inicioSemana = getInicioSemanaJueves(fechaInicio || new Date());
+            inicioSemana.setDate(inicioSemana.getDate() + (semanaNumero - 1) * 7);
+
+            return {
+              semana,
+              semanaNumero,
+              fechaInicio: formatearFechaLocal(inicioSemana),
+              fechaFin: formatearFechaLocal(sumarDias(inicioSemana, 6)),
+            };
+          })
+          .sort((a, b) => a.semanaNumero - b.semanaNumero);
+
+  return semanas.map((semana) => ({
+    ...semana,
+    tareasFinalizadas: conteo[semana.semana] || 0,
   }));
 };
 

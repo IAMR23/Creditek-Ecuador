@@ -130,11 +130,9 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
       stats.porVendedor[vendedor] = (stats.porVendedor[vendedor] || 0) + 1;
     }
 
-    const origenNormalizado = normalizarClave(v.origen);
     const observacionValor = v.observacion ?? v.observaciones;
     const observacionNormalizada = normalizarClave(observacionValor);
-    const esEngancheJavier =
-      origenNormalizado === "enganche" && observacionNormalizada === "javier";
+    const esObservacionJavier = observacionNormalizada === "javier";
 
     const margen = normalizarNumero(v.margen);
     const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);
@@ -164,14 +162,14 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
           ((stats.costoPorSemana[key] || 0) + costo).toFixed(2)
         );
 
-        if (esEngancheJavier) {
+        if (esObservacionJavier) {
           stats.indicadorEngancheJavierPorSemana[key] =
             (stats.indicadorEngancheJavierPorSemana[key] || 0) + 1;
         }
       }
     }
 
-    if (esEngancheJavier) {
+    if (esObservacionJavier) {
       stats.indicadorEngancheJavierTotal += 1;
 
       if (vendedor) {
