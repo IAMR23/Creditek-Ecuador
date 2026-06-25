@@ -45,30 +45,61 @@ function limpiarTelefono(phone) {
   return `+${cleaned}`;
 }
 
-function detectarCampania({ sourceId, sourceUrl, payload }) {
+function parseJsonSafe(value) {
+  try {
+    if (!value || typeof value !== "string") return null;
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function detectarCampania({ sourceId, sourceUrl, decoded, payload }) {
+  const decodedPayload = parseJsonSafe(decoded);
+  const payloads = [payload, decodedPayload].filter(Boolean);
+
+  const findInPayloads = (keys) => {
+    for (const item of payloads) {
+      const found = findValueDeep(item, keys);
+      if (found) return found;
+    }
+    return null;
+  };
+
   const instanceName = findValueDeep(payload, [
     "instanceName",
     "instanceId",
     "instance",
   ]);
 
-  const adTitle = findValueDeep(payload, ["title"]);
+  const adTitle = findInPayloads([
+    "title",
+    "headline",
+    "sourceTitle",
+    "source_title",
+  ]);
 
-  const adBody = findValueDeep(payload, [
+  const adBody = findInPayloads([
     "body",
     "description",
+    "sourceDescription",
+    "source_description",
   ]);
+  const decodedSourceId = findInPayloads(["sourceId", "source_id", "adId", "ad_id"]);
+  const decodedSourceUrl = findInPayloads(["sourceUrl", "source_url", "sourceURL"]);
+  const finalSourceId = sourceId || decodedSourceId;
+  const finalSourceUrl = sourceUrl || decodedSourceUrl;
 
   let origen = "WhatsApp";
   let campania = null;
   let instancia = instanceName || null;
 
-  if (sourceId) {
+  if (finalSourceId) {
     origen = "Facebook Ads";
-    campania = `Meta Source ID ${sourceId}`;
+    campania = `Meta Source ID ${finalSourceId}`;
   }
 
-  if (sourceUrl) {
+  if (finalSourceUrl) {
     origen = "Facebook Ads";
   }
 

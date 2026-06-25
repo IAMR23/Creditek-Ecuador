@@ -755,11 +755,34 @@ async function enviarAGHL({
 
   const hayCampaniaDetectada =
     campania && campania !== "Sin campana detectada" && String(campania).trim() !== "";
+  const origenDetectado = origen || "WhatsApp";
+  const origenNumero = instancia || origenDetectado;
+  const canalMensaje = vieneDeAnuncio
+    ? "WhatsApp Stevo - Meta Ads"
+    : isFromMe
+      ? "WhatsApp Stevo - Asesor"
+      : "WhatsApp Stevo - Cliente";
 
   const customFields = [
     {
       key: "origen_ultimo_mensaje",
-      field_value: origen || "WhatsApp",
+      field_value: origenDetectado,
+    },
+    {
+      key: "origen",
+      field_value: origenNumero,
+    },
+    {
+      key: "fuente_origen",
+      field_value: origenNumero,
+    },
+    {
+      key: "origen_detectado",
+      field_value: origenDetectado,
+    },
+    {
+      key: "canal_ultimo_mensaje",
+      field_value: canalMensaje,
     },
     {
       key: "instancia_entrada",
@@ -820,11 +843,7 @@ async function enviarAGHL({
   const payloadGHL = {
     locationId: config.locationId,
     phone,
-    source: vieneDeAnuncio
-      ? "WhatsApp Stevo - Meta Ads"
-      : isFromMe
-        ? "WhatsApp Stevo - Asesor"
-        : "WhatsApp Stevo - Cliente",
+    source: origenNumero,
     customFields,
   };
 
