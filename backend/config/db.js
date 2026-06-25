@@ -277,12 +277,80 @@ const ensureSistemasTareasSchema = async (queryInterface, tables) => {
     allowNull: true,
   });
 
+  await addColumnIfMissing(queryInterface, "sistemas_tareas", "fechaFin", {
+    type: Sequelize.DATEONLY,
+    allowNull: true,
+  });
+
   await sequelize.query(`
     UPDATE sistemas_tareas
     SET "finalizadoEn" = COALESCE("finalizadoEn", "updatedAt", NOW())
     WHERE estado = 'finalizado'
       AND "finalizadoEn" IS NULL;
   `);
+
+  await sequelize.query(`
+    UPDATE sistemas_tareas
+    SET "fechaFin" = DATE("finalizadoEn")
+    WHERE estado = 'finalizado'
+      AND "fechaFin" IS NULL
+      AND "finalizadoEn" IS NOT NULL;
+  `);
+};
+
+const ensureSecretariosEjecutivosPlanesSchema = async (queryInterface, tables) => {
+  if (!tables.includes("secretarios_ejecutivos_planes")) return;
+
+  await addColumnIfMissing(
+    queryInterface,
+    "secretarios_ejecutivos_planes",
+    "condicion",
+    {
+      type: Sequelize.STRING,
+      allowNull: false,
+      defaultValue: "inexistencia",
+    },
+  );
+
+  await addColumnIfMissing(
+    queryInterface,
+    "secretarios_ejecutivos_planes",
+    "respuestasFormula",
+    {
+      type: Sequelize.JSONB,
+      allowNull: false,
+      defaultValue: {},
+    },
+  );
+
+  await addColumnIfMissing(
+    queryInterface,
+    "secretarios_ejecutivos_planes",
+    "detalle",
+    {
+      type: Sequelize.JSONB,
+      allowNull: false,
+      defaultValue: {},
+    },
+  );
+};
+
+const ensureUsuariosSchema = async (queryInterface, tables) => {
+  if (!tables.includes("usuarios")) return;
+
+  await addColumnIfMissing(queryInterface, "usuarios", "entidadFinanciera", {
+    type: Sequelize.STRING,
+    allowNull: true,
+  });
+};
+
+const ensureNominaSchema = async (queryInterface, tables) => {
+  if (!tables.includes("nomina_empleados")) return;
+
+  await addColumnIfMissing(queryInterface, "nomina_empleados", "cargo", {
+    type: Sequelize.STRING,
+    allowNull: true,
+  });
 };
 
 const connectDB = async () => {
@@ -299,6 +367,9 @@ const connectDB = async () => {
     await ensureMovimientoCajaSchema(queryInterface, tables);
     await ensureMarketingSchema(queryInterface, tables);
     await ensureSistemasTareasSchema(queryInterface, tables);
+    await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
+    await ensureUsuariosSchema(queryInterface, tables);
+    await ensureNominaSchema(queryInterface, tables);
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

@@ -52,6 +52,8 @@ export const ROUTE_PERMISSIONS = {
   "/bdd-ventas": "Gerencia",
   "/conciliacion-facturas": "Gerencia",
   "/bonos": "Gerencia",
+  "/secretarios-ejecutivos": "Gerencia",
+  "/ver-planes-batalla": "Gerencia",
   "/tasks": "Gerencia",
   "/ventas-completas": "Gerencia",
 
@@ -68,6 +70,7 @@ export const ROUTE_PERMISSIONS = {
 
   "/revisar-cajas": ["Contabilidad", "Administracion"],
   "/revisar-cajas2": ["Contabilidad", "Administracion"],
+  "/nomina": ["Contabilidad", "Administracion"],
 
   "/entregas-auditoria": "Auditoria",
   "/ventas-auditoria": "Auditoria",
@@ -112,6 +115,8 @@ export const ROUTE_PERMISSIONS = {
   "/crear-traslado": VENDEDOR_PERMISSION,
   "/mis-traslados": VENDEDOR_PERMISSION,
   "/gestion": VENDEDOR_PERMISSION,
+  "/planes-batalla": VENDEDOR_PERMISSION,
+  "/mis-planes-batalla": VENDEDOR_PERMISSION,
   "/mis-gestiones": VENDEDOR_PERMISSION,
   "/caja": VENDEDOR_PERMISSION,
   "/mis-cierres-caja": VENDEDOR_PERMISSION,

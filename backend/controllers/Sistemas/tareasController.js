@@ -47,6 +47,7 @@ const serializarTarea = (tarea) => {
     titulo: plain.titulo,
     descripcion: plain.descripcion || "",
     fechaInicio: plain.fechaInicio,
+    fechaFin: plain.fechaFin,
     estado: ESTADO_LABELS[plain.estado] || plain.estado,
     status: plain.estado,
     tiempoAcumuladoSegundos: Number(plain.tiempoAcumuladoSegundos) || 0,
@@ -266,20 +267,15 @@ const getSemanaComercial = (fechaInput, fechaInicio) => {
 const buildWhereTareasFinalizadas = ({ fechaInicio, fechaFin }) => {
   const where = {
     estado: "finalizado",
-    finalizadoEn: { [Op.ne]: null },
+    fechaFin: { [Op.ne]: null },
   };
 
   if (fechaInicio && fechaFin) {
-    where.finalizadoEn = {
-      [Op.between]: [
-        new Date(`${fechaInicio}T00:00:00`),
-        new Date(`${fechaFin}T23:59:59`),
-      ],
-    };
+    where.fechaFin = { [Op.between]: [fechaInicio, fechaFin] };
   } else if (fechaInicio) {
-    where.finalizadoEn = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
+    where.fechaFin = { [Op.gte]: fechaInicio };
   } else if (fechaFin) {
-    where.finalizadoEn = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+    where.fechaFin = { [Op.lte]: fechaFin };
   }
 
   return where;
@@ -290,12 +286,12 @@ exports.obtenerTareasFinalizadasPorFecha = async ({ fechaInicio, fechaFin }) => 
 
   const tareas = await SistemaTarea.findAll({
     where,
-    attributes: ["id", "finalizadoEn"],
-    order: [["finalizadoEn", "ASC"]],
+    attributes: ["id", "fechaFin"],
+    order: [["fechaFin", "ASC"]],
   });
 
   const conteo = tareas.reduce((acc, tarea) => {
-    const fecha = formatearFechaLocal(tarea.finalizadoEn);
+    const fecha = tarea.fechaFin;
     if (!fecha) return acc;
     acc[fecha] = (acc[fecha] || 0) + 1;
     return acc;
@@ -314,14 +310,14 @@ exports.obtenerTareasFinalizadasPorSemana = async ({ fechaInicio, fechaFin }) =>
 
   const tareas = await SistemaTarea.findAll({
     where,
-    attributes: ["id", "finalizadoEn"],
-    order: [["finalizadoEn", "ASC"]],
+    attributes: ["id", "fechaFin"],
+    order: [["fechaFin", "ASC"]],
   });
 
   const conteo = tareas.reduce((acc, tarea) => {
     const semanaNumero = getSemanaComercial(
-      tarea.finalizadoEn,
-      fechaInicio || tarea.finalizadoEn,
+      tarea.fechaFin,
+      fechaInicio || tarea.fechaFin,
     );
 
     if (!semanaNumero) return acc;
@@ -361,6 +357,7 @@ exports.crearTarea = async (req, res) => {
     const titulo = String(req.body.titulo || "").trim();
     const descripcion = req.body.descripcion ?? "";
     const fechaInicio = req.body.fechaInicio;
+    const fechaFin = req.body.fechaFin || null;
 
     if (!usuarioId) {
       return res.status(400).json({ ok: false, message: "Usuario no identificado" });
@@ -374,10 +371,15 @@ exports.crearTarea = async (req, res) => {
       return res.status(400).json({ ok: false, message: "La fecha de inicio es obligatoria" });
     }
 
+    if (fechaFin && fechaFin < fechaInicio) {
+      return res.status(400).json({ ok: false, message: "La fecha fin no puede ser menor que la fecha de inicio" });
+    }
+
     const tarea = await SistemaTarea.create({
       titulo,
       descripcion,
       fechaInicio,
+      fechaFin,
       estado: "pendiente",
       creadoPorId: usuarioId,
       tiempoAcumuladoSegundos: 0,
@@ -411,15 +413,24 @@ exports.actualizarTarea = async (req, res) => {
     const titulo = req.body.titulo;
     const descripcion = req.body.descripcion;
     const fechaInicio = req.body.fechaInicio;
+    const fechaFin = req.body.fechaFin;
 
     if (titulo !== undefined && !String(titulo).trim()) {
       return res.status(400).json({ ok: false, message: "El titulo es obligatorio" });
+    }
+
+    const fechaInicioValidacion = fechaInicio !== undefined ? fechaInicio : tarea.fechaInicio;
+    const fechaFinValidacion = fechaFin !== undefined ? fechaFin || null : tarea.fechaFin;
+
+    if (fechaFinValidacion && fechaInicioValidacion && fechaFinValidacion < fechaInicioValidacion) {
+      return res.status(400).json({ ok: false, message: "La fecha fin no puede ser menor que la fecha de inicio" });
     }
 
     await tarea.update({
       ...(titulo !== undefined && { titulo: String(titulo).trim() }),
       ...(descripcion !== undefined && { descripcion }),
       ...(fechaInicio !== undefined && { fechaInicio }),
+      ...(fechaFin !== undefined && { fechaFin: fechaFin || null }),
     });
 
     const tareaActualizada = await findTarea(tarea.id);
@@ -556,6 +567,7 @@ exports.finalizarTarea = async (req, res) => {
       cronometroActivo: false,
       ultimoInicioCronometro: null,
       finalizadoEn: tarea.finalizadoEn || new Date(),
+      fechaFin: tarea.fechaFin || formatearFechaLocal(new Date()),
     });
 
     const tareaActualizada = await findTarea(tarea.id);

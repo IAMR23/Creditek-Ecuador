@@ -21,6 +21,13 @@ const validarRoles = async (rolIds) => {
   return roles;
 };
 
+const normalizarTexto = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+
 const sincronizarRolesUsuario = async (usuarioId, rolIds) => {
   await UsuarioRol.destroy({ where: { usuarioId } });
 
@@ -50,6 +57,7 @@ router.post("/", async (req, res) => {
       fechaIngreso,
       fechaSalida,
       numeroCuenta,
+      entidadFinanciera,
       direccion,
       telefono,
     } = req.body;
@@ -96,6 +104,7 @@ router.post("/", async (req, res) => {
       fechaIngreso,
       fechaSalida,
       numeroCuenta,
+      entidadFinanciera,
       direccion,
       telefono,
       activo: true,
@@ -116,21 +125,45 @@ router.post("/", async (req, res) => {
 // ===========================
 router.get("/", async (req, res) => {
   try {
+    const incluirInactivos = ["true", "1", "si", "sí"].includes(
+      String(req.query.incluirInactivos || req.query.todos || "")
+        .trim()
+        .toLowerCase(),
+    );
+    const rolFiltro = String(req.query.rol || req.query.rolNombre || "").trim();
+    const includeRoles = {
+      model: Rol,
+      as: "roles",
+      attributes: ["id", "nombre"],
+      through: { attributes: [] },
+    };
+
     const usuarios = await Usuario.findAll({
-      where: { activo: true },
+      where: incluirInactivos ? {} : { activo: true },
       attributes: { exclude: ["password"] },
       include: [
         { model: Rol, as: "rol", attributes: ["id", "nombre"] },
-        {
-          model: Rol,
-          as: "roles",
-          attributes: ["id", "nombre"],
-          through: { attributes: [] },
-        },
+        includeRoles,
       ],
       order: [["nombre", "ASC"]],
     });
-    res.json(usuarios);
+
+    if (!rolFiltro) {
+      return res.json(usuarios);
+    }
+
+    const rolNormalizado = normalizarTexto(rolFiltro);
+    const usuariosFiltrados = usuarios.filter((usuario) => {
+      const rolPrincipal = normalizarTexto(usuario.rol?.nombre);
+      const rolesAsignados = Array.isArray(usuario.roles) ? usuario.roles : [];
+
+      return (
+        rolPrincipal === rolNormalizado ||
+        rolesAsignados.some((rol) => normalizarTexto(rol.nombre) === rolNormalizado)
+      );
+    });
+
+    res.json(usuariosFiltrados);
   } catch (error) {
     res.status(500).json({ message: "Error al obtener usuarios", error });
   }
@@ -180,6 +213,7 @@ const actualizarUsuario = async (req, res) => {
       fechaIngreso,
       fechaSalida,
       numeroCuenta,
+      entidadFinanciera,
       direccion,
       telefono,
     } = req.body;
@@ -238,6 +272,7 @@ const actualizarUsuario = async (req, res) => {
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
     if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalida;
     if (numeroCuenta !== undefined) usuario.numeroCuenta = numeroCuenta;
+    if (entidadFinanciera !== undefined) usuario.entidadFinanciera = entidadFinanciera;
     if (direccion !== undefined) usuario.direccion = direccion;
     if (telefono !== undefined) usuario.telefono = telefono;
 

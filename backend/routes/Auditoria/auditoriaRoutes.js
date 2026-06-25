@@ -176,6 +176,13 @@ router.get("/ventas2", async (req, res) => {
         (acc, item) => acc + (Number(item.tareasFinalizadas) || 0),
         0,
       );
+    estadisticas.entregasPorVendedor =
+      await auditoriaVentasController.obtenerEntregasPorVendedorDashboard({
+        fechaInicio,
+        fechaFin,
+        agenciaId,
+        vendedorId,
+      });
  
     res.json({ ok: true, estadisticas});
   } catch (error) {

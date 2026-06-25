@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import { FaFileExcel, FaTrash } from "react-icons/fa";
 
@@ -46,7 +47,9 @@ export default function MetasComerciales() {
 
   const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: { rol: "Vendedor" },
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -292,7 +295,7 @@ export default function MetasComerciales() {
             <option value="">Todos</option>
             {usuarios.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.nombre}
+                {nombreCortoUsuario(u)}
               </option>
             ))}
           </select>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
@@ -182,7 +183,9 @@ export default function Powerbi() {
 
   const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: { rol: "Vendedor" },
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -458,7 +461,7 @@ export default function Powerbi() {
               <option value="">Todos</option>
               {usuarios.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.nombre}
+                  {nombreCortoUsuario(u)}
                 </option>
               ))}
             </select>

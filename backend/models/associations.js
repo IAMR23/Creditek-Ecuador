@@ -32,6 +32,10 @@ const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const ReaperturaCierreCaja = require('./CierreCaja/ReaperturaCierreCaja');
 const Task = require('./Task');
 const SistemaTarea = require('./SistemaTarea');
+const PlanBatalla = require('./PlanBatalla');
+const SecretarioEjecutivoPlan = require('./SecretarioEjecutivoPlan');
+const NominaEmpleado = require('./NominaEmpleado');
+const { NominaBeneficio } = require('./NominaBeneficio');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
 const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
@@ -386,6 +390,67 @@ Usuario.hasMany(SistemaTarea, {
 SistemaTarea.belongsTo(Usuario, {
   foreignKey: "creadoPorId",
   as: "creadoPor",
+});
+
+UsuarioAgencia.hasMany(PlanBatalla, {
+  foreignKey: "usuarioAgenciaId",
+  as: "planesBatalla",
+});
+
+PlanBatalla.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+Usuario.hasMany(SecretarioEjecutivoPlan, {
+  foreignKey: "usuarioId",
+  as: "planesSecretarioEjecutivo",
+});
+
+SecretarioEjecutivoPlan.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+
+Agencia.hasMany(SecretarioEjecutivoPlan, {
+  foreignKey: "agenciaId",
+  as: "planesSecretarioEjecutivo",
+});
+
+SecretarioEjecutivoPlan.belongsTo(Agencia, {
+  foreignKey: "agenciaId",
+  as: "agencia",
+});
+
+/* NOMINA */
+Usuario.hasMany(NominaEmpleado, {
+  foreignKey: "usuarioId",
+  as: "nominaEmpleados",
+});
+
+NominaEmpleado.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+
+UsuarioAgencia.hasOne(NominaEmpleado, {
+  foreignKey: "usuarioAgenciaId",
+  as: "nominaEmpleado",
+});
+
+NominaEmpleado.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+NominaEmpleado.hasMany(NominaBeneficio, {
+  foreignKey: "nominaEmpleadoId",
+  as: "beneficios",
+});
+
+NominaBeneficio.belongsTo(NominaEmpleado, {
+  foreignKey: "nominaEmpleadoId",
+  as: "nominaEmpleado",
 });
 
 /* GESTIONES COMERCIALES */

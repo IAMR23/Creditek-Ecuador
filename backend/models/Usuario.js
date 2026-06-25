@@ -68,6 +68,11 @@ const Usuario = sequelize.define(
       allowNull: true,
     },
 
+    entidadFinanciera: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     direccion: {
       type: DataTypes.STRING,
       allowNull: true,

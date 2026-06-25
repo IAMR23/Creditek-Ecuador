@@ -474,13 +474,6 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         </p>
       </div>
 
-{/*       <div className="bg-white p-6 rounded-2xl shadow xl:col-span-3">
-        <h3 className="text-gray-500 text-sm">Tareas Finalizadas</h3>
-
-        <p className="text-4xl font-bold text-pink-700">
-          {Number(estadisticas.totalTareasFinalizadas) || 0}
-        </p>
-      </div> */}
 
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

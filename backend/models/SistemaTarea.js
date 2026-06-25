@@ -22,6 +22,10 @@ const SistemaTarea = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: false,
     },
+    fechaFin: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
     estado: {
       type: DataTypes.ENUM("pendiente", "en_progreso", "finalizado"),
       allowNull: false,
@@ -62,6 +66,7 @@ const SistemaTarea = sequelize.define(
     indexes: [
       { fields: ["estado"] },
       { fields: ["fechaInicio"] },
+      { fields: ["fechaFin"] },
       { fields: ["cronometroActivo"] },
     ],
   },

@@ -12,6 +12,7 @@ import {
   Line,
   CartesianGrid,
 } from "recharts";
+
 const COLORS = [
   "#2563eb",
   "#16a34a",
@@ -19,195 +20,255 @@ const COLORS = [
   "#dc2626",
   "#7c3aed",
   "#0891b2",
+  "#0f766e",
+  "#9333ea",
 ];
 
 const toArray = (obj = {}) =>
-  Object.entries(obj).map(([name, value]) => ({ name, value }));
+  Object.entries(obj)
+    .map(([name, value]) => ({ name, value: Number(value) || 0 }))
+    .sort((a, b) => b.value - a.value);
 
 const tooltipStyle = {
   contentStyle: {
     borderRadius: "10px",
     border: "none",
-    boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
+    boxShadow: "0 6px 16px rgba(15,23,42,0.15)",
   },
 };
 
 export default function DashboardGraficas({ estadisticas }) {
   if (!estadisticas) return null;
 
+  const cards = [
+    {
+      title: "Ventas por Agencia",
+      type: "bar",
+      data: toArray(estadisticas.porAgencia),
+      color: COLORS[0],
+      showXAxis: true,
+    },
+    {
+      title: "Ventas por Vendedor",
+      type: "bar",
+      data: toArray(estadisticas.porVendedor),
+      color: COLORS[1],
+    },
+    {
+      title: "Entregas subidas por Vendedor",
+      type: "bar",
+      data: toArray(estadisticas.entregasPorVendedor),
+      color: COLORS[4],
+    },
+    {
+      title: "Ventas por Dia",
+      type: "line",
+      data: toArray(estadisticas.porDia),
+      color: COLORS[2],
+      showXAxis: true,
+    },
+    {
+      title: "Tipo de Producto",
+      type: "pie",
+      data: toArray(estadisticas.porTipo),
+    },
+    {
+      title: "Ventas por Marca",
+      type: "bar",
+      data: toArray(estadisticas.porMarca),
+      color: COLORS[3],
+    },
+    {
+      title: "Origen",
+      type: "pie",
+      data: toArray(estadisticas.porOrigen),
+    },
+    {
+      title: "Modelo",
+      type: "bar",
+      data: toArray(estadisticas.porModelo),
+      color: COLORS[5],
+    },
+    {
+      title: "Cierre de Caja",
+      type: "pie",
+      data: toArray(estadisticas.porCierreCaja),
+    },
+  ];
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-      {/* KPI */}
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="text-gray-500 text-sm">Total Ventas</h3>
-        <p className="text-4xl font-bold text-blue-800">
-          {estadisticas.totalVentas}
-        </p>
+    <section className="mt-6 space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
+        <KpiCard
+          label="Total entregas"
+          value={toArray(estadisticas.entregasPorVendedor).reduce(
+            (acc, item) => acc + item.value,
+            0,
+          )}
+        />
+        <KpiCard
+          label="Agencias con ventas"
+          value={toArray(estadisticas.porAgencia).length}
+        />
+        <KpiCard
+          label="Vendedores con ventas"
+          value={toArray(estadisticas.porVendedor).length}
+        />
       </div>
 
-      {/* Ventas por Agencia */}
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="font-semibold mb-4">Ventas por Agencia</h3>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={toArray(estadisticas.porAgencia)}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip {...tooltipStyle} />
-            <Bar dataKey="value" fill={COLORS[0]} radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Ventas por Vendedor */}
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="font-semibold mb-4">Ventas por Vendedor</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={toArray(estadisticas.porVendedor)}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="name" hide />
-            <YAxis />
-            <Tooltip {...tooltipStyle} />
-            <Bar dataKey="value" fill={COLORS[1]} radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Ventas por Día */}
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="font-semibold mb-4">Ventas por Día</h3>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={toArray(estadisticas.porDia)}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip {...tooltipStyle} />
-            <Line
-              dataKey="value"
-              stroke={COLORS[2]}
-              strokeWidth={3}
-              dot={{ r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Tipo de Producto */}
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="font-semibold mb-4">Tipo de Producto</h3>
-        <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie
-              data={toArray(estadisticas.porTipo)}
-              dataKey="value"
-              nameKey="name"
-              outerRadius={95}
-              label
-            >
-              {toArray(estadisticas.porTipo).map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip {...tooltipStyle} />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Ventas por Marca */}
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="font-semibold mb-4">Ventas por Marca</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={toArray(estadisticas.porMarca)}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="name" hide />
-            <YAxis />
-            <Tooltip {...tooltipStyle} />
-            <Bar dataKey="value" fill={COLORS[3]} radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="bg-white p-6 rounded-2xl shadow flex  flex-col gap-2 ">
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <h3 className="font-semibold mb-4">Origen</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={toArray(estadisticas.porOrigen)}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={95}
-                label
-              >
-                {toArray(estadisticas.porOrigen).map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip {...tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow">
-          <h3 className="font-semibold mb-4">Modelo</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={toArray(estadisticas.porModelo)}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={95}
-                label
-              >
-                {toArray(estadisticas.porModelo).map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip {...tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-         <div className="bg-white p-6 rounded-2xl shadow">
-          <h3 className="font-semibold mb-4">Cierre de Caja</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={toArray(estadisticas.porCierreCaja)}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={95}
-                label
-              >
-                {toArray(estadisticas.porCierreCaja).map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip {...tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
- 
-      </div>
-
-      <div className="bg-white p-6 rounded-2xl shadow">
-        <h3 className="font-semibold mb-4">Modelo</h3>
-        {toArray(estadisticas.porModelo).map((m) => (
-          <div key={m.name} className="mb-2">
-            <div className="flex justify-between text-sm">
-              <span>{m.name}</span>
-              <span>{m.value}</span>
-            </div>
-            <div className="h-2 bg-gray-200 rounded">
-              <div
-                className="h-2 bg-blue-500 rounded"
-                style={{ width: `${m.value}%` }}
-              />
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        {cards.map((card) => (
+          <ChartCard key={card.title} title={card.title}>
+            <ChartRenderer {...card} />
+          </ChartCard>
         ))}
       </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <RankingCard
+          title="Dispositivos mas vendidos"
+          data={toArray(estadisticas.porTipo)}
+          color={COLORS[0]}
+        />
+        <RankingCard
+          title="Modelos mas vendidos"
+          data={toArray(estadisticas.porModelo)}
+          color={COLORS[5]}
+        />
+      </div>
+    </section>
+  );
+}
+
+function KpiCard({ label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function ChartCard({ title, children }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+      </div>
+      <div className="h-[320px] min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function ChartRenderer({ type, data, color = COLORS[0], showXAxis = false }) {
+  if (!data.length) {
+    return <EmptyState />;
+  }
+
+  if (type === "pie") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="value"
+            nameKey="name"
+            outerRadius={105}
+            label={({ name, value }) => `${name}: ${value}`}
+          >
+            {data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip {...tooltipStyle} />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (type === "line") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 18, left: -10, bottom: 10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="name" hide={!showXAxis} tick={{ fontSize: 12 }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+          <Tooltip {...tooltipStyle} />
+          <Line
+            dataKey="value"
+            stroke={color}
+            strokeWidth={3}
+            dot={{ r: 4 }}
+            activeDot={{ r: 6 }}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 10, right: 18, left: -10, bottom: 10 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        <XAxis dataKey="name" hide={!showXAxis} tick={{ fontSize: 12 }} />
+        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+        <Tooltip {...tooltipStyle} />
+        <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
+      Sin datos para mostrar
+    </div>
+  );
+}
+
+function RankingCard({ title, data, color }) {
+  const max = data[0]?.value || 0;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="mb-4 text-base font-semibold text-slate-900">{title}</h3>
+
+      {data.length ? (
+        <div className="space-y-3">
+          {data.map((item, index) => (
+            <div key={item.name} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                    {index + 1}
+                  </span>
+                  <span className="truncate font-medium text-slate-800">
+                    {item.name}
+                  </span>
+                </div>
+                <span className="shrink-0 font-bold text-slate-900">
+                  {item.value}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100">
+                <div
+                  className="h-2 rounded-full"
+                  style={{
+                    width: `${max ? (item.value / max) * 100 : 0}%`,
+                    backgroundColor: color,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
+          Sin datos para mostrar
+        </div>
+      )}
     </div>
   );
 }

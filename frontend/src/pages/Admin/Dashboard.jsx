@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import DashboardGraficas from "./DashboardGraficas";
@@ -31,7 +32,14 @@ export default function Dashboard() {
     filtrosGuardados.fechaFin || new Date().toLocaleDateString("en-CA"),
   );
 
-  const [agenciaId, setAgenciaId] = useState(filtrosGuardados.agenciaId || "");
+  const [agenciaId, setAgenciaId] = useState(
+    Array.isArray(filtrosGuardados.agenciaId)
+      ? filtrosGuardados.agenciaId
+      : filtrosGuardados.agenciaId
+        ? String(filtrosGuardados.agenciaId).split(",")
+        : [],
+  );
+  const [openAgencias, setOpenAgencias] = useState(false);
 
   const [vendedorId, setVendedorId] = useState(
     filtrosGuardados.vendedorId || "",
@@ -76,7 +84,9 @@ export default function Dashboard() {
   // -----------------------------
   const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: { rol: "Vendedor" },
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -98,6 +108,20 @@ export default function Dashboard() {
     cargarAgencias();
     cargarUsuarios();
   }, []);
+
+  const toggleAgencia = (id) => {
+    setAgenciaId((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((item) => item !== id);
+      }
+
+      return [...prev, id];
+    });
+  };
+
+  const limpiarAgencias = () => {
+    setAgenciaId([]);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -129,7 +153,7 @@ export default function Dashboard() {
         fechaFin,
       });
 
-      if (agenciaId) params.append("agenciaId", agenciaId);
+      if (agenciaId.length > 0) params.append("agenciaId", agenciaId.join(","));
       if (vendedorId) params.append("vendedorId", vendedorId);
       if (cierreCajaTipo) params.append("cierreCaja", cierreCajaTipo);
 
@@ -285,22 +309,95 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col relative">
             <label className="mb-1.5 text-sm font-medium text-gray-700">
               Agencia
             </label>
-            <select
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
-              value={agenciaId}
-              onChange={(e) => setAgenciaId(e.target.value)}
-            >
-              <option value="">Todas</option>
-              {agencias.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nombre}
-                </option>
-              ))}
-            </select>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpenAgencias((prev) => !prev)}
+                className="w-full min-h-[46px] rounded-xl border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-800 shadow-sm outline-none transition hover:border-gray-400 focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              >
+                {agenciaId.length === 0 ? (
+                  <span className="text-gray-400">Todas las agencias</span>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {agenciaId.slice(0, 2).map((id) => {
+                      const agencia = agencias.find(
+                        (a) => String(a.id) === String(id),
+                      );
+
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700"
+                        >
+                          {agencia?.nombre || id}
+                        </span>
+                      );
+                    })}
+
+                    {agenciaId.length > 2 && (
+                      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+                        +{agenciaId.length - 2} mas
+                      </span>
+                    )}
+                  </div>
+                )}
+              </button>
+
+              {openAgencias && (
+                <div className="absolute z-30 mt-2 w-full rounded-2xl border border-gray-200 bg-white shadow-xl">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                    <span className="text-xs font-semibold uppercase text-gray-500">
+                      Seleccionar agencias
+                    </span>
+
+                    {agenciaId.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={limpiarAgencias}
+                        className="text-xs font-medium text-red-500 hover:text-red-600"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto p-2">
+                    {agencias.map((a) => {
+                      const seleccionado = agenciaId.includes(String(a.id));
+
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => toggleAgencia(String(a.id))}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition ${
+                            seleccionado
+                              ? "bg-green-50 text-green-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <span>{a.nombre}</span>
+                          <span
+                            className={`flex h-5 w-5 items-center justify-center rounded-md border text-xs ${
+                              seleccionado
+                                ? "border-green-500 bg-green-500 text-white"
+                                : "border-gray-300 bg-white text-transparent"
+                            }`}
+                          >
+                            OK
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-col">
@@ -315,7 +412,7 @@ export default function Dashboard() {
               <option value="">Todos</option>
               {usuarios.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.nombre}
+                  {nombreCortoUsuario(u)}
                 </option>
               ))}
             </select>

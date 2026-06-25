@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 
 export default function SelectUsuarios({
   value,
   onChange,
   label = "Usuario",
   incluirTodos = true,
+  rol,
 }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -14,7 +16,9 @@ export default function SelectUsuarios({
   const cargarUsuarios = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: rol ? { rol } : undefined,
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -26,7 +30,7 @@ export default function SelectUsuarios({
 
   useEffect(() => {
     cargarUsuarios();
-  }, []);
+  }, [rol]);
 
   return (
     <div>
@@ -42,7 +46,7 @@ export default function SelectUsuarios({
 
         {usuarios.map((u) => (
           <option key={u.id} value={u.id}>
-            {u.nombre}
+            {nombreCortoUsuario(u)}
           </option>
         ))}
       </select>

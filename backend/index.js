@@ -171,10 +171,13 @@ connectDB()
     app.use("/api/gestion", require("./routes/CallCenter/gestionRoutes"));
     app.use("/api/gestion-comercial", require("./routes/Comercial/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
+    app.use("/api/contabilidad/nomina", require("./routes/Contabilidad/nominaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
+    app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
     app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));
     app.use("/api/tareas", require("./routes/Sistemas/tareasRoutes"));
+    app.use("/api/planes-batalla", require("./routes/planesBatallaRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));

@@ -8,7 +8,7 @@ const Obsequio = require("../models/Obsequio");
 // Listar todos los obsequios
 router.get("/", async (req, res) => {
   try {
-    const obsequios = await Obsequio.findAll();
+    const obsequios = await Obsequio.findAll(); 
     res.json(obsequios);
   } catch (error) {
     console.error(error);

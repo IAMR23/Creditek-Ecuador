@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import { getHoyLocal } from "../../utils/dateUtils";
 import { useAuthUser } from "../../utils/useAuthUser";
 
@@ -647,7 +648,7 @@ export default function CierresCajaTabla() {
                 <option value="">Todos</option>
                 {usuariosFiltrados.map((usuario) => (
                   <option key={usuario.id} value={usuario.id}>
-                    {usuario.nombre}
+                    {nombreCortoUsuario(usuario)}
                   </option>
                 ))}
               </select>
@@ -1431,7 +1432,7 @@ function EditorCierre({
                 <option value="">Seleccionar</option>
                 {usuariosEdit.map((usuario) => (
                   <option key={usuario.id} value={usuario.id}>
-                    {usuario.nombre}
+                    {nombreCortoUsuario(usuario)}
                   </option>
                 ))}
               </select>

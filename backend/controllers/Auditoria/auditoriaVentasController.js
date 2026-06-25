@@ -17,6 +17,7 @@ const Origen = require("../../models/Origen");
 const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
+const Entrega = require("../../models/Entrega");
 
 const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
@@ -460,6 +461,77 @@ const normalizarIds = (valor) => {
     .split(",")
     .map(Number)
     .filter(Boolean);
+};
+
+exports.obtenerEntregasPorVendedorDashboard = async ({
+  fechaInicio,
+  fechaFin,
+  agenciaId,
+  vendedorId,
+}) => {
+  const whereEntrega = {
+    activo: true,
+  };
+
+  if (fechaInicio && fechaFin) {
+    whereEntrega.fecha = {
+      [Op.between]: [fechaInicio, fechaFin],
+    };
+  } else if (fechaInicio) {
+    whereEntrega.fecha = { [Op.gte]: fechaInicio };
+  } else if (fechaFin) {
+    whereEntrega.fecha = { [Op.lte]: fechaFin };
+  }
+
+  const agenciasIds = normalizarIds(agenciaId);
+  const vendedoresIds = normalizarIds(vendedorId);
+
+  const entregas = await Entrega.findAll({
+    where: whereEntrega,
+    attributes: ["id"],
+    include: [
+      {
+        model: UsuarioAgencia,
+        as: "usuarioAgencia",
+        attributes: ["id"],
+        required: true,
+        include: [
+          {
+            model: Usuario,
+            as: "usuario",
+            attributes: ["id", "nombre"],
+            required: true,
+            ...(vendedoresIds && {
+              where: {
+                id: {
+                  [Op.in]: vendedoresIds,
+                },
+              },
+            }),
+          },
+          {
+            model: Agencia,
+            as: "agencia",
+            attributes: ["id", "nombre"],
+            required: true,
+            ...(agenciasIds && {
+              where: {
+                id: {
+                  [Op.in]: agenciasIds,
+                },
+              },
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  return entregas.reduce((acc, entrega) => {
+    const vendedor = entrega.usuarioAgencia?.usuario?.nombre || "Sin vendedor";
+    acc[vendedor] = (acc[vendedor] || 0) + 1;
+    return acc;
+  }, {});
 };
 
 const normalizarEstadoActivo = (estado) => {

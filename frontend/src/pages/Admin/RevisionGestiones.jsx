@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import {
   FaUser,
   FaBuilding,
@@ -47,7 +48,9 @@ const RevisionGestiones = () => {
 
     const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: { rol: "Vendedor" },
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -308,7 +311,7 @@ const RevisionGestiones = () => {
             <option value="">Todos</option>
             {usuarios.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.nombre}
+                {nombreCortoUsuario(u)}
               </option>
             ))}
           </select>

@@ -41,6 +41,7 @@ const formInicial = {
   titulo: "",
   descripcion: "",
   fechaInicio: new Date().toLocaleDateString("en-CA"),
+  fechaFin: "",
 };
 
 const filtrosIniciales = {
@@ -206,6 +207,7 @@ export default function GestionTareas() {
       titulo: tarea.titulo || "",
       descripcion: tarea.descripcion || "",
       fechaInicio: tarea.fechaInicio || formInicial.fechaInicio,
+      fechaFin: tarea.fechaFin || "",
     });
     setModalAbierto(true);
   };
@@ -241,6 +243,15 @@ export default function GestionTareas() {
 
     if (!form.fechaInicio) {
       Swal.fire("Validacion", "La fecha de inicio es obligatoria", "warning");
+      return;
+    }
+
+    if (form.fechaFin && form.fechaFin < form.fechaInicio) {
+      Swal.fire(
+        "Validacion",
+        "La fecha fin no puede ser menor que la fecha de inicio",
+        "warning",
+      );
       return;
     }
 
@@ -513,12 +524,13 @@ export default function GestionTareas() {
         </div>
 
         <div className="max-w-full overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-sm">
+          <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead className="bg-gray-100 text-left text-xs uppercase text-gray-600">
               <tr>
                 <th className="border-b border-gray-200 px-3 py-2">Titulo</th>
                 <th className="border-b border-gray-200 px-3 py-2">Descripcion</th>
                 <th className="border-b border-gray-200 px-3 py-2">Fecha de inicio</th>
+                <th className="border-b border-gray-200 px-3 py-2">Fecha fin</th>
                 <th className="border-b border-gray-200 px-3 py-2 text-right">
                   Tiempo acumulado
                 </th>
@@ -532,13 +544,13 @@ export default function GestionTareas() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-gray-500">
+                  <td colSpan={7} className="px-3 py-10 text-center text-gray-500">
                     Cargando tareas...
                   </td>
                 </tr>
               ) : tareas.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-gray-500">
+                  <td colSpan={7} className="px-3 py-10 text-center text-gray-500">
                     No hay tareas con los filtros seleccionados
                   </td>
                 </tr>
@@ -566,6 +578,9 @@ export default function GestionTareas() {
                       </td>
                       <td className="px-3 py-3 align-top text-gray-700">
                         {formatFecha(tarea.fechaInicio)}
+                      </td>
+                      <td className="px-3 py-3 align-top text-gray-700">
+                        {formatFecha(tarea.fechaFin)}
                       </td>
                       <td className="px-3 py-3 text-right align-top font-mono font-bold text-gray-900">
                         {formatTiempo(calcularTiempoVisible(tarea, now))}
@@ -709,6 +724,21 @@ export default function GestionTareas() {
                   value={form.fechaInicio}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, fechaInicio: event.target.value }))
+                  }
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+
+              <label className="block">
+                <span className="block text-sm font-medium text-gray-700">
+                  Fecha fin
+                </span>
+                <input
+                  type="date"
+                  value={form.fechaFin}
+                  min={form.fechaInicio || undefined}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, fechaFin: event.target.value }))
                   }
                   className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />

@@ -216,6 +216,7 @@ export default function BDDVentas() {
   label="Vendedor"
   value={vendedorId}
   onChange={setVendedorId}
+  rol="Vendedor"
 />
 
 

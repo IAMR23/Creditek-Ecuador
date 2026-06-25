@@ -21,6 +21,7 @@ import {
   LucideTicketPercent,
   MonitorCog,
   Table2,
+  FileCheck2,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { FaTasks } from "react-icons/fa";
@@ -65,16 +66,8 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/metas-comerciales",
           },
-          {
-            label: "Costo por Venta Marketing",
-            icon: <DollarSign size={20} />,
-            path: "/costo-venta-marketing",
-          },
-          {
-            label: "Costo por Entrega",
-            icon: <PackageCheck size={20} />,
-            path: "/costo-entrega-marketing",
-          },
+
+
           {
             label: "Reporte Entregas",
             icon: <BarChart3 size={20} />,
@@ -95,18 +88,20 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/bdd-ventas",
           },
+
+
           {
-            label: "Normalizacion dispositivos",
+            label: "Secretarios Ejecutivos",
             icon: <ClipboardList size={20} />,
-            path: "/conciliacion-facturas",
+            path: "/secretarios-ejecutivos",
           },
           {
-            label: "Bonos",
-            icon: <LucideTicketPercent size={20} />,
-            path: "/bonos",
+            label: "Ver planes de batalla",
+            icon: <FileCheck2 size={20} />,
+            path: "/ver-planes-batalla",
           },
-          { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
-          {
+/*           { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
+ */          {
             label: "Power BI",
             icon: <BarChart3 size={20} />,
             path: "/powerbi",
@@ -122,6 +117,11 @@ export default function Sidebar({ auth }) {
       Marketing: {
         title: "Marketing",
         items: [
+                   {
+            label: "Costo por Venta Marketing",
+            icon: <DollarSign size={20} />,
+            path: "/costo-venta-marketing",
+          },
           {
             label: "Copa Creditek 🏆",
             icon: <BarChart3 size={20} />,
@@ -132,12 +132,19 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/goleadores",
           },
+ 
         ],
       },
 
       logistica: {
         title: "Logística",
         items: [
+                    {
+            label: "Costo por Entrega",
+            icon: <PackageCheck size={20} />,
+            path: "/costo-entrega-marketing",
+          },
+
           {
             label: "Entregas Pendientes",
             icon: <PackageCheck size={20} />,
@@ -156,9 +163,19 @@ export default function Sidebar({ auth }) {
         title: "Contabilidad",
         items: [
           {
+            label: "Nómina",
+            icon: <DollarSign size={20} />,
+            path: "/nomina",
+          },
+          {
             label: "Cierres de Caja",
             icon: <PackageCheck size={20} />,
             path: "/revisar-cajas",
+          },
+                    {
+            label: "Bonos",
+            icon: <LucideTicketPercent size={20} />,
+            path: "/bonos",
           },
         ],
       },
@@ -179,7 +196,7 @@ export default function Sidebar({ auth }) {
         ],
       },
 
-      DesarrolloOrganizacional: {
+/*       DesarrolloOrganizacional: {
         title: "Desarrollo Organizacional",
         items: [
           {
@@ -187,9 +204,8 @@ export default function Sidebar({ auth }) {
             icon: <UserPlus size={20} />,
             path: "/postulaciones",
           },
-       
         ],
-      },
+      }, */
 
       Sistemas: {
         title: "Sistemas",
@@ -198,6 +214,11 @@ export default function Sidebar({ auth }) {
             label: "Gestion de Tareas",
             icon: <MonitorCog size={20} />,
             path: "/sistemas/tareas",
+          },
+          {
+            label: "Normalizacion dispositivos",
+            icon: <ClipboardList size={20} />,
+            path: "/conciliacion-facturas",
           },
         ],
       },
@@ -267,7 +288,6 @@ export default function Sidebar({ auth }) {
             icon: <ClipboardList size={20} />,
             path: "/costoHistorico",
           },
-        
         ],
       },
     }),

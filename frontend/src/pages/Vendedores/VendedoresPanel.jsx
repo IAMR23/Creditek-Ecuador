@@ -11,6 +11,8 @@ import {
   MdAssignment,
   MdAnalytics,
   MdSupportAgent,
+  MdFlag,
+  MdFactCheck,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
 
@@ -66,6 +68,18 @@ function VendedorPanel() {
           desc: "Revisa tus gestiones",
           icon: <MdSupportAgent />,
           path: "/mis-gestiones-comerciales",
+        },
+        {
+          title: "Planes de batalla",
+          desc: "Organiza tu plan semanal",
+          icon: <MdFlag />,
+          path: "/planes-batalla",
+        },
+        {
+          title: "Mis planes de batalla",
+          desc: "Consulta tus planes enviados",
+          icon: <MdFactCheck />,
+          path: "/mis-planes-batalla",
         },
       ],
     },

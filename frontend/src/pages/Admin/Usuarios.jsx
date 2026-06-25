@@ -26,6 +26,7 @@ export default function Usuarios() {
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
+    entidadFinanciera: "",
     direccion: "",
     telefono: "",
   });
@@ -42,6 +43,7 @@ export default function Usuarios() {
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
+    entidadFinanciera: "",
     direccion: "",
     telefono: "",
     activo: true,
@@ -65,6 +67,7 @@ export default function Usuarios() {
       fechaIngreso: usuario.fechaIngreso || "",
       fechaSalida: usuario.fechaSalida || "",
       numeroCuenta: usuario.numeroCuenta || "",
+      entidadFinanciera: usuario.entidadFinanciera || "",
       direccion: usuario.direccion || "",
       telefono: usuario.telefono || "",
       activo: !!usuario.activo,
@@ -85,6 +88,7 @@ export default function Usuarios() {
       fechaIngreso: "",
       fechaSalida: "",
       numeroCuenta: "",
+      entidadFinanciera: "",
       direccion: "",
       telefono: "",
       activo: true,
@@ -92,7 +96,9 @@ export default function Usuarios() {
   };
 
   const cargarUsuarios = async () => {
-    const res = await axios.get(`${API_URL}/usuarios`);
+    const res = await axios.get(`${API_URL}/usuarios`, {
+      params: { incluirInactivos: true },
+    });
     setUsuarios(res.data);
   };
 
@@ -136,6 +142,7 @@ export default function Usuarios() {
         fechaIngreso: form.fechaIngreso || null,
         fechaSalida: form.fechaSalida || null,
         numeroCuenta: normalizeText(form.numeroCuenta),
+        entidadFinanciera: normalizeText(form.entidadFinanciera),
         direccion: normalizeText(form.direccion),
         telefono: normalizeText(form.telefono),
       });
@@ -150,6 +157,7 @@ export default function Usuarios() {
         fechaIngreso: "",
         fechaSalida: "",
         numeroCuenta: "",
+        entidadFinanciera: "",
         direccion: "",
         telefono: "",
       });
@@ -186,6 +194,7 @@ export default function Usuarios() {
         fechaIngreso: editForm.fechaIngreso || null,
         fechaSalida: editForm.fechaSalida || null,
         numeroCuenta: normalizeText(editForm.numeroCuenta),
+        entidadFinanciera: normalizeText(editForm.entidadFinanciera),
         direccion: normalizeText(editForm.direccion),
         telefono: normalizeText(editForm.telefono),
         activo: editForm.activo,
@@ -393,6 +402,21 @@ export default function Usuarios() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
+                  Entidad financiera
+                </label>
+                <input
+                  type="text"
+                  placeholder="Banco o cooperativa"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.entidadFinanciera}
+                  onChange={(e) =>
+                    setForm({ ...form, entidadFinanciera: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
                   Fecha de ingreso
                 </label>
                 <input
@@ -563,6 +587,9 @@ export default function Usuarios() {
                       <p className="text-xs text-slate-400">
                         Cuenta: {u.numeroCuenta || "-"}
                       </p>
+                      <p className="text-xs text-slate-400">
+                        Entidad: {u.entidadFinanciera || "-"}
+                      </p>
                     </td>
 
                     <td className="px-6 py-4">
@@ -680,6 +707,15 @@ export default function Usuarios() {
 
                   <div>
                     <p className="text-xs font-semibold text-slate-400">
+                      Entidad financiera
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      {u.entidadFinanciera || "-"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
                       Ingreso
                     </p>
                     <p className="font-medium text-slate-700">
@@ -747,6 +783,24 @@ export default function Usuarios() {
                       value={editForm.nombre}
                       onChange={(e) =>
                         setEditForm({ ...editForm, nombre: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Entidad financiera
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Banco o cooperativa"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.entidadFinanciera}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          entidadFinanciera: e.target.value,
+                        })
                       }
                     />
                   </div>

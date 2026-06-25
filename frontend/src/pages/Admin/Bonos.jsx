@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import {
   BarChart,
@@ -45,7 +46,7 @@ export default function Bonos() {
   const [tabla, setTabla] = useState([]);
   const [totalVentas, setTotalVentas] = useState(0);
   const [totalPago, setTotalPago] = useState(0);
-const [bono, setBono] = useState(0);
+const [bono, setBono] = useState("0");
 const [ventasPorVendedor, setVentasPorVendedor] = useState({});
   // ✅ Estados persistentes
   const [fechaInicio, setFechaInicio] = useState(
@@ -65,6 +66,22 @@ const [ventasPorVendedor, setVentasPorVendedor] = useState({});
   const [cierreCajaTipo, setCierreCajaTipo] = useState(
     filtrosGuardados.cierreCajaTipo || "",
   );
+
+  const bonoNumerico = Number(bono || 0);
+
+  const normalizarBono = (value) => {
+    let limpio = String(value || "")
+      .replace(/,/g, ".")
+      .replace(/[^\d.]/g, "");
+
+    const [entero = "", ...decimales] = limpio.split(".");
+    limpio = decimales.length
+      ? `${entero}.${decimales.join("").slice(0, 2)}`
+      : entero;
+
+    if (limpio.startsWith(".")) limpio = `0${limpio}`;
+    return limpio;
+  };
 
   const exportarExcelCompleto = async () => {
     const workbook = new ExcelJS.Workbook();
@@ -163,7 +180,9 @@ const [ventasPorVendedor, setVentasPorVendedor] = useState({});
   // -----------------------------
   const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: { rol: "Vendedor" },
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -231,8 +250,8 @@ setVentasPorVendedor(vendedores);
         ([nombre, ventas]) => ({
           vendedor: nombre,
           cantidad: ventas,
-          bono: bono,
-          total: ventas * bono,
+          bono: bonoNumerico,
+          total: ventas * bonoNumerico,
         }),
       );
 
@@ -299,8 +318,8 @@ setVentasPorVendedor(vendedores);
     ([nombre, ventas]) => ({
       vendedor: nombre,
       cantidad: ventas,
-      bono: bono,
-      total: ventas * bono,
+      bono: bonoNumerico,
+      total: ventas * bonoNumerico,
     }),
   );
 
@@ -318,7 +337,7 @@ setVentasPorVendedor(vendedores);
   setTotalVentas(totalVentasCalc);
   setTotalPago(totalPagoCalc);
 
-}, [bono, ventasPorVendedor]);
+}, [bonoNumerico, ventasPorVendedor]);
 
 
   return (
@@ -375,7 +394,7 @@ setVentasPorVendedor(vendedores);
             <option value="">Todos</option>
             {usuarios.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.nombre}
+                {nombreCortoUsuario(u)}
               </option>
             ))}
           </select>
@@ -400,12 +419,12 @@ setVentasPorVendedor(vendedores);
 <div>
   <label className="block text-sm font-medium">Bono:</label>
 <input
-  type="number"
+  type="text"
+  inputMode="decimal"
   className="border px-2 py-1 rounded w-24"
   value={bono}
-  min="0"
-  step="0.01"
-  onChange={(e) => setBono(Number(e.target.value) || 0)}
+  onChange={(e) => setBono(normalizarBono(e.target.value))}
+  onBlur={() => setBono((prev) => (prev === "" ? "0" : normalizarBono(prev)))}
 />
 </div>
 

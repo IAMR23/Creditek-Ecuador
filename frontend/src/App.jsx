@@ -88,8 +88,13 @@ import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
+import PlanesBatalla from "./pages/Vendedores/PlanesBatalla";
+import MisPlanesBatalla from "./pages/Vendedores/MisPlanesBatalla";
 import Powerbi from "./pages/Admin/PowerBi";
+import VerPlanesBatalla from "./pages/Admin/VerPlanesBatalla";
+import SecretariosEjecutivos from "./pages/Admin/SecretariosEjecutivos";
 import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
+import Nomina from "./pages/Contabilidad/Nomina";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
 
@@ -284,6 +289,8 @@ useEffect(() => {
                 <Route path="bdd-ventas" element={protect(<BDDVentas />, "/bdd-ventas")} />
                 <Route path="conciliacion-facturas" element={protect(<ConciliacionFacturas />, "/conciliacion-facturas")} />
                 <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
+                <Route path="secretarios-ejecutivos" element={protect(<SecretariosEjecutivos />, "/secretarios-ejecutivos")} />
+                <Route path="ver-planes-batalla" element={protect(<VerPlanesBatalla />, "/ver-planes-batalla")} />
                 <Route
                   path="entrega-logistica/:id"
                   element={protect(<DetalleEntrega />, "/entrega-logistica")}
@@ -361,6 +368,7 @@ useEffect(() => {
                 />
                 <Route path="revisar-cajas" element={protect(<CierresCajaTabla />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
+                <Route path="nomina" element={protect(<Nomina />, "/nomina")} />
                 <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />
                 <Route
                   path="sistemas/tareas"
@@ -466,6 +474,8 @@ useEffect(() => {
               <Route path="crear-traslado" element={protect(<CrearTraslado />, "/crear-traslado")} />
               <Route path="mis-traslados" element={protect(<TrasladosList />, "/mis-traslados")} />
               <Route path="gestion" element={protect(<Gestion />, "/gestion")} />
+              <Route path="planes-batalla" element={protect(<PlanesBatalla />, "/planes-batalla")} />
+              <Route path="mis-planes-batalla" element={protect(<MisPlanesBatalla />, "/mis-planes-batalla")} />
               <Route path="mis-gestiones" element={protect(<MisGestiones />, "/mis-gestiones")} />
               <Route path="mis-gestiones-comerciales" element={protect(<MisGestionesComerciales />, "/mis-gestiones-comerciales")} />
               <Route path="mi-gestion/:id" element={protect(<EditarGestion />, "/mis-gestiones")} />

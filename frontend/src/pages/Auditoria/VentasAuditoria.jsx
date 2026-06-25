@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { nombreCortoUsuario } from "../../utils/nombres";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import * as XLSX from "xlsx";
@@ -271,7 +272,9 @@ export default function VentasAuditoria() {
 
   const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`);
+      const res = await axios.get(`${API_URL}/usuarios`, {
+        params: { rol: "Vendedor" },
+      });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -1035,6 +1038,7 @@ export default function VentasAuditoria() {
             onChange={setVendedorId}
             options={usuarios}
             emptyLabel="Todos"
+            shortNames
           />
 
           <label className="block">
@@ -1391,7 +1395,7 @@ function FiltroFecha({ label, value, onChange }) {
   );
 }
 
-function FiltroSelect({ label, value, onChange, options, emptyLabel }) {
+function FiltroSelect({ label, value, onChange, options, emptyLabel, shortNames = false }) {
   return (
     <label className="block">
       <span className="block text-sm font-medium text-gray-700">{label}</span>
@@ -1403,7 +1407,7 @@ function FiltroSelect({ label, value, onChange, options, emptyLabel }) {
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
-            {option.nombre}
+            {shortNames ? nombreCortoUsuario(option) : option.nombre}
           </option>
         ))}
       </select>
