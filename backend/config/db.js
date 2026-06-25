@@ -353,6 +353,52 @@ const ensureNominaSchema = async (queryInterface, tables) => {
   });
 };
 
+const ensureMapaComercialSchema = async (tables) => {
+  if (tables.includes("mapa_comercial_zonas")) {
+    await sequelize.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS mapa_comercial_zonas_agencia_nombre_unique
+      ON mapa_comercial_zonas ("agenciaId", nombre);
+    `);
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS mapa_comercial_zonas_activo_agencia_idx
+      ON mapa_comercial_zonas (activo, "agenciaId");
+    `);
+  }
+
+  if (tables.includes("mapa_ubicaciones_normalizadas")) {
+    await sequelize.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS mapa_ubicaciones_entidad_unique
+      ON mapa_ubicaciones_normalizadas ("entidadTipo", "entidadId");
+    `);
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS mapa_ubicaciones_estado_idx
+      ON mapa_ubicaciones_normalizadas ("estadoGeocodificacion");
+    `);
+  }
+};
+
+const ensureDetalleEntregasUbicacionSchema = async (queryInterface, tables) => {
+  if (!tables.includes("detalle_entregas")) return;
+
+  const columns = await queryInterface.describeTable("detalle_entregas");
+
+  if (columns.ubicacion) {
+    await queryInterface.changeColumn("detalle_entregas", "ubicacion", {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    });
+  }
+
+  if (columns.ubicacionDispositivo) {
+    await queryInterface.changeColumn("detalle_entregas", "ubicacionDispositivo", {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    });
+  }
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
@@ -370,6 +416,8 @@ const connectDB = async () => {
     await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
     await ensureUsuariosSchema(queryInterface, tables);
     await ensureNominaSchema(queryInterface, tables);
+    await ensureMapaComercialSchema(tables);
+    await ensureDetalleEntregasUbicacionSchema(queryInterface, tables);
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

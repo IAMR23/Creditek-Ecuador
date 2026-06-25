@@ -177,6 +177,7 @@ connectDB()
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
     app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));
     app.use("/api/tareas", require("./routes/Sistemas/tareasRoutes"));
+    app.use("/api/sistemas/mapa-comercial", require("./routes/Sistemas/mapaComercialRoutes"));
     app.use("/api/planes-batalla", require("./routes/planesBatallaRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));

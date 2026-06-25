@@ -690,7 +690,7 @@ Detalle:
 - Marca: ${dispositivoMarcaSeleccionado?.marca?.nombre || "N/A"}
 - Modelo: ${modelo?.nombre || "N/A"}
 - Forma de Pago: ${formaPago?.nombre || "N/A"}
-- Precio Venta : $${detalle.precioVenta || detalle.precioVendedor || 0}
+- Precio Venta : $${ detalle.precioVendedor || 0}
 - Cantidad: ${detalle.cantidad || 0}
 - Entrada : $${detalle.entrada || 0}
 - Alcance : $${detalle.alcance || 0}

@@ -5,7 +5,7 @@ const Agencia = require("../models/Agencia");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const NominaEmpleado = require("../models/NominaEmpleado");
 const { NominaBeneficio, TIPOS_BENEFICIO_NOMINA } = require("../models/NominaBeneficio");
-
+ 
 const ESTADOS_NOMINA = ["ACTIVO", "PASIVO"];
 
 const normalizarEstado = (estado) => {

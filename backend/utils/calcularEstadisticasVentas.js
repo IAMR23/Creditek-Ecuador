@@ -1,3 +1,85 @@
+const normalizarTexto = (valor) => {
+  if (valor === null || valor === undefined) return "";
+  return String(valor).trim();
+};
+
+const normalizarNumero = (...valores) => {
+  for (const valor of valores) {
+    if (valor === null || valor === undefined || valor === "") continue;
+
+    const numero = Number(String(valor).replace(",", "."));
+    if (Number.isFinite(numero)) return numero;
+  }
+
+  return 0;
+};
+
+const redondear2 = (valor) => Number((Number(valor) || 0).toFixed(2));
+
+const calcularResumenMargen = (ventas = [], rango = {}) => {
+  let totalMargen = 0;
+  let totalCosto = 0;
+  const ventasUnicas = new Set();
+  const detalles = new Set();
+  const detallesDuplicados = [];
+  const registros = [];
+
+  ventas.forEach((venta) => {
+    const margen = normalizarNumero(venta.margen);
+    const costo = normalizarNumero(venta.costo);
+
+    totalMargen += margen;
+    totalCosto += costo;
+
+    if (venta.id !== undefined && venta.id !== null) {
+      ventasUnicas.add(venta.id);
+    }
+
+    if (venta.detalleVentaId !== undefined && venta.detalleVentaId !== null) {
+      if (detalles.has(venta.detalleVentaId)) {
+        detallesDuplicados.push(venta.detalleVentaId);
+      }
+
+      detalles.add(venta.detalleVentaId);
+    }
+
+    registros.push({
+      id: venta.id ?? null,
+      detalleVentaId: venta.detalleVentaId ?? null,
+      fecha: venta.fecha ?? null,
+      agencia: venta.local ?? null,
+      vendedor: venta.vendedor ?? null,
+      origen: venta.origen ?? null,
+      observaciones: venta.observaciones ?? venta.observacion ?? null,
+      formaPago: venta.formaPago ?? null,
+      cierreCaja: venta.cierreCaja ?? null,
+      margen,
+      costo,
+    });
+  });
+
+  totalMargen = redondear2(totalMargen);
+  totalCosto = redondear2(totalCosto);
+
+  return {
+    totalMargen,
+    totalCosto,
+    margenPorcentaje:
+      totalCosto === 0 ? 0 : redondear2((totalMargen / totalCosto) * 100),
+    cantidadRegistros: ventas.length,
+    ventasUnicas: ventasUnicas.size,
+    detallesUnicos: detalles.size,
+    detallesDuplicados,
+    registros,
+    rangoFechasAplicado: {
+      fechaInicio: rango.fechaInicio || null,
+      fechaFin: rango.fechaFin || null,
+    },
+  };
+};
+
+exports.calcularResumenMargen = calcularResumenMargen;
+
 exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   const stats = {
     totalVentas: ventas.length,
@@ -25,11 +107,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     precioVentaPorSemana: {},
     costoPorSemana: {},
     margenPorcentualPorSemana: {},
-  };
-
-  const normalizarTexto = (valor) => {
-    if (valor === null || valor === undefined) return "";
-    return String(valor).trim();
+    debugMargen: calcularResumenMargen(ventas),
   };
 
   const normalizarClave = (valor) =>
@@ -70,17 +148,6 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     const day = String(fecha.getDate()).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
-  };
-
-  const normalizarNumero = (...valores) => {
-    for (const valor of valores) {
-      if (valor === null || valor === undefined || valor === "") continue;
-
-      const numero = Number(String(valor).replace(",", "."));
-      if (Number.isFinite(numero)) return numero;
-    }
-
-    return 0;
   };
 
   const getInicioSemanaJueves = (fechaInput) => {
@@ -137,13 +204,9 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     const margen = normalizarNumero(v.margen);
     const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);
     const costo = normalizarNumero(v.costo);
-    stats.indicadorGerenciaTotal = Number(
-      (stats.indicadorGerenciaTotal + margen).toFixed(2)
-    );
-    stats.precioVentaTotal = Number(
-      (stats.precioVentaTotal + precioVenta).toFixed(2)
-    );
-    stats.costoTotal = Number((stats.costoTotal + costo).toFixed(2));
+    stats.indicadorGerenciaTotal += margen;
+    stats.precioVentaTotal += precioVenta;
+    stats.costoTotal += costo;
 
     // Semana comercial jueves-miercoles calculada desde la fecha real.
     if (v.fecha) {
@@ -152,15 +215,11 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
       if (semanaCalculada) {
         const key = `Semana ${semanaCalculada}`;
         stats.porSemana[key] = (stats.porSemana[key] || 0) + 1;
-        stats.indicadorGerenciaPorSemana[key] = Number(
-          ((stats.indicadorGerenciaPorSemana[key] || 0) + margen).toFixed(2)
-        );
-        stats.precioVentaPorSemana[key] = Number(
-          ((stats.precioVentaPorSemana[key] || 0) + precioVenta).toFixed(2)
-        );
-        stats.costoPorSemana[key] = Number(
-          ((stats.costoPorSemana[key] || 0) + costo).toFixed(2)
-        );
+        stats.indicadorGerenciaPorSemana[key] =
+          (stats.indicadorGerenciaPorSemana[key] || 0) + margen;
+        stats.precioVentaPorSemana[key] =
+          (stats.precioVentaPorSemana[key] || 0) + precioVenta;
+        stats.costoPorSemana[key] = (stats.costoPorSemana[key] || 0) + costo;
 
         if (esObservacionJavier) {
           stats.indicadorEngancheJavierPorSemana[key] =
@@ -242,22 +301,32 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   ]);
 
   semanasMargen.forEach((key) => {
-    const utilidad = Number(stats.indicadorGerenciaPorSemana[key]) || 0;
-    const costo = Number(stats.costoPorSemana[key]) || 0;
+    const utilidad = redondear2(stats.indicadorGerenciaPorSemana[key]);
+    const costo = redondear2(stats.costoPorSemana[key]);
+
+    stats.indicadorGerenciaPorSemana[key] = utilidad;
+    stats.costoPorSemana[key] = costo;
+    stats.precioVentaPorSemana[key] = redondear2(stats.precioVentaPorSemana[key]);
 
     stats.margenPorcentualPorSemana[key] =
-      costo === 0 ? 0 : Number(((utilidad / costo) * 100).toFixed(2));
+      costo === 0 ? 0 : redondear2((utilidad / costo) * 100);
   });
+
+  stats.indicadorGerenciaTotal = redondear2(stats.indicadorGerenciaTotal);
+  stats.precioVentaTotal = redondear2(stats.precioVentaTotal);
+  stats.costoTotal = redondear2(stats.costoTotal);
 
   stats.margenPorcentualTotal =
     stats.costoTotal === 0
       ? 0
-      : Number(
-          (
-            (stats.indicadorGerenciaTotal / stats.costoTotal) *
-            100
-          ).toFixed(2)
-        );
+      : redondear2((stats.indicadorGerenciaTotal / stats.costoTotal) * 100);
+
+  stats.debugMargen = {
+    ...stats.debugMargen,
+    totalMargen: stats.indicadorGerenciaTotal,
+    totalCosto: stats.costoTotal,
+    margenPorcentaje: stats.margenPorcentualTotal,
+  };
 
   return stats;
 };

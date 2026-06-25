@@ -78,6 +78,7 @@ export const ROUTE_PERMISSIONS = {
   "/postulaciones": "Desarrollo Organizacional",
 
   "/sistemas/tareas": ["Sistemas", "Administracion"],
+  "/sistemas/mapa-comercial": ["Sistemas", "Administracion"],
 
   "/usuarios": "Administracion",
   "/rol": "Administracion",
@@ -134,6 +135,7 @@ export const ROUTE_REDIRECT_ORDER = [
   "/revisar-cajas",
   "/postulaciones",
   "/sistemas/tareas",
+  "/sistemas/mapa-comercial",
   "/usuarios",
   "/marcas",
 ];

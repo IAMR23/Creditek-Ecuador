@@ -44,6 +44,8 @@ const ConciliacionLote = require('./ConciliacionLote');
 const ConciliacionPdfImportacion = require('./ConciliacionPdfImportacion');
 const ConciliacionModeloTv = require('./ConciliacionModeloTv');
 const ConciliacionModeloCelular = require('./ConciliacionModeloCelular');
+const MapaComercialZona = require('./MapaComercialZona');
+const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 require('./UsuarioPermiso');
 require('./UsuarioRol');
 // -------------------- Usuario, Rol, Agencia --------------------
@@ -539,4 +541,21 @@ ConciliacionModeloCelular.belongsTo(Modelo, {
 Modelo.hasMany(ConciliacionModeloCelular, {
   foreignKey: "modeloRveId",
   as: "mapeosConciliacionCelular",
+});
+
+/* MAPA COMERCIAL */
+
+MapaComercialZona.belongsTo(Agencia, {
+  foreignKey: "agenciaId",
+  as: "agencia",
+});
+
+Agencia.hasMany(MapaComercialZona, {
+  foreignKey: "agenciaId",
+  as: "mapaComercialZonas",
+});
+
+MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {
+  foreignKey: "zonaId",
+  as: "zona",
 });

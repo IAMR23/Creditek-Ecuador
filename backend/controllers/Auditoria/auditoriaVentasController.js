@@ -18,6 +18,7 @@ const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
 const Entrega = require("../../models/Entrega");
+const DetalleEntrega = require("../../models/DetalleEntrega");
 
 const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
@@ -126,6 +127,7 @@ exports.obtenerReporteAuditoria = async ({
           "precioVendedor",
           "entrada",
           "margen",
+          "costo",
           "alcance",
           "contrato",
           "cierreCaja",
@@ -461,6 +463,170 @@ const normalizarIds = (valor) => {
     .split(",")
     .map(Number)
     .filter(Boolean);
+};
+
+const getCierreCajaDesdeDetalle = (detalle) => {
+  const formaPagoCredito = esFormaPagoCredito({
+    formaPagoId: detalle.formaPagoId,
+    formaPago: detalle.formaPago?.nombre,
+  });
+
+  if (!formaPagoCredito) return "CONTADO";
+
+  const dispositivoId = Number(detalle.dispositivoMarca?.dispositivo?.id);
+  if (dispositivoId === 1) return "CREDITV";
+  if (dispositivoId === 2) return "UPHONE";
+
+  return "CONTADO";
+};
+
+exports.obtenerReporteEntregasAuditoria = async ({
+  fechaInicio,
+  fechaFin,
+  agenciaId,
+  vendedorId,
+  modeloId,
+  cierreCaja,
+  dispositivoId,
+  estado,
+}) => {
+  const whereEntrega = {};
+
+  if (fechaInicio && fechaFin) {
+    whereEntrega.fecha = { [Op.between]: [fechaInicio, fechaFin] };
+  } else if (fechaInicio) {
+    whereEntrega.fecha = { [Op.gte]: fechaInicio };
+  } else if (fechaFin) {
+    whereEntrega.fecha = { [Op.lte]: fechaFin };
+  }
+
+  if (estado && estado !== "todos") {
+    whereEntrega.estado = { [Op.iLike]: estado };
+  }
+
+  const whereDetalleEntrega = {};
+  if (modeloId && modeloId !== "todos") {
+    whereDetalleEntrega.modeloId = modeloId;
+  }
+
+  const includeUsuarioAgencia = {
+    model: UsuarioAgencia,
+    as: "usuarioAgencia",
+    attributes: ["id"],
+    required: !!agenciaId || !!vendedorId,
+    include: [
+      {
+        model: Usuario,
+        as: "usuario",
+        attributes: ["id", "nombre"],
+        ...(vendedorId &&
+          vendedorId !== "todos" && {
+            where: { id: vendedorId },
+          }),
+      },
+      {
+        model: Agencia,
+        as: "agencia",
+        attributes: ["id", "nombre"],
+        ...(agenciaId &&
+          agenciaId !== "todas" && {
+            where: { id: agenciaId },
+          }),
+      },
+    ],
+  };
+
+  const entregas = await Entrega.findAll({
+    where: whereEntrega,
+    attributes: ["id", "fecha", "estado", "activo"],
+    order: [["fecha", "ASC"], ["id", "ASC"]],
+    include: [
+      includeUsuarioAgencia,
+      {
+        model: Cliente,
+        as: "cliente",
+        attributes: ["cedula", "cliente"],
+      },
+      {
+        model: DetalleEntrega,
+        as: "detalleEntregas",
+        attributes: [
+          "id",
+          "modeloId",
+          "precioVendedor",
+          "formaPagoId",
+          "entrada",
+          "alcance",
+        ],
+        required:
+          Object.keys(whereDetalleEntrega).length > 0 ||
+          (dispositivoId && dispositivoId !== "todos"),
+        ...(Object.keys(whereDetalleEntrega).length > 0 && {
+          where: whereDetalleEntrega,
+        }),
+        include: [
+          { model: Modelo, as: "modelo", attributes: ["id", "nombre"] },
+          {
+            model: DispositivoMarca,
+            as: "dispositivoMarca",
+            attributes: ["id"],
+            required: !!dispositivoId && dispositivoId !== "todos",
+            include: [
+              {
+                model: Dispositivo,
+                as: "dispositivo",
+                attributes: ["id", "nombre"],
+                required: !!dispositivoId && dispositivoId !== "todos",
+                ...(dispositivoId &&
+                  dispositivoId !== "todos" && {
+                    where: { id: dispositivoId },
+                  }),
+              },
+              { model: Marca, as: "marca", attributes: ["id", "nombre"] },
+            ],
+          },
+          { model: FormaPago, as: "formaPago", attributes: ["id", "nombre"] },
+        ],
+      },
+    ],
+  });
+
+  const reporte = exports.formatearReporteEntregas(entregas);
+
+  return cierreCaja && cierreCaja !== "todos"
+    ? reporte.filter((fila) => fila.cierreCaja === cierreCaja)
+    : reporte;
+};
+
+exports.formatearReporteEntregas = (entregas = []) => {
+  const filas = [];
+
+  entregas.forEach((entrega) => {
+    (entrega.detalleEntregas || []).forEach((detalle) => {
+      filas.push({
+        id: entrega.id,
+        detalleEntregaId: detalle.id,
+        fecha: normalizarFecha(entrega.fecha),
+        cedula: entrega.cliente?.cedula || "",
+        cliente: entrega.cliente?.cliente || "",
+        agencia: entrega.usuarioAgencia?.agencia?.nombre || "",
+        vendedor: entrega.usuarioAgencia?.usuario?.nombre || "",
+        dispositivo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
+        marca: detalle.dispositivoMarca?.marca?.nombre || "",
+        modeloId: detalle.modeloId || null,
+        modelo: detalle.modelo?.nombre || "",
+        precioVendedor: detalle.precioVendedor || "",
+        formaPago: detalle.formaPago?.nombre || "",
+        formaPagoId: detalle.formaPagoId || null,
+        entrada: detalle.entrada || "0",
+        alcance: detalle.alcance || "0",
+        estado: entrega.estado || "",
+        cierreCaja: getCierreCajaDesdeDetalle(detalle),
+      });
+    });
+  });
+
+  return filas;
 };
 
 exports.obtenerEntregasPorVendedorDashboard = async ({

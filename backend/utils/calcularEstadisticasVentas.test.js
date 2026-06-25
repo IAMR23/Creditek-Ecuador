@@ -37,4 +37,38 @@ describe("calcularEstadisticasVentas", () => {
     expect(estadisticas.margenPorcentualPorSemana["Semana 1"]).toBe(0);
     expect(estadisticas.margenPorcentualTotal).toBe(0);
   });
+
+  test("no promedia porcentajes individuales, usa total margen sobre total costo", () => {
+    const estadisticas = calcularEstadisticasVentas(
+      [
+        {
+          fecha: "2026-06-18",
+          margen: 10,
+          costo: 100,
+        },
+        {
+          fecha: "2026-06-19",
+          margen: 90,
+          costo: 100,
+        },
+        {
+          fecha: "2026-06-20",
+          margen: 50,
+          costo: 300,
+        },
+      ],
+      "2026-06-18",
+    );
+
+    expect(estadisticas.indicadorGerenciaPorSemana["Semana 1"]).toBe(150);
+    expect(estadisticas.costoPorSemana["Semana 1"]).toBe(500);
+    expect(estadisticas.margenPorcentualPorSemana["Semana 1"]).toBe(30);
+    expect(estadisticas.margenPorcentualTotal).toBe(30);
+    expect(estadisticas.debugMargen).toMatchObject({
+      totalMargen: 150,
+      totalCosto: 500,
+      margenPorcentaje: 30,
+      cantidadRegistros: 3,
+    });
+  });
 });

@@ -25,6 +25,7 @@ const STORAGE_KEY = "ventas_auditoria_filtros";
 const getHoyLocal = () => new Date().toLocaleDateString("en-CA");
 
 const TABLE_COLUMNS = [
+  "ID Venta",
   "Fecha",
   "Fecha PDF",
   "Cedula",
@@ -39,6 +40,7 @@ const TABLE_COLUMNS = [
   "Codigo / IMEI PDF",
   "Precio Venta",
   "Precio Vendedor",
+  "Costo",
   "Ventas PDF",
   "Diferencia",
   "Precio Unitario",
@@ -161,6 +163,7 @@ const mapVentaAuditoria = (venta) => {
   return {
     id: venta.id,
     detalleVentaId: venta.detalleVentaId,
+    "ID Venta": venta.id ?? "",
     modeloId: venta.modeloId ?? "",
     Fecha: venta.fecha ?? "",
     "Fecha PDF": venta.fechaPdf ?? "",
@@ -180,6 +183,7 @@ const mapVentaAuditoria = (venta) => {
     "Codigo / IMEI PDF": venta.referenciaPdf ?? "",
     "Precio Venta": precioVenta,
     "Precio Vendedor": precioVendedor,
+    Costo: toMoney(venta.costo),
     "Ventas PDF": toMoney(venta.precioVendedorPdf),
     Diferencia: diferencia,
     "Precio Unitario":
@@ -736,6 +740,7 @@ export default function VentasAuditoria() {
         : fila.Dispositivo,
       "Precio Venta": precioVenta,
       "Precio Vendedor": precioVendedor,
+      Costo: toMoney(detalle.costo),
       Diferencia:
         precioVenta !== "" || precioVendedor !== ""
           ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
@@ -952,9 +957,14 @@ export default function VentasAuditoria() {
     }
 
     if (
-      ["Precio Unitario", "Entrada", "Entrada PDF", "Alcance", "Ventas PDF"].includes(
-        key,
-      )
+      [
+        "Precio Unitario",
+        "Entrada",
+        "Entrada PDF",
+        "Alcance",
+        "Ventas PDF",
+        "Costo",
+      ].includes(key)
     ) {
       clase += " text-right tabular-nums";
     }

@@ -57,10 +57,10 @@ const DetalleEntrega = sequelize.define(
       allowNull: false,
     },
     ubicacion: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
     },
     ubicacionDispositivo: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
     },
     observacionDetalle: {
       type: DataTypes.STRING,

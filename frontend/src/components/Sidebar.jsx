@@ -22,6 +22,7 @@ import {
   MonitorCog,
   Table2,
   FileCheck2,
+  MapPinned,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { FaTasks } from "react-icons/fa";
@@ -214,6 +215,11 @@ export default function Sidebar({ auth }) {
             label: "Gestion de Tareas",
             icon: <MonitorCog size={20} />,
             path: "/sistemas/tareas",
+          },
+          {
+            label: "Mapa Comercial",
+            icon: <MapPinned size={20} />,
+            path: "/sistemas/mapa-comercial",
           },
           {
             label: "Normalizacion dispositivos",

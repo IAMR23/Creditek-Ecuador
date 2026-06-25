@@ -89,6 +89,7 @@ const editarEntregaCompleta = async (req, res) => {
         observacion: entrega.observacion,
         fecha: entrega.fecha,
         FechaHoraLlamada: entrega.FechaHoraLlamada,
+        estado: entrega.estado,
         ...(fotoUrl && { fotoFechaLlamada: fotoUrl }),
       },
       { transaction: t }
@@ -119,6 +120,8 @@ const editarEntregaCompleta = async (req, res) => {
         entrada: detalle.entrada,
         alcance: detalle.alcance,
         contrato: detalle.contrato,
+        ubicacion: detalle.ubicacion,
+        ubicacionDispositivo: detalle.ubicacionDispositivo,
         observacionDetalle: detalle.observacionDetalle,
       },
       { transaction: t }
@@ -234,6 +237,7 @@ const obtenerEntregaCompleta = async (req, res) => {
         origen: entrega.origen || null,
         observacion: entrega.observacion,
         fecha: entrega.fecha,
+        estado: entrega.estado,
         
       },
       detalle: entrega.detalleEntregas?.[0] || {

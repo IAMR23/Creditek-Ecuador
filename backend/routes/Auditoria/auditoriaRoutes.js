@@ -8,7 +8,11 @@ const multer = require("multer");
 const router = express.Router();
 const auditoriaVentasController = require("../../controllers/Auditoria/auditoriaVentasController");
 const tareasSistemasController = require("../../controllers/Sistemas/tareasController");
-const { calcularEstadisticasVentas, comiteCompras } = require("../../utils/calcularEstadisticasVentas");
+const {
+  calcularEstadisticasVentas,
+  calcularResumenMargen,
+  comiteCompras,
+} = require("../../utils/calcularEstadisticasVentas");
 
 const uploadRoot =
   process.env.AUDITORIA_TEMP_DIR ||
@@ -117,6 +121,37 @@ router.patch(
   auditoriaVentasController.actualizarDetalleVentaAuditoria,
 );
 
+router.get("/entregas", async (req, res) => {
+  try {
+    const {
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      modeloId,
+      cierreCaja,
+      dispositivoId,
+      estado,
+    } = req.query;
+
+    const entregas = await auditoriaVentasController.obtenerReporteEntregasAuditoria({
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      modeloId,
+      cierreCaja,
+      dispositivoId,
+      estado,
+    });
+
+    res.json({ ok: true, entregas, totalEntregas: entregas.length });
+  } catch (error) {
+    console.error("Error reporte entregas auditoria:", error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 router.get("/informe", async (req, res) => {
   try {
     const { fechaInicio, fechaFin, agenciaId, vendedorId   , observacion} = req.query;
@@ -161,6 +196,19 @@ router.get("/ventas2", async (req, res) => {
     const reporte = auditoriaVentasController.formatearReporte(ventas);
 
     const estadisticas = calcularEstadisticasVentas(reporte , fechaInicio);
+    estadisticas.debugMargen = {
+      ...estadisticas.debugMargen,
+      rangoFechasAplicado: {
+        fechaInicio,
+        fechaFin,
+      },
+      filtrosAplicados: {
+        agenciaId: agenciaId || null,
+        vendedorId: vendedorId || null,
+        cierreCaja: cierreCaja || null,
+        observacion: observacion || null,
+      },
+    };
     estadisticas.tareasFinalizadasPorFecha =
       await tareasSistemasController.obtenerTareasFinalizadasPorFecha({
         fechaInicio,
@@ -187,6 +235,105 @@ router.get("/ventas2", async (req, res) => {
     res.json({ ok: true, estadisticas});
   } catch (error) {
     console.error(error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+router.get("/ventas2/debug-margen", async (req, res) => {
+  try {
+    const {
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      cierreCaja,
+      observacion,
+    } = req.query;
+
+    const filtrosAplicados = {
+      fechaInicio,
+      fechaFin,
+      agenciaId: agenciaId || null,
+      vendedorId: vendedorId || null,
+      cierreCaja: cierreCaja || null,
+      observacion: observacion || null,
+    };
+
+    const ventasPowerBi = await auditoriaVentasController.obtenerReporteGerencia({
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      cierreCaja,
+      observacion,
+    });
+    const reportePowerBi = auditoriaVentasController.formatearReporte(ventasPowerBi);
+    const resumenPowerBi = calcularResumenMargen(reportePowerBi, {
+      fechaInicio,
+      fechaFin,
+    });
+
+    const ventasMetas = await auditoriaVentasController.obtenerReporte({
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      observacion,
+    });
+    const reporteMetas = auditoriaVentasController.formatearReporte(ventasMetas);
+    const resumenMetas = calcularResumenMargen(reporteMetas, {
+      fechaInicio,
+      fechaFin,
+    });
+
+    const powerBiDetalleIds = new Set(
+      resumenPowerBi.registros
+        .map((item) => item.detalleVentaId)
+        .filter((id) => id !== null && id !== undefined),
+    );
+    const metasDetalleIds = new Set(
+      resumenMetas.registros
+        .map((item) => item.detalleVentaId)
+        .filter((id) => id !== null && id !== undefined),
+    );
+    const soloPowerBi = resumenPowerBi.registros.filter(
+      (item) => item.detalleVentaId && !metasDetalleIds.has(item.detalleVentaId),
+    );
+    const soloMetasComerciales = resumenMetas.registros.filter(
+      (item) => item.detalleVentaId && !powerBiDetalleIds.has(item.detalleVentaId),
+    );
+
+    const debug = {
+      formula: "MargenPorcentaje = totalMargen / totalCosto * 100",
+      filtrosAplicados,
+      powerBi: resumenPowerBi,
+      metasComerciales: resumenMetas,
+      comparacionRegistros: {
+        soloPowerBi,
+        soloMetasComerciales,
+      },
+      diferencias: {
+        totalMargen: Number(
+          (resumenPowerBi.totalMargen - resumenMetas.totalMargen).toFixed(2),
+        ),
+        totalCosto: Number(
+          (resumenPowerBi.totalCosto - resumenMetas.totalCosto).toFixed(2),
+        ),
+        margenPorcentaje: Number(
+          (
+            resumenPowerBi.margenPorcentaje - resumenMetas.margenPorcentaje
+          ).toFixed(2),
+        ),
+        cantidadRegistros:
+          resumenPowerBi.cantidadRegistros - resumenMetas.cantidadRegistros,
+      },
+    };
+
+    console.log("[DEBUG margen Power BI]", JSON.stringify(debug, null, 2));
+
+    res.json({ ok: true, debug });
+  } catch (error) {
+    console.error("Error debug margen Power BI:", error);
     res.status(500).json({ ok: false, error: error.message });
   }
 });
