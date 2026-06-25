@@ -132,18 +132,6 @@ router.get("/usuarios-repartidores", async (req, res) => {
               attributes: ["id", "nombre"],
               through: { attributes: [] },
             },
-            {
-              model: UsuarioPermiso,
-              as: "permisosAsignados",
-              required: false,
-              include: [
-                {
-                  model: Permiso,
-                  as: "permiso",
-                  attributes: ["id", "nombre"],
-                },
-              ],
-            },
           ],
         },
         {
@@ -163,11 +151,8 @@ router.get("/usuarios-repartidores", async (req, res) => {
       const tieneRol = rolesUsuario.some(
         (rol) => String(rol.nombre || "").trim().toLowerCase() === "repartidor",
       );
-      const tienePermiso = ua.usuario?.permisosAsignados?.some(
-        (p) => p.permiso?.nombre === "Logistica",
-      );
 
-      return tieneRol || tienePermiso;
+      return tieneRol;
     });
 
     res.json(repartidores);

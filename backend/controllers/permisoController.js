@@ -25,6 +25,31 @@ exports.listarPermisos = async (req, res) => {
   }
 };
 
+exports.eliminarPermiso = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const permiso = await Permiso.findByPk(id);
+
+    if (!permiso) {
+      return res.status(404).json({ message: "Permiso no encontrado" });
+    }
+
+    const asignacionesEliminadas = await UsuarioPermiso.destroy({
+      where: { permisoId: permiso.id },
+    });
+
+    await permiso.destroy();
+
+    res.json({
+      message: "Permiso eliminado correctamente",
+      asignacionesEliminadas,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error eliminando el permiso" });
+  }
+};
+
 exports.sincronizarPermisos = async (req, res) => {
   try {
     const { permisos = [] } = req.body;

@@ -22,4 +22,12 @@ router.get(
   permisoController.listarPermisos,
 );
 
+// Eliminar permiso y quitarlo de todos los usuarios asociados
+router.delete(
+  "/:id",
+  authenticate,
+  requirePermission("Administracion"),
+  permisoController.eliminarPermiso,
+);
+
 module.exports = router;
