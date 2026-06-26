@@ -44,8 +44,12 @@ const ConciliacionLote = require('./ConciliacionLote');
 const ConciliacionPdfImportacion = require('./ConciliacionPdfImportacion');
 const ConciliacionModeloTv = require('./ConciliacionModeloTv');
 const ConciliacionModeloCelular = require('./ConciliacionModeloCelular');
+<<<<<<< HEAD
 const MapaComercialZona = require('./MapaComercialZona');
 const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
+=======
+require('./FacebookComentario');
+>>>>>>> 73bf26d (Apolo, movimiento de terminales, ajuste de relaciones de agencias y control de asistencias)
 require('./UsuarioPermiso');
 require('./UsuarioRol');
 // -------------------- Usuario, Rol, Agencia --------------------

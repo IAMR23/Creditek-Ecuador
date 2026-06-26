@@ -64,7 +64,11 @@ app.use(
 app.options("*", cors());
 
 // Middleware
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 
 /* =========================
    SOCKET.IO
@@ -183,6 +187,7 @@ connectDB()
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
+    app.use("/api/facebook", require("./routes/facebookWebhookRoutes"));
     console.log(
       "Carpeta uploads que Express está usando:",
       path.join(__dirname, "uploads")

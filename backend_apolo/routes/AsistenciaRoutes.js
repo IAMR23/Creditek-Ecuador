@@ -45,6 +45,31 @@ const normalizarObservacion = (observacion) => {
 
 const validarFechaISO = (fecha) => /^\d{4}-\d{2}-\d{2}$/.test(String(fecha));
 
+const obtenerUsuarioAgenciaIds = async (usuarioId) => {
+  const relaciones = await UsuarioAgencia.findAll({
+    where: { usuarioId },
+    attributes: ["id"],
+  });
+
+  return relaciones.map((relacion) => relacion.id);
+};
+
+const obtenerUsuarioAgenciaIdParaGuardar = async ({ usuarioId, usuarioAgenciaIdActivo, fecha }) => {
+  const usuarioAgenciaIds = await obtenerUsuarioAgenciaIds(usuarioId);
+  const existente = await Asistencia.findOne({
+    where: {
+      usuarioAgenciaId: { [Op.in]: usuarioAgenciaIds },
+      fecha,
+    },
+    order: [
+      ["updatedAt", "DESC"],
+      ["id", "DESC"],
+    ],
+  });
+
+  return existente?.usuarioAgenciaId || usuarioAgenciaIdActivo;
+};
+
 const obtenerFechasEnRango = (fechaInicio, fechaFin) => {
   const fechas = [];
   const cursor = new Date(`${fechaInicio}T00:00:00`);
@@ -92,7 +117,16 @@ router.get("/agencias", async (req, res) => {
       ],
     });
 
-    const usuarioAgenciaIds = usuarioAgencias.map((ua) => ua.id);
+    const usuarioIds = [...new Set(usuarioAgencias.map((ua) => ua.usuarioId))];
+    const todasRelacionesUsuarios = usuarioIds.length
+      ? await UsuarioAgencia.findAll({
+          where: { usuarioId: { [Op.in]: usuarioIds } },
+          attributes: ["id", "usuarioId", "activo", "updatedAt"],
+        })
+      : [];
+
+    const usuarioAgenciaIds = todasRelacionesUsuarios.map((ua) => ua.id);
+    const relacionPorId = new Map(todasRelacionesUsuarios.map((ua) => [ua.id, ua]));
 
     const asistencias = usuarioAgenciaIds.length
       ? await Asistencia.findAll({
@@ -104,15 +138,23 @@ router.get("/agencias", async (req, res) => {
         })
       : [];
 
-    const asistenciasPorUA = new Map();
+    const asistenciasPorUsuario = new Map();
     for (const a of asistencias) {
-      const key = a.usuarioAgenciaId;
-      const fecha = a.fecha;
-      if (!asistenciasPorUA.has(key)) asistenciasPorUA.set(key, {});
+      const relacion = relacionPorId.get(a.usuarioAgenciaId);
+      if (!relacion) continue;
 
-      asistenciasPorUA.get(key)[fecha] = {
+      const key = relacion.usuarioId;
+      const fecha = a.fecha;
+      if (!asistenciasPorUsuario.has(key)) asistenciasPorUsuario.set(key, {});
+
+      const actuales = asistenciasPorUsuario.get(key);
+      const existente = actuales[fecha];
+      if (existente && existente.activoOrigen && !relacion.activo) continue;
+
+      actuales[fecha] = {
         estado: a.estado || "libre",
         observacion: a.observacion || "",
+        activoOrigen: relacion.activo,
       };
     }
 
@@ -127,7 +169,7 @@ router.get("/agencias", async (req, res) => {
         nombre: ua.usuario?.nombre || "",
         apellido: "",
         cargo: "",
-        asistencias: asistenciasPorUA.get(ua.id) || {},
+        asistencias: asistenciasPorUsuario.get(ua.usuarioId) || {},
       });
     }
 
@@ -175,8 +217,14 @@ router.post("/", async (req, res) => {
 
     const estadoNormalizado = !estado || estado === "libre" ? null : estado;
 
+    const usuarioAgenciaIdParaGuardar = await obtenerUsuarioAgenciaIdParaGuardar({
+      usuarioId: ua.usuarioId,
+      usuarioAgenciaIdActivo: usuarioAgenciaId,
+      fecha,
+    });
+
     if (!estadoNormalizado && !observacionNormalizada) {
-      await Asistencia.destroy({ where: { usuarioAgenciaId, fecha } });
+      await Asistencia.destroy({ where: { usuarioAgenciaId: usuarioAgenciaIdParaGuardar, fecha } });
       return res.json({ ok: true, message: "Asistencia eliminada." });
     }
 
@@ -186,7 +234,7 @@ router.post("/", async (req, res) => {
 
     const [record] = await Asistencia.upsert(
       {
-        usuarioAgenciaId,
+        usuarioAgenciaId: usuarioAgenciaIdParaGuardar,
         fecha,
         estado: estadoNormalizado,
         observacion: observacionNormalizada,
@@ -246,7 +294,7 @@ router.post("/masivo", async (req, res) => {
         agenciaId,
         activo: true,
       },
-      attributes: ["id"],
+      attributes: ["id", "usuarioId"],
     });
 
     if (usuarioAgencias.length !== usuarioAgenciaIds.length) {
@@ -260,9 +308,16 @@ router.post("/masivo", async (req, res) => {
     const idsValidos = usuarioAgencias.map((ua) => ua.id);
 
     if (!estadoNormalizado && !observacionNormalizada) {
+      const usuarioIds = usuarioAgencias.map((ua) => ua.usuarioId);
+      const relacionesUsuarios = await UsuarioAgencia.findAll({
+        where: { usuarioId: { [Op.in]: usuarioIds } },
+        attributes: ["id"],
+      });
+      const idsTodasRelaciones = relacionesUsuarios.map((ua) => ua.id);
+
       await Asistencia.destroy({
         where: {
-          usuarioAgenciaId: { [Op.in]: idsValidos },
+          usuarioAgenciaId: { [Op.in]: idsTodasRelaciones },
           fecha: { [Op.in]: fechas },
         },
       });
@@ -276,15 +331,21 @@ router.post("/masivo", async (req, res) => {
     }
 
     await Promise.all(
-      idsValidos.flatMap((usuarioAgenciaId) =>
-        fechas.map((fecha) =>
-          Asistencia.upsert({
-            usuarioAgenciaId,
+      usuarioAgencias.flatMap((ua) =>
+        fechas.map(async (fecha) => {
+          const usuarioAgenciaIdParaGuardar = await obtenerUsuarioAgenciaIdParaGuardar({
+            usuarioId: ua.usuarioId,
+            usuarioAgenciaIdActivo: ua.id,
+            fecha,
+          });
+
+          return Asistencia.upsert({
+            usuarioAgenciaId: usuarioAgenciaIdParaGuardar,
             fecha,
             estado: estadoNormalizado,
             observacion: observacionNormalizada,
-          })
-        )
+          });
+        })
       )
     );
 

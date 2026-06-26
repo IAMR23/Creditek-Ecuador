@@ -65,7 +65,7 @@ app.use(
 app.use(express.json());
 app.use(parseCookies);
 
-app.get("/health", (_req, res) => res.json({ ok: true, app: "APOLO BUSINESS SOLUTIONS" }));
+app.get("/health", (_req, res) => res.json({ ok: true, app: "ABS" }));
 app.use("/bootstrap", bootstrapRoutes);
 app.use("/auth", authRoutes);
 
@@ -95,7 +95,7 @@ connectDB()
     ]).catch((e) => console.error("Seed inicial falló:", e.message));
 
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`APOLO backend corriendo en puerto ${PORT}`);
+      console.log(`ABS backend corriendo en puerto ${PORT}`);
     });
   })
   .catch((err) => {

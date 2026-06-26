@@ -64,7 +64,7 @@ export default function Sidebar() {
           <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
         </div>
         <div className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">
-          Apolo Business Solutions
+          ABS
         </div>
       </div>
 

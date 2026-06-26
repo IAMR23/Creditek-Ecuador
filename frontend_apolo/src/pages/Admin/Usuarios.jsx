@@ -119,12 +119,7 @@ export default function Usuarios() {
     return map;
   }, [relacionesActivas]);
 
-  const toggleAgenciaInList = (list, agenciaId) => {
-    const id = String(agenciaId);
-    if (list.some((x) => String(x) === id))
-      return list.filter((x) => String(x) !== id);
-    return [...list, agenciaId];
-  };
+  const seleccionarAgenciaUnica = (agenciaId) => [agenciaId];
 
   const crearUsuario = async (e) => {
     e.preventDefault();
@@ -139,7 +134,7 @@ export default function Usuarios() {
       return Swal.fire({
         icon: "warning",
         title: "Agencia requerida",
-        text: "Selecciona al menos una agencia para el usuario.",
+        text: "Selecciona una agencia para el usuario.",
       });
     }
 
@@ -249,28 +244,25 @@ export default function Usuarios() {
       usuarioAgenciaId: a.usuarioAgenciaId,
     }));
 
-    const selectedSet = new Set(agenciasSeleccionadas.map((id) => String(id)));
+    const agenciaSeleccionada = agenciasSeleccionadas[0];
+    if (!agenciaSeleccionada) return;
 
-    const toDisable = actuales.filter(
-      (x) => !selectedSet.has(String(x.agenciaId)),
-    );
-    const toKeep = actuales.filter((x) => selectedSet.has(String(x.agenciaId)));
-    const currentSet = new Set(actuales.map((x) => String(x.agenciaId)));
-    const toCreate = agenciasSeleccionadas.filter(
-      (id) => !currentSet.has(String(id)),
+    const relacionActual = actuales.find(
+      (x) => String(x.agenciaId) === String(agenciaSeleccionada),
     );
 
-    await Promise.all([
-      ...toDisable.map((x) =>
-        api.put(`/usuario-agencia/${x.usuarioAgenciaId}`, { activo: false }),
-      ),
-      ...toKeep.map((x) =>
-        api.put(`/usuario-agencia/${x.usuarioAgenciaId}`, { activo: true }),
-      ),
-      ...toCreate.map((agenciaId) =>
-        api.post("/usuario-agencia", { usuarioId, agenciaId, activo: true }),
-      ),
-    ]);
+    if (relacionActual) {
+      await api.put(`/usuario-agencia/${relacionActual.usuarioAgenciaId}`, {
+        activo: true,
+      });
+      return;
+    }
+
+    await api.post("/usuario-agencia", {
+      usuarioId,
+      agenciaId: agenciaSeleccionada,
+      activo: true,
+    });
   };
 
   const actualizarUsuario = async (e) => {
@@ -286,7 +278,7 @@ export default function Usuarios() {
       return Swal.fire({
         icon: "warning",
         title: "Agencia requerida",
-        text: "Selecciona al menos una agencia para el usuario.",
+        text: "Selecciona una agencia para el usuario.",
       });
     }
 
@@ -557,7 +549,7 @@ export default function Usuarios() {
               Agencias
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              Selecciona al menos una.
+              Selecciona una.
             </div>
 
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -567,17 +559,15 @@ export default function Usuarios() {
                   className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
                 >
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="agencia-crear-usuario"
                     checked={form.agenciasIds.some(
                       (id) => String(id) === String(a.id),
                     )}
                     onChange={() =>
                       setForm({
                         ...form,
-                        agenciasIds: toggleAgenciaInList(
-                          form.agenciasIds,
-                          a.id,
-                        ),
+                        agenciasIds: seleccionarAgenciaUnica(a.id),
                       })
                     }
                   />
@@ -946,17 +936,15 @@ export default function Usuarios() {
                       className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer"
                     >
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="agencia-editar-usuario"
                         checked={editForm.agenciasIds.some(
                           (id) => String(id) === String(a.id),
                         )}
                         onChange={() =>
                           setEditForm({
                             ...editForm,
-                            agenciasIds: toggleAgenciaInList(
-                              editForm.agenciasIds,
-                              a.id,
-                            ),
+                            agenciasIds: seleccionarAgenciaUnica(a.id),
                           })
                         }
                       />

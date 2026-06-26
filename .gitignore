@@ -4,5 +4,6 @@ postgres-backups
 IntegraDent/ 
 
 .env.example
+!backend/.env.example
 
 powerbi.txt
