@@ -1,9 +1,8 @@
 const {
-  clasificarUbicacion,
+  clasificarUbicacionPermitida,
   construirMapaComercial,
-  extraerCoordenadasDeTexto,
+  extraerCoordenadasGooglePermitidas,
   getRankingDispositivos,
-  pickUbicacion,
 } = require("./mapaComercialService");
 
 describe("mapaComercialService", () => {
@@ -115,38 +114,32 @@ describe("mapaComercialService", () => {
     });
   });
 
-  test("extrae coordenadas desde formatos de Google Maps", () => {
+  test("extrae coordenadas solo desde formatos permitidos de Google Maps", () => {
     expect(
-      extraerCoordenadasDeTexto("https://www.google.com/maps/@-0.123456,-78.456789,17z"),
-    ).toEqual({ latitud: -0.123456, longitud: -78.456789 });
-
-    expect(
-      extraerCoordenadasDeTexto("https://www.google.com/maps/search/?api=1&query=-0.305,-78.45"),
-    ).toEqual({ latitud: -0.305, longitud: -78.45 });
-
-    expect(
-      extraerCoordenadasDeTexto("https://maps.google.com/?q=-0.22,-78.51"),
-    ).toEqual({ latitud: -0.22, longitud: -78.51 });
-
-    expect(
-      extraerCoordenadasDeTexto("https://www.google.com/maps?q=-0.7588503,-78.6146328&z=17&hl=es"),
+      extraerCoordenadasGooglePermitidas("https://www.google.com/maps?q=-0.7588503,-78.6146328&z=17&hl=es"),
     ).toEqual({ latitud: -0.7588503, longitud: -78.6146328 });
 
     expect(
-      extraerCoordenadasDeTexto("https://www.google.com/maps/place/0%C2%B019'48.5%22S+78%C2%B031'19.6%22W/@-0.3301367,-78.5246749,17z/data=!3m1!4b1!4m4!3m3!8m2!3d-0.3301367!4d-78.5221?hl=es&entry=ttu"),
+      extraerCoordenadasGooglePermitidas("https://www.google.com/maps/place/0%C2%B019'48.5%22S+78%C2%B031'19.6%22W/@-0.3301367,-78.5246749,17z/data=!3m1!4b1!4m4!3m3!8m2!3d-0.3301367!4d-78.5221?hl=es&entry=ttu"),
     ).toEqual({ latitud: -0.3301367, longitud: -78.5221 });
 
-    expect(extraerCoordenadasDeTexto("0°19'48.5\"S 78°31'19.6\"W")).toEqual({
-      latitud: -0.3301389,
-      longitud: -78.5221111,
-    });
+    expect(
+      extraerCoordenadasGooglePermitidas("https://www.google.com/maps/place/Sector/@-0.3301367,-78.5246749,17z"),
+    ).toEqual({ latitud: -0.3301367, longitud: -78.5246749 });
+
+    expect(extraerCoordenadasGooglePermitidas("-0.7588503,-78.6146328")).toBeNull();
+    expect(extraerCoordenadasGooglePermitidas("Puente 7")).toBeNull();
+    expect(
+      extraerCoordenadasGooglePermitidas("https://www.google.com/maps/search/?api=1&query=-0.305,-78.45"),
+    ).toBeNull();
   });
 
-  test("clasifica ubicaciones y prioriza enlaces sobre textos", () => {
-    expect(clasificarUbicacion("Puente 7")).toBe("texto");
-    expect(clasificarUbicacion("https://maps.app.goo.gl/abc123")).toBe("enlace_corto_google");
-    expect(
-      pickUbicacion(["Puente 7", "https://www.google.com/maps/@-0.123,-78.456,17z"]),
-    ).toBe("https://www.google.com/maps/@-0.123,-78.456,17z");
+  test("clasifica solo ubicaciones permitidas para mapa comercial", () => {
+    expect(clasificarUbicacionPermitida("https://maps.app.goo.gl/abc123")).toBe("enlace_corto_google");
+    expect(clasificarUbicacionPermitida("https://www.google.com/maps?q=-0.7588503,-78.6146328")).toBe("google_maps_q");
+    expect(clasificarUbicacionPermitida("https://www.google.com/maps/place/Sector/@-0.3301367,-78.5246749,17z")).toBe("google_maps_place");
+    expect(clasificarUbicacionPermitida("Puente 7")).toBe("formato_no_permitido");
+    expect(clasificarUbicacionPermitida("-0.7588503,-78.6146328")).toBe("formato_no_permitido");
+    expect(clasificarUbicacionPermitida("https://www.google.com/maps/place/Sector")).toBe("google_sin_coordenadas");
   });
 });

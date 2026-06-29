@@ -1,11 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
-import { Eye, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
 import ModalDetalle from "../../components/PostulacionDetalle";
 
 const dash = "-";
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
+const PAGE_SIZE = 10;
+const initialFilters = {
+  q: "",
+  fechaDesde: "",
+  fechaHasta: "",
+  estado: "",
+};
 
 const getDatos = (postulacion) => postulacion?.formulario?.datos_personales || {};
 const getVivienda = (postulacion) => postulacion?.formulario?.vivienda_actual || {};
@@ -23,14 +30,33 @@ const tdClass = "min-w-0 break-words px-1.5 py-2 text-[10px] leading-tight text-
 
 export default function Postulaciones() {
   const [postulaciones, setPostulaciones] = useState([]);
-  const [cedula, setCedula] = useState("");
+  const [filters, setFilters] = useState(initialFilters);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [resumen, setResumen] = useState({ total: 0, noLeidas: 0 });
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+  const [observacionesDraft, setObservacionesDraft] = useState({});
+  const [savingObservationId, setSavingObservationId] = useState(null);
+  const [editingObservationId, setEditingObservationId] = useState(null);
+  const requestIdRef = useRef(0);
 
-  const total = useMemo(() => postulaciones.length, [postulaciones]);
+  const total = useMemo(() => pagination.total || postulaciones.length, [pagination.total, postulaciones.length]);
+
+  const syncObservacionesDraft = (items = []) => {
+    setObservacionesDraft(
+      Object.fromEntries(items.map((item) => [item.id, item.observacion || ""]))
+    );
+  };
 
   const actualizarResumen = async () => {
     try {
@@ -41,42 +67,58 @@ export default function Postulaciones() {
     }
   };
 
-  const fetchPostulaciones = async () => {
+  const fetchPostulaciones = async (pageToLoad = page, filtersToUse = filters) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     try {
       setLoading(true);
       setError("");
-      const res = await api.get("/api/postulaciones");
-      setPostulaciones(res.data.data || []);
-      setCedula("");
+      const res = await api.get("/api/postulaciones", {
+        params: {
+          page: pageToLoad,
+          limit: PAGE_SIZE,
+          q: filtersToUse.q.trim() || undefined,
+          fechaDesde: filtersToUse.fechaDesde || undefined,
+          fechaHasta: filtersToUse.fechaHasta || undefined,
+          estado: filtersToUse.estado || undefined,
+        },
+      });
+      const items = res.data.data || [];
+      const paginationData = res.data.pagination || {
+        total: items.length,
+        page: pageToLoad,
+        limit: PAGE_SIZE,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: pageToLoad > 1,
+      };
+
+      if (requestId !== requestIdRef.current) return;
+
+      setPostulaciones(items);
+      syncObservacionesDraft(items);
+      setPagination(paginationData);
+      setPage(paginationData.page || pageToLoad);
       await actualizarResumen();
       window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       const message = err.response?.data?.message || "Error cargando postulaciones";
       setError(message);
       Swal.fire("Error", message, "error");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   };
 
-  const buscarPorCedula = async () => {
-    const cedulaLimpia = cedula.trim();
+  const limpiarFiltros = () => {
+    setFilters(initialFilters);
+  };
 
-    if (!cedulaLimpia) return fetchPostulaciones();
-
-    try {
-      setLoading(true);
-      setError("");
-      const res = await api.get(`/api/postulaciones/cedula/${encodeURIComponent(cedulaLimpia)}`);
-      setPostulaciones(res.data.data ? [res.data.data] : []);
-      await actualizarResumen();
-    } catch {
-      setPostulaciones([]);
-      setError("No se encontro una postulacion con esa cedula");
-      Swal.fire("Sin resultados", "No se encontro una postulacion con esa cedula", "info");
-    } finally {
-      setLoading(false);
-    }
+  const irPagina = (nextPage) => {
+    if (nextPage < 1 || nextPage > pagination.totalPages || loading) return;
+    fetchPostulaciones(nextPage, filters);
   };
 
   const verPostulacion = async (postulacion) => {
@@ -120,6 +162,60 @@ export default function Postulaciones() {
     }
   };
 
+  const guardarObservacion = async (postulacion) => {
+    const observacion = observacionesDraft[postulacion.id] || "";
+
+    try {
+      setSavingObservationId(postulacion.id);
+      setError("");
+      const res = await api.patch(`/api/postulaciones/${postulacion.id}/observacion`, {
+        observacion,
+      });
+      const postulacionActualizada = res.data?.data;
+
+      setPostulaciones((prev) =>
+        prev.map((item) =>
+          item.id === postulacion.id
+            ? { ...item, observacion: postulacionActualizada?.observacion || "" }
+            : item
+        )
+      );
+      setSelected((prev) =>
+        prev?.id === postulacion.id
+          ? { ...prev, observacion: postulacionActualizada?.observacion || "" }
+          : prev
+      );
+      setEditingObservationId(null);
+      Swal.fire("Guardado", "La observacion fue guardada correctamente", "success");
+    } catch (err) {
+      const message = err.response?.data?.message || "No se pudo guardar la observacion";
+      setError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setSavingObservationId(null);
+    }
+  };
+
+  const actualizarObservacionDraft = (postulacionId, value) => {
+    setObservacionesDraft((prev) => ({ ...prev, [postulacionId]: value }));
+  };
+
+  const editarObservacion = (postulacion) => {
+    setObservacionesDraft((prev) => ({
+      ...prev,
+      [postulacion.id]: prev[postulacion.id] ?? postulacion.observacion ?? "",
+    }));
+    setEditingObservationId(postulacion.id);
+  };
+
+  const cancelarEdicionObservacion = (postulacion) => {
+    setObservacionesDraft((prev) => ({
+      ...prev,
+      [postulacion.id]: postulacion.observacion || "",
+    }));
+    setEditingObservationId(null);
+  };
+
   const eliminarPostulacion = async (postulacion) => {
     const datos = getDatos(postulacion);
     const nombre = datos.nombreCompleto || postulacion.nombre || `ID ${postulacion.id}`;
@@ -140,9 +236,9 @@ export default function Postulaciones() {
       setDeletingId(postulacion.id);
       setError("");
       await api.delete(`/api/postulaciones/${postulacion.id}`);
-      setPostulaciones((prev) => prev.filter((item) => item.id !== postulacion.id));
       setSelected((prev) => (prev?.id === postulacion.id ? null : prev));
-      await actualizarResumen();
+      const nextPage = postulaciones.length === 1 && page > 1 ? page - 1 : page;
+      await fetchPostulaciones(nextPage, filters);
       window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
       Swal.fire("Eliminada", "La postulacion fue eliminada correctamente", "success");
     } catch (err) {
@@ -155,8 +251,12 @@ export default function Postulaciones() {
   };
 
   useEffect(() => {
-    fetchPostulaciones();
-  }, []);
+    const timeoutId = setTimeout(() => {
+      fetchPostulaciones(1, filters);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [filters]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
@@ -177,37 +277,53 @@ export default function Postulaciones() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_150px_150px_150px_auto] lg:items-end">
             <div className="relative">
               <Search
                 size={18}
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               />
               <input
-                value={cedula}
-                onChange={(e) => setCedula(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && buscarPorCedula()}
-                placeholder="Buscar por cedula"
-                className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 sm:w-72"
+                value={filters.q}
+                onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+                placeholder="Nombre, telefono o cedula"
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
               />
             </div>
 
-            <button
-              onClick={buscarPorCedula}
-              disabled={loading}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+     {/*        <input
+              type="date"
+              value={filters.fechaDesde}
+              onChange={(e) => setFilters((prev) => ({ ...prev, fechaDesde: e.target.value }))}
+              title="Fecha desde"
+              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+            />
+
+            <input
+              type="date"
+              value={filters.fechaHasta}
+              onChange={(e) => setFilters((prev) => ({ ...prev, fechaHasta: e.target.value }))}
+              title="Fecha hasta"
+              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+            /> */}
+
+            <select
+              value={filters.estado}
+              onChange={(e) => setFilters((prev) => ({ ...prev, estado: e.target.value }))}
+              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
             >
-              <Search size={17} />
-              Buscar
-            </button>
+              <option value="">Todas</option>
+              <option value="leidas">Leidas</option>
+              <option value="no-leidas">No leidas</option>
+            </select>
 
             <button
-              onClick={fetchPostulaciones}
+              onClick={limpiarFiltros}
               disabled={loading}
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw size={17} />
-              Ver todos
+              Limpiar
             </button>
           </div>
         </div>
@@ -236,19 +352,20 @@ export default function Postulaciones() {
             <div className="overflow-hidden">
               <table className="w-full table-fixed text-left text-[10px] leading-tight lg:text-xs">
                 <colgroup>
-                  <col className="w-[14%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[4%]" />
-                  <col className="w-[4%]" />
-                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
                   <col className="w-[7%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[4%]" />
+                  <col className="w-[4%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[6%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[6%]" />
+                  <col className="w-[4%]" />
+                  <col className="w-[6%]" />
+                  <col className="w-[8%]" />
                   <col className="w-[13%]" />
                   <col className="w-[7%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[6%]" />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
@@ -264,6 +381,7 @@ export default function Postulaciones() {
                     <th className={thClass}>Trab.</th>
                     <th className={thClass}>Estado</th>
                     <th className={thClass}>Fecha</th>
+                    <th className={thClass}>Observacion</th>
                     <th className={`${thClass} text-right`}>Accion</th>
                   </tr>
                 </thead>
@@ -272,6 +390,8 @@ export default function Postulaciones() {
                     const datos = getDatos(p);
                     const vivienda = getVivienda(p);
                     const trabajos = p.formulario?.historial_laboral?.length || 0;
+
+                    const editingObservation = editingObservationId === p.id;
 
                     return (
                       <tr key={p.id} className="transition hover:bg-slate-50">
@@ -322,11 +442,57 @@ export default function Postulaciones() {
                         <td className={tdClass}>
                           {formatDate(p.createdAt)}
                         </td>
+                        <td className={tdClass}>
+                          {editingObservation ? (
+                            <div className="space-y-1">
+                              <textarea
+                                id={`observacion-${p.id}`}
+                                value={observacionesDraft[p.id] ?? ""}
+                                onChange={(e) => actualizarObservacionDraft(p.id, e.target.value)}
+                                rows={2}
+                                placeholder="Observacion"
+                                className="min-h-14 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                              />
+                              <div className="flex flex-wrap gap-1">
+                                <button
+                                  onClick={() => guardarObservacion(p)}
+                                  disabled={savingObservationId === p.id}
+                                  className="inline-flex h-7 items-center justify-center gap-1 rounded-md bg-orange-500 px-2 text-[10px] font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <Save size={12} />
+                                  {savingObservationId === p.id ? "..." : "Guardar"}
+                                </button>
+                                <button
+                                  onClick={() => cancelarEdicionObservacion(p)}
+                                  disabled={savingObservationId === p.id}
+                                  className="inline-flex h-7 items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <X size={12} />
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <p className="whitespace-pre-wrap break-words text-slate-700">
+                                {p.observacion || "Sin observacion"}
+                              </p>
+                             
+                            </div>
+                          )}
+                        </td>
                         <td className={`${tdClass} text-right`}>
                           <div className="flex justify-end gap-1">
+                             <button
+                                onClick={() => editarObservacion(p)}
+                                className="inline-flex h-7 w-7 items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                <Pencil size={12} />
+                                
+                              </button>
                             <button
                               onClick={() => verPostulacion(p)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-white transition hover:bg-slate-700"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-white transition px-2 hover:bg-slate-700"
                               aria-label="Ver postulacion"
                               title="Ver"
                             >
@@ -335,7 +501,7 @@ export default function Postulaciones() {
                             <button
                               onClick={() => eliminarPostulacion(p)}
                               disabled={deletingId === p.id}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 px-2 text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                               aria-label="Eliminar postulacion"
                               title={deletingId === p.id ? "Eliminando" : "Eliminar"}
                             >
@@ -348,6 +514,32 @@ export default function Postulaciones() {
                   })}
                 </tbody>
               </table>
+              <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  Pagina {pagination.page} de {pagination.totalPages} · {pagination.total} registro
+                  {pagination.total === 1 ? "" : "s"}
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => irPagina(page - 1)}
+                    disabled={!pagination.hasPrevPage || loading}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ChevronLeft size={16} />
+                    Anterior
+                  </button>
+
+                  <button
+                    onClick={() => irPagina(page + 1)}
+                    disabled={!pagination.hasNextPage || loading}
+                    className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Siguiente
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

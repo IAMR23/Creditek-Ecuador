@@ -11,7 +11,7 @@ const Postulacion = sequelize.define(
     },
     nombre: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: true, 
     },
     cedula: {
       type: DataTypes.STRING,
@@ -28,6 +28,10 @@ const Postulacion = sequelize.define(
     },
     leidaAt: {
       type: DataTypes.DATE,
+      allowNull: true,
+    },
+    observacion: {
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     formulario: {

@@ -51,6 +51,87 @@ const decodeLocation = (value) => {
   }
 };
 
+const getUrl = (value) => {
+  try {
+    return new URL(String(value || "").trim());
+  } catch (_error) {
+    return null;
+  }
+};
+
+const extraerCoordenadas3d4d = (texto) => {
+  const match = decodeLocation(texto).match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i);
+  return match ? parseCoordinatePair(match[1], match[2]) : null;
+};
+
+const extraerCoordenadasAt = (texto) => {
+  const match = decodeLocation(texto).match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i);
+  return match ? parseCoordinatePair(match[1], match[2]) : null;
+};
+
+const extraerCoordenadasQueryQ = (url) => {
+  const q = url.searchParams.get("q");
+  if (!q) return null;
+
+  const match = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  return match ? parseCoordinatePair(match[1], match[2]) : null;
+};
+
+const esHostGoogleMapsPermitido = (hostname) =>
+  ["www.google.com", "google.com"].includes(String(hostname || "").toLowerCase());
+
+const extraerCoordenadasGooglePermitidas = (value) => {
+  const url = getUrl(value);
+  if (!url) return null;
+
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname || "";
+
+  if (!esHostGoogleMapsPermitido(hostname)) return null;
+
+  if (pathname.startsWith("/maps/place/")) {
+    return (
+      extraerCoordenadas3d4d(url.href) ||
+      extraerCoordenadasAt(url.href)
+    );
+  }
+
+  if (pathname === "/maps" && url.searchParams.has("q")) {
+    return extraerCoordenadasQueryQ(url);
+  }
+
+  return null;
+};
+
+const clasificarUbicacionPermitida = (value) => {
+  const texto = String(value || "").trim();
+  if (!texto) return "formato_no_permitido";
+
+  const url = getUrl(texto);
+  if (!url) return "formato_no_permitido";
+
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname || "";
+
+  if (hostname === "maps.app.goo.gl") return "enlace_corto_google";
+
+  if (!esHostGoogleMapsPermitido(hostname)) return "formato_no_permitido";
+
+  if (pathname.startsWith("/maps/place/")) {
+    return extraerCoordenadasGooglePermitidas(texto)
+      ? "google_maps_place"
+      : "google_sin_coordenadas";
+  }
+
+  if (pathname === "/maps" && url.searchParams.has("q")) {
+    return extraerCoordenadasGooglePermitidas(texto)
+      ? "google_maps_q"
+      : "google_sin_coordenadas";
+  }
+
+  return "formato_no_permitido";
+};
+
 const parseDmsCoordinate = (degrees, minutes, seconds, direction) => {
   const deg = Number(degrees);
   const min = Number(minutes);
@@ -365,12 +446,15 @@ const calcularDiasSinVentas = (ultimaVenta, fechaFin) => {
 };
 
 module.exports = {
+  clasificarUbicacionPermitida,
   construirMapaComercial,
   clasificarUbicacion,
   extraerCoordenadasDeTexto,
+  extraerCoordenadasGooglePermitidas,
   getRankingDispositivos,
   getRankingZonas,
   isCoordinateInsideEcuador,
   normalizarTexto,
+  parseCoordinatePair,
   pickUbicacion,
 };

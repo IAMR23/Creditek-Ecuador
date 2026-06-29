@@ -7,3 +7,5 @@ IntegraDent/
 !backend/.env.example
 
 powerbi.txt
+
+.agents

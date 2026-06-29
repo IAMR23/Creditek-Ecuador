@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import L from "leaflet";
 import {
   CircleMarker,
   MapContainer,
@@ -9,6 +10,7 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.heat";
 import {
   AlertTriangle,
   Crosshair,
@@ -71,6 +73,40 @@ function ManualPointPicker({ selected, onPick }) {
   return null;
 }
 
+function HeatLayer({ points }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const heatPoints = (points || [])
+      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+
+    if (!heatPoints.length || typeof L.heatLayer !== "function") return undefined;
+
+    const max = Math.max(1, ...heatPoints.map((point) => Number(point[2]) || 1));
+    const layer = L.heatLayer(heatPoints, {
+      radius: 34,
+      blur: 24,
+      maxZoom: 17,
+      max,
+      minOpacity: 0.35,
+      gradient: {
+        0.25: "#60a5fa",
+        0.5: "#22c55e",
+        0.75: "#facc15",
+        1: "#ef4444",
+      },
+    });
+
+    layer.addTo(map);
+
+    return () => {
+      map.removeLayer(layer);
+    };
+  }, [map, points]);
+
+  return null;
+}
+
 export default function MapaComercial() {
   const [filtros, setFiltros] = useState(DEFAULT_FILTROS);
   const [data, setData] = useState(null);
@@ -99,6 +135,17 @@ export default function MapaComercial() {
   const maxVentasPunto = Math.max(
     0,
     ...puntosVenta.map((punto) => Number(punto.cantidadTotal) || 0),
+  );
+  const puntosCalor = useMemo(
+    () =>
+      puntosVenta
+        .map((punto) => [
+          Number(punto.latitud),
+          Number(punto.longitud),
+          Math.max(1, Number(punto.cantidadTotal) || 1),
+        ])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)),
+    [puntosVenta],
   );
   const mapCenter = puntosVenta[0]
     ? [Number(puntosVenta[0].latitud), Number(puntosVenta[0].longitud)]
@@ -324,11 +371,10 @@ export default function MapaComercial() {
               />
               <MapBounds puntos={puntosVenta} />
               <ManualPointPicker selected={ubicacionManual} onPick={guardarUbicacionManual} />
-              {(vistaMapa === "puntos" || vistaMapa === "calor") && puntosVenta.map((punto) => {
+              {vistaMapa === "calor" && <HeatLayer points={puntosCalor} />}
+              {vistaMapa === "puntos" && puntosVenta.map((punto) => {
                 const cantidad = Number(punto.cantidadTotal) || 0;
-                const radius = vistaMapa === "calor"
-                  ? Math.max(28, Math.min(76, 28 + (cantidad / Math.max(1, maxVentasPunto)) * 48))
-                  : Math.max(12, Math.min(32, 12 + (cantidad / Math.max(1, maxVentasPunto)) * 20));
+                const radius = Math.max(12, Math.min(32, 12 + (cantidad / Math.max(1, maxVentasPunto)) * 20));
 
                 return (
                   <CircleMarker
@@ -338,8 +384,8 @@ export default function MapaComercial() {
                     pathOptions={{
                       color: "#dc2626",
                       fillColor: "#ef4444",
-                      fillOpacity: vistaMapa === "calor" ? 0.32 : 0.82,
-                      weight: vistaMapa === "calor" ? 1 : 3,
+                      fillOpacity: 0.82,
+                      weight: 3,
                     }}
                   >
                     <Popup>

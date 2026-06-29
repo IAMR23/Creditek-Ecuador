@@ -15,8 +15,8 @@ const MapaComercialZona = require("../../models/MapaComercialZona");
 const MapaUbicacionNormalizada = require("../../models/MapaUbicacionNormalizada");
 const {
   construirMapaComercial,
-  clasificarUbicacion,
-  extraerCoordenadasDeTexto,
+  clasificarUbicacionPermitida,
+  extraerCoordenadasGooglePermitidas,
   getRankingDispositivos,
   getRankingZonas,
   normalizarTexto,
@@ -33,7 +33,7 @@ const parseIds = (value) => {
 
 const validarFecha = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 
-const ESTADOS_PENDIENTES_UBICACION = ["pendiente", "AMBIGUO", "ambigua", "error"];
+const ESTADOS_PENDIENTES_UBICACION = ["pendiente", "AMBIGUO", "ambigua", "error", "omitido"];
 
 const getFechaVenta = (fecha) => {
   if (!fecha) return "";
@@ -357,99 +357,31 @@ const resolverEnlaceCorto = async (url) => {
   );
 };
 
-const geocodificarTexto = async ({ ubicacionOriginal, zonaNombre, agencia, agenciaCiudad }) => {
-  const partes = [
-    ubicacionOriginal,
-    zonaNombre,
-    agenciaCiudad,
-    agencia,
-    "Ecuador",
-  ]
-    .map((item) => String(item || "").trim())
-    .filter(Boolean);
-  const q = Array.from(new Set(partes)).join(", ");
-
-  if (!q || q === "Ecuador") {
-    return {
-      estadoGeocodificacion: "sin_ubicacion",
-      tipoUbicacion: "sin_ubicacion",
-      errorDetalle: "Venta sin ubicacion textual para geocodificar",
-    };
-  }
-
-  const { data } = await axios.get("https://nominatim.openstreetmap.org/search", {
-    timeout: 12000,
-    headers: {
-      "User-Agent": "CreditekMapaComercial/1.0 sistemas@creditek-ecuador.com",
-    },
-    params: {
-      q,
-      format: "json",
-      limit: 3,
-      countrycodes: "ec",
-      addressdetails: 1,
-    },
-  });
-
-  const resultados = Array.isArray(data) ? data : [];
-  const mejor = resultados[0];
-  const segundo = resultados[1];
-
-  if (!mejor) {
-    return {
-      estadoGeocodificacion: "AMBIGUO",
-      tipoUbicacion: "texto",
-      errorDetalle: `No se encontro una coordenada confiable para: ${q}`,
-    };
-  }
-
-  const latitud = Number(mejor.lat);
-  const longitud = Number(mejor.lon);
-  const importancia = Number(mejor.importance) || 0;
-  const diferencia =
-    importancia - (Number(segundo?.importance) || 0);
-
-  if (!hasCoordenadas({ latitud, longitud }) || importancia < 0.2 || (segundo && diferencia < 0.03)) {
-    return {
-      estadoGeocodificacion: "AMBIGUO",
-      tipoUbicacion: "texto",
-      errorDetalle: `Resultado ambiguo para: ${q}`,
-    };
-  }
-
-  return {
-    estadoGeocodificacion: "procesado",
-    tipoUbicacion: "texto",
-    latitud,
-    longitud,
-    precision: mejor.type || mejor.class || "geocodificado",
-  };
-};
-
 const normalizarVenta = async (venta) => {
   const ubicacionOriginal = String(venta.ubicacionOriginal || "").trim();
-  const tipoUbicacion = clasificarUbicacion(ubicacionOriginal);
+  const tipoUbicacion = clasificarUbicacionPermitida(ubicacionOriginal);
   const now = new Date();
 
-  if (tipoUbicacion === "sin_ubicacion") {
+  if (tipoUbicacion === "formato_no_permitido") {
     return {
       entidadTipo: "venta",
       entidadId: venta.ventaId,
       ubicacionOriginal,
       tipoUbicacion,
-      estadoGeocodificacion: "sin_ubicacion",
+      estadoGeocodificacion: "omitido",
       procesadoEn: now,
-      errorDetalle: "No existe ubicacion en detalle_entregas.ubicacion",
+      // Se omite por regla de negocio: el mapa solo acepta URLs validas de Google Maps.
+      errorDetalle: "Formato no permitido. Solo maps.app.goo.gl, google.com/maps/place o google.com/maps?q=lat,lng",
     };
   }
 
-  let coordenadas = extraerCoordenadasDeTexto(ubicacionOriginal);
+  let coordenadas = extraerCoordenadasGooglePermitidas(ubicacionOriginal);
   let ubicacionFinal = ubicacionOriginal;
   let precision = "extraida_url";
 
   if (!coordenadas && tipoUbicacion === "enlace_corto_google") {
     ubicacionFinal = await resolverEnlaceCorto(ubicacionOriginal);
-    coordenadas = extraerCoordenadasDeTexto(ubicacionFinal);
+    coordenadas = extraerCoordenadasGooglePermitidas(ubicacionFinal);
     precision = "extraida_redireccion";
   }
 
@@ -468,13 +400,16 @@ const normalizarVenta = async (venta) => {
     };
   }
 
-  const geocodificado = await geocodificarTexto(venta);
+  // No se geocodifica texto libre ni coordenadas sueltas. Si Google Maps no trae coordenadas,
+  // queda omitido para revision/correccion de la ubicacion original.
   return {
     entidadTipo: "venta",
     entidadId: venta.ventaId,
     ubicacionOriginal,
+    tipoUbicacion: "google_sin_coordenadas",
+    estadoGeocodificacion: "omitido",
     procesadoEn: now,
-    ...geocodificado,
+    errorDetalle: "URL de Google Maps permitida, pero sin coordenadas extraibles",
   };
 };
 
@@ -499,12 +434,14 @@ const crearResumenNormalizacion = () => ({
   ambiguos: 0,
   conError: 0,
   sinUbicacion: 0,
+  omitidosFormato: 0,
   omitidos: 0,
 });
 
 const sumarEstadoNormalizacion = (resumen, estado) => {
   if (estado === "procesado" || estado === "manual") resumen.procesados += 1;
   else if (estado === "AMBIGUO" || estado === "ambigua") resumen.ambiguos += 1;
+  else if (estado === "omitido") resumen.omitidosFormato += 1;
   else if (estado === "sin_ubicacion") resumen.sinUbicacion += 1;
   else resumen.conError += 1;
 };
@@ -551,7 +488,7 @@ const normalizarVentasPendientes = async (req) => {
         entidadTipo: "venta",
         entidadId: venta.ventaId,
         ubicacionOriginal: venta.ubicacionOriginal || "",
-        tipoUbicacion: clasificarUbicacion(venta.ubicacionOriginal),
+        tipoUbicacion: clasificarUbicacionPermitida(venta.ubicacionOriginal),
         estadoGeocodificacion: "error",
         procesadoEn: new Date(),
         errorDetalle: error.message,
@@ -634,54 +571,6 @@ const agruparPuntos = (ventas = [], ubicaciones = []) => {
     cantidadTotal: punto.cantidadTotal,
     ventas: punto.ventas,
   }));
-};
-
-const completarUbicacionesDesdeVenta = async (ventas = [], ubicaciones = []) => {
-  const ubicacionesCompletas = [...ubicaciones];
-  const ventasConUbicacion = new Set(
-    ubicaciones
-      .filter(hasCoordenadas)
-      .map((ubicacion) => Number(ubicacion.entidadId)),
-  );
-
-  agruparPorVenta(ventas).forEach((venta) => {
-    if (ventasConUbicacion.has(Number(venta.ventaId))) return;
-
-    const coordenadas = extraerCoordenadasDeTexto(venta.ubicacionOriginal);
-    if (!coordenadas) return;
-
-    ubicacionesCompletas.push({
-      entidadId: venta.ventaId,
-      ubicacionOriginal: venta.ubicacionOriginal,
-      latitud: coordenadas.latitud,
-      longitud: coordenadas.longitud,
-      estadoGeocodificacion: "procesado",
-    });
-    ventasConUbicacion.add(Number(venta.ventaId));
-  });
-
-  for (const venta of agruparPorVenta(ventas)) {
-    if (ventasConUbicacion.has(Number(venta.ventaId))) continue;
-    if (clasificarUbicacion(venta.ubicacionOriginal) !== "enlace_corto_google") continue;
-
-    try {
-      const resultado = await normalizarVenta(venta);
-      if (resultado.estadoGeocodificacion !== "procesado" || !hasCoordenadas(resultado)) {
-        continue;
-      }
-
-      await guardarNormalizacion(resultado);
-      ubicacionesCompletas.push(resultado);
-      ventasConUbicacion.add(Number(venta.ventaId));
-    } catch (error) {
-      console.error("No se pudo resolver enlace corto de mapa comercial:", {
-        ventaId: venta.ventaId,
-        error: error.message,
-      });
-    }
-  }
-
-  return ubicacionesCompletas;
 };
 
 const getData = async (req) => {
@@ -833,7 +722,7 @@ exports.diagnosticoUbicaciones = responder(async (req) => {
   const ventas = agruparPorVenta(await consultarVentas(req, false));
   const resumen = ventas.reduce(
     (acc, venta) => {
-      const tipo = clasificarUbicacion(venta.ubicacionOriginal);
+      const tipo = clasificarUbicacionPermitida(venta.ubicacionOriginal);
       acc.totalVentas += 1;
       acc[tipo] = (acc[tipo] || 0) + 1;
       return acc;
@@ -846,7 +735,7 @@ exports.diagnosticoUbicaciones = responder(async (req) => {
     .map((venta) => ({
       ventaId: venta.ventaId,
       campo: "detalle_entregas.ubicacion",
-      tipo: clasificarUbicacion(venta.ubicacionOriginal),
+      tipo: clasificarUbicacionPermitida(venta.ubicacionOriginal),
       ubicacionOriginal: venta.ubicacionOriginal,
       zona: venta.zonaNombre,
       agencia: venta.agencia,
@@ -888,8 +777,7 @@ exports.puntosVentas = async (req, res) => {
       ],
     });
 
-    const ubicacionesCompletas = await completarUbicacionesDesdeVenta(ventas, ubicaciones);
-    res.json(agruparPuntos(ventas, ubicacionesCompletas));
+    res.json(agruparPuntos(ventas, ubicaciones));
   } catch (error) {
     console.error("Error puntos mapa comercial:", error);
     res.status(500).json({ ok: false, message: error.message });

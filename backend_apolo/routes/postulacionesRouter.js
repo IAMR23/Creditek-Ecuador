@@ -1,4 +1,5 @@
 const express = require("express");
+const { Op } = require("sequelize");
 
 const Postulacion = require("../models/Postulacion");
 const auth = require("../middleware/auth");
@@ -20,6 +21,79 @@ const clean = (obj = {}) =>
 const tieneDatos = (obj = {}) => Object.values(obj).some((value) => !isEmptyValue(value));
 
 const normalizeArray = (value) => (Array.isArray(value) ? value.map(clean).filter(tieneDatos) : []);
+
+const parsePositiveInt = (value, fallback, max = Number.MAX_SAFE_INTEGER) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+};
+
+const parseDateOnlyParts = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  return { year, month, day };
+};
+
+const guayaquilDayStartUtc = (value) => {
+  const parts = parseDateOnlyParts(value);
+  if (!parts) return null;
+
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 5, 0, 0, 0));
+};
+
+const guayaquilDayEndUtc = (value) => {
+  const parts = parseDateOnlyParts(value);
+  if (!parts) return null;
+
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1, 4, 59, 59, 999));
+};
+
+const parseDateRange = ({ fecha, fechaDesde, fechaHasta } = {}) => {
+  const desde = fechaDesde || fecha;
+  const hasta = fechaHasta || fecha;
+
+  if (!desde && !hasta) return null;
+
+  const start = desde ? guayaquilDayStartUtc(desde) : null;
+  const end = hasta ? guayaquilDayEndUtc(hasta) : null;
+  const range = {};
+
+  if (start && end && start > end) {
+    range[Op.gte] = guayaquilDayStartUtc(hasta);
+    range[Op.lte] = guayaquilDayEndUtc(desde);
+    return range;
+  }
+
+  if (start) range[Op.gte] = start;
+  if (end) range[Op.lte] = end;
+
+  return Object.keys(range).length ? range : null;
+};
+
+const buildListWhere = (query = {}) => {
+  const where = {};
+  const q = typeof query.q === "string" ? query.q.trim() : "";
+  const estado = typeof query.estado === "string" ? query.estado.toLowerCase() : "";
+  const noLeidas = String(query.noLeidas || "").toLowerCase() === "true";
+  const createdAtRange = parseDateRange(query);
+
+  if (q) {
+    where[Op.or] = [
+      { nombre: { [Op.iLike]: `%${q}%` } },
+      { cedula: { [Op.iLike]: `%${q}%` } },
+      { telefono: { [Op.iLike]: `%${q}%` } },
+    ];
+  }
+
+  if (estado === "leidas") where.leida = true;
+  if (estado === "no-leidas" || noLeidas) where.leida = false;
+  if (createdAtRange) where.createdAt = createdAtRange;
+
+  return where;
+};
 
 const buildFromFlatPayload = (data) => ({
   datos_personales: clean({
@@ -189,15 +263,32 @@ router.get("/resumen", auth, async (_req, res) => {
   }
 });
 
-router.get("/", auth, async (_req, res) => {
+router.get("/", auth, async (req, res) => {
   try {
-    const postulaciones = await Postulacion.findAll({
+    const page = parsePositiveInt(req.query.page, 1);
+    const limit = parsePositiveInt(req.query.limit, 10, 100);
+    const offset = (page - 1) * limit;
+    const where = buildListWhere(req.query);
+
+    const { count, rows } = await Postulacion.findAndCountAll({
+      where,
       order: [["createdAt", "DESC"]],
+      limit,
+      offset,
     });
+    const totalPages = Math.max(Math.ceil(count / limit), 1);
 
     return res.json({
       ok: true,
-      data: postulaciones,
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
     });
   } catch (error) {
     console.error("Error obteniendo postulaciones:", error);
@@ -205,6 +296,39 @@ router.get("/", auth, async (_req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al obtener postulaciones",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/observacion", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const observacion = typeof req.body?.observacion === "string" ? req.body.observacion.trim() : "";
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    postulacion.observacion = observacion || null;
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: "Observacion guardada",
+      data: postulacion,
+    });
+  } catch (error) {
+    console.error("Error guardando observacion de postulacion:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al guardar la observacion",
       error: error.message,
     });
   }
