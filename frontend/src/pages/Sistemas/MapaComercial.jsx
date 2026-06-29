@@ -43,6 +43,13 @@ const DEFAULT_FILTROS = {
 
 const numberFormatter = new Intl.NumberFormat("es-EC");
 
+const normalizarTexto = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
 function MapBounds({ puntos }) {
   const map = useMap();
 
@@ -113,6 +120,7 @@ export default function MapaComercial() {
   const [puntosVenta, setPuntosVenta] = useState([]);
   const [pendientesUbicacion, setPendientesUbicacion] = useState([]);
   const [ubicacionManual, setUbicacionManual] = useState(null);
+  const [zonaMapaSeleccionada, setZonaMapaSeleccionada] = useState(null);
   const [vistaMapa, setVistaMapa] = useState("puntos");
   const [catalogos, setCatalogos] = useState({
     agencias: [],
@@ -132,23 +140,36 @@ export default function MapaComercial() {
     return search;
   }, [filtros]);
 
+  const puntosMapa = useMemo(() => {
+    if (!zonaMapaSeleccionada) return puntosVenta;
+
+    const zonaSeleccionada = normalizarTexto(zonaMapaSeleccionada.zona);
+    const agenciaSeleccionada = normalizarTexto(zonaMapaSeleccionada.agencia);
+
+    return puntosVenta.filter((punto) => {
+      const mismaZona = normalizarTexto(punto.zona) === zonaSeleccionada;
+      const mismaAgencia = !agenciaSeleccionada || normalizarTexto(punto.agencia) === agenciaSeleccionada;
+      return mismaZona && mismaAgencia;
+    });
+  }, [puntosVenta, zonaMapaSeleccionada]);
+
   const maxVentasPunto = Math.max(
     0,
-    ...puntosVenta.map((punto) => Number(punto.cantidadTotal) || 0),
+    ...puntosMapa.map((punto) => Number(punto.cantidadTotal) || 0),
   );
   const puntosCalor = useMemo(
     () =>
-      puntosVenta
+      puntosMapa
         .map((punto) => [
           Number(punto.latitud),
           Number(punto.longitud),
           Math.max(1, Number(punto.cantidadTotal) || 1),
         ])
         .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)),
-    [puntosVenta],
+    [puntosMapa],
   );
-  const mapCenter = puntosVenta[0]
-    ? [Number(puntosVenta[0].latitud), Number(puntosVenta[0].longitud)]
+  const mapCenter = puntosMapa[0]
+    ? [Number(puntosMapa[0].latitud), Number(puntosMapa[0].longitud)]
     : [-1.8312, -78.1834];
 
   const cargarCatalogos = async () => {
@@ -172,11 +193,13 @@ export default function MapaComercial() {
     setError("");
 
     try {
-      const [dashboardResponse, puntosResponse, pendientesResponse] = await Promise.all([
+      const [dashboardResponse, puntosResponse] = await Promise.all([
         axios.get(`${API_URL}/api/sistemas/mapa-comercial?${params.toString()}`),
         axios.get(`${API_URL}/api/sistemas/mapa-comercial/puntos?${params.toString()}`),
-        axios.get(`${API_URL}/api/sistemas/mapa-comercial/ubicaciones-pendientes?${params.toString()}`),
       ]);
+      const pendientesResponse = await axios.get(
+        `${API_URL}/api/sistemas/mapa-comercial/ubicaciones-pendientes?${params.toString()}`,
+      );
       const response = dashboardResponse.data;
 
       if (!response.ok) {
@@ -211,7 +234,17 @@ export default function MapaComercial() {
   }, [params]);
 
   const actualizarFiltro = (key, value) => {
+    setZonaMapaSeleccionada(null);
     setFiltros((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const seleccionarZonaMapa = (row) => {
+    setVistaMapa("puntos");
+    setZonaMapaSeleccionada((actual) => {
+      const mismaZona = normalizarTexto(actual?.zona) === normalizarTexto(row.zona);
+      const mismaAgencia = normalizarTexto(actual?.agencia) === normalizarTexto(row.agencia);
+      return mismaZona && mismaAgencia ? null : { zona: row.zona, agencia: row.agencia };
+    });
   };
 
   const normalizarPendientes = async () => {
@@ -250,6 +283,7 @@ export default function MapaComercial() {
           zona: ubicacionManual.ubicacionOriginal,
         },
       );
+      setUbicacionManual(null);
       await cargarMapa();
     } catch (error) {
       console.error("Error guardando ubicacion manual:", error);
@@ -329,12 +363,11 @@ export default function MapaComercial() {
 
       <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-8">
         <Metric label="Dispositivos vendidos" value={resumen.totalDispositivos} />
-        <Metric label="Puntos con coordenadas" value={puntosVenta.length} tone="red" />
+        <Metric label="Ubicaciones en mapa" value={puntosMapa.length} tone="blue" />
         <Metric label="Modelos vendidos" value={resumen.modelosDiferentes} />
         <Metric label="Mas vendido" value={resumen.dispositivoMasVendido ? `${resumen.dispositivoMasVendido.marca} ${resumen.dispositivoMasVendido.modelo}` : "-"} />
         <Metric label="Zona top" value={resumen.zonaConMasVentas?.zona || "-"} />
         <Metric label="Zonas con ventas" value={resumen.zonasConVentas} />
-        <Metric label="Zonas sin ventas" value={resumen.zonasSinVentas} tone="amber" />
         <Metric label="Cobertura" value={`${Number(resumen.coberturaComercial || 0).toFixed(2)}%`} tone="green" />
       </section>
 
@@ -344,7 +377,7 @@ export default function MapaComercial() {
             <div>
               <h2 className="text-sm font-bold uppercase text-slate-700">Mapa de ventas</h2>
               <p className="text-xs text-slate-500">
-                Puntos rojos anonimos calculados solo desde detalle_entregas.ubicacion.
+                Puntos azules anonimos calculados desde detalle_entregas.ubicacion.
               </p>
             </div>
             <MapPinned className="text-emerald-700" size={20} />
@@ -362,6 +395,16 @@ export default function MapaComercial() {
               label="Mapa de calor"
               onClick={() => setVistaMapa("calor")}
             />
+            {zonaMapaSeleccionada && (
+              <button
+                type="button"
+                onClick={() => setZonaMapaSeleccionada(null)}
+                className="inline-flex items-center justify-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+              >
+                Zona: {zonaMapaSeleccionada.zona}
+                <span className="text-blue-500">Limpiar</span>
+              </button>
+            )}
           </div>
           <div className="h-[620px]">
             <MapContainer center={mapCenter} zoom={11} className="h-full w-full" scrollWheelZoom>
@@ -369,10 +412,10 @@ export default function MapaComercial() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              <MapBounds puntos={puntosVenta} />
+              <MapBounds puntos={puntosMapa} />
               <ManualPointPicker selected={ubicacionManual} onPick={guardarUbicacionManual} />
               {vistaMapa === "calor" && <HeatLayer points={puntosCalor} />}
-              {vistaMapa === "puntos" && puntosVenta.map((punto) => {
+              {vistaMapa === "puntos" && puntosMapa.map((punto) => {
                 const cantidad = Number(punto.cantidadTotal) || 0;
                 const radius = Math.max(12, Math.min(32, 12 + (cantidad / Math.max(1, maxVentasPunto)) * 20));
 
@@ -382,8 +425,8 @@ export default function MapaComercial() {
                     center={[Number(punto.latitud), Number(punto.longitud)]}
                     radius={radius}
                     pathOptions={{
-                      color: "#dc2626",
-                      fillColor: "#ef4444",
+                      color: "#1d4ed8",
+                      fillColor: "#3b82f6",
                       fillOpacity: 0.82,
                       weight: 3,
                     }}
@@ -413,8 +456,11 @@ export default function MapaComercial() {
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <RankingDispositivos rows={data?.rankings?.dispositivos || []} />
-        <RankingZonas rows={data?.rankings?.zonas || []} />
-        <ZonasSinVentas rows={data?.zonasSinVentas || []} />
+        <RankingZonas
+          rows={data?.rankings?.zonas || []}
+          selected={zonaMapaSeleccionada}
+          onSelect={seleccionarZonaMapa}
+        />
       </section>
 
       <section className="mt-5 rounded border border-slate-200 bg-white p-4 shadow-sm">
@@ -441,7 +487,10 @@ export default function MapaComercial() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setUbicacionManual(item)}
+                onClick={() => {
+                  setUbicacionManual(item);
+                  setVistaMapa("puntos");
+                }}
                 className={`flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-amber-50 ${
                   ubicacionManual?.id === item.id ? "bg-amber-50 text-amber-800" : ""
                 }`}
@@ -525,6 +574,7 @@ function Metric({ label, value, tone = "slate" }) {
     green: "border-emerald-200 bg-emerald-50 text-emerald-800",
     amber: "border-amber-200 bg-amber-50 text-amber-800",
     red: "border-red-200 bg-red-50 text-red-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
   };
 
   return (
@@ -626,12 +676,20 @@ function RankingDispositivos({ rows }) {
   );
 }
 
-function RankingZonas({ rows }) {
+function RankingZonas({ rows, selected, onSelect }) {
   return (
     <TableCard title="Zonas con mas ventas">
-      {rows.map((row) => (
+      {rows.map((row) => {
+        const isSelected =
+          normalizarTexto(selected?.zona) === normalizarTexto(row.zona) &&
+          normalizarTexto(selected?.agencia) === normalizarTexto(row.agencia);
+
+        return (
         <tr
           key={`${row.agencia}-${row.zona}`}
+          onClick={() => onSelect?.(row)}
+          className={`cursor-pointer hover:bg-blue-50 ${isSelected ? "bg-blue-50 text-blue-800" : ""}`}
+          title="Ver solo esta zona en el mapa"
         >
           <td>{row.posicion}</td>
           <td>{row.zona}</td>
@@ -640,27 +698,13 @@ function RankingZonas({ rows }) {
           <td>{row.agencia}</td>
           <td className="text-right">{row.porcentaje}%</td>
         </tr>
-      ))}
+        );
+      })}
     </TableCard>
   );
 }
 
-function ZonasSinVentas({ rows }) {
-  return (
-    <TableCard title="Zonas sin ventas">
-      {rows.map((row) => (
-        <tr
-          key={`${row.agencia}-${row.zona}`}
-        >
-          <td>{row.zona}</td>
-          <td>{row.agencia}</td>
-          <td>{row.ultimaVenta || "-"}</td>
-          <td className="text-right">{row.diasSinVentas ?? "-"}</td>
-        </tr>
-      ))}
-    </TableCard>
-  );
-}
+
 
 function TableCard({ title, children }) {
   return (

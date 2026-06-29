@@ -17,6 +17,7 @@ const {
   construirMapaComercial,
   clasificarUbicacionPermitida,
   extraerCoordenadasGooglePermitidas,
+  extraerCoordenadasGoogleRedireccion,
   getRankingDispositivos,
   getRankingZonas,
   normalizarTexto,
@@ -91,30 +92,34 @@ const crearWhere = (req, incluirFechas = true) => {
     modeloId,
     zona,
   } = req.query;
-  const whereVenta = { activo: true };
+  const whereVenta = {};
   const whereDetalle = {};
   const whereAgencia = {};
   const whereUsuario = {};
   const whereMarca = {};
   const whereModelo = {};
   const whereEntrega = {
+    activo: true,
     [Op.and]: [
-      sequelizeWhere(fn("LOWER", fn("TRIM", col("entregas.estado"))), "entregado"),
+      sequelizeWhere(fn("LOWER", fn("TRIM", col("estado"))), "entregado"),
     ],
+  };
+  const whereDetalleEntrega = {
+    ubicacion: {
+      [Op.and]: [
+        { [Op.not]: null },
+        { [Op.ne]: "" },
+      ],
+    },
   };
 
   if (incluirFechas) {
     if (fechaInicio && fechaFin) {
-      whereVenta.fecha = {
-        [Op.between]: [
-          new Date(`${fechaInicio}T00:00:00`),
-          new Date(`${fechaFin}T23:59:59`),
-        ],
-      };
+      whereEntrega.fecha = { [Op.between]: [fechaInicio, fechaFin] };
     } else if (fechaInicio) {
-      whereVenta.fecha = { [Op.gte]: new Date(`${fechaInicio}T00:00:00`) };
+      whereEntrega.fecha = { [Op.gte]: fechaInicio };
     } else if (fechaFin) {
-      whereVenta.fecha = { [Op.lte]: new Date(`${fechaFin}T23:59:59`) };
+      whereEntrega.fecha = { [Op.lte]: fechaFin };
     }
   }
 
@@ -150,6 +155,7 @@ const crearWhere = (req, incluirFechas = true) => {
     whereMarca,
     whereModelo,
     whereEntrega,
+    whereDetalleEntrega,
     agenciasPermitidas,
   };
 };
@@ -163,12 +169,13 @@ const consultarVentas = async (req, incluirFechas = true) => {
     whereMarca,
     whereModelo,
     whereEntrega,
+    whereDetalleEntrega,
     agenciasPermitidas,
   } = crearWhere(req, incluirFechas);
 
-  const ventas = await Venta.findAll({
-    where: whereVenta,
-    attributes: ["id", "fecha"],
+  const entregas = await Entrega.findAll({
+    where: whereEntrega,
+    attributes: ["id", "fecha", "sectorEntrega", "estado"],
     include: [
       {
         model: UsuarioAgencia,
@@ -193,11 +200,20 @@ const consultarVentas = async (req, incluirFechas = true) => {
         ],
       },
       {
-        model: DetalleVenta,
-        as: "detalleVenta",
-        attributes: ["id", "cantidad", "modeloId", "dispositivoMarcaId"],
+        model: DetalleEntrega,
+        as: "detalleEntregas",
+        attributes: [
+          "id",
+          "cantidad",
+          "modeloId",
+          "dispositivoMarcaId",
+          "ubicacion",
+        ],
         required: true,
-        ...(Object.keys(whereDetalle).length && { where: whereDetalle }),
+        where: {
+          ...whereDetalle,
+          ...whereDetalleEntrega,
+        },
         include: [
           {
             model: Modelo,
@@ -226,37 +242,15 @@ const consultarVentas = async (req, incluirFechas = true) => {
           },
         ],
       },
-      {
-        model: Entrega,
-        as: "entregas",
-        attributes: ["id", "sectorEntrega", "estado"],
-        required: Object.keys(whereEntrega).length > 0,
-        ...(Object.keys(whereEntrega).length && { where: whereEntrega }),
-        include: [
-          {
-            model: DetalleEntrega,
-            as: "detalleEntregas",
-            attributes: ["id", "ubicacion"],
-          },
-        ],
-      },
     ],
     order: [["fecha", "ASC"]],
   });
 
-  return ventas.flatMap((venta) => {
-    const agencia = venta.usuarioAgencia?.agencia;
-    const vendedor = venta.usuarioAgencia?.usuario;
-    const entregaConSector =
-      venta.entregas?.find((entrega) => entrega.sectorEntrega) ||
-      venta.entregas?.[0];
-    const ubicacionOriginal =
-      (venta.entregas || [])
-        .flatMap((entrega) => entrega.detalleEntregas || [])
-        .map((detalle) => String(detalle.ubicacion || "").trim())
-        .find(Boolean) || "";
+  return entregas.flatMap((entrega) => {
+    const agencia = entrega.usuarioAgencia?.agencia;
+    const vendedor = entrega.usuarioAgencia?.usuario;
 
-    return (venta.detalleVenta || []).map((detalle) => {
+    return (entrega.detalleEntregas || []).map((detalle) => {
       const modelo = detalle.modelo;
       const marca =
         modelo?.marca ||
@@ -264,9 +258,9 @@ const consultarVentas = async (req, incluirFechas = true) => {
       const dispositivo = detalle.dispositivoMarca?.dispositivo;
 
       return {
-        ventaId: venta.id,
+        ventaId: entrega.id,
         detalleVentaId: detalle.id,
-        fecha: venta.fecha,
+        fecha: entrega.fecha,
         cantidad: Number(detalle.cantidad) || 0,
         agenciaId: agencia?.id || null,
         agencia: agencia?.nombre || "",
@@ -278,8 +272,8 @@ const consultarVentas = async (req, incluirFechas = true) => {
         modeloId: modelo?.id || null,
         modelo: modelo?.nombre || "",
         dispositivo: dispositivo?.nombre || "",
-        zonaNombre: entregaConSector?.sectorEntrega || "",
-        ubicacionOriginal,
+        zonaNombre: entrega.sectorEntrega || "",
+        ubicacionOriginal: String(detalle.ubicacion || "").trim(),
         agenciasPermitidas,
       };
     });
@@ -343,11 +337,28 @@ const agruparPorVenta = (ventas = []) => {
 };
 
 const resolverEnlaceCorto = async (url) => {
+  const extraerContinueCaptcha = (html) => {
+    const match = String(html || "").match(/name=['"]continue['"]\s+value=['"]([^'"]+)['"]/i);
+    if (!match) return null;
+
+    return match[1]
+      .replace(/&amp;/g, "&")
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"');
+  };
+
   const response = await axios.get(url, {
     maxRedirects: 8,
     timeout: 12000,
-    validateStatus: (status) => status >= 200 && status < 400,
+    validateStatus: (status) => (status >= 200 && status < 400) || status === 429,
   });
+
+  if (response.status === 429) {
+    const continueUrl = extraerContinueCaptcha(response.data);
+    if (continueUrl) return continueUrl;
+
+    throw new Error("Google bloqueo la resolucion del enlace corto con CAPTCHA");
+  }
 
   return (
     response.request?.res?.responseUrl ||
@@ -364,7 +375,7 @@ const normalizarVenta = async (venta) => {
 
   if (tipoUbicacion === "formato_no_permitido") {
     return {
-      entidadTipo: "venta",
+      entidadTipo: "entrega",
       entidadId: venta.ventaId,
       ubicacionOriginal,
       tipoUbicacion,
@@ -381,13 +392,15 @@ const normalizarVenta = async (venta) => {
 
   if (!coordenadas && tipoUbicacion === "enlace_corto_google") {
     ubicacionFinal = await resolverEnlaceCorto(ubicacionOriginal);
-    coordenadas = extraerCoordenadasGooglePermitidas(ubicacionFinal);
+    coordenadas =
+      extraerCoordenadasGooglePermitidas(ubicacionFinal) ||
+      extraerCoordenadasGoogleRedireccion(ubicacionFinal);
     precision = "extraida_redireccion";
   }
 
   if (coordenadas) {
     return {
-      entidadTipo: "venta",
+      entidadTipo: "entrega",
       entidadId: venta.ventaId,
       ubicacionOriginal,
       tipoUbicacion,
@@ -403,7 +416,7 @@ const normalizarVenta = async (venta) => {
   // No se geocodifica texto libre ni coordenadas sueltas. Si Google Maps no trae coordenadas,
   // queda omitido para revision/correccion de la ubicacion original.
   return {
-    entidadTipo: "venta",
+    entidadTipo: "entrega",
     entidadId: venta.ventaId,
     ubicacionOriginal,
     tipoUbicacion: "google_sin_coordenadas",
@@ -458,7 +471,7 @@ const normalizarVentasPendientes = async (req) => {
     if (procesadasEnLote >= limit) break;
 
     const existente = await MapaUbicacionNormalizada.findOne({
-      where: { entidadTipo: "venta", entidadId: venta.ventaId },
+      where: { entidadTipo: "entrega", entidadId: venta.ventaId },
     });
 
     if (
@@ -485,7 +498,7 @@ const normalizarVentasPendientes = async (req) => {
       });
     } catch (error) {
       const registro = await guardarNormalizacion({
-        entidadTipo: "venta",
+        entidadTipo: "entrega",
         entidadId: venta.ventaId,
         ubicacionOriginal: venta.ubicacionOriginal || "",
         tipoUbicacion: clasificarUbicacionPermitida(venta.ubicacionOriginal),
@@ -571,6 +584,32 @@ const agruparPuntos = (ventas = [], ubicaciones = []) => {
     cantidadTotal: punto.cantidadTotal,
     ventas: punto.ventas,
   }));
+};
+
+const resolverUbicacionesDesdeDetalle = async (ventas = [], ubicaciones = []) => {
+  const ubicacionesCompletas = [...ubicaciones];
+  const ventasConUbicacion = new Set(
+    ubicaciones
+      .filter(hasCoordenadas)
+      .map((ubicacion) => Number(ubicacion.entidadId)),
+  );
+
+  for (const venta of agruparPorVenta(ventas)) {
+    if (ventasConUbicacion.has(Number(venta.ventaId))) continue;
+
+    const resultado = await normalizarVenta(venta);
+    if (resultado.estadoGeocodificacion !== "procesado" || !hasCoordenadas(resultado)) {
+      // Se guarda el omitido/error para diagnostico, pero no se pinta en el mapa.
+      await guardarNormalizacion(resultado);
+      continue;
+    }
+
+    await guardarNormalizacion(resultado);
+    ubicacionesCompletas.push(resultado);
+    ventasConUbicacion.add(Number(venta.ventaId));
+  }
+
+  return ubicacionesCompletas;
 };
 
 const getData = async (req) => {
@@ -690,9 +729,17 @@ exports.filtros = responder(async (req) => {
 });
 
 exports.ubicacionesPendientes = responder(async (req) => {
-  const data = await getData(req);
+  const ventas = await consultarVentas(req, true);
+  const entregaIds = [...new Set(ventas.map((row) => Number(row.ventaId)).filter(Boolean))];
+
+  if (!entregaIds.length) {
+    return { pendientes: [] };
+  }
+
   const normalizadasPendientes = await MapaUbicacionNormalizada.findAll({
     where: {
+      entidadTipo: "entrega",
+      entidadId: { [Op.in]: entregaIds },
       estadoGeocodificacion: {
         [Op.in]: ESTADOS_PENDIENTES_UBICACION,
       },
@@ -713,7 +760,7 @@ exports.ubicacionesPendientes = responder(async (req) => {
   });
 
   return {
-    pendientes: [...data.pendientes.slice(0, 100), ...normalizadasPendientes],
+    pendientes: normalizadasPendientes,
   };
 });
 
@@ -761,7 +808,7 @@ exports.puntosVentas = async (req, res) => {
 
     const ubicaciones = await MapaUbicacionNormalizada.findAll({
       where: {
-        entidadTipo: "venta",
+        entidadTipo: "entrega",
         entidadId: { [Op.in]: ventaIds },
         estadoGeocodificacion: { [Op.in]: ["procesado", "manual"] },
         latitud: { [Op.not]: null },
@@ -777,7 +824,8 @@ exports.puntosVentas = async (req, res) => {
       ],
     });
 
-    res.json(agruparPuntos(ventas, ubicaciones));
+    const ubicacionesCompletas = await resolverUbicacionesDesdeDetalle(ventas, ubicaciones);
+    res.json(agruparPuntos(ventas, ubicacionesCompletas));
   } catch (error) {
     console.error("Error puntos mapa comercial:", error);
     res.status(500).json({ ok: false, message: error.message });

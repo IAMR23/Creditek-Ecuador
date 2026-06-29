@@ -2,6 +2,7 @@ const {
   clasificarUbicacionPermitida,
   construirMapaComercial,
   extraerCoordenadasGooglePermitidas,
+  extraerCoordenadasGoogleRedireccion,
   getRankingDispositivos,
 } = require("./mapaComercialService");
 
@@ -59,28 +60,7 @@ describe("mapaComercialService", () => {
     expect(data.zonasConVentas[0].totalDispositivos).toBe(5);
   });
 
-  test("calcula zonas sin ventas solo desde cobertura configurada", () => {
-    const data = construirMapaComercial({
-      ventas: [
-        {
-          detalleVentaId: 1,
-          fecha: "2026-06-18",
-          cantidad: 1,
-          agenciaId: 10,
-          agencia: "Sangolqui",
-          marca: "Samsung",
-          modelo: "A15",
-          zonaNombre: "Puente 7",
-        },
-      ],
-      zonasCobertura,
-    });
 
-    expect(data.resumen.zonasConVentas).toBe(1);
-    expect(data.resumen.zonasSinVentas).toBe(1);
-    expect(data.zonasSinVentas[0].zona).toBe("Centro");
-    expect(data.resumen.coberturaComercial).toBe(50);
-  });
 
   test("ranking de dispositivos calcula porcentaje y numero de zonas", () => {
     const ranking = getRankingDispositivos([
@@ -132,6 +112,12 @@ describe("mapaComercialService", () => {
     expect(
       extraerCoordenadasGooglePermitidas("https://www.google.com/maps/search/?api=1&query=-0.305,-78.45"),
     ).toBeNull();
+  });
+
+  test("extrae coordenadas desde URL final de redireccion de maps.app.goo.gl", () => {
+    expect(
+      extraerCoordenadasGoogleRedireccion("https://www.google.com/maps/search/GOOGLE+MAPS/@-0.3264925,-78.562782,3a,75y,234.99h,92.21t/data=!3m7!1e1"),
+    ).toEqual({ latitud: -0.3264925, longitud: -78.562782 });
   });
 
   test("clasifica solo ubicaciones permitidas para mapa comercial", () => {

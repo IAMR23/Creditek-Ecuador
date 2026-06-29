@@ -103,6 +103,24 @@ const extraerCoordenadasGooglePermitidas = (value) => {
   return null;
 };
 
+const extraerCoordenadasGoogleRedireccion = (value) => {
+  const url = getUrl(value);
+  if (!url) return null;
+
+  const hostname = url.hostname.toLowerCase();
+  const pathname = url.pathname || "";
+
+  if (!esHostGoogleMapsPermitido(hostname) || !pathname.startsWith("/maps")) {
+    return null;
+  }
+
+  return (
+    extraerCoordenadas3d4d(url.href) ||
+    extraerCoordenadasAt(url.href) ||
+    extraerCoordenadasGooglePermitidas(url.href)
+  );
+};
+
 const clasificarUbicacionPermitida = (value) => {
   const texto = String(value || "").trim();
   if (!texto) return "formato_no_permitido";
@@ -451,6 +469,7 @@ module.exports = {
   clasificarUbicacion,
   extraerCoordenadasDeTexto,
   extraerCoordenadasGooglePermitidas,
+  extraerCoordenadasGoogleRedireccion,
   getRankingDispositivos,
   getRankingZonas,
   isCoordinateInsideEcuador,

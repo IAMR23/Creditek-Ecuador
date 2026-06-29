@@ -14,7 +14,6 @@ router.get("/ranking-zonas", controller.rankingZonas);
 router.get("/zonas-sin-ventas", controller.zonasSinVentas);
 router.get("/filtros", controller.filtros);
 router.get("/puntos", controller.puntosVentas);
-router.get("/diagnostico-ubicaciones", controller.diagnosticoUbicaciones);
 router.get("/ubicaciones-pendientes", controller.ubicacionesPendientes);
 router.post("/normalizar", controller.normalizarUbicaciones);
 router.patch("/ubicaciones/:id", controller.corregirUbicacion);
