@@ -213,6 +213,7 @@ const editarVentaCompleta = async (req, res) => {
         cierreCaja: cierreCaja,
         alcance: detalle.alcance,
         contrato: detalle.contrato,
+        identificadorAnuncio: detalle.identificadorAnuncio || null,
         observacionDetalle: detalle.observacionDetalle,
       },
       { transaction: t },
@@ -283,6 +284,7 @@ const obtenerVentaCompleta = async (req, res) => {
             "entrada",
             "alcance",
             "contrato",
+            "identificadorAnuncio",
             "observacionDetalle",
           ],
           include: [
@@ -334,6 +336,7 @@ const obtenerVentaCompleta = async (req, res) => {
         dispositivoMarcaId: "",
         modeloId: "",
         contrato: "",
+        identificadorAnuncio: "",
         formaPagoId: "",
         entrada: "",
         alcance: "",

@@ -395,8 +395,12 @@ export default function DetalleEntrega() {
                 />
               </div>
 
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid md:grid-cols-4 gap-4">
                 <Field label="Contrato" value={detalle.contrato} />
+                <Field
+                  label="Identificador anuncio"
+                  value={detalle.identificadorAnuncio}
+                />
                 <Field label="Entrada" value={`$${detalle.entrada}`} />
                 <Field label="Alcance" value={`$${detalle.alcance}`} />
               </div>

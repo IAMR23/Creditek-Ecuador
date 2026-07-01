@@ -96,18 +96,48 @@ import VerPlanesBatalla from "./pages/Admin/VerPlanesBatalla";
 import SecretariosEjecutivos from "./pages/Admin/SecretariosEjecutivos";
 import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
 import Nomina from "./pages/Contabilidad/Nomina";
+import ExtraccionReportesCaja from "./pages/Contabilidad/ExtraccionReportesCaja";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
+import {
+  clearAccessToken,
+  getAccessToken,
+  onAccessTokenUpdated,
+  onSessionExpired,
+  refreshSession,
+} from "./api/client";
 
 const GhlOportunidadesMatriz = lazy(() => import("./pages/GHL/OportunidadesMatriz"));
 
+const emptyAuth = {
+  isAuthenticated: false,
+  rol: null,
+  permisos: null,
+  usuario: null,
+  token: null,
+};
+
+const getAuthFromToken = (token) => {
+  const decodedToken = jwtDecode(token);
+  const now = Date.now() / 1000;
+
+  if (decodedToken.exp && decodedToken.exp < now) {
+    const error = new Error("Token expirado");
+    error.code = "TOKEN_EXPIRED";
+    throw error;
+  }
+
+  return {
+    isAuthenticated: true,
+    rol: decodedToken.usuario?.rol?.nombre?.toLowerCase() || null,
+    permisos: decodedToken.usuario?.permisosAsignados || [],
+    usuario: decodedToken.usuario || null,
+    token,
+  };
+};
+
 function App() {
-  const [auth, setAuth] = useState({
-    isAuthenticated: false,
-    rol: null,
-    permisos: null,
-    usuario: null,
-  });
+  const [auth, setAuth] = useState(emptyAuth);
 
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -115,75 +145,54 @@ function App() {
     Notification.requestPermission();
   }
 
+  useEffect(() => {
+    const token = auth.token || getAccessToken();
 
-  const validateToken = () => {
-  const token = localStorage.getItem("token");
+    if (auth.isAuthenticated && token) {
+      socket.auth = { token };
 
-  if (!token) {
-    setAuth({
-      isAuthenticated: false,
-      rol: null,
-      permisos: null,
-      usuario: null,
-    });
-    setAuthLoading(false);
-    return;
-  }
+      if (!socket.connected) {
+        socket.connect();
+      }
+    } else {
+      socket.disconnect();
+    }
+  }, [auth.isAuthenticated, auth.token]);
 
-  try {
-    const decodedToken = jwtDecode(token);
-    const now = Date.now() / 1000;
+  const resetAuth = () => {
+    setAuth(emptyAuth);
+  };
 
-    if (decodedToken.exp < now) {
-      localStorage.removeItem("token");
+  const applyToken = (token) => {
+    const nextAuth = getAuthFromToken(token);
+    setAuth(nextAuth);
+    return nextAuth;
+  };
+
+  const validateToken = async () => {
+    const token = getAccessToken();
+
+    if (token) {
+      try {
+        applyToken(token);
+        setAuthLoading(false);
+        return;
+      } catch {
+        clearAccessToken();
+      }
+    }
+
+    try {
+      const refreshedToken = await refreshSession();
+      applyToken(refreshedToken);
+    } catch {
+      clearAccessToken();
       localStorage.removeItem("activeMode");
-
-      setAuth({
-        isAuthenticated: false,
-        rol: null,
-        permisos: null,
-        usuario: null,
-      });
+      resetAuth();
+    } finally {
       setAuthLoading(false);
-      return;
     }
-
-    setAuth({
-      isAuthenticated: true,
-      rol: decodedToken.usuario?.rol?.nombre?.toLowerCase() || null,
-      permisos: decodedToken.usuario?.permisosAsignados || [],
-      usuario: decodedToken.usuario || null,
-    });
-  } catch (error) {
-    console.error("Token inválido", error);
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("activeMode");
-
-    setAuth({
-      isAuthenticated: false,
-      rol: null,
-      permisos: null,
-      usuario: null,
-    });
-  } finally {
-    setAuthLoading(false);
-  }
-};
-
-useEffect(() => {
-  const token = localStorage.getItem("token");
-
-  if (auth.isAuthenticated && token) {
-    socket.auth = { token };
-
-    if (!socket.connected) {
-      socket.connect();
-    }
-  } else {
-    socket.disconnect();
-  }
-}, [auth.isAuthenticated]);
+  };
 
 
   useEffect(() => {
@@ -194,6 +203,38 @@ useEffect(() => {
     return () => {
       window.removeEventListener("storage", validateToken);
     };
+  }, []);
+
+  useEffect(() => {
+    return onSessionExpired(() => {
+      clearAccessToken();
+      localStorage.removeItem("activeMode");
+      socket.disconnect();
+      resetAuth();
+      setAuthLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    return onAccessTokenUpdated((event) => {
+      const token = event.detail?.token || getAccessToken();
+      if (!token) return;
+
+      try {
+        applyToken(token);
+        socket.auth = { token };
+
+        if (socket.connected) {
+          socket.disconnect();
+          socket.connect();
+        }
+
+        initSWWithToken();
+      } catch {
+        clearAccessToken();
+        resetAuth();
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -370,6 +411,13 @@ useEffect(() => {
                 <Route path="revisar-cajas" element={protect(<CierresCajaTabla />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
                 <Route path="nomina" element={protect(<Nomina />, "/nomina")} />
+                <Route
+                  path="contabilidad/extraccion-reportes-caja"
+                  element={protect(
+                    <ExtraccionReportesCaja />,
+                    "/contabilidad/extraccion-reportes-caja",
+                  )}
+                />
                 <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />
                 <Route
                   path="sistemas/tareas"

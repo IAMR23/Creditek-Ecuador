@@ -26,6 +26,7 @@ export default function DetalleVenta() {
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
+    identificadorAnuncio: "",
     formaPagoId: "",
     entrada: "0",
     alcance: "0",
@@ -143,6 +144,7 @@ export default function DetalleVenta() {
       entrada: parseFloat(form.entrada || 0),
       alcance: parseFloat(form.alcance || 0),
       subtotal: parseInt(form.cantidad) * parseFloat(form.precioVendedor),
+      identificadorAnuncio: form.identificadorAnuncio || null,
       observacionDetalle: form.observacionDetalle || null,
     };
 
@@ -155,6 +157,7 @@ export default function DetalleVenta() {
       ...prev,
       modeloId: "",
       contrato: "",
+      identificadorAnuncio: "",
       formaPagoId: "",
       entrada: "0",
       alcance: "0",
@@ -302,6 +305,20 @@ export default function DetalleVenta() {
                   name="contrato"
                   placeholder="Número de contrato"
                   value={form.contrato}
+                  onChange={handleChange}
+                  className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Identificador anuncio
+                </label>
+                <input
+                  type="text"
+                  name="identificadorAnuncio"
+                  placeholder="Identificador del anuncio"
+                  value={form.identificadorAnuncio}
                   onChange={handleChange}
                   className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
@@ -458,6 +475,7 @@ export default function DetalleVenta() {
                   <th className="p-3 border text-left">Precio</th>
                   <th className="p-3 border text-left">Forma de Pago</th>
                   <th className="p-3 border text-left">Contrato</th>
+                  <th className="p-3 border text-left">Identificador anuncio</th>
                   <th className="p-3 border text-left">Observación</th>
                 </tr>
               </thead>
@@ -487,6 +505,7 @@ export default function DetalleVenta() {
                         ?.nombre || "-"}
                     </td>
                     <td className="p-3 border">{d.contrato || "-"}</td>
+                    <td className="p-3 border">{d.identificadorAnuncio || "-"}</td>
                     <td className="p-3 border">
                       {d.observacionDetalle ? d.observacionDetalle : "-"}
                     </td>

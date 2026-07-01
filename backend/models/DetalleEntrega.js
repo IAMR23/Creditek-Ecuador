@@ -44,6 +44,10 @@ const DetalleEntrega = sequelize.define(
     contrato: {
       type: DataTypes.STRING,
     },
+    identificadorAnuncio: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     formaPagoId: {
       type: DataTypes.INTEGER,
       allowNull: false,

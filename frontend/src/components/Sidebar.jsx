@@ -23,6 +23,7 @@ import {
   Table2,
   FileCheck2,
   MapPinned,
+  FileSpreadsheet,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { FaTasks } from "react-icons/fa";
@@ -173,7 +174,12 @@ export default function Sidebar({ auth }) {
             icon: <PackageCheck size={20} />,
             path: "/revisar-cajas",
           },
-                    {
+          {
+            label: "Extraccion reportes caja",
+            icon: <FileSpreadsheet size={20} />,
+            path: "/contabilidad/extraccion-reportes-caja",
+          },
+          {
             label: "Bonos",
             icon: <LucideTicketPercent size={20} />,
             path: "/bonos",

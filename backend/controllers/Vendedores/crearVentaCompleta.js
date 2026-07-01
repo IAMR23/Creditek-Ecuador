@@ -218,6 +218,7 @@ const crearVentaCompleta = async (req, res) => {
         entrada: detalle.entrada,
         alcance: detalle.alcance,
         contrato: detalle.contrato,
+        identificadorAnuncio: detalle.identificadorAnuncio || null,
         observacionDetalle: detalle.observacionDetalle,
       },
       { transaction: t },

@@ -118,6 +118,7 @@ export default function MisMetas() {
       texto += `- Entrada: ${item.entrada}\n`;
       texto += `- Alcance: ${item.alcance}\n`;
       texto += `- Forma de pago: ${item.formaPago.nombre}\n`;
+      texto += `- Identificador anuncio: ${item.identificadorAnuncio || "N/A"}\n`;
       texto += `- Obs: ${item.observacionDetalle}\n`;
     });
 
@@ -262,6 +263,10 @@ export default function MisMetas() {
                 </p>
                 <p>
                   <b>Forma Pago:</b> {item.formaPago.nombre}
+                </p>
+                <p>
+                  <b>Identificador anuncio:</b>{" "}
+                  {item.identificadorAnuncio || "-"}
                 </p>
 
                 {item.observacionDetalle?.trim() !== "" && (

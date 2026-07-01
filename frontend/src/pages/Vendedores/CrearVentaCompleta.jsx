@@ -99,6 +99,7 @@ const CrearVentaCompleta = () => {
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
+    identificadorAnuncio: "",
     formaPagoId: "",
     entrada: "",
     alcance: "",
@@ -695,6 +696,7 @@ Detalle:
 - Entrada : $${detalle.entrada || 0}
 - Alcance : $${detalle.alcance || 0}
 - Contrato: ${detalle.contrato || "N/A"}
+- Identificador anuncio: ${detalle.identificadorAnuncio || "N/A"}
 - Observación del detalle: ${detalle.observacionDetalle || "N/A"}
 Obsequios:
 ${
@@ -1188,6 +1190,20 @@ ${
             name="contrato"
             placeholder="Número de contrato"
             value={detalle.contrato}
+            onChange={handleChange}
+            className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Identificador anuncio
+          </label>
+          <input
+            type="text"
+            name="identificadorAnuncio"
+            placeholder="Identificador del anuncio"
+            value={detalle.identificadorAnuncio || ""}
             onChange={handleChange}
             className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
           />

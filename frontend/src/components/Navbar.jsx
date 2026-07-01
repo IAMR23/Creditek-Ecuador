@@ -5,6 +5,7 @@ import { socket } from "../socket/socket";
 import { useTaskNotifications } from "../context/TaskNotificationContext";
 import { useState } from "react";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
+import { logoutSession } from "../api/client";
 
 function Navbar({ auth, setAuth }) {
   const navigate = useNavigate();
@@ -30,8 +31,8 @@ const handleLogoClick = () => {
   navigate(redirectTo);
 };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
+  const handleLogout = async () => {
+    await logoutSession();
     localStorage.removeItem("rol");
     localStorage.removeItem("usuario");
     localStorage.removeItem("activeMode");
@@ -42,6 +43,7 @@ const handleLogoClick = () => {
       rol: null,
       permisos: null,
       usuario: null,
+      token: null,
     });
 
     clearNotifications();

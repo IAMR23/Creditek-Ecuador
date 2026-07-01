@@ -384,6 +384,13 @@ const ensureDetalleEntregasUbicacionSchema = async (queryInterface, tables) => {
 
   const columns = await queryInterface.describeTable("detalle_entregas");
 
+  if (!columns.identificadorAnuncio) {
+    await queryInterface.addColumn("detalle_entregas", "identificadorAnuncio", {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    });
+  }
+
   if (columns.ubicacion) {
     await queryInterface.changeColumn("detalle_entregas", "ubicacion", {
       type: Sequelize.TEXT,
@@ -435,6 +442,11 @@ const connectDB = async () => {
     if (tables.includes("detalle_ventas")) {
       await addColumnIfMissing(queryInterface, "detalle_ventas", "precioVenta", {
         type: Sequelize.DECIMAL(10, 2),
+        allowNull: true,
+      });
+
+      await addColumnIfMissing(queryInterface, "detalle_ventas", "identificadorAnuncio", {
+        type: Sequelize.TEXT,
         allowNull: true,
       });
 

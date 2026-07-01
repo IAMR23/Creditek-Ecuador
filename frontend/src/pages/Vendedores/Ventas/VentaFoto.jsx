@@ -102,6 +102,7 @@ export default function VentaFoto() {
 - Entrada : $${item.entrada} 
 - Alcance : $${item.alcance}
 - Forma de pago: ${item.formaPago.nombre}
+- Identificador anuncio: ${item.identificadorAnuncio || "N/A"}
 - Observacion de la venta: ${item.observacionDetalle}
 `;
     });

@@ -6,6 +6,7 @@ import { jwtDecode } from "jwt-decode";
 import { AiFillEye, AiFillEyeInvisible } from "react-icons/ai";
 import { useTaskNotifications } from "../context/TaskNotificationContext";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
+import { setAccessToken } from "../api/client";
 
 function LoginForm({ setAuth }) {
   const [credentials, setCredentials] = useState({
@@ -44,9 +45,14 @@ function LoginForm({ setAuth }) {
         return;
       }
 
-      localStorage.setItem("token", response.token);
+      const token = response.accessToken || response.token;
+      if (!token) {
+        throw new Error("El backend no devolvio access token.");
+      }
+
+      setAccessToken(token);
       reloadPendingTasks();
-      const decodedToken = jwtDecode(response.token);
+      const decodedToken = jwtDecode(token);
 
       const permisos = decodedToken.usuario?.permisosAsignados || [];
       const rol = decodedToken.usuario?.rol?.nombre;
@@ -56,6 +62,7 @@ function LoginForm({ setAuth }) {
         rol,
         permisos,
         usuario: decodedToken.usuario || null,
+        token,
       });
 
       navigate(

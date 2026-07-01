@@ -118,6 +118,7 @@ const crearEntregaCompleta = async (req, res) => {
         entrada: detalle.entrada,
         alcance: detalle.alcance,
         contrato: detalle.contrato,
+        identificadorAnuncio: detalle.identificadorAnuncio || null,
         observacionDetalle: detalle.observacionDetalle,
         ubicacion: detalle.ubicacion,
         ubicacionDispositivo: detalle.ubicacionDispositivo,

@@ -4,6 +4,7 @@ const cors = require("cors");
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+const { JWT_SECRET } = require("./utils/tokenConfig");
 const { connectDB } = require("./config/db");
 require("./models/associations");
 
@@ -33,35 +34,51 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5020;
 
+const parseCookies = (req, _res, next) => {
+  const header = req.headers.cookie || "";
+  req.cookies = header.split(";").reduce((cookies, item) => {
+    const [rawKey, ...rawValue] = item.trim().split("=");
+    if (!rawKey) return cookies;
+
+    cookies[rawKey] = decodeURIComponent(rawValue.join("=") || "");
+    return cookies;
+  }, {});
+  next();
+};
+
 /* startTaskCron();
 startTaskReminderJob();
  */
 
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
+  process.env.WEB_CORS,
   "http://192.168.1.123:5173",
   /^https?:\/\/localhost:\d+$/,
-  /^https?:\/\/(www\.)?creditek-ecuador\.com$/,
-  /^https?:\/\/(www\.)?rve.creditek-ecuador\.com$/,
-];
+  /^https?:\/\/127\.0\.0\.1:\d+$/,
+  /^https?:\/\/(www\.)?creditek-ecuador\.com(:\d+)?$/,
+  /^https?:\/\/(www\.)?rve\.creditek-ecuador\.com(:\d+)?$/,
+].filter(Boolean);
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      const allowed = allowedOrigins.some((o) =>
-        typeof o === "string" ? o === origin : o.test(origin)
-      );
-      if (allowed) return callback(null, true);
-      return callback(new Error("CORS no permitido: " + origin), false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    const allowed = allowedOrigins.some((o) =>
+      typeof o === "string" ? o === origin : o.test(origin)
+    );
+    if (allowed) return callback(null, true);
+    return callback(new Error("CORS no permitido: " + origin), false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Disposition", "X-RVE-Registros", "X-RVE-No-Leidas"],
+  maxAge: 3600,
+};
 
-app.options("*", cors());
+app.use(cors(corsOptions));
+
+app.options("*", cors(corsOptions));
 
 // Middleware
 app.use(express.json({
@@ -69,6 +86,7 @@ app.use(express.json({
     req.rawBody = buf;
   },
 }));
+app.use(parseCookies);
 
 /* =========================
    SOCKET.IO
@@ -102,11 +120,11 @@ io.use((socket, next) => {
       return next(new Error("No autorizado: token no enviado"));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     socket.user = {
       id: decoded.usuario?.id,
-      email: decoded.email,
-      rol: decoded.rol,
+      email: decoded.usuario?.email,
+      rol: decoded.usuario?.rol?.nombre,
     };
   
     next();
@@ -175,6 +193,7 @@ connectDB()
     app.use("/api/gestion", require("./routes/CallCenter/gestionRoutes"));
     app.use("/api/gestion-comercial", require("./routes/Comercial/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
+    app.use("/api/contabilidad/reportes-caja", require("./routes/Contabilidad/reportesCajaRoutes"));
     app.use("/api/contabilidad/nomina", require("./routes/Contabilidad/nominaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));

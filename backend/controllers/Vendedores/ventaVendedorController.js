@@ -144,6 +144,7 @@ const fechaISO = entrega.fecha
 
         observaciones: entrega.observacion || "",
         contrato: detalle.contrato || "",
+        identificadorAnuncio: detalle.identificadorAnuncio || "",
         validada: entrega.validada || "",
       });
     });

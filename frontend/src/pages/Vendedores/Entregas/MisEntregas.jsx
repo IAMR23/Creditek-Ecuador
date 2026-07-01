@@ -129,6 +129,7 @@ export default function MisEntregas() {
 - Entrada : $${item.entrada} 
 - Alcance : $${item.alcance}
 - Forma de pago: ${item.formaPago.nombre}
+- Identificador anuncio: ${item.identificadorAnuncio || "N/A"}
 - Ubicación del Cliente: ${item.ubicacion || ""}
 - Ubicación del dispositivo: ${item.ubicacionDispositivo || ""}
 `;

@@ -114,6 +114,7 @@ exports.formatearReporte = (entregas) => {
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",
         contrato: detalle.contrato || "",
+        identificadorAnuncio: detalle.identificadorAnuncio || "",
         observaciones: entrega.observacion || "",
         obsequios: obsequios,
         cierreCaja: entrega.validada ? "Sí" : "No",
