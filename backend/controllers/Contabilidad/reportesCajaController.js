@@ -10,6 +10,8 @@ const getPythonBin = () =>
   process.env.PYTHON_PATH ||
   (process.platform === "win32" ? "python" : "python3");
 
+const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 const normalizarAsignacionesAgencia = (raw) => {
   if (!raw) return [];
 
@@ -32,9 +34,18 @@ const normalizarAsignacionesAgencia = (raw) => {
     .map((item) => ({
       fecha: String(item?.fecha || "").trim(),
       usuario: String(item?.usuario || "").trim().toUpperCase(),
+      horaInicio: String(item?.horaInicio || "").trim(),
+      horaFin: String(item?.horaFin || "").trim(),
       agencia: String(item?.agencia || "").trim().toUpperCase(),
     }))
-    .filter((item) => item.fecha || item.usuario || item.agencia)
+    .filter(
+      (item) =>
+        item.fecha ||
+        item.usuario ||
+        item.horaInicio ||
+        item.horaFin ||
+        item.agencia,
+    )
     .map((item) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(item.fecha)) {
         throw new Error("Cada asignacion debe tener una fecha valida.");
@@ -46,6 +57,18 @@ const normalizarAsignacionesAgencia = (raw) => {
 
       if (!item.agencia || item.agencia.length > 80) {
         throw new Error("Cada asignacion debe tener una agencia valida.");
+      }
+
+      const tieneHorario = item.horaInicio || item.horaFin;
+
+      if (tieneHorario) {
+        if (!HORA_REGEX.test(item.horaInicio) || !HORA_REGEX.test(item.horaFin)) {
+          throw new Error("Cada asignacion debe tener un horario valido.");
+        }
+
+        if (item.horaInicio > item.horaFin) {
+          throw new Error("La hora inicial no puede ser mayor que la hora final.");
+        }
       }
 
       return item;

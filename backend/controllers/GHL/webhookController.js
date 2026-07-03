@@ -12,11 +12,6 @@ async function recibirWebhookStevo(req, res) {
 
     const isFromMe = info?.IsFromMe === true;
 
-    console.log("\n==============================");
-    console.log("📩 WEBHOOK STEVO RECIBIDO");
-    console.log("==============================\n");
-
-    console.log("📤 Es mensaje enviado por asesor:", isFromMe);
     console.dir(payload, { depth: null });
 
     const sourceId = findValueDeep(payload, [
@@ -121,18 +116,7 @@ async function recibirWebhookStevo(req, res) {
      */
     const instanciaPauta = vieneDeAnuncio ? instanciaActual : "";
 
-    console.log("\n🔥 DATOS PROCESADOS\n");
-    console.log("📱 Teléfono:", phone);
-    console.log("💬 Mensaje:", message);
-    console.log("📢 Source ID:", sourceId);
-    console.log("🌐 Source URL:", sourceUrl);
-    console.log("🧠 CTWA CLID:", ctwaClid);
-    console.log("🎯 Origen:", campaniaInfo.origen);
-    console.log("🎯 Campaña detectada:", campaniaInfo.campania);
-    console.log("📌 Instancia actual:", instanciaActual);
-    console.log("📣 Viene de anuncio:", vieneDeAnuncio);
-    console.log("🎯 Instancia pauta:", instanciaPauta);
-    console.log("📤 IsFromMe:", isFromMe);
+  
 
     let ghlResponse = null;
 
@@ -156,7 +140,6 @@ async function recibirWebhookStevo(req, res) {
         isFromMe,
       });
 
-      console.log("\n✅ CONTACTO ENVIADO A GHL");
       console.dir(ghlResponse, { depth: null });
     } catch (ghlError) {
       console.error("\n❌ ERROR ENVIANDO A GHL");

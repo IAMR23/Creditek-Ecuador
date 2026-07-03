@@ -7,7 +7,7 @@ require("dotenv").config();
 const { JWT_SECRET } = require("./utils/tokenConfig");
 const { connectDB } = require("./config/db");
 require("./models/associations");
-
+  
 // Rutas
 const authRoutes = require("./routes/authRoutes");
 const agencia = require("./routes/AgenciaRoutes");
@@ -141,10 +141,8 @@ io.on("connection", (socket) => {
   // Room individual por usuario
   socket.join(`user_${userId}`);
 
-  console.log(`Usuario conectado por socket: ${userId}`);
 
   socket.on("disconnect", () => {
-    console.log(`Usuario desconectado del socket: ${userId}`);
   });
 });
 

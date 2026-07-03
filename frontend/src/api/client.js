@@ -4,6 +4,7 @@ import { API_URL } from "../../config";
 const TOKEN_KEY = "token";
 const SESSION_EXPIRED_EVENT = "rve:session-expired";
 const ACCESS_TOKEN_UPDATED_EVENT = "rve:access-token-updated";
+const ACCESS_TOKEN_REFRESH_SKEW_MS = 30 * 1000;
 
 let refreshPromise = null;
 let sessionExpiredNotified = false;
@@ -86,6 +87,43 @@ const isAuthRequest = (config = {}) => {
   );
 };
 
+const decodeJwtPayload = (token) => {
+  const payload = token?.split(".")?.[1];
+  if (!payload || typeof globalThis.atob !== "function") return null;
+
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "=",
+    );
+    const binary = globalThis.atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+};
+
+const shouldRefreshAccessToken = (token) => {
+  const payload = decodeJwtPayload(token);
+  const expMs = Number(payload?.exp) * 1000;
+
+  if (!Number.isFinite(expMs)) return false;
+
+  return expMs <= Date.now() + ACCESS_TOKEN_REFRESH_SKEW_MS;
+};
+
+const refreshAccessTokenOrExpireSession = async () => {
+  try {
+    return await refreshSession();
+  } catch (error) {
+    clearAccessToken();
+    notifySessionExpired();
+    throw error;
+  }
+};
+
 export const refreshSession = async () => {
   if (!refreshPromise) {
     refreshPromise = refreshApi
@@ -114,11 +152,66 @@ export const logoutSession = async () => {
   }
 };
 
+const resolveFetchInput = (input) => {
+  if (typeof input === "string" && input.startsWith("/")) {
+    return `${API_URL || ""}${input}`;
+  }
+
+  return input;
+};
+
+const buildFetchOptions = (init = {}, token) => {
+  const headers = new Headers(init.headers || {});
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return {
+    ...init,
+    credentials: "include",
+    headers,
+  };
+};
+
+const isRefreshableFetchResponse = async (response) => {
+  if (response.status !== 401) return false;
+
+  try {
+    const data = await response.clone().json();
+    return data?.code === "TOKEN_EXPIRED";
+  } catch {
+    return false;
+  }
+};
+
+export const apiFetch = async (input, init = {}) => {
+  let token = getAccessToken();
+
+  if (token && shouldRefreshAccessToken(token)) {
+    token = await refreshAccessTokenOrExpireSession();
+  }
+
+  const url = resolveFetchInput(input);
+  let response = await fetch(url, buildFetchOptions(init, token));
+
+  if (await isRefreshableFetchResponse(response)) {
+    token = await refreshAccessTokenOrExpireSession();
+    response = await fetch(url, buildFetchOptions(init, token));
+  }
+
+  return response;
+};
+
 const attachAuthInterceptors = (instance) => {
-  instance.interceptors.request.use((config) => {
+  instance.interceptors.request.use(async (config) => {
     config.withCredentials = true;
 
-    const token = getAccessToken();
+    let token = getAccessToken();
+    if (token && !isAuthRequest(config) && shouldRefreshAccessToken(token)) {
+      token = await refreshAccessTokenOrExpireSession();
+    }
+
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;

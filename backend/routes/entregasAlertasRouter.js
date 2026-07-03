@@ -6,6 +6,7 @@ const {
 } = require("../controllers/Logistica/calculoEntregas");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Cliente = require("../models/Cliente");
+const Usuario = require("../models/Usuario");
 
 const router = express.Router();
 router.get("/entregas-pendientes", async (req, res) => {
@@ -20,6 +21,18 @@ router.get("/entregas-pendientes", async (req, res) => {
           model: Cliente,
           as: "cliente",
           attributes: ["id", "cliente", "telefono", "cedula"],
+        },
+        {
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          include: [
+            {
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+          ],
         },
       ],
       order: [["createdAt", "DESC"]], // 🔥 más recientes primero
@@ -40,6 +53,7 @@ router.get("/entregas-pendientes", async (req, res) => {
           telefono: entrega.cliente?.telefono,
           cedula: entrega.cliente?.cedula,
         },
+        vendedor: entrega.usuarioAgencia?.usuario?.nombre || "",
       };
     });
 
@@ -64,6 +78,18 @@ router.get("/entregas-transito", async (req, res) => {
           as: "cliente",
           attributes: ["id", "cliente", "telefono", "cedula"],
         },
+        {
+          model: UsuarioAgencia,
+          as: "usuarioAgencia",
+          attributes: ["id"],
+          include: [
+            {
+              model: Usuario,
+              as: "usuario",
+              attributes: ["id", "nombre"],
+            },
+          ],
+        },
       ],
       order: [["createdAt", "DESC"]], 
     });
@@ -83,6 +109,7 @@ router.get("/entregas-transito", async (req, res) => {
           telefono: entrega.cliente?.telefono,
           cedula: entrega.cliente?.cedula,
         },
+        vendedor: entrega.usuarioAgencia?.usuario?.nombre || "",
       };
     });
 

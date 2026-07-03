@@ -13,6 +13,10 @@ from openpyxl.utils import get_column_letter
 
 MAPEO_AGENCIAS = {
     "ALEXFER": "NUEVA AURORA",
+    "GABYMATRIZ": "NUEVA AURORA",
+    "GABYCAUP": "NUEVA AURORA",
+    "GABYSANGO": "NUEVA AURORA",
+    "GABYCHILLO": "NUEVA AURORA",
     "DAMIZA": "CAUPICHO",
     "CHAVICTK": "SANGOLQUI",
 }
@@ -32,6 +36,7 @@ PATRON_INICIO_FILA = re.compile(
 PATRON_POSIBLE_REGISTRO = re.compile(r"^\d+\s+\d{1,2}/\d{1,2}/\d{2}\s+")
 PATRON_TOKEN_PAGO = re.compile(r"^\d+(?:[.,]\d{1,3})?$")
 PATRON_SOLO_CUOTAS = re.compile(r"^[\d,\s]+(?:DE(?:\s+\d+)?)?$", re.IGNORECASE)
+PATRON_HORA = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 
 def limpiar_linea(linea: str) -> str:
@@ -100,8 +105,34 @@ def obtener_fechas_posibles(fecha: str) -> list[str]:
     return fechas
 
 
-def normalizar_asignaciones_agencias(raw) -> dict[str, dict[str, str]]:
-    asignaciones = defaultdict(dict)
+def hora_a_minutos(hora: str, ampm: str = "") -> int | None:
+    match = PATRON_HORA.match((hora or "").strip())
+    if not match:
+        return None
+
+    horas = int(match.group(1))
+    minutos = int(match.group(2))
+    ampm = (ampm or "").upper().strip()
+
+    if minutos > 59:
+        return None
+
+    if ampm:
+        if horas < 1 or horas > 12:
+            return None
+
+        if ampm == "PM" and horas != 12:
+            horas += 12
+        elif ampm == "AM" and horas == 12:
+            horas = 0
+    elif horas > 23:
+        return None
+
+    return horas * 60 + minutos
+
+
+def normalizar_asignaciones_agencias(raw) -> dict[str, list[dict]]:
+    asignaciones = defaultdict(list)
 
     if not raw:
         return asignaciones
@@ -110,9 +141,26 @@ def normalizar_asignaciones_agencias(raw) -> dict[str, dict[str, str]]:
         fecha = normalizar_fecha_asignacion(str(item.get("fecha", "")))
         usuario = str(item.get("usuario", "")).upper().strip()
         agencia = str(item.get("agencia", "")).upper().strip()
+        hora_inicio_raw = str(item.get("horaInicio", "")).strip()
+        hora_fin_raw = str(item.get("horaFin", "")).strip()
+        tiene_horario = bool(hora_inicio_raw or hora_fin_raw)
+        hora_inicio = hora_a_minutos(hora_inicio_raw) if tiene_horario else None
+        hora_fin = hora_a_minutos(hora_fin_raw) if tiene_horario else None
 
         if fecha and usuario and agencia:
-            asignaciones[fecha][usuario] = agencia
+            if tiene_horario and (
+                hora_inicio is None or hora_fin is None or hora_inicio > hora_fin
+            ):
+                raise ValueError("Las asignaciones de agencias tienen un horario invalido.")
+
+            asignaciones[fecha].append(
+                {
+                    "usuario": usuario,
+                    "agencia": agencia,
+                    "horaInicio": hora_inicio,
+                    "horaFin": hora_fin,
+                }
+            )
 
     return asignaciones
 
@@ -120,16 +168,30 @@ def normalizar_asignaciones_agencias(raw) -> dict[str, dict[str, str]]:
 def obtener_agencia(
     usuario_cobrador: str,
     fecha: str = "",
-    asignaciones_agencias: dict[str, dict[str, str]] | None = None,
+    asignaciones_agencias: dict[str, list[dict]] | None = None,
+    hora: str = "",
+    ampm: str = "",
 ) -> str:
     usuario = (usuario_cobrador or "").upper().strip()
     fechas_posibles = obtener_fechas_posibles(fecha)
+    hora_registro = hora_a_minutos(hora, ampm)
 
     if asignaciones_agencias:
         for fecha_key in fechas_posibles:
-            for clave, agencia in asignaciones_agencias.get(fecha_key, {}).items():
+            for asignacion in asignaciones_agencias.get(fecha_key, []):
+                clave = asignacion["usuario"]
                 if clave in usuario:
-                    return agencia
+                    hora_inicio = asignacion.get("horaInicio")
+                    hora_fin = asignacion.get("horaFin")
+
+                    if hora_inicio is None or hora_fin is None:
+                        return asignacion["agencia"]
+
+                    if (
+                        hora_registro is not None
+                        and hora_inicio <= hora_registro <= hora_fin
+                    ):
+                        return asignacion["agencia"]
 
     for clave, agencia in MAPEO_AGENCIAS.items():
         if clave in usuario:
@@ -210,7 +272,7 @@ def unir_lineas_cortadas(lineas: list[str]) -> list[str]:
 
 def extraer_pdf(
     ruta_pdf: Path,
-    asignaciones_agencias: dict[str, dict[str, str]] | None = None,
+    asignaciones_agencias: dict[str, list[dict]] | None = None,
 ) -> tuple[list[dict], list[str]]:
     registros = []
     no_leidas = []
@@ -257,7 +319,13 @@ def extraer_pdf(
                 "PAGOS CUOTAS": pagos,
                 "Nro CUOTAS": n_cuotas.upper().strip(),
                 "PRODUCTO": producto,
-                "AGENCIA": obtener_agencia(usuario, fecha, asignaciones_agencias),
+                "AGENCIA": obtener_agencia(
+                    usuario,
+                    fecha,
+                    asignaciones_agencias,
+                    hora,
+                    ampm,
+                ),
                 "ARCHIVO": ruta_pdf.name,
             }
         )

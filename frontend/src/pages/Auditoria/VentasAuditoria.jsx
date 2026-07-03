@@ -38,7 +38,7 @@ const TABLE_COLUMNS = [
   "Dispositivo",
   "Modelo",
   "Codigo / IMEI PDF",
-  "Precio Venta",
+  "Precio Carga",
   "Precio Vendedor",
   "Costo",
   "Ventas PDF",
@@ -181,7 +181,7 @@ const mapVentaAuditoria = (venta) => {
     Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
     Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
     "Codigo / IMEI PDF": venta.referenciaPdf ?? "",
-    "Precio Venta": precioVenta,
+    "Precio Carga": precioVenta,
     "Precio Vendedor": precioVendedor,
     Costo: toMoney(venta.costo),
     "Ventas PDF": toMoney(venta.precioVendedorPdf),
@@ -738,7 +738,7 @@ export default function VentasAuditoria() {
       Dispositivo: detalle.dispositivo
         ? String(detalle.dispositivo).toUpperCase()
         : fila.Dispositivo,
-      "Precio Venta": precioVenta,
+      "Precio Carga": precioVenta,
       "Precio Vendedor": precioVendedor,
       Costo: toMoney(detalle.costo),
       Diferencia:
@@ -938,12 +938,12 @@ export default function VentasAuditoria() {
   const getCellClass = (fila, key) => {
     let clase = "px-3 py-2 align-top text-gray-700";
 
-    if (key === "Precio Venta") {
+    if (key === "Precio Carga") {
       clase += " text-right font-semibold text-blue-700";
     }
 
     if (key === "Precio Vendedor") {
-      clase += `${getPrecioVendedorClass(fila[key], fila["Precio Venta"])} text-right`;
+      clase += `${getPrecioVendedorClass(fila[key], fila["Precio Carga"])} text-right`;
     }
 
     if (key === "Diferencia") {

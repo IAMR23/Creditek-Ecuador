@@ -5,12 +5,14 @@ import Swal from "sweetalert2";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  CheckCircle2,
   Gift,
   ImagePlus,
   MapPin,
   Package,
   RefreshCw,
   Save,
+  Trash,
   User,
 } from "lucide-react";
 import { API_URL } from "../../../config";
@@ -45,6 +47,8 @@ export default function EntregaAuditoria() {
 
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
+  const [activando, setActivando] = useState(false);
   const [origenes, setOrigenes] = useState([]);
   const [dispositivoMarcas, setDispositivoMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
@@ -67,6 +71,7 @@ export default function EntregaAuditoria() {
     fecha: hoyLocal(),
     FechaHoraLlamada: "",
     estado: "Pendiente",
+    activo: true,
   });
   const [detalle, setDetalle] = useState({
     cantidad: 1,
@@ -153,6 +158,7 @@ export default function EntregaAuditoria() {
         fecha: entregaDB.fecha ? String(entregaDB.fecha).slice(0, 10) : hoyLocal(),
         FechaHoraLlamada: formatDatetimeLocal(entregaDB.FechaHoraLlamada),
         estado: entregaDB.estado || "Pendiente",
+        activo: entregaDB.activo !== false,
       });
       setDetalle({
         cantidad: Number(detalleDB.cantidad) || 1,
@@ -331,6 +337,68 @@ export default function EntregaAuditoria() {
     }
   };
 
+  const desactivarEntrega = async () => {
+    const confirm = await Swal.fire({
+      title: "Desactivar entrega?",
+      text: "La entrega quedara inactiva y marcada como Eliminado.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Si, desactivar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    setEliminando(true);
+
+    try {
+      await axios.patch(`${API_URL}/auditoria/entregas/${id}/desactivar`);
+      Swal.fire("Listo", "Entrega desactivada correctamente", "success");
+      navigate("/entregas-auditoria");
+    } catch (error) {
+      console.error("Error desactivando entrega auditoria:", error);
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo desactivar la entrega",
+        "error",
+      );
+    } finally {
+      setEliminando(false);
+    }
+  };
+
+  const activarEntrega = async () => {
+    const confirm = await Swal.fire({
+      title: "Activar entrega?",
+      text: "La entrega volvera a quedar activa con estado Pendiente.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Si, activar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    setActivando(true);
+
+    try {
+      await axios.patch(`${API_URL}/auditoria/entregas/${id}/activar`, {
+        estado: "Pendiente",
+      });
+      Swal.fire("Listo", "Entrega activada correctamente", "success");
+      navigate("/entregas-auditoria");
+    } catch (error) {
+      console.error("Error activando entrega auditoria:", error);
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo activar la entrega",
+        "error",
+      );
+    } finally {
+      setActivando(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
@@ -350,14 +418,45 @@ export default function EntregaAuditoria() {
             Ajusta datos de cliente, entrega, producto, ubicaciones y estado.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/entregas-auditoria")}
-          className="inline-flex items-center justify-center gap-2 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-        >
-          <ArrowLeft size={16} />
-          Volver
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {entrega.activo ? (
+            <button
+              type="button"
+              onClick={desactivarEntrega}
+              disabled={guardando || eliminando || activando}
+              className="inline-flex items-center justify-center gap-2 rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {eliminando ? (
+                <RefreshCw className="animate-spin" size={16} />
+              ) : (
+                <Trash size={16} />
+              )}
+              {eliminando ? "Desactivando..." : "Desactivar"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={activarEntrega}
+              disabled={guardando || eliminando || activando}
+              className="inline-flex items-center justify-center gap-2 rounded bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+            >
+              {activando ? (
+                <RefreshCw className="animate-spin" size={16} />
+              ) : (
+                <CheckCircle2 size={16} />
+              )}
+              {activando ? "Activando..." : "Activar"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate("/entregas-auditoria")}
+            className="inline-flex items-center justify-center gap-2 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            <ArrowLeft size={16} />
+            Volver
+          </button>
+        </div>
       </header>
 
       <form onSubmit={guardar} className="space-y-5">

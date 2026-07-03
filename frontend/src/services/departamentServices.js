@@ -39,7 +39,6 @@ export async function obtenerDepartamento(id) {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
     });
-    console.log(response);
 
     return response;
   } catch (error) {
@@ -53,7 +52,6 @@ export async function obtenerDepartamento(id) {
 
 export const updateDepartament = async (id, departamentoData) => {
   try {
-    console.log("Actualizando departamento con ID:", id);
     
     const response = await axios.patch(`/departamento/${id}`, departamentoData, {
       headers: {

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { API_URL } from '../../../config';
+import { useState, useEffect } from 'react';
+import { apiFetch } from '../../api/client';
 
 const AdminObsequios = () => {
   // Estados
@@ -23,7 +23,7 @@ const AdminObsequios = () => {
   const fetchObsequios = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/obsequios`);
+      const response = await apiFetch('/obsequios');
       if (!response.ok) throw new Error('Error al cargar obsequios');
       const data = await response.json();
       setObsequios(data);
@@ -52,12 +52,12 @@ const AdminObsequios = () => {
 
     try {
       const url = editingId 
-        ? `${API_URL}/obsequios/${editingId}`
-        : `${API_URL}/obsequios`;
+        ? `/obsequios/${editingId}`
+        : '/obsequios';
       
       const method = editingId ? 'PUT' : 'POST';
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -95,7 +95,7 @@ const AdminObsequios = () => {
   // Cargar datos para editar
   const handleEdit = async (id) => {
     try {
-      const response = await fetch(`${API_URL}/obsequios/${id}`);
+      const response = await apiFetch(`/obsequios/${id}`);
       if (!response.ok) throw new Error('Error al cargar obsequio');
       const data = await response.json();
       
@@ -116,7 +116,7 @@ const AdminObsequios = () => {
     if (!window.confirm('¿Estás seguro de eliminar este obsequio?')) return;
     
     try {
-      const response = await fetch(`${API_URL}/obsequios/${id}`, {
+      const response = await apiFetch(`/obsequios/${id}`, {
         method: 'DELETE',
       });
 

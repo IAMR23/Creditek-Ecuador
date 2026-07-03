@@ -1,5 +1,5 @@
-import { API_URL } from "../../../config";
 import { useEffect, useState } from "react";
+import { apiFetch } from "../../api/client";
 
 export default function EstadoEntrega() {
   const [estados, setEstados] = useState([]);
@@ -11,7 +11,7 @@ export default function EstadoEntrega() {
   // ====================
   const cargarEstados = async () => {
     try {
-      const res = await fetch(`${API_URL}/estado-entrega`);
+      const res = await apiFetch("/estado-entrega");
       const data = await res.json();
       setEstados(data);
     } catch (error) {
@@ -32,10 +32,10 @@ export default function EstadoEntrega() {
     try {
       const metodo = editId ? "PUT" : "POST";
       const url = editId
-        ? `${API_URL}/estado-entrega/${editId}`
-        : `${API_URL}/estado-entrega`;
+        ? `/estado-entrega/${editId}`
+        : "/estado-entrega";
 
-      await fetch(url, {
+      await apiFetch(url, {
         method: metodo,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nombre }),
@@ -56,7 +56,7 @@ export default function EstadoEntrega() {
     if (!confirm("¿Eliminar este estado?")) return;
 
     try {
-      await fetch(`${API_URL}/estado-entrega/${id}`, {
+      await apiFetch(`/estado-entrega/${id}`, {
         method: "DELETE",
       });
 

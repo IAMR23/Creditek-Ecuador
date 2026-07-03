@@ -44,7 +44,6 @@ import MisVentas from "./pages/Vendedores/Ventas/MisVentas";
 import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
 import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
-import VentasCompletas from "./pages/Admin/VentasCompletas";
 import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
 import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
 import EntregasAuditoria from "./pages/Auditoria/EntregasAuditoria";
@@ -312,7 +311,6 @@ function App() {
                     "/ghl/oportunidades-matriz",
                   )}
                 />
-                <Route path="ventas-completas" element={protect(<VentasCompletas />, "/ventas-completas")} />
                 <Route path="usuarios" element={protect(<Usuarios />, "/usuarios")} />
                 <Route path="agencias" element={protect(<Agencias />, "/agencias")} />
                 <Route

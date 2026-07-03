@@ -9,10 +9,16 @@ const router = express.Router();
 const auditoriaVentasController = require("../../controllers/Auditoria/auditoriaVentasController");
 const tareasSistemasController = require("../../controllers/Sistemas/tareasController");
 const {
+  authenticate,
+  requirePermission,
+} = require("../../middleware/authMiddleware");
+const {
   calcularEstadisticasVentas,
   calcularResumenMargen,
   comiteCompras,
 } = require("../../utils/calcularEstadisticasVentas");
+
+const accesoAuditoria = [authenticate, requirePermission("Auditoria", "Administracion")];
 
 const uploadRoot =
   process.env.AUDITORIA_TEMP_DIR ||
@@ -75,7 +81,7 @@ const uploadPdfs = (req, res, next) => {
   });
 };
 
-router.get("/ventas", async (req, res) => {
+router.get("/ventas", accesoAuditoria, async (req, res) => {
   try {
     const {
       fechaInicio,
@@ -102,6 +108,7 @@ router.get("/ventas", async (req, res) => {
     });
 
     const reporte = auditoriaVentasController.formatearReporte(ventas);
+    await auditoriaVentasController.notificarDiferenciasPrecioAuditoria(req, reporte);
     res.json({ ok: true, ventas: reporte , totalVentas : ventas.length});
   } catch (error) {
     console.error(error);
@@ -111,6 +118,7 @@ router.get("/ventas", async (req, res) => {
 
 router.post(
   "/ventas/importar-pdf",
+  accesoAuditoria,
   prepareUploadFolder,
   uploadPdfs,
   auditoriaVentasController.auditarVentasDesdePdf,
@@ -151,6 +159,18 @@ router.get("/entregas", async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
+
+router.patch(
+  "/entregas/:id/desactivar",
+  accesoAuditoria,
+  auditoriaVentasController.desactivarEntregaAuditoria,
+);
+
+router.patch(
+  "/entregas/:id/activar",
+  accesoAuditoria,
+  auditoriaVentasController.activarEntregaAuditoria,
+);
 
 router.get("/informe", async (req, res) => {
   try {

@@ -2,11 +2,14 @@ const Cliente = require("../../models/Cliente");
 const Venta = require("../../models/Venta");
 const DetalleVenta = require("../../models/DetalleVenta");
 const VentaObsequio = require("../../models/VentaObsequio");
+const Usuario = require("../../models/Usuario");
+const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const { sequelize } = require("../../config/db");
 const { validarCedulaEC } = require("../../middleware/validacionCedula");
 const DispositivoMarca = require("../../models/DispositivoMarca");
 const Modelo = require("../../models/Modelo");
 const FormaPago = require("../../models/FormaPago");
+const auditoriaVentasController = require("../Auditoria/auditoriaVentasController");
 const {
   buscarClienteContifico,
   actualizarClienteContifico,
@@ -74,6 +77,16 @@ const crearVentaCompleta = async (req, res) => {
 
     // 🔥 FOTO
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
+    const usuarioAgenciaDB = await UsuarioAgencia.findByPk(usuarioAgenciaId, {
+      attributes: ["id", "usuarioId"],
+      transaction: t,
+    });
+    const vendedorDB = usuarioAgenciaDB
+      ? await Usuario.findByPk(usuarioAgenciaDB.usuarioId, {
+          attributes: ["id", "nombre"],
+          transaction: t,
+        })
+      : null;
 
     // 1️⃣ Cliente
     let clienteDB = await Cliente.findOne({
@@ -142,7 +155,7 @@ const crearVentaCompleta = async (req, res) => {
 
     // 🔹 Obtener modelo y PVP1
     const modeloDB = await Modelo.findByPk(detalle.modeloId, {
-      attributes: ["id", "PVP1"],
+      attributes: ["id", "PVP1", "nombre"],
       transaction: t,
     });
 
@@ -239,6 +252,21 @@ const crearVentaCompleta = async (req, res) => {
     }
 
     await t.commit();
+
+    await auditoriaVentasController.notificarDiferenciasPrecioAuditoria(req, [
+      {
+        id: ventaDB.id,
+        detalleVentaId: detalleDB.id,
+        activo: true,
+        fecha: ventaDB.fecha,
+        vendedor: vendedorDB?.nombre || `Usuario ${req.user?.id || ""}`.trim(),
+        nombre: clienteDB.cliente,
+        modelo: modeloDB.nombre || "",
+        contrato: detalleDB.contrato || "",
+        precioVenta,
+        precioVendedor,
+      },
+    ]);
 
     res.status(201).json({
       ok: true,

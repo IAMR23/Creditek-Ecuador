@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { Eye, RefreshCw, Search, X } from "lucide-react";
+import { CheckCircle2, Eye, RefreshCw, Search, Trash, X } from "lucide-react";
+import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
 
@@ -70,6 +71,7 @@ const coincideBusquedaCliente = (fila, busqueda) => {
 const mapEntregaAuditoria = (entrega) => ({
   id: entrega.id,
   detalleEntregaId: entrega.detalleEntregaId,
+  activo: entrega.activo !== false,
   modeloId: entrega.modeloId ?? "",
   cierreCaja: entrega.cierreCaja ?? "",
   "ID Entrega": entrega.id ?? "",
@@ -84,7 +86,7 @@ const mapEntregaAuditoria = (entrega) => ({
   "Forma de Pago": entrega.formaPago ?? "",
   Entrada: toMoney(entrega.entrada),
   Alcance: toMoney(entrega.alcance),
-  Estado: entrega.estado ?? "",
+  Estado: entrega.activo === false ? "Desactivada" : entrega.estado ?? "",
 });
 
 export default function EntregasAuditoria() {
@@ -256,6 +258,77 @@ export default function EntregasAuditoria() {
     setBusquedaCliente("");
   };
 
+  const desactivarEntrega = async (id) => {
+    const confirm = await Swal.fire({
+      title: "Desactivar entrega?",
+      text: "La entrega quedara inactiva y marcada como Eliminado.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Si, desactivar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await axios.patch(`${API_URL}/auditoria/entregas/${id}/desactivar`);
+
+      setFilas((prev) =>
+        prev.map((fila) =>
+          fila.id === id
+            ? { ...fila, activo: false, Estado: "Desactivada" }
+            : fila,
+        ),
+      );
+
+      Swal.fire("Listo", "Entrega desactivada correctamente.", "success");
+    } catch (error) {
+      console.error("Error desactivando entrega:", error);
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo desactivar la entrega.",
+        "error",
+      );
+    }
+  };
+
+  const activarEntrega = async (id) => {
+    const confirm = await Swal.fire({
+      title: "Activar entrega?",
+      text: "La entrega volvera a quedar activa con estado Pendiente.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Si, activar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const { data } = await axios.patch(
+        `${API_URL}/auditoria/entregas/${id}/activar`,
+        { estado: "Pendiente" },
+      );
+
+      const estado = data.entrega?.estado || "Pendiente";
+
+      setFilas((prev) =>
+        prev.map((fila) =>
+          fila.id === id ? { ...fila, activo: true, Estado: estado } : fila,
+        ),
+      );
+
+      Swal.fire("Listo", "Entrega activada correctamente.", "success");
+    } catch (error) {
+      console.error("Error activando entrega:", error);
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo activar la entrega.",
+        "error",
+      );
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 text-gray-900 md:p-6">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -364,6 +437,7 @@ export default function EntregasAuditoria() {
               <option value="Entregado">Entregado</option>
               <option value="Urgente">Urgente</option>
               <option value="Eliminado">Eliminado</option>
+              <option value="desactivada">Desactivada</option>
             </select>
           </label>
         </div>
@@ -451,13 +525,35 @@ export default function EntregasAuditoria() {
                       </td>
                     ))}
                     <td className="px-3 py-2 text-center">
-                      <Link
-                        to={`/entregas-auditoria/${fila.id}`}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
-                        title="Ver detalle"
-                      >
-                        <Eye size={17} />
-                      </Link>
+                      <div className="flex items-center justify-center gap-1">
+                        <Link
+                          to={`/entregas-auditoria/${fila.id}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded bg-blue-600 text-white hover:bg-blue-700"
+                          title="Ver detalle"
+                        >
+                          <Eye size={17} />
+                        </Link>
+
+                        {fila.activo ? (
+                          <button
+                            type="button"
+                            onClick={() => desactivarEntrega(fila.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
+                            title="Desactivar entrega"
+                          >
+                            <Trash size={17} />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => activarEntrega(fila.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded bg-green-600 text-white hover:bg-green-700"
+                            title="Activar entrega"
+                          >
+                            <CheckCircle2 size={17} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -509,7 +605,9 @@ function getCellClass(key) {
 function EstadoBadge({ estado }) {
   const valor = normalizarBusqueda(estado);
   const classes =
-    valor === "entregado"
+    valor === "desactivada" || valor === "eliminado"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : valor === "entregado"
       ? "border-green-200 bg-green-50 text-green-700"
       : valor === "pendiente"
         ? "border-amber-200 bg-amber-50 text-amber-700"

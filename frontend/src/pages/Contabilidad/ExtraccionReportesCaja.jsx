@@ -16,10 +16,12 @@ import { API_URL } from "../../../config";
 const API_ENDPOINT = `${API_URL}/api/contabilidad/reportes-caja/extraer`;
 const AGENCIAS = ["NUEVA AURORA", "CAUPICHO", "SANGOLQUI", "OTROS"];
 
-const crearAsignacionVacia = () => ({
+const crearAsignacionVacia = (orden = 0) => ({
   id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
   fecha: new Date().toISOString().slice(0, 10),
-  agencia: "NUEVA AURORA",
+  horaInicio: orden === 0 ? "10:00" : "14:00",
+  horaFin: orden === 0 ? "13:59" : "19:59",
+  agencia: orden === 0 ? "CAUPICHO" : "NUEVA AURORA",
 });
 
 const formatBytes = (bytes = 0) => {
@@ -70,7 +72,7 @@ export default function ExtraccionReportesCaja() {
   };
 
   const agregarAsignacion = () => {
-    setAsignaciones((actual) => [...actual, crearAsignacionVacia()]);
+    setAsignaciones((actual) => [...actual, crearAsignacionVacia(actual.length)]);
   };
 
   const actualizarAsignacion = (id, campo, valor) => {
@@ -89,14 +91,29 @@ export default function ExtraccionReportesCaja() {
       return;
     }
 
+    const asignacionInvalida = asignaciones.find(
+      ({ horaInicio, horaFin }) => !horaInicio || !horaFin || horaInicio > horaFin,
+    );
+
+    if (asignacionInvalida) {
+      Swal.fire(
+        "Horario no valido",
+        "Revisa que cada asignacion tenga hora desde y hasta en orden.",
+        "warning",
+      );
+      return;
+    }
+
     const formData = new FormData();
     files.forEach((file) => formData.append("pdfs", file));
     formData.append(
       "asignacionesAgencias",
       JSON.stringify(
-        asignaciones.map(({ fecha, agencia }) => ({
+        asignaciones.map(({ fecha, horaInicio, horaFin, agencia }) => ({
           fecha,
           usuario: "BRYAN",
+          horaInicio,
+          horaFin,
           agencia,
         })),
       ),
@@ -232,7 +249,7 @@ export default function ExtraccionReportesCaja() {
           <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">
-                Asignacion diaria de BRYAN
+                Asignacion por horario de BRYAN
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 Aplica a cualquier usuario cuyo codigo contenga BRYAN.
@@ -245,7 +262,7 @@ export default function ExtraccionReportesCaja() {
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60"
             >
               <Plus size={16} />
-              Agregar dia
+              Agregar horario
             </button>
           </div>
 
@@ -258,7 +275,7 @@ export default function ExtraccionReportesCaja() {
               {asignaciones.map((item) => (
                 <div
                   key={item.id}
-                  className="grid gap-3 p-4 md:grid-cols-[180px_1fr_auto] md:items-end"
+                  className="grid gap-3 p-4 md:grid-cols-[160px_130px_130px_1fr_auto] md:items-end"
                 >
                   <label className="grid gap-1">
                     <span className="text-xs font-semibold uppercase text-slate-500">
@@ -269,6 +286,36 @@ export default function ExtraccionReportesCaja() {
                       value={item.fecha}
                       onChange={(event) =>
                         actualizarAsignacion(item.id, "fecha", event.target.value)
+                      }
+                      disabled={loading}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    />
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase text-slate-500">
+                      Desde
+                    </span>
+                    <input
+                      type="time"
+                      value={item.horaInicio}
+                      onChange={(event) =>
+                        actualizarAsignacion(item.id, "horaInicio", event.target.value)
+                      }
+                      disabled={loading}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    />
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase text-slate-500">
+                      Hasta
+                    </span>
+                    <input
+                      type="time"
+                      value={item.horaFin}
+                      onChange={(event) =>
+                        actualizarAsignacion(item.id, "horaFin", event.target.value)
                       }
                       disabled={loading}
                       className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"

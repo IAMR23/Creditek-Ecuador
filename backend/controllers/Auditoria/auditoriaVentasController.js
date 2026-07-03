@@ -14,8 +14,11 @@ const Marca = require("../../models/Marca");
 const Modelo = require("../../models/Modelo");
 const Obsequio = require("../../models/Obsequio");
 const Origen = require("../../models/Origen");
+const Rol = require("../../models/Rol");
+const Task = require("../../models/Task");
 const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
+require("../../models/UsuarioRol");
 const Venta = require("../../models/Venta");
 const Entrega = require("../../models/Entrega");
 const DetalleEntrega = require("../../models/DetalleEntrega");
@@ -500,7 +503,10 @@ exports.obtenerReporteEntregasAuditoria = async ({
     whereEntrega.fecha = { [Op.lte]: fechaFin };
   }
 
-  if (estado && estado !== "todos") {
+  const estadoActivo = normalizarEstadoActivo(estado);
+  if (estadoActivo !== null) {
+    whereEntrega.activo = estadoActivo;
+  } else if (estado && estado !== "todos") {
     whereEntrega.estado = { [Op.iLike]: estado };
   }
 
@@ -620,6 +626,7 @@ exports.formatearReporteEntregas = (entregas = []) => {
         formaPagoId: detalle.formaPagoId || null,
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",
+        activo: entrega.activo,
         estado: entrega.estado || "",
         cierreCaja: getCierreCajaDesdeDetalle(detalle),
       });
@@ -627,6 +634,86 @@ exports.formatearReporteEntregas = (entregas = []) => {
   });
 
   return filas;
+};
+
+exports.desactivarEntregaAuditoria = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const entrega = await Entrega.findByPk(id);
+
+    if (!entrega) {
+      return res.status(404).json({
+        ok: false,
+        message: "Entrega no encontrada",
+      });
+    }
+
+    await entrega.update({
+      activo: false,
+      estado: "Eliminado",
+    });
+
+    return res.json({
+      ok: true,
+      message: "Entrega desactivada correctamente",
+      entrega: {
+        id: entrega.id,
+        activo: entrega.activo,
+        estado: entrega.estado,
+      },
+    });
+  } catch (error) {
+    console.error("Error desactivando entrega desde auditoria:", error);
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "No se pudo desactivar la entrega",
+    });
+  }
+};
+
+exports.activarEntregaAuditoria = async (req, res) => {
+  const { id } = req.params;
+  const estadoSolicitado = String(req.body?.estado || "").trim();
+
+  try {
+    const entrega = await Entrega.findByPk(id);
+
+    if (!entrega) {
+      return res.status(404).json({
+        ok: false,
+        message: "Entrega no encontrada",
+      });
+    }
+
+    const estadoActual = String(entrega.estado || "").trim();
+    const estadoRestaurado =
+      estadoSolicitado ||
+      (!estadoActual || estadoActual.toLowerCase() === "eliminado"
+        ? "Pendiente"
+        : estadoActual);
+
+    await entrega.update({
+      activo: true,
+      estado: estadoRestaurado,
+    });
+
+    return res.json({
+      ok: true,
+      message: "Entrega activada correctamente",
+      entrega: {
+        id: entrega.id,
+        activo: entrega.activo,
+        estado: entrega.estado,
+      },
+    });
+  } catch (error) {
+    console.error("Error activando entrega desde auditoria:", error);
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "No se pudo activar la entrega",
+    });
+  }
 };
 
 exports.obtenerEntregasPorVendedorDashboard = async ({
@@ -765,6 +852,242 @@ const toNumero = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(String(value).replace(",", "."));
   return Number.isFinite(number) ? Number(number.toFixed(2)) : null;
+};
+
+const esRolAdministrador = (rol) => {
+  const nombre = normalizarTexto(rol?.nombre || rol);
+  return nombre === "admin" || nombre === "administrador";
+};
+
+const obtenerRolesUsuario = (usuario) => {
+  const roles = [];
+
+  if (usuario?.rol) roles.push(usuario.rol);
+  if (Array.isArray(usuario?.roles)) roles.push(...usuario.roles);
+
+  return roles;
+};
+
+const obtenerAdministradoresActivos = async () => {
+  const usuarios = await Usuario.findAll({
+    where: { activo: true },
+    attributes: ["id", "nombre", "email", "rolId"],
+    include: [
+      {
+        model: Rol,
+        as: "rol",
+        attributes: ["id", "nombre"],
+        required: false,
+      },
+      {
+        model: Rol,
+        as: "roles",
+        attributes: ["id", "nombre"],
+        through: {
+          attributes: [],
+          where: { activo: true },
+        },
+        required: false,
+      },
+    ],
+  });
+
+  return usuarios.filter((usuario) =>
+    obtenerRolesUsuario(usuario).some(esRolAdministrador),
+  );
+};
+
+const obtenerDiferenciaPrecioVenta = (fila) => {
+  if (!fila || fila.activo === false) return null;
+
+  const precioVenta = toNumero(fila.precioVenta);
+  const precioVendedor = toNumero(fila.precioVendedor);
+
+  if (precioVenta === null || precioVendedor === null) return null;
+
+  const diferencia = Number((precioVenta - precioVendedor).toFixed(2));
+
+  if (Math.abs(diferencia) < 0.01) return null;
+
+  return { precioVenta, precioVendedor, diferencia };
+};
+
+const agruparDiferenciasPrecioPorVendedor = (filas = []) => {
+  const grupos = new Map();
+
+  filas.forEach((fila) => {
+    const precios = obtenerDiferenciaPrecioVenta(fila);
+
+    if (!precios) return;
+
+    const vendedor = String(fila.vendedor || "Sin vendedor").trim() || "Sin vendedor";
+
+    if (!grupos.has(vendedor)) {
+      grupos.set(vendedor, {
+        vendedor,
+        filas: [],
+      });
+    }
+
+    grupos.get(vendedor).filas.push({
+      id: fila.id,
+      detalleVentaId: fila.detalleVentaId,
+      contrato: fila.contrato,
+      cliente: fila.nombre,
+      modelo: fila.modelo,
+      fecha: fila.fecha,
+      ...precios,
+    });
+  });
+
+  return [...grupos.values()];
+};
+
+const construirDescripcionDiferenciaPrecio = (grupo) => {
+  const detalles = grupo.filas.slice(0, 8).map((fila) => {
+    let referencia = "Venta sin identificador";
+
+    if (fila.detalleVentaId || fila.id) {
+      referencia = [
+        fila.contrato ? `Contrato ${fila.contrato}` : "",
+        `Venta ${fila.id || "s/n"} / Detalle ${fila.detalleVentaId || "s/n"}`,
+      ]
+        .filter(Boolean)
+        .join(" / ");
+    } else if (fila.contrato) {
+      referencia = `Contrato ${fila.contrato}`;
+    }
+
+    return [
+      `- ${referencia}`,
+      fila.fecha ? `fecha ${fila.fecha}` : "",
+      fila.cliente ? `cliente ${fila.cliente}` : "",
+      fila.modelo ? `modelo ${fila.modelo}` : "",
+      `precio carga $${fila.precioVenta}`,
+      `precio vendedor $${fila.precioVendedor}`,
+      `diferencia $${fila.diferencia}`,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+  });
+
+  const pendientes = grupo.filas.length - detalles.length;
+  const extra = pendientes > 0 ? [`... y ${pendientes} venta(s) mas.`] : [];
+
+  return [
+    `Se detectaron ${grupo.filas.length} venta(s) con diferencia entre precio de carga y precio del vendedor.`,
+    `Vendedor: ${grupo.vendedor}`,
+    "",
+    ...detalles,
+    ...extra,
+  ].join("\n");
+};
+
+const getReferenciaDiferenciaPrecio = (fila = {}) => {
+  if (fila.detalleVentaId) return `Detalle ${fila.detalleVentaId}`;
+  if (fila.id) return `Venta ${fila.id}`;
+  if (fila.contrato) return `Contrato ${fila.contrato}`;
+  return null;
+};
+
+const crearTareaDiferenciaPrecio = async ({ req, admin, grupo, creadorId }) => {
+  const inicioDia = new Date();
+  inicioDia.setHours(0, 0, 0, 0);
+
+  const title = `Revisar venta del vendedor ${grupo.vendedor}`;
+  const referenciaUnica =
+    grupo.filas.length === 1 ? getReferenciaDiferenciaPrecio(grupo.filas[0]) : null;
+  const descripcion = construirDescripcionDiferenciaPrecio(grupo);
+  const tareaExistente = referenciaUnica
+    ? await Task.findOne({
+        where: {
+          assignedTo: admin.id,
+          title,
+          description: {
+            [Op.iLike]: `%${referenciaUnica}%`,
+          },
+          createdAt: {
+            [Op.gte]: inicioDia,
+          },
+        },
+      })
+    : await Task.findOne({
+        where: {
+          assignedTo: admin.id,
+          title,
+          createdAt: {
+            [Op.gte]: inicioDia,
+          },
+        },
+      });
+
+  if (tareaExistente) return tareaExistente;
+
+  const task = await Task.create({
+    title,
+    description: descripcion,
+    assignedTo: admin.id,
+    createdBy: creadorId,
+    priority: "alta",
+    status: "pendiente",
+  });
+
+  const fullTask = await Task.findByPk(task.id, {
+    include: [
+      {
+        model: Usuario,
+        as: "creator",
+        attributes: ["id", "nombre", "email"],
+      },
+      {
+        model: Usuario,
+        as: "assignee",
+        attributes: ["id", "nombre", "email"],
+      },
+    ],
+  });
+
+  const io = req.app.get("io");
+  if (io) {
+    io.to(`user_${admin.id}`).emit("task:sync", {
+      type: "created",
+      task: fullTask || task,
+    });
+  }
+
+  return fullTask || task;
+};
+
+exports.notificarDiferenciasPrecioAuditoria = async (req, filas = []) => {
+  try {
+    const grupos = agruparDiferenciasPrecioPorVendedor(filas);
+
+    if (!grupos.length) return [];
+
+    const administradores = await obtenerAdministradoresActivos();
+
+    if (!administradores.length) return [];
+
+    const creadorId = req.user?.id || administradores[0].id;
+    const tareas = [];
+
+    for (const admin of administradores) {
+      for (const grupo of grupos) {
+        const tarea = await crearTareaDiferenciaPrecio({
+          req,
+          admin,
+          grupo,
+          creadorId,
+        });
+        tareas.push(tarea);
+      }
+    }
+
+    return tareas;
+  } catch (error) {
+    console.error("Error notificando diferencias de precio en auditoria:", error);
+    return [];
+  }
 };
 
 const toNumeroRequerido = (value, fallback, fieldName) => {
@@ -1390,7 +1713,6 @@ const obtenerDiaSemana = (fecha) => {
 };
 
 exports.formatearReporte = (ventas) => {
-  // console.log(ventas)
   const filas = [];
 
   ventas.forEach((venta) => {
@@ -1674,6 +1996,7 @@ exports.auditarVentasDesdePdf = async (req, res) => {
       registrosPdf,
       ventas,
     });
+    await exports.notificarDiferenciasPrecioAuditoria(req, auditoria.resultados);
 
     return res.json({
       ok: true,

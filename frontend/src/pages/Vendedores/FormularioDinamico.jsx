@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import { API_URL } from "../../../config";
-import axios from "axios";
+import api, { apiFetch } from "../../api/client";
 
 export default function FormularioDinamico() {
   const [user, setUser] = useState([]);
@@ -30,7 +29,7 @@ export default function FormularioDinamico() {
     if (!token) {
       navigate("/login", { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -60,7 +59,7 @@ export default function FormularioDinamico() {
     setLoadingProductos(true);
 
     try {
-      const res = await axios.get(`${API_URL}/productos?filtro=${busqueda}`);
+      const res = await api.get(`/productos?filtro=${encodeURIComponent(busqueda)}`);
       setProductos(res.data);
     } catch (error) {
       console.error(error);
@@ -91,7 +90,7 @@ export default function FormularioDinamico() {
         activo: true,
       };
 
-      const res = await fetch(`${API_URL}/venta`, {
+      const res = await apiFetch("/venta", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

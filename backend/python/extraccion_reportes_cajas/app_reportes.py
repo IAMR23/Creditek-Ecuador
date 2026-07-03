@@ -20,6 +20,10 @@ from openpyxl.utils import get_column_letter
 
 MAPEO_AGENCIAS = {
     "ALEXFER": "NUEVA AURORA",
+    "GABYMATRIZ": "NUEVA AURORA",
+    "GABYCAUP": "NUEVA AURORA",
+    "GABYSANGO": "NUEVA AURORA",
+    "GABYCHILLO": "NUEVA AURORA",
     "DAMIZA": "CAUPICHO",
     "CHAVICTK": "SANGOLQUI",
 }

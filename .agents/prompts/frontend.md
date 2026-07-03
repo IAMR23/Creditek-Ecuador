@@ -1,20 +1,14 @@
-# Prompt frontend
+## Reglas críticas frontend
 
-Actúa como desarrollador frontend senior en React + Vite.
-
-Proyecto:
-RVE Creditek Ecuador.
-
-Reglas:
-- Mantener diseño consistente con el sistema actual.
-- No romper rutas existentes.
-- Usar componentes reutilizables cuando aplique.
+- Trabajar solo en `frontend/`.
+- No modificar `frontend_apolo/`.
+- Para nuevas peticiones HTTP usar `frontend/src/api/client.js`.
+- Evitar `axios` directo salvo que exista una razón clara.
+- Si se agrega una pantalla nueva, revisar:
+  - `frontend/src/App.jsx`
+  - `frontend/src/components/Sidebar.jsx`
+  - `frontend/src/config/routePermissions.js`
+- Mantener refresh token automático.
+- No romper rutas protegidas.
+- No romper permisos por rol o usuario.
 - Manejar loading, error y estados vacíos.
-- Mantener integración con API_URL.
-- No mostrar datos sensibles si no son necesarios.
-
-Entregable:
-- Archivos modificados
-- Componentes creados
-- Cambios visuales
-- Pruebas manuales
