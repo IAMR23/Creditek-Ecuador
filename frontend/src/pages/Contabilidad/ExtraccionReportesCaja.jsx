@@ -1,10 +1,26 @@
 import { useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
-import { Download, FileSpreadsheet, FileText, Loader2, Upload, X } from "lucide-react";
+import {
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { API_URL } from "../../../config";
 
 const API_ENDPOINT = `${API_URL}/api/contabilidad/reportes-caja/extraer`;
+const AGENCIAS = ["NUEVA AURORA", "CAUPICHO", "SANGOLQUI", "OTROS"];
+
+const crearAsignacionVacia = () => ({
+  id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  fecha: new Date().toISOString().slice(0, 10),
+  agencia: "NUEVA AURORA",
+});
 
 const formatBytes = (bytes = 0) => {
   if (!bytes) return "0 KB";
@@ -24,6 +40,7 @@ export default function ExtraccionReportesCaja() {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [lastSummary, setLastSummary] = useState(null);
+  const [asignaciones, setAsignaciones] = useState([]);
 
   const totalSize = useMemo(
     () => files.reduce((total, file) => total + file.size, 0),
@@ -52,6 +69,20 @@ export default function ExtraccionReportesCaja() {
     if (inputRef.current) inputRef.current.value = "";
   };
 
+  const agregarAsignacion = () => {
+    setAsignaciones((actual) => [...actual, crearAsignacionVacia()]);
+  };
+
+  const actualizarAsignacion = (id, campo, valor) => {
+    setAsignaciones((actual) =>
+      actual.map((item) => (item.id === id ? { ...item, [campo]: valor } : item)),
+    );
+  };
+
+  const eliminarAsignacion = (id) => {
+    setAsignaciones((actual) => actual.filter((item) => item.id !== id));
+  };
+
   const generarExcel = async () => {
     if (!files.length) {
       Swal.fire("Faltan PDFs", "Selecciona al menos un PDF para procesar.", "info");
@@ -60,6 +91,16 @@ export default function ExtraccionReportesCaja() {
 
     const formData = new FormData();
     files.forEach((file) => formData.append("pdfs", file));
+    formData.append(
+      "asignacionesAgencias",
+      JSON.stringify(
+        asignaciones.map(({ fecha, agencia }) => ({
+          fecha,
+          usuario: "BRYAN",
+          agencia,
+        })),
+      ),
+    );
 
     setLoading(true);
     setLastSummary(null);
@@ -185,6 +226,89 @@ export default function ExtraccionReportesCaja() {
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">
+                Asignacion diaria de BRYAN
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Aplica a cualquier usuario cuyo codigo contenga BRYAN.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={agregarAsignacion}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60"
+            >
+              <Plus size={16} />
+              Agregar dia
+            </button>
+          </div>
+
+          {asignaciones.length === 0 ? (
+            <div className="p-4 text-sm text-slate-500">
+              Sin asignaciones temporales. Se usara el mapeo fijo del reporte.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {asignaciones.map((item) => (
+                <div
+                  key={item.id}
+                  className="grid gap-3 p-4 md:grid-cols-[180px_1fr_auto] md:items-end"
+                >
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase text-slate-500">
+                      Fecha
+                    </span>
+                    <input
+                      type="date"
+                      value={item.fecha}
+                      onChange={(event) =>
+                        actualizarAsignacion(item.id, "fecha", event.target.value)
+                      }
+                      disabled={loading}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    />
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-xs font-semibold uppercase text-slate-500">
+                      Agencia
+                    </span>
+                    <select
+                      value={item.agencia}
+                      onChange={(event) =>
+                        actualizarAsignacion(item.id, "agencia", event.target.value)
+                      }
+                      disabled={loading}
+                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+                    >
+                      {AGENCIAS.map((agencia) => (
+                        <option key={agencia} value={agencia}>
+                          {agencia}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => eliminarAsignacion(item.id)}
+                    disabled={loading}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+                    aria-label="Eliminar asignacion"
+                    title="Eliminar asignacion"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {files.length > 0 && (

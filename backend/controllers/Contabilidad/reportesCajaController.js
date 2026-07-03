@@ -10,7 +10,49 @@ const getPythonBin = () =>
   process.env.PYTHON_PATH ||
   (process.platform === "win32" ? "python" : "python3");
 
-const runReporteCajaProcessor = ({ pdfs, outputFile }) =>
+const normalizarAsignacionesAgencia = (raw) => {
+  if (!raw) return [];
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Las asignaciones de agencias no tienen un formato valido.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Las asignaciones de agencias deben ser una lista.");
+  }
+
+  if (parsed.length > 200) {
+    throw new Error("No se permiten mas de 200 asignaciones por reporte.");
+  }
+
+  return parsed
+    .map((item) => ({
+      fecha: String(item?.fecha || "").trim(),
+      usuario: String(item?.usuario || "").trim().toUpperCase(),
+      agencia: String(item?.agencia || "").trim().toUpperCase(),
+    }))
+    .filter((item) => item.fecha || item.usuario || item.agencia)
+    .map((item) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(item.fecha)) {
+        throw new Error("Cada asignacion debe tener una fecha valida.");
+      }
+
+      if (!item.usuario || item.usuario.length > 50) {
+        throw new Error("Cada asignacion debe tener un usuario valido.");
+      }
+
+      if (!item.agencia || item.agencia.length > 80) {
+        throw new Error("Cada asignacion debe tener una agencia valida.");
+      }
+
+      return item;
+    });
+};
+
+const runReporteCajaProcessor = ({ pdfs, outputFile, asignacionesAgencias }) =>
   new Promise((resolve, reject) => {
     const scriptPath = path.join(
       __dirname,
@@ -21,7 +63,13 @@ const runReporteCajaProcessor = ({ pdfs, outputFile }) =>
       "processor.py",
     );
 
-    const child = spawn(getPythonBin(), [scriptPath, "--output", outputFile, ...pdfs], {
+    const args = [scriptPath, "--output", outputFile];
+
+    if (asignacionesAgencias.length) {
+      args.push("--asignaciones-agencias", JSON.stringify(asignacionesAgencias));
+    }
+
+    const child = spawn(getPythonBin(), [...args, ...pdfs], {
       cwd: path.join(__dirname, "..", ".."),
       env: {
         ...process.env,
@@ -95,10 +143,17 @@ exports.extraerReportesCaja = async (req, res) => {
       });
     }
 
+    const asignacionesAgencias = normalizarAsignacionesAgencia(
+      req.body?.asignacionesAgencias,
+    );
     const pdfs = archivos.map((file) => file.path);
     const outputFile = path.join(tempRoot, "REPORTE_CAJA_GENERADO.xlsx");
 
-    const { summary } = await runReporteCajaProcessor({ pdfs, outputFile });
+    const { summary } = await runReporteCajaProcessor({
+      pdfs,
+      outputFile,
+      asignacionesAgencias,
+    });
 
     if (!fs.existsSync(outputFile)) {
       throw new Error("No se genero el archivo Excel.");

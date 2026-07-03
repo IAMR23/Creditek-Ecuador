@@ -2,6 +2,7 @@ import argparse
 import json
 import re
 from collections import defaultdict
+from datetime import date
 from pathlib import Path
 
 import pdfplumber
@@ -49,8 +50,86 @@ def normalizar_producto(texto: str, nombre_archivo: str) -> str:
     return "OTRO"
 
 
-def obtener_agencia(usuario_cobrador: str) -> str:
+def construir_fecha_iso(dia: str, mes: str, anio: str) -> str:
+    anio_num = int(anio)
+    if anio_num < 100:
+        anio_num += 2000
+
+    try:
+        return date(anio_num, int(mes), int(dia)).isoformat()
+    except ValueError:
+        return ""
+
+
+def normalizar_fecha_asignacion(fecha: str) -> str:
+    fecha = (fecha or "").strip()
+
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", fecha):
+        try:
+            return date.fromisoformat(fecha).isoformat()
+        except ValueError:
+            return ""
+
+    match = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})$", fecha)
+    if not match:
+        return ""
+
+    dia, mes, anio = match.groups()
+    return construir_fecha_iso(dia, mes, anio)
+
+
+def obtener_fechas_posibles(fecha: str) -> list[str]:
+    fecha = (fecha or "").strip()
+
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", fecha):
+        normalizada = normalizar_fecha_asignacion(fecha)
+        return [normalizada] if normalizada else []
+
+    match = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})$", fecha)
+    if not match:
+        return []
+
+    primero, segundo, anio = match.groups()
+    fechas = []
+
+    for dia, mes in ((primero, segundo), (segundo, primero)):
+        normalizada = construir_fecha_iso(dia, mes, anio)
+        if normalizada and normalizada not in fechas:
+            fechas.append(normalizada)
+
+    return fechas
+
+
+def normalizar_asignaciones_agencias(raw) -> dict[str, dict[str, str]]:
+    asignaciones = defaultdict(dict)
+
+    if not raw:
+        return asignaciones
+
+    for item in raw:
+        fecha = normalizar_fecha_asignacion(str(item.get("fecha", "")))
+        usuario = str(item.get("usuario", "")).upper().strip()
+        agencia = str(item.get("agencia", "")).upper().strip()
+
+        if fecha and usuario and agencia:
+            asignaciones[fecha][usuario] = agencia
+
+    return asignaciones
+
+
+def obtener_agencia(
+    usuario_cobrador: str,
+    fecha: str = "",
+    asignaciones_agencias: dict[str, dict[str, str]] | None = None,
+) -> str:
     usuario = (usuario_cobrador or "").upper().strip()
+    fechas_posibles = obtener_fechas_posibles(fecha)
+
+    if asignaciones_agencias:
+        for fecha_key in fechas_posibles:
+            for clave, agencia in asignaciones_agencias.get(fecha_key, {}).items():
+                if clave in usuario:
+                    return agencia
 
     for clave, agencia in MAPEO_AGENCIAS.items():
         if clave in usuario:
@@ -129,7 +208,10 @@ def unir_lineas_cortadas(lineas: list[str]) -> list[str]:
     return resultado
 
 
-def extraer_pdf(ruta_pdf: Path) -> tuple[list[dict], list[str]]:
+def extraer_pdf(
+    ruta_pdf: Path,
+    asignaciones_agencias: dict[str, dict[str, str]] | None = None,
+) -> tuple[list[dict], list[str]]:
     registros = []
     no_leidas = []
 
@@ -175,7 +257,7 @@ def extraer_pdf(ruta_pdf: Path) -> tuple[list[dict], list[str]]:
                 "PAGOS CUOTAS": pagos,
                 "Nro CUOTAS": n_cuotas.upper().strip(),
                 "PRODUCTO": producto,
-                "AGENCIA": obtener_agencia(usuario),
+                "AGENCIA": obtener_agencia(usuario, fecha, asignaciones_agencias),
                 "ARCHIVO": ruta_pdf.name,
             }
         )
@@ -332,13 +414,14 @@ def escribir_reporte(registros: list[dict], salida: Path, no_leidas_por_archivo)
     wb.save(salida)
 
 
-def procesar(pdfs: list[Path], salida: Path):
+def procesar(pdfs: list[Path], salida: Path, asignaciones_agencias=None):
     registros = []
     todas_no_leidas = defaultdict(list)
     detalle_archivos = []
+    asignaciones = normalizar_asignaciones_agencias(asignaciones_agencias or [])
 
     for pdf in pdfs:
-        extraidos, no_leidas = extraer_pdf(pdf)
+        extraidos, no_leidas = extraer_pdf(pdf, asignaciones)
         registros.extend(extraidos)
 
         if no_leidas:
@@ -367,12 +450,18 @@ def procesar(pdfs: list[Path], salida: Path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
+    parser.add_argument("--asignaciones-agencias", default="[]")
     parser.add_argument("pdfs", nargs="+")
     args = parser.parse_args()
 
+    try:
+        asignaciones_agencias = json.loads(args.asignaciones_agencias)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Las asignaciones de agencias no tienen un formato valido.") from exc
+
     pdfs = [Path(pdf) for pdf in args.pdfs]
     salida = Path(args.output)
-    resultado = procesar(pdfs, salida)
+    resultado = procesar(pdfs, salida, asignaciones_agencias)
     print(json.dumps(resultado, ensure_ascii=False))
 
 
