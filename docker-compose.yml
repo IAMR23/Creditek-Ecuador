@@ -61,6 +61,11 @@ services:
       GHL_TOKEN: ${GHL_TOKEN}
       GHL_PIPELINE_ID: ${GHL_PIPELINE_ID}
       GHL_BASE_URL: ${GHL_BASE_URL}
+      GHL_WEBHOOK_SECRET: ${GHL_WEBHOOK_SECRET}
+      META_API_VERSION: ${META_API_VERSION}
+      META_DATASET_ID: ${META_DATASET_ID}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN}
+      META_PAGE_ID: ${META_PAGE_ID}
       DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}
     volumes:
       - ./backend/uploads:/app/uploads

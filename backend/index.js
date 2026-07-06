@@ -204,10 +204,10 @@ connectDB()
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
+    app.use("/api/meta", require("./routes/metaRoutes"));
     app.use("/api/facebook", require("./routes/facebookWebhookRoutes"));
     console.log(
-      "Carpeta uploads que Express está usando:",
-      path.join(__dirname, "uploads")
+      "Carpeta uploads que Express está usando:", 
     );
 
     server.listen(PORT, "0.0.0.0", () => {
