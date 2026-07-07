@@ -96,6 +96,7 @@ const buildWhatsappPurchasePayload = (input, config, options = {}) => {
   const userData = {
     page_id: compactString(config.pageId),
     ctwa_clid: compactString(input.ctwaClid),
+    client_user_agent: compactString(input.clientUserAgent) || "GHL-Webhook",
   };
 
   addHashedField(userData, "ph", input.phone, normalizePhone);
@@ -121,6 +122,7 @@ const buildWhatsappPurchasePayload = (input, config, options = {}) => {
         event_time: options.eventTime || Math.floor(Date.now() / 1000),
         action_source: "business_messaging",
         messaging_channel: "whatsapp",
+        event_source_url: compactString(input.sourceUrl) || "https://wa.me/593984065314",
         event_id: `ghl_purchase_${eventSourceId}`,
         user_data: userData,
         custom_data: customData,

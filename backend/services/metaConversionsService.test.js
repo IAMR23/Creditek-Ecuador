@@ -24,6 +24,8 @@ describe("metaConversionsService", () => {
         currency: "",
         productName: "HONOR X5c Plus",
         productCategory: "Celulares",
+        sourceUrl: "https://wa.me/593999999999",
+        clientUserAgent: "GHL-Test-Agent",
       },
       {
         pageId: "page_123",
@@ -40,10 +42,12 @@ describe("metaConversionsService", () => {
           event_time: 1770000000,
           action_source: "business_messaging",
           messaging_channel: "whatsapp",
+          event_source_url: "https://wa.me/593999999999",
           event_id: "ghl_purchase_opp_001",
           user_data: {
             page_id: "page_123",
             ctwa_clid: "ctwa-123",
+            client_user_agent: "GHL-Test-Agent",
             ph: sha256("593984065314"),
             em: sha256("cliente@example.com"),
             fn: sha256("juan"),
@@ -76,6 +80,8 @@ describe("metaConversionsService", () => {
     );
 
     expect(payload.data[0].event_id).toBe("ghl_purchase_contact_001");
+    expect(payload.data[0].event_source_url).toBe("https://wa.me/593984065314");
+    expect(payload.data[0].user_data.client_user_agent).toBe("GHL-Webhook");
     expect(payload.data[0].custom_data.value).toBe(0);
   });
 
