@@ -60,9 +60,7 @@ import EditarVentaCompletaVendedores from "./pages/Vendedores/EditarVentaComplet
 import CrearEntregaCompleta from "./pages/Vendedores/CrearEntregaCompleta";
 import EditarEntregaCompleta from "./pages/Vendedores/EditarEntregaCompleta";
 import Permisos from "./pages/Admin/Permisos";
-import AsignarPermisos from "./pages/Admin/AsignarPermisos";
 import AsignarPermisosUsuarioAgencia from "./pages/Admin/AsignarPermisosUsuarioAgencia";
-import UsuariosConPermisos from "./pages/Admin/UsuariosConPermisos";
 import SeleccionarModo from "./pages/SeleccionarModo";
 import MisEntregasPendientes from "./pages/Logistica/MisEntregasPendientes";
 import MisEntregasRealizadas from "./pages/Logistica/MisEntregasRealizadas";
@@ -400,14 +398,9 @@ function App() {
                 />
                 <Route path="postulaciones" element={protect(<Postulaciones />, "/postulaciones")} />
                 <Route path="permisos" element={protect(<Permisos />, "/permisos")} />
-                <Route path="asignar-permisos" element={protect(<AsignarPermisos />, "/asignar-permisos")} />
                 <Route
-                  path="asignar-permisos-usuario-agencia"
-                  element={protect(<AsignarPermisosUsuarioAgencia />, "/asignar-permisos-usuario-agencia")}
-                />
-                <Route
-                  path="usuarios-permisos"
-                  element={protect(<UsuariosConPermisos />, "/usuarios-permisos")}
+                  path="asignar-permisos"
+                  element={protect(<AsignarPermisosUsuarioAgencia />, "/asignar-permisos")}
                 />
                 <Route path="revisar-cajas" element={protect(<CierresCajaTabla />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />

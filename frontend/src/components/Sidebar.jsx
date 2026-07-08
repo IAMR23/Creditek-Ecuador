@@ -271,19 +271,9 @@ export default function Sidebar({ auth }) {
             path: "/permisos",
           },
           {
-            label: "Asignar Permisos",
+            label: "Permisos de usuarios",
             icon: <MdSecurity size={20} />,
             path: "/asignar-permisos",
-          },
-          {
-            label: "Asignar Permisos Usuario",
-            icon: <MdSecurity size={20} />,
-            path: "/asignar-permisos-usuario-agencia",
-          },
-          {
-            label: "Usuarios con Permisos",
-            icon: <MdSecurity size={20} />,
-            path: "/usuarios-permisos",
           },
         ],
       },

@@ -90,8 +90,6 @@ export const ROUTE_PERMISSIONS = {
   "/usuarios-agencias": "Administracion",
   "/permisos": "Administracion",
   "/asignar-permisos": "Administracion",
-  "/asignar-permisos-usuario-agencia": "Administracion",
-  "/usuarios-permisos": "Administracion",
   "/recuperar-permisos": "Administracion",
   "/recuperar-permisos/catalogo": "Administracion",
   "/seleccionar-modo": "Administracion",

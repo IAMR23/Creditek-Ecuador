@@ -1,55 +1,98 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
-import { API_URL } from "../../../config";
+import {
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  ShieldPlus,
+  Users,
+} from "lucide-react";
+import { api } from "../../api/client";
 import { SYSTEM_ROUTES } from "../../config/routePermissions";
+
+const getPermisosIds = (usuario) =>
+  (usuario?.permisosAsignados || [])
+    .map((item) => item.permiso?.id)
+    .filter(Boolean);
+
+const getPermisosNombres = (usuario) =>
+  (usuario?.permisosAsignados || [])
+    .map((item) => item.permiso?.nombre)
+    .filter(Boolean);
 
 export default function AsignarPermisosUsuarioAgencia() {
   const [usuarios, setUsuarios] = useState([]);
   const [permisos, setPermisos] = useState([]);
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(null);
   const [permisosSeleccionados, setPermisosSeleccionados] = useState([]);
+  const [busqueda, setBusqueda] = useState("");
+  const [loading, setLoading] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
+  const usuariosFiltrados = useMemo(() => {
+    const term = busqueda.trim().toLowerCase();
+    if (!term) return usuarios;
+
+    return usuarios.filter((usuario) => {
+      const permisosTexto = getPermisosNombres(usuario).join(" ");
+      return `${usuario.nombre || ""} ${usuario.email || ""} ${usuario.rol?.nombre || ""} ${permisosTexto}`
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [busqueda, usuarios]);
+
+  const permisosPorSeccion = useMemo(() => {
+    return permisos.reduce((acc, permiso) => {
+      const key = permiso.nombre || "Sin nombre";
+      acc[key] = permiso;
+      return acc;
+    }, {});
+  }, [permisos]);
+
   const cargarUsuarios = async () => {
-    try {
-      const { data } = await axios.get(`${API_URL}/api/usuario-permisos/usuarios-permisos`);
-      setUsuarios(data || []);
-      return data || [];
-    } catch (error) {
-      console.error(error);
-      Swal.fire("Error", "No se pudieron cargar usuarios", "error");
-      return [];
-    }
+    const { data } = await api.get("/api/usuario-permisos/usuarios-permisos");
+    setUsuarios(data || []);
+    return data || [];
   };
 
   const cargarPermisos = async () => {
+    const { data } = await api.post("/api/permisos-catalogo/sincronizar", {
+      permisos: SYSTEM_ROUTES.map((ruta) => ({
+        nombre: ruta.permission,
+        descripcion: ruta.descripcion,
+      })),
+    });
+    setPermisos(data || []);
+    return data || [];
+  };
+
+  const cargarTodo = async () => {
+    setLoading(true);
     try {
-      const { data } = await axios.post(`${API_URL}/api/permisos-catalogo/sincronizar`, {
-        permisos: SYSTEM_ROUTES.map((ruta) => ({
-          nombre: ruta.permission,
-          descripcion: ruta.descripcion,
-        })),
-      });
-      setPermisos(data || []);
+      const [usuariosData] = await Promise.all([cargarUsuarios(), cargarPermisos()]);
+
+      if (usuarioSeleccionado) {
+        const actualizado = usuariosData.find(
+          (usuario) => usuario.id === usuarioSeleccionado.id,
+        );
+        if (actualizado) seleccionarUsuario(actualizado);
+      }
     } catch (error) {
       console.error(error);
-      Swal.fire("Error", "No se pudieron cargar permisos", "error");
+      Swal.fire("Error", "No se pudieron cargar usuarios y permisos", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    cargarUsuarios();
-    cargarPermisos();
+    cargarTodo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const seleccionarUsuario = (usuario) => {
     setUsuarioSeleccionado(usuario);
-    setPermisosSeleccionados(
-      (usuario.permisosAsignados || [])
-        .map((p) => p.permiso?.id)
-        .filter(Boolean),
-    );
+    setPermisosSeleccionados(getPermisosIds(usuario));
   };
 
   const togglePermiso = (permisoId) => {
@@ -66,9 +109,8 @@ export default function AsignarPermisosUsuarioAgencia() {
     }
 
     setGuardando(true);
-
     try {
-      await axios.post(`${API_URL}/api/usuario-permisos`, {
+      await api.post("/api/usuario-permisos", {
         usuarioId: usuarioSeleccionado.id,
         permisoIds: permisosSeleccionados,
       });
@@ -78,102 +120,263 @@ export default function AsignarPermisosUsuarioAgencia() {
         (usuario) => usuario.id === usuarioSeleccionado.id,
       );
 
-      if (usuarioActualizado) {
-        seleccionarUsuario(usuarioActualizado);
-      }
+      if (usuarioActualizado) seleccionarUsuario(usuarioActualizado);
 
       Swal.fire("Listo", "Permisos actualizados correctamente", "success");
     } catch (error) {
       console.error(error);
-      const mensaje =
-        error.response?.data?.message || "No se pudieron actualizar permisos";
-      Swal.fire("Error", mensaje, "error");
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudieron actualizar permisos",
+        "error",
+      );
     } finally {
       setGuardando(false);
     }
   };
 
+  const seleccionarTodos = () => {
+    setPermisosSeleccionados(permisos.map((permiso) => permiso.id));
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <h1 className="mb-6 text-2xl font-bold text-green-600">
-        Asignar permisos a usuarios
-      </h1>
-
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <div className="rounded bg-white p-4 shadow">
-          <h2 className="mb-4 font-semibold">Usuarios</h2>
-
-          <ul className="max-h-[70vh] space-y-2 overflow-y-auto">
-            {usuarios.map((usuario) => (
-              <li
-                key={usuario.id}
-                onClick={() => seleccionarUsuario(usuario)}
-                className={`cursor-pointer rounded border p-3 ${
-                  usuarioSeleccionado?.id === usuario.id
-                    ? "border-green-500 bg-green-100"
-                    : "hover:bg-gray-100"
-                }`}
-              >
-                <p className="font-medium">{usuario.nombre}</p>
-                <p className="text-sm text-gray-500">{usuario.email}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded bg-white p-4 shadow md:col-span-2">
-          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-semibold">Permisos</h2>
-            {usuarioSeleccionado && (
-              <span className="text-sm text-gray-500">
-                {permisosSeleccionados.length} seleccionados
-              </span>
-            )}
-          </div>
-
-          {!usuarioSeleccionado ? (
-            <p className="text-gray-500">
-              Seleccione un usuario para asignar permisos.
-            </p>
-          ) : (
-            <>
-              <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {permisos.map((p) => (
-                  <label
-                    key={p.id}
-                    className="flex cursor-pointer items-center gap-2 rounded border p-2 hover:bg-green-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={permisosSeleccionados.includes(p.id)}
-                      onChange={() => togglePermiso(p.id)}
-                      className="accent-green-500"
-                    />
-                    <span>{p.nombre}</span>
-                  </label>
-                ))}
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-5">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-emerald-700">
+                <ShieldCheck size={18} />
+                Administracion
               </div>
+              <h1 className="mt-2 text-2xl font-bold text-slate-900">
+                Permisos de usuarios
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Asigna, consulta y actualiza permisos desde una sola pantalla.
+              </p>
+            </div>
 
-              <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={cargarTodo}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              Actualizar
+            </button>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
+          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 p-4">
+              <div className="flex items-center gap-2 font-semibold text-slate-900">
+                <Users size={18} />
+                Usuarios
+              </div>
+              <div className="relative mt-3">
+                <Search
+                  className="pointer-events-none absolute left-3 top-2.5 text-slate-400"
+                  size={18}
+                />
+                <input
+                  value={busqueda}
+                  onChange={(event) => setBusqueda(event.target.value)}
+                  placeholder="Buscar usuario o permiso"
+                  className="w-full rounded-lg border border-slate-300 py-2 pl-10 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                />
+              </div>
+            </div>
+
+            <div className="max-h-[62vh] overflow-y-auto p-3">
+              {usuariosFiltrados.map((usuario) => (
                 <button
                   type="button"
-                  onClick={() => setPermisosSeleccionados([])}
-                  disabled={guardando}
-                  className="rounded border px-4 py-2 text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+                  key={usuario.id}
+                  onClick={() => seleccionarUsuario(usuario)}
+                  className={`mb-2 w-full rounded-lg border p-3 text-left transition ${
+                    usuarioSeleccionado?.id === usuario.id
+                      ? "border-emerald-500 bg-emerald-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
                 >
-                  Quitar todos
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{usuario.nombre}</p>
+                      <p className="text-xs text-slate-500">{usuario.email}</p>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                        usuario.activo
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {usuario.activo ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {getPermisosIds(usuario).length} permisos asignados
+                  </p>
                 </button>
-                <button
-                  onClick={guardarPermisos}
-                  disabled={guardando}
-                  className="rounded bg-green-600 px-6 py-2 text-white hover:bg-green-700 disabled:opacity-60"
-                >
-                  {guardando ? "Guardando..." : "Guardar permisos"}
-                </button>
+              ))}
+
+              {!usuariosFiltrados.length && (
+                <p className="px-3 py-8 text-center text-sm text-slate-500">
+                  No hay usuarios para la busqueda actual.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2 font-semibold text-slate-900">
+                    <ShieldPlus size={18} />
+                    Editor de permisos
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {usuarioSeleccionado
+                      ? `${usuarioSeleccionado.nombre} - ${permisosSeleccionados.length} permisos seleccionados`
+                      : "Seleccione un usuario para editar sus permisos."}
+                  </p>
+                </div>
+
+                {usuarioSeleccionado && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={seleccionarTodos}
+                      disabled={guardando}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    >
+                      Seleccionar todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPermisosSeleccionados([])}
+                      disabled={guardando}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
+                    >
+                      Quitar todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={guardarPermisos}
+                      disabled={guardando}
+                      className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                    >
+                      {guardando ? "Guardando..." : "Guardar permisos"}
+                    </button>
+                  </div>
+                )}
               </div>
-            </>
-          )}
+            </div>
+
+            <div className="p-4">
+              {!usuarioSeleccionado ? (
+                <div className="rounded-lg border border-dashed border-slate-300 px-4 py-12 text-center text-sm text-slate-500">
+                  Seleccione un usuario del listado para empezar.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {Object.values(permisosPorSeccion).map((permiso) => (
+                    <label
+                      key={permiso.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 transition hover:bg-emerald-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={permisosSeleccionados.includes(permiso.id)}
+                        onChange={() => togglePermiso(permiso.id)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-900">
+                          {permiso.nombre}
+                        </span>
+                        {permiso.descripcion ? (
+                          <span className="block text-xs text-slate-500">
+                            {permiso.descripcion}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
         </div>
+
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-4">
+            <h2 className="font-semibold text-slate-900">Usuarios con permisos</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
+                <tr>
+                  <th className="px-4 py-3">Usuario</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Rol</th>
+                  <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">Permisos</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {usuariosFiltrados.map((usuario) => (
+                  <tr key={usuario.id} className="transition hover:bg-slate-50">
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {usuario.nombre}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{usuario.email}</td>
+                    <td className="px-4 py-3">{usuario.rol?.nombre || "Sin rol"}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          usuario.activo
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {usuario.activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {getPermisosNombres(usuario).length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {getPermisosNombres(usuario).map((permiso) => (
+                            <span
+                              key={`${usuario.id}-${permiso}`}
+                              className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+                            >
+                              {permiso}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">Sin permisos</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+
+                {!usuariosFiltrados.length && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
+                      No hay registros.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   );
