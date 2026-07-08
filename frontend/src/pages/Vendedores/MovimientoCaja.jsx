@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import axios from "axios";
-import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
-import { API_URL } from "../../../config";
+import api from "../../api/client";
 import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
 import { getHoyLocal } from "../../utils/dateUtils";
 import { useAuthUser } from "../../utils/useAuthUser";
@@ -53,7 +51,6 @@ const convertirNumeroDosDecimales = (value) =>
   Number((Number(normalizarNumeroPositivoTexto(value)) || 0).toFixed(2));
 
 export default function MovimientoCaja() {
-  const navigate = useNavigate();
   const [rows, setRows] = useState([{ ...filaVacia }]);
   const [loading, setLoading] = useState(false);
   const [estadoLoading, setEstadoLoading] = useState(true);
@@ -98,25 +95,15 @@ export default function MovimientoCaja() {
     );
   };
 
-  const manejarSesionExpirada = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("activeMode");
-    alert("Sesion expirada. Vuelve a iniciar sesion.");
-    navigate("/login");
-  };
-
   const cargarEstadoCierre = async (fecha = fechaCaja) => {
     try {
       setEstadoLoading(true);
-      const res = await axios.get(`${API_URL}/api/contabilidad/cierre-caja/estado`, {
+      const res = await api.get("/api/contabilidad/cierre-caja/estado", {
         params: { fecha },
       });
       setCierreActual(res.data?.cierre || null);
     } catch (error) {
       console.error(error?.response?.data || error);
-      if (error?.response?.status === 401) {
-        manejarSesionExpirada();
-      }
     } finally {
       setEstadoLoading(false);
     }
@@ -124,13 +111,6 @@ export default function MovimientoCaja() {
 
   const cerrarCaja = async () => {
     try {
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        alert("Sesión expirada");
-        return;
-      }
-
       if (cierreActual) {
         alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
         return;
@@ -156,14 +136,9 @@ export default function MovimientoCaja() {
           .filter((row) => row.id)
           .filter(filaEsMovimientoValido)
           .map((row) =>
-            axios.put(
-              `${API_URL}/api/movimientos/${row.id}`,
+            api.put(
+              `/api/movimientos/${row.id}`,
               construirPayloadMovimiento(row),
-              {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              },
             ),
           ),
       );
@@ -210,11 +185,7 @@ export default function MovimientoCaja() {
         movimientosPendientes,
       };
 
-      const response = await axios.post(`${API_URL}/api/contabilidad/cierre-caja`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await api.post("/api/contabilidad/cierre-caja", payload);
 
       await Swal.fire("Cierre de caja completado", "", "success");
       setCierreActual(response.data?.cierre || null);
@@ -224,10 +195,6 @@ export default function MovimientoCaja() {
       setDetalles(denominacionesBase);
     } catch (error) {
       console.error(error?.response?.data || error);
-      if (error?.response?.status === 401) {
-        manejarSesionExpirada();
-        return;
-      }
       if (error?.response?.status === 409) {
         setCierreActual(error.response.data?.cierre || { fecha: fechaCaja });
       }
@@ -264,20 +231,11 @@ export default function MovimientoCaja() {
 
   const cargarMovimientos = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-
-      const res = await axios.get(`${API_URL}/api/movimientos`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await api.get("/api/movimientos");
 
       setRows(mapearMovimientos(res.data.data));
     } catch (error) {
       console.error(error);
-      if (error?.response?.status === 401) {
-        manejarSesionExpirada();
-      }
     }
   }, []);
 
@@ -338,13 +296,6 @@ export default function MovimientoCaja() {
       if (!fila?.id) return;
       if (!validarFilaMovimiento(fila)) return;
 
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        alert("SesiÃ³n expirada");
-        return;
-      }
-
       if (cierreActual) {
         alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
         return;
@@ -352,14 +303,9 @@ export default function MovimientoCaja() {
 
       setLoading(true);
 
-      await axios.put(
-        `${API_URL}/api/movimientos/${fila.id}`,
+      await api.put(
+        `/api/movimientos/${fila.id}`,
         construirPayloadMovimiento(fila),
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
       );
 
       await cargarMovimientos();
@@ -371,10 +317,6 @@ export default function MovimientoCaja() {
       });
     } catch (error) {
       console.error(error?.response?.data || error);
-      if (error?.response?.status === 401) {
-        manejarSesionExpirada();
-        return;
-      }
       if (error?.response?.status === 409) {
         setCierreActual({ fecha: fechaCaja });
       }
@@ -390,13 +332,6 @@ export default function MovimientoCaja() {
 
       if (!validarFilaMovimiento(ultimaFila)) return;
 
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        alert("Sesión expirada");
-        return;
-      }
-
       if (cierreActual) {
         alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
         return;
@@ -404,23 +339,14 @@ export default function MovimientoCaja() {
 
       setLoading(true);
 
-      await axios.post(
-        `${API_URL}/api/movimientos`,
+      await api.post(
+        "/api/movimientos",
         construirPayloadMovimiento(ultimaFila),
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
       );
 
       await cargarMovimientos();
     } catch (error) {
       console.error(error?.response?.data || error);
-      if (error?.response?.status === 401) {
-        manejarSesionExpirada();
-        return;
-      }
       if (error?.response?.status === 409) { 
         setCierreActual({ fecha: fechaCaja });
       }
@@ -435,20 +361,12 @@ export default function MovimientoCaja() {
 
     try {
       if (fila.id) {
-        await axios.delete(`${API_URL}/api/movimientos/${fila.id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        });
+        await api.delete(`/api/movimientos/${fila.id}`);
       }
 
       await cargarMovimientos();
     } catch (error) {
       console.error("Error al eliminar fila:", error);
-      if (error?.response?.status === 401) {
-        manejarSesionExpirada();
-        return;
-      }
       alert("No se pudo eliminar la fila");
     }
   };
