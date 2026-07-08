@@ -95,6 +95,9 @@ import VerPlanesBatalla from "./pages/Admin/VerPlanesBatalla";
 import SecretariosEjecutivos from "./pages/Admin/SecretariosEjecutivos";
 import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
 import Nomina from "./pages/Contabilidad/Nomina";
+import RolesPago from "./pages/Contabilidad/RolesPago";
+import Comisiones from "./pages/Contabilidad/Comisiones";
+import PagosComisiones from "./pages/Contabilidad/PagosComisiones";
 import ExtraccionReportesCaja from "./pages/Contabilidad/ExtraccionReportesCaja";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
@@ -409,6 +412,18 @@ function App() {
                 <Route path="revisar-cajas" element={protect(<CierresCajaTabla />, "/revisar-cajas")} />
                 <Route path="revisar-cajas2" element={protect(<CierresCajaTabla />, "/revisar-cajas2")} />
                 <Route path="nomina" element={protect(<Nomina />, "/nomina")} />
+                <Route
+                  path="contabilidad/roles-pago"
+                  element={protect(<RolesPago />, "/contabilidad/roles-pago")}
+                />
+                <Route
+                  path="contabilidad/comisiones"
+                  element={protect(<Comisiones />, "/contabilidad/comisiones")}
+                />
+                <Route
+                  path="contabilidad/pagos-comisiones"
+                  element={protect(<PagosComisiones />, "/contabilidad/pagos-comisiones")}
+                />
                 <Route
                   path="contabilidad/extraccion-reportes-caja"
                   element={protect(

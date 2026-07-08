@@ -71,6 +71,9 @@ export const ROUTE_PERMISSIONS = {
   "/revisar-cajas": ["Contabilidad", "Administracion"],
   "/revisar-cajas2": ["Contabilidad", "Administracion"],
   "/nomina": ["Contabilidad", "Administracion"],
+  "/contabilidad/roles-pago": ["Contabilidad", "Administracion"],
+  "/contabilidad/comisiones": ["Contabilidad", "Administracion"],
+  "/contabilidad/pagos-comisiones": ["Contabilidad", "Administracion"],
   "/contabilidad/extraccion-reportes-caja": ["Contabilidad", "Administracion"],
 
   "/entregas-auditoria": "Auditoria",

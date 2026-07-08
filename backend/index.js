@@ -193,6 +193,9 @@ connectDB()
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/contabilidad/reportes-caja", require("./routes/Contabilidad/reportesCajaRoutes"));
     app.use("/api/contabilidad/nomina", require("./routes/Contabilidad/nominaRoutes"));
+    app.use("/api/contabilidad/roles-pago", require("./routes/Contabilidad/rolesPagoRoutes"));
+    app.use("/api/contabilidad/comisiones", require("./routes/Contabilidad/comisionesConfiguracionRoutes"));
+    app.use("/api/contabilidad/pagos-comisiones", require("./routes/Contabilidad/pagosComisionesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));

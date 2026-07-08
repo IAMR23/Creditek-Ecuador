@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
+import { api } from "../../api/client";
 
 const normalizeText = (value) => (value?.trim() ? value.trim() : null);
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [rolesPago, setRolesPago] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const [filters, setFilters] = useState({
@@ -23,6 +25,7 @@ export default function Usuarios() {
     password: "",
     rolId: "",
     rolIds: [],
+    rolPagoId: "",
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
@@ -40,6 +43,7 @@ export default function Usuarios() {
     password: "",
     rolId: "",
     rolIds: [],
+    rolPagoId: "",
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
@@ -64,6 +68,7 @@ export default function Usuarios() {
       password: "",
       rolId: rolIds[0] || "",
       rolIds,
+      rolPagoId: usuario.rolPagoId ? String(usuario.rolPagoId) : "",
       fechaIngreso: usuario.fechaIngreso || "",
       fechaSalida: usuario.fechaSalida || "",
       numeroCuenta: usuario.numeroCuenta || "",
@@ -85,6 +90,7 @@ export default function Usuarios() {
       password: "",
       rolId: "",
       rolIds: [],
+      rolPagoId: "",
       fechaIngreso: "",
       fechaSalida: "",
       numeroCuenta: "",
@@ -107,6 +113,16 @@ export default function Usuarios() {
     setRoles(res.data);
   };
 
+  const cargarRolesPago = async () => {
+    try {
+      const { data } = await api.get("/api/contabilidad/roles-pago");
+      setRolesPago(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando roles de pago", error);
+      setRolesPago([]);
+    }
+  };
+
   const toggleRol = (estado, setEstado, rolId) => {
     setEstado((prev) => {
       const rolIds = prev.rolIds || [];
@@ -126,6 +142,7 @@ export default function Usuarios() {
   useEffect(() => {
     cargarUsuarios();
     cargarRoles();
+    cargarRolesPago();
   }, []);
 
   const crearUsuario = async (e) => {
@@ -139,6 +156,7 @@ export default function Usuarios() {
         password: form.password,
         rolId: form.rolIds[0] || form.rolId,
         rolIds: form.rolIds,
+        rolPagoId: form.rolPagoId || null,
         fechaIngreso: form.fechaIngreso || null,
         fechaSalida: form.fechaSalida || null,
         numeroCuenta: normalizeText(form.numeroCuenta),
@@ -154,6 +172,7 @@ export default function Usuarios() {
         password: "",
         rolId: "",
         rolIds: [],
+        rolPagoId: "",
         fechaIngreso: "",
         fechaSalida: "",
         numeroCuenta: "",
@@ -191,6 +210,7 @@ export default function Usuarios() {
         password: editForm.password || undefined,
         rolId: editForm.rolIds[0] || editForm.rolId,
         rolIds: editForm.rolIds,
+        rolPagoId: editForm.rolPagoId || null,
         fechaIngreso: editForm.fechaIngreso || null,
         fechaSalida: editForm.fechaSalida || null,
         numeroCuenta: normalizeText(editForm.numeroCuenta),
@@ -368,6 +388,24 @@ export default function Usuarios() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Cargo salarial
+                </label>
+                <select
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.rolPagoId}
+                  onChange={(e) => setForm({ ...form, rolPagoId: e.target.value })}
+                >
+                  <option value="">Sin cargo salarial</option>
+                  {rolesPago.map((rolPago) => (
+                    <option key={rolPago.id} value={rolPago.id}>
+                      {rolPago.nivel} - {rolPago.cargo}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1.5">
@@ -558,6 +596,7 @@ export default function Usuarios() {
                   <th className="px-6 py-4 text-left">Cédula</th>
                   <th className="px-6 py-4 text-left">Contacto</th>
                   <th className="px-6 py-4 text-left">Rol</th>
+                  <th className="px-6 py-4 text-left">Cargo salarial</th>
                   <th className="px-6 py-4 text-left">Ingreso</th>
                   <th className="px-6 py-4 text-left">Estado</th>
                   <th className="px-6 py-4 text-center">Acciones</th>
@@ -578,6 +617,15 @@ export default function Usuarios() {
 
                     <td className="px-6 py-4 text-sm text-slate-700">
                       {u.cedula}
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {u.rolPago?.cargo || "-"}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {u.rolPago?.nivel || ""}
+                      </p>
                     </td>
 
                     <td className="px-6 py-4">
@@ -641,7 +689,7 @@ export default function Usuarios() {
 
                 {usuariosFiltrados.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="px-6 py-10 text-center">
+                    <td colSpan="8" className="px-6 py-10 text-center">
                       <p className="font-semibold text-slate-700">
                         No se encontraron usuarios
                       </p>
@@ -693,6 +741,15 @@ export default function Usuarios() {
                       {(u.roles?.length ? u.roles : u.rol ? [u.rol] : [])
                         .map((rol) => rol.nombre)
                         .join(", ") || "Sin rol"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      Cargo salarial
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      {u.rolPago?.cargo || "-"}
                     </p>
                   </div>
 
@@ -867,6 +924,26 @@ export default function Usuarios() {
                         </label>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Cargo salarial
+                    </label>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.rolPagoId}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, rolPagoId: e.target.value })
+                      }
+                    >
+                      <option value="">Sin cargo salarial</option>
+                      {rolesPago.map((rolPago) => (
+                        <option key={rolPago.id} value={rolPago.id}>
+                          {rolPago.nivel} - {rolPago.cargo}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="space-y-1.5">

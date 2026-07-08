@@ -16,6 +16,7 @@ import {
 import { API_URL } from "../../../config";
 
 const API_ENDPOINT = `${API_URL}/api/contabilidad/nomina`;
+const ROLES_PAGO_ENDPOINT = `${API_URL}/api/contabilidad/roles-pago`;
 
 const ESTADOS = [
   { value: "", label: "Todos" },
@@ -59,14 +60,27 @@ const authHeaders = () => ({
 const getBenefitLabel = (tipoBeneficio) =>
   BENEFICIOS.find((beneficio) => beneficio.value === tipoBeneficio)?.label || tipoBeneficio;
 
+const getIngresoAproximado = (registro) => {
+  const min = registro.ingresoMin;
+  const max = registro.ingresoMax;
+
+  if (min === null || min === undefined || max === null || max === undefined) {
+    return "";
+  }
+
+  return `${moneyFormatter.format(Number(min || 0))} - ${moneyFormatter.format(Number(max || 0))}`;
+};
+
 export default function Nomina() {
   const [registros, setRegistros] = useState([]);
   const [agencias, setAgencias] = useState([]);
+  const [rolesPago, setRolesPago] = useState([]);
   const [filters, setFilters] = useState(emptyFilters);
   const [loading, setLoading] = useState(false);
   const [modalMode, setModalMode] = useState(null);
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState({
+    rolPagoId: "",
     sueldo: "",
     cargo: "",
     estado: "ACTIVO",
@@ -116,8 +130,21 @@ export default function Nomina() {
     }
   };
 
+  const fetchRolesPago = async () => {
+    try {
+      const { data } = await axios.get(ROLES_PAGO_ENDPOINT, {
+        headers: authHeaders(),
+      });
+      setRolesPago(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando roles de pago", error);
+      setRolesPago([]);
+    }
+  };
+
   useEffect(() => {
     fetchAgencias();
+    fetchRolesPago();
   }, []);
 
   useEffect(() => {
@@ -129,6 +156,7 @@ export default function Nomina() {
     setSelected(registro);
     setModalMode(mode);
     setForm({
+      rolPagoId: registro.rolPagoId ? String(registro.rolPagoId) : "",
       sueldo: registro.sueldo ?? "",
       cargo: registro.cargo || "",
       estado: registro.estado || "ACTIVO",
@@ -162,6 +190,22 @@ export default function Nomina() {
     }));
   };
 
+  const handleRolPagoChange = (rolPagoId) => {
+    const rolPago = rolesPago.find((rol) => String(rol.id) === String(rolPagoId));
+
+    if (!rolPago) {
+      setForm((prev) => ({ ...prev, rolPagoId }));
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      rolPagoId: String(rolPago.id),
+      cargo: rolPago.cargo,
+      sueldo: rolPago.sueldoTotal,
+    }));
+  };
+
   const handleSave = async () => {
     if (!selected) return;
 
@@ -171,6 +215,7 @@ export default function Nomina() {
         {
           sueldo: form.sueldo,
           cargo: form.cargo,
+          rolPagoId: form.rolPagoId || null,
           estado: form.estado,
           observaciones: form.observaciones,
           beneficios: form.beneficios,
@@ -190,6 +235,10 @@ export default function Nomina() {
   const beneficiosActivos = (beneficios = []) =>
     beneficios.filter((beneficio) => beneficio.activo).map((beneficio) => beneficio.tipoBeneficio);
 
+  const rolPagoSeleccionado = rolesPago.find(
+    (rol) => String(rol.id) === String(form.rolPagoId),
+  );
+
   const exportarExcel = () => {
     if (!registros.length) {
       Swal.fire("Sin datos", "No hay registros para exportar", "info");
@@ -203,6 +252,13 @@ export default function Nomina() {
       "Fecha de ingreso": registro.fechaIngreso || "",
       "Fecha de salida": registro.fechaSalida || "",
       "Tiempo trabajado": registro.tiempoTrabajado || "",
+      Nivel: registro.rolPagoNivel || "",
+      "Rol de pago": registro.rolPagoCargo || "",
+      "Sueldo base": registro.sueldoBase ?? "",
+      "Sueldo extra": registro.sueldoExtra ?? "",
+      Total: registro.sueldoTotal ?? Number(registro.sueldo || 0),
+      Comisiones: registro.comisiones || "",
+      "Ingreso aproximado": getIngresoAproximado(registro),
       Cargo: registro.cargo || "",
       Sueldo: Number(registro.sueldo || 0),
       "CI / Cedula": registro.cedula || "",
@@ -225,6 +281,13 @@ export default function Nomina() {
       { wch: 16 },
       { wch: 16 },
       { wch: 22 },
+      { wch: 18 },
+      { wch: 30 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 38 },
+      { wch: 24 },
       { wch: 24 },
       { wch: 12 },
       { wch: 15 },
@@ -338,7 +401,7 @@ export default function Nomina() {
 
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="min-w-[1600px] w-full text-left text-sm">
+            <table className="min-w-[2400px] w-full text-left text-sm">
               <thead className="bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-4 py-3">#</th>
@@ -347,6 +410,13 @@ export default function Nomina() {
                   <th className="px-4 py-3">Fecha ingreso</th>
                   <th className="px-4 py-3">Fecha salida</th>
                   <th className="px-4 py-3">Tiempo trabajado</th>
+                  <th className="px-4 py-3">Nivel</th>
+                  <th className="px-4 py-3">Rol de pago</th>
+                  <th className="px-4 py-3">Sueldo base</th>
+                  <th className="px-4 py-3">Sueldo extra</th>
+                  <th className="px-4 py-3">Total</th>
+                  <th className="px-4 py-3">Comisiones</th>
+                  <th className="px-4 py-3">Ingreso aproximado</th>
                   <th className="px-4 py-3">Cargo</th>
                   <th className="px-4 py-3">Sueldo</th>
                   <th className="px-4 py-3">CI / Cedula</th>
@@ -363,7 +433,7 @@ export default function Nomina() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={16} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={24} className="px-4 py-10 text-center text-slate-500">
                       Cargando nomina...
                     </td>
                   </tr>
@@ -379,6 +449,31 @@ export default function Nomina() {
                         <td className="px-4 py-3">{formatDate(registro.fechaIngreso)}</td>
                         <td className="px-4 py-3">{formatDate(registro.fechaSalida)}</td>
                         <td className="px-4 py-3">{registro.tiempoTrabajado || "-"}</td>
+                        <td className="px-4 py-3">{registro.rolPagoNivel || "-"}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">
+                          {registro.rolPagoCargo || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {registro.sueldoBase === null || registro.sueldoBase === undefined
+                            ? "-"
+                            : moneyFormatter.format(Number(registro.sueldoBase || 0))}
+                        </td>
+                        <td className="px-4 py-3">
+                          {registro.sueldoExtra === null || registro.sueldoExtra === undefined
+                            ? "-"
+                            : moneyFormatter.format(Number(registro.sueldoExtra || 0))}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-900">
+                          {moneyFormatter.format(
+                            Number(registro.sueldoTotal ?? registro.sueldo ?? 0),
+                          )}
+                        </td>
+                        <td className="px-4 py-3 max-w-[260px]">
+                          {registro.comisiones || "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {getIngresoAproximado(registro) || "-"}
+                        </td>
                         <td className="px-4 py-3">{registro.cargo || "-"}</td>
                         <td className="px-4 py-3 font-semibold text-slate-900">
                           {moneyFormatter.format(Number(registro.sueldo || 0))}
@@ -441,7 +536,7 @@ export default function Nomina() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={16} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={24} className="px-4 py-10 text-center text-slate-500">
                       No hay registros para los filtros seleccionados.
                     </td>
                   </tr>
@@ -489,6 +584,54 @@ export default function Nomina() {
 
               <section className="space-y-4 rounded-lg border border-slate-200 p-4">
                 <h3 className="font-semibold text-slate-900">Datos de nomina</h3>
+
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-slate-700">
+                    Rol de pago / Cargo salarial
+                  </span>
+                  <select
+                    value={form.rolPagoId}
+                    disabled={readOnly}
+                    onChange={(event) => handleRolPagoChange(event.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                  >
+                    <option value="">Sin rol de pago</option>
+                    {rolesPago.map((rolPago) => (
+                      <option key={rolPago.id} value={rolPago.id}>
+                        {rolPago.nivel} - {rolPago.cargo}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {rolPagoSeleccionado && (
+                  <div className="grid gap-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-900 sm:grid-cols-2">
+                    <InfoCompact
+                      label="Base"
+                      value={moneyFormatter.format(Number(rolPagoSeleccionado.sueldoBase || 0))}
+                    />
+                    <InfoCompact
+                      label="Extra"
+                      value={moneyFormatter.format(Number(rolPagoSeleccionado.sueldoExtra || 0))}
+                    />
+                    <InfoCompact
+                      label="Total"
+                      value={moneyFormatter.format(Number(rolPagoSeleccionado.sueldoTotal || 0))}
+                    />
+                    <InfoCompact
+                      label="Ingreso aprox."
+                      value={getIngresoAproximado(rolPagoSeleccionado) || "-"}
+                    />
+                    <div className="sm:col-span-2">
+                      <p className="text-xs font-semibold uppercase text-emerald-700">
+                        Comisiones
+                      </p>
+                      <p className="font-medium">
+                        {rolPagoSeleccionado.comisiones || "-"}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <label className="space-y-1">
                   <span className="text-sm font-medium text-slate-700">Cargo</span>
@@ -612,6 +755,15 @@ function Info({ label, value }) {
     <div className="grid grid-cols-[150px_1fr] gap-3 border-b border-slate-100 pb-2 text-sm last:border-0">
       <span className="font-medium text-slate-500">{label}</span>
       <span className="text-slate-900">{value || "-"}</span>
+    </div>
+  );
+}
+
+function InfoCompact({ label, value }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase text-emerald-700">{label}</p>
+      <p className="font-medium">{value || "-"}</p>
     </div>
   );
 }

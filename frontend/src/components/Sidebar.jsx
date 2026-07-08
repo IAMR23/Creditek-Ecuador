@@ -170,6 +170,21 @@ export default function Sidebar({ auth }) {
             path: "/nomina",
           },
           {
+            label: "Roles de pago",
+            icon: <DollarSign size={20} />,
+            path: "/contabilidad/roles-pago",
+          },
+          {
+            label: "Configuracion de Comisiones", 
+            icon: <LucideTicketPercent size={20} />,
+            path: "/contabilidad/comisiones",
+          },
+          {
+            label: "Pagos comisiones",
+            icon: <FileSpreadsheet size={20} />,
+            path: "/contabilidad/pagos-comisiones",
+          },
+          {
             label: "Cierres de Caja",
             icon: <PackageCheck size={20} />,
             path: "/revisar-cajas",

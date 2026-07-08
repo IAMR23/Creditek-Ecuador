@@ -34,7 +34,7 @@ const ESTADOS_ENTREGA = [
   { key: "entregado", label: "Entregado", color: "#16a34a" },
   { key: "pendiente", label: "Pendiente", color: "#f59e0b" },
   { key: "noEntregado", label: "No entregado", color: "#dc2626" },
-  { key: "transito", label: "Transito", color: "#64748b" },
+  { key: "transito", label: "Transito", color: "#2461E8" },
 ];
 
 const toEntregasPorVendedorEstados = (rows = []) =>

@@ -5,6 +5,7 @@ const Agencia = require("../models/Agencia");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const NominaEmpleado = require("../models/NominaEmpleado");
 const { NominaBeneficio, TIPOS_BENEFICIO_NOMINA } = require("../models/NominaBeneficio");
+const RolPago = require("../models/RolPago");
  
 const ESTADOS_NOMINA = ["ACTIVO", "PASIVO"];
 
@@ -22,6 +23,32 @@ const formatoBeneficio = (tipo) =>
     .trim()
     .toUpperCase()
     .replace(/\s+/g, "_");
+
+const calcularSueldoRolPago = (rolPago) =>
+  Number((Number(rolPago.sueldoBase || 0) + Number(rolPago.sueldoExtra || 0)).toFixed(2));
+
+const sincronizarRolPagoUsuarioYNominas = async ({ usuarioId, rolPago }) => {
+  if (!usuarioId) return;
+
+  if (!rolPago) {
+    await Usuario.update({ rolPagoId: null }, { where: { id: usuarioId } });
+    await NominaEmpleado.update(
+      { rolPagoId: null, cargo: null },
+      { where: { usuarioId } },
+    );
+    return;
+  }
+
+  await Usuario.update({ rolPagoId: rolPago.id }, { where: { id: usuarioId } });
+  await NominaEmpleado.update(
+    {
+      rolPagoId: rolPago.id,
+      cargo: rolPago.cargo,
+      sueldo: calcularSueldoRolPago(rolPago),
+    },
+    { where: { usuarioId } },
+  );
+};
 
 const calcularTiempoTrabajado = (fechaIngreso, fechaSalida) => {
   if (!fechaIngreso) return "";
@@ -71,14 +98,18 @@ const asegurarBeneficios = async (nominaEmpleadoId) => {
 };
 
 const asegurarNominaRelacion = async (relacion) => {
+  const rolPagoUsuario = relacion.usuario?.rolPago || null;
+  const sueldoRolPago = rolPagoUsuario ? calcularSueldoRolPago(rolPagoUsuario) : 0;
+
   const [nomina] = await NominaEmpleado.findOrCreate({
     where: { usuarioAgenciaId: relacion.id },
     defaults: {
       usuarioId: relacion.usuarioId,
       usuarioAgenciaId: relacion.id,
+      rolPagoId: rolPagoUsuario?.id || null,
       estado: relacion.usuario?.activo === false || relacion.activo === false ? "PASIVO" : "ACTIVO",
-      sueldo: 0,
-      cargo: null,
+      sueldo: sueldoRolPago,
+      cargo: rolPagoUsuario?.cargo || null,
       observaciones: null,
     },
   });
@@ -97,12 +128,16 @@ const obtenerNominaCompleta = async (id) =>
           {
             model: Usuario,
             as: "usuario",
-            include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+            include: [
+              { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+              { model: RolPago, as: "rolPago" },
+            ],
           },
           { model: Agencia, as: "agencia" },
         ],
       },
       { model: NominaBeneficio, as: "beneficios" },
+      { model: RolPago, as: "rolPago" },
     ],
   });
 
@@ -111,11 +146,25 @@ const serializarNomina = (nomina, relacionFallback = null) => {
   const usuario = relacion?.usuario || {};
   const agencia = relacion?.agencia || {};
   const beneficios = Array.isArray(nomina.beneficios) ? nomina.beneficios : [];
+  const rolPago = nomina.rolPago || usuario.rolPago || null;
+  const sueldoBase = rolPago ? Number(rolPago.sueldoBase || 0) : null;
+  const sueldoExtra = rolPago ? Number(rolPago.sueldoExtra || 0) : null;
+  const sueldoTotal =
+    rolPago ? Number((sueldoBase + sueldoExtra).toFixed(2)) : Number(nomina.sueldo || 0);
 
   return {
     id: nomina.id,
     usuarioId: nomina.usuarioId,
     usuarioAgenciaId: nomina.usuarioAgenciaId,
+    rolPagoId: nomina.rolPagoId || null,
+    rolPagoNivel: rolPago?.nivel || "",
+    rolPagoCargo: rolPago?.cargo || "",
+    sueldoBase,
+    sueldoExtra,
+    sueldoTotal,
+    comisiones: rolPago?.comisiones ?? null,
+    ingresoMin: rolPago?.ingresoMin === null || !rolPago ? null : Number(rolPago.ingresoMin),
+    ingresoMax: rolPago?.ingresoMax === null || !rolPago ? null : Number(rolPago.ingresoMax),
     agenciaId: relacion?.agenciaId || agencia.id || null,
     agencia: agencia.nombre || "",
     nombre: usuario.nombre || "",
@@ -162,7 +211,10 @@ const listarNomina = async ({ agenciaId, estado, nombre, usuarioId } = {}) => {
         model: Usuario,
         as: "usuario",
         where: whereUsuario,
-        include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+        include: [
+          { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+          { model: RolPago, as: "rolPago" },
+        ],
       },
       { model: Agencia, as: "agencia" },
     ],
@@ -193,7 +245,10 @@ const obtenerNominaPorUsuario = async (usuarioId) => {
       {
         model: Usuario,
         as: "usuario",
-        include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+        include: [
+          { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+          { model: RolPago, as: "rolPago" },
+        ],
       },
       { model: Agencia, as: "agencia" },
     ],
@@ -215,7 +270,10 @@ const crearSiNoExiste = async (usuarioAgenciaId) => {
       {
         model: Usuario,
         as: "usuario",
-        include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+        include: [
+          { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+          { model: RolPago, as: "rolPago" },
+        ],
       },
       { model: Agencia, as: "agencia" },
     ],
@@ -260,13 +318,57 @@ const actualizarNomina = async (id, payload = {}) => {
   }
 
   const cambios = {};
-  if (payload.sueldo !== undefined) cambios.sueldo = Number(payload.sueldo) || 0;
-  if (payload.cargo !== undefined) cambios.cargo = payload.cargo || null;
+  let rolPagoAplicado = false;
+  let debeSincronizarRolPago = false;
+  let rolPagoSeleccionado = null;
+
+  if (payload.rolPagoId !== undefined) {
+    const rolPagoId = payload.rolPagoId ? Number(payload.rolPagoId) : null;
+    debeSincronizarRolPago = true;
+
+    if (rolPagoId) {
+      const rolPago = await RolPago.findOne({
+        where: {
+          id: rolPagoId,
+          activo: true,
+        },
+      });
+
+      if (!rolPago) {
+        const error = new Error("Rol de pago activo no encontrado");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      cambios.rolPagoId = rolPago.id;
+      cambios.cargo = rolPago.cargo;
+      cambios.sueldo = calcularSueldoRolPago(rolPago);
+      rolPagoSeleccionado = rolPago;
+      rolPagoAplicado = true;
+    } else {
+      cambios.rolPagoId = null;
+      cambios.cargo = null;
+    }
+  }
+
+  if (payload.sueldo !== undefined && !rolPagoAplicado) {
+    cambios.sueldo = Number(payload.sueldo) || 0;
+  }
+  if (payload.cargo !== undefined && !rolPagoAplicado) {
+    cambios.cargo = payload.cargo || null;
+  }
   if (payload.estado !== undefined) cambios.estado = normalizarEstado(payload.estado);
   if (payload.observaciones !== undefined) cambios.observaciones = payload.observaciones;
 
   if (Object.keys(cambios).length) {
     await nomina.update(cambios);
+  }
+
+  if (debeSincronizarRolPago) {
+    await sincronizarRolPagoUsuarioYNominas({
+      usuarioId: nomina.usuarioId,
+      rolPago: rolPagoSeleccionado,
+    });
   }
 
   if (Array.isArray(payload.beneficios)) {

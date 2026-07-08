@@ -4,6 +4,8 @@ const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const UsuarioRol = require("../models/UsuarioRol");
+const RolPago = require("../models/RolPago");
+const NominaEmpleado = require("../models/NominaEmpleado");
 const bcrypt = require("bcryptjs");
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
@@ -42,6 +44,45 @@ const sincronizarRolesUsuario = async (usuarioId, rolIds) => {
   }
 };
 
+const calcularSueldoRolPago = (rolPago) =>
+  Number((Number(rolPago.sueldoBase || 0) + Number(rolPago.sueldoExtra || 0)).toFixed(2));
+
+const obtenerRolPagoActivo = async (rolPagoId) => {
+  if (!rolPagoId) return null;
+
+  const rolPago = await RolPago.findOne({
+    where: {
+      id: Number(rolPagoId),
+      activo: true,
+    },
+  });
+
+  if (!rolPago) {
+    throw new Error("Rol de pago activo no encontrado.");
+  }
+
+  return rolPago;
+};
+
+const sincronizarRolPagoNominaUsuario = async (usuarioId, rolPago) => {
+  if (!rolPago) {
+    await NominaEmpleado.update(
+      { rolPagoId: null },
+      { where: { usuarioId } },
+    );
+    return;
+  }
+
+  await NominaEmpleado.update(
+    {
+      rolPagoId: rolPago.id,
+      cargo: rolPago.cargo,
+      sueldo: calcularSueldoRolPago(rolPago),
+    },
+    { where: { usuarioId } },
+  );
+};
+
 // ===========================
 // 🔹 CREAR USUARIO
 // ===========================
@@ -60,6 +101,7 @@ router.post("/", async (req, res) => {
       entidadFinanciera,
       direccion,
       telefono,
+      rolPagoId,
     } = req.body;
 
     // Validar contraseña
@@ -92,6 +134,13 @@ router.post("/", async (req, res) => {
         .json({ message: error.message });
     }
 
+    let rolPago = null;
+    try {
+      rolPago = await obtenerRolPagoActivo(rolPagoId);
+    } catch (error) {
+      return res.status(400).json({ message: error.message });
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -107,10 +156,12 @@ router.post("/", async (req, res) => {
       entidadFinanciera,
       direccion,
       telefono,
+      rolPagoId: rolPago?.id || null,
       activo: true,
     });
 
     await sincronizarRolesUsuario(nuevoUsuario.id, rolesIdsNormalizados);
+    await sincronizarRolPagoNominaUsuario(nuevoUsuario.id, rolPago);
 
     const { password: _, ...usuarioSinPassword } = nuevoUsuario.toJSON();
     res.status(201).json(usuarioSinPassword);
@@ -142,7 +193,8 @@ router.get("/", async (req, res) => {
       where: incluirInactivos ? {} : { activo: true },
       attributes: { exclude: ["password"] },
       include: [
-        { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+      { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+        { model: RolPago, as: "rolPago" },
         includeRoles,
       ],
       order: [["nombre", "ASC"]],
@@ -178,6 +230,7 @@ router.get("/:id", async (req, res) => {
       attributes: { exclude: ["password"] },
       include: [
         { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+        { model: RolPago, as: "rolPago" },
         {
           model: Rol,
           as: "roles",
@@ -216,6 +269,7 @@ const actualizarUsuario = async (req, res) => {
       entidadFinanciera,
       direccion,
       telefono,
+      rolPagoId,
     } = req.body;
     const usuario = await Usuario.findByPk(req.params.id);
 
@@ -265,6 +319,19 @@ const actualizarUsuario = async (req, res) => {
       usuario.rolId = rolesIdsNormalizados[0];
     }
 
+    const debeActualizarRolPago = rolPagoId !== undefined;
+    let rolPago = null;
+
+    if (debeActualizarRolPago) {
+      try {
+        rolPago = await obtenerRolPagoActivo(rolPagoId);
+      } catch (error) {
+        return res.status(400).json({ message: error.message });
+      }
+
+      usuario.rolPagoId = rolPago?.id || null;
+    }
+
     // ========== CAMPOS NORMALES (solo si vienen) ==========
     if (nombre !== undefined) usuario.nombre = nombre;
     if (cedula !== undefined) usuario.cedula = cedula;
@@ -280,6 +347,10 @@ const actualizarUsuario = async (req, res) => {
 
     if (debeActualizarRoles) {
       await sincronizarRolesUsuario(usuario.id, rolesIdsNormalizados);
+    }
+
+    if (debeActualizarRolPago) {
+      await sincronizarRolPagoNominaUsuario(usuario.id, rolPago);
     }
 
     if (activo === false) {

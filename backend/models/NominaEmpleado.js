@@ -27,6 +27,16 @@ const NominaEmpleado = sequelize.define(
       },
       onDelete: "CASCADE",
     },
+    rolPagoId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "roles_pago",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
     sueldo: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
@@ -59,6 +69,9 @@ const NominaEmpleado = sequelize.define(
       },
       {
         fields: ["estado"],
+      },
+      {
+        fields: ["rolPagoId"],
       },
     ],
   },

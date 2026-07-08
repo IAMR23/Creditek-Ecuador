@@ -342,6 +342,24 @@ const ensureUsuariosSchema = async (queryInterface, tables) => {
     type: Sequelize.STRING,
     allowNull: true,
   });
+
+  if (tables.includes("roles_pago")) {
+    await addColumnIfMissing(queryInterface, "usuarios", "rolPagoId", {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: {
+        model: "roles_pago",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    });
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS usuarios_rol_pago_id_idx
+      ON usuarios ("rolPagoId");
+    `);
+  }
 };
 
 const ensureNominaSchema = async (queryInterface, tables) => {
@@ -351,6 +369,52 @@ const ensureNominaSchema = async (queryInterface, tables) => {
     type: Sequelize.STRING,
     allowNull: true,
   });
+
+  if (tables.includes("roles_pago")) {
+    await addColumnIfMissing(queryInterface, "nomina_empleados", "rolPagoId", {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: {
+        model: "roles_pago",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    });
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS nomina_empleados_rol_pago_id_idx
+      ON nomina_empleados ("rolPagoId");
+    `);
+  }
+};
+
+const ensureRolesPagoSchema = async (tables) => {
+  if (!tables.includes("roles_pago")) return;
+
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS roles_pago_cargo_unique
+    ON roles_pago (cargo);
+  `);
+
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS roles_pago_nivel_activo_idx
+    ON roles_pago (nivel, activo);
+  `);
+};
+
+const ensureComisionesConfiguracionSchema = async (tables) => {
+  if (!tables.includes("comisiones_configuracion")) return;
+
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS comisiones_config_activo_idx
+    ON comisiones_configuracion (activo);
+  `);
+
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS comisiones_config_grupo_periodo_idx
+    ON comisiones_configuracion (grupo, periodo);
+  `);
 };
 
 const ensureMapaComercialSchema = async (tables) => {
@@ -422,9 +486,17 @@ const connectDB = async () => {
     await ensureSistemasTareasSchema(queryInterface, tables);
     await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
     await ensureUsuariosSchema(queryInterface, tables);
+    await ensureRolesPagoSchema(tables);
+    await ensureComisionesConfiguracionSchema(tables);
     await ensureNominaSchema(queryInterface, tables);
     await ensureMapaComercialSchema(tables);
     await ensureDetalleEntregasUbicacionSchema(queryInterface, tables);
+    const { seedRolesPago } = require("../seeders/rolesPagoSeeder");
+    await seedRolesPago();
+    const {
+      seedComisionesConfiguracion,
+    } = require("../seeders/comisionesConfiguracionSeeder");
+    await seedComisionesConfiguracion();
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {
