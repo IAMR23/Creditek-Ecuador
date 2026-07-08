@@ -4,6 +4,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -29,6 +30,27 @@ const toArray = (obj = {}) =>
     .map(([name, value]) => ({ name, value: Number(value) || 0 }))
     .sort((a, b) => b.value - a.value);
 
+const ESTADOS_ENTREGA = [
+  { key: "entregado", label: "Entregado", color: "#16a34a" },
+  { key: "pendiente", label: "Pendiente", color: "#f59e0b" },
+  { key: "noEntregado", label: "No entregado", color: "#dc2626" },
+  { key: "transito", label: "Transito", color: "#64748b" },
+];
+
+const toEntregasPorVendedorEstados = (rows = []) =>
+  Array.isArray(rows)
+    ? rows
+        .map((row) => ({
+          name: row.vendedor || "Sin vendedor",
+          total: Number(row.total) || 0,
+          entregado: Number(row.entregado) || 0,
+          pendiente: Number(row.pendiente) || 0,
+          noEntregado: Number(row.noEntregado) || 0,
+          transito: Number(row.transito ?? row.otros) || 0,
+        }))
+        .sort((a, b) => b.total - a.total)
+    : [];
+
 const tooltipStyle = {
   contentStyle: {
     borderRadius: "10px",
@@ -39,6 +61,26 @@ const tooltipStyle = {
 
 export default function DashboardGraficas({ estadisticas }) {
   if (!estadisticas) return null;
+
+  const entregasPorVendedorEstados = toEntregasPorVendedorEstados(
+    estadisticas.entregasPorVendedorEstados,
+  );
+  const entregasPorVendedorChart = entregasPorVendedorEstados.length
+    ? entregasPorVendedorEstados
+    : toArray(estadisticas.entregasPorVendedor).map((item) => ({
+        name: item.name,
+        total: item.value,
+        entregado: 0,
+        pendiente: 0,
+        noEntregado: 0,
+        transito: item.value,
+      }));
+  const totalEntregas =
+    entregasPorVendedorChart.reduce((acc, item) => acc + item.total, 0) ||
+    toArray(estadisticas.entregasPorVendedor).reduce(
+      (acc, item) => acc + item.value,
+      0,
+    );
 
   const cards = [
     {
@@ -56,9 +98,9 @@ export default function DashboardGraficas({ estadisticas }) {
     },
     {
       title: "Entregas subidas por Vendedor",
-      type: "bar",
-      data: toArray(estadisticas.entregasPorVendedor),
-      color: COLORS[4],
+      type: "stacked-bar",
+      data: entregasPorVendedorChart,
+      showXAxis: true,
     },
     {
       title: "Ventas por Dia",
@@ -102,10 +144,7 @@ export default function DashboardGraficas({ estadisticas }) {
         <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
         <KpiCard
           label="Total entregas"
-          value={toArray(estadisticas.entregasPorVendedor).reduce(
-            (acc, item) => acc + item.value,
-            0,
-          )}
+          value={totalEntregas}
         />
         <KpiCard
           label="Agencias con ventas"
@@ -203,6 +242,35 @@ function ChartRenderer({ type, data, color = COLORS[0], showXAxis = false }) {
             activeDot={{ r: 6 }}
           />
         </LineChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  if (type === "stacked-bar") {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 10, right: 18, left: -10, bottom: 10 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="name" hide={!showXAxis} tick={{ fontSize: 12 }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+          <Tooltip {...tooltipStyle} />
+          <Legend
+            wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+            formatter={(value) =>
+              ESTADOS_ENTREGA.find((estado) => estado.key === value)?.label || value
+            }
+          />
+          {ESTADOS_ENTREGA.map((estado) => (
+            <Bar
+              key={estado.key}
+              dataKey={estado.key}
+              stackId="entregas"
+              fill={estado.color}
+              name={estado.label}
+              radius={estado.key === "transito" ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+            />
+          ))}
+        </BarChart>
       </ResponsiveContainer>
     );
   }

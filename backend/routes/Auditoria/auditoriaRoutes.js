@@ -244,13 +244,15 @@ router.get("/ventas2", async (req, res) => {
         (acc, item) => acc + (Number(item.tareasFinalizadas) || 0),
         0,
       );
-    estadisticas.entregasPorVendedor =
+    const entregasPorVendedor =
       await auditoriaVentasController.obtenerEntregasPorVendedorDashboard({
         fechaInicio,
         fechaFin,
         agenciaId,
         vendedorId,
       });
+    estadisticas.entregasPorVendedor = entregasPorVendedor.totales;
+    estadisticas.entregasPorVendedorEstados = entregasPorVendedor.porEstado;
  
     res.json({ ok: true, estadisticas});
   } catch (error) {

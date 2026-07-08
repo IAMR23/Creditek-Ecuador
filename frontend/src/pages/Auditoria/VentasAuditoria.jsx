@@ -140,7 +140,39 @@ const getValorColumnaReporte = (fila, columna) =>
 
 const esFilaConIncidencia = (fila) => {
   const observacion = String(fila["Observacion Error"] || "").trim().toUpperCase();
-  return Boolean(observacion && observacion !== "OK");
+  const diferencia = toNumber(fila.Diferencia);
+
+  return Boolean(
+    (observacion && observacion !== "OK") || Math.abs(diferencia) >= 0.01,
+  );
+};
+
+const agregarObservacionDiferenciaPrecio = ({
+  observacionError,
+  diferencia,
+  precioVenta,
+  precioVendedor,
+}) => {
+  const diferenciaNumerica = Number(diferencia);
+  const observacionActual = String(observacionError || "").trim();
+
+  if (!Number.isFinite(diferenciaNumerica) || Math.abs(diferenciaNumerica) < 0.01) {
+    return observacionActual;
+  }
+
+  if (
+    observacionActual
+      .toUpperCase()
+      .includes("DIFERENCIA_PRECIO_CARGA_VENDEDOR")
+  ) {
+    return observacionActual;
+  }
+
+  const observacionDiferencia = `DIFERENCIA_PRECIO_CARGA_VENDEDOR CARGA:${precioVenta} VENDEDOR:${precioVendedor} DIFERENCIA:${diferenciaNumerica}`;
+
+  return !observacionActual || observacionActual.toUpperCase() === "OK"
+    ? observacionDiferencia
+    : `${observacionActual}; ${observacionDiferencia}`;
 };
 
 const coincideBusquedaCliente = (fila, busqueda) => {
@@ -159,6 +191,12 @@ const mapVentaAuditoria = (venta) => {
     precioVenta !== "" || precioVendedor !== ""
       ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
       : "";
+  const observacionError = agregarObservacionDiferenciaPrecio({
+    observacionError: venta.observacionError,
+    diferencia,
+    precioVenta,
+    precioVendedor,
+  });
 
   return {
     id: venta.id,
@@ -195,7 +233,7 @@ const mapVentaAuditoria = (venta) => {
     "Entrada PDF": toMoney(venta.entradaPdf),
     Alcance: venta.alcance ?? "",
     Estado: venta.id ? (venta.activo ? "Activo" : "Desactivada") : "Sin venta",
-    "Observacion Error": venta.observacionError ?? "",
+    "Observacion Error": observacionError,
   };
 };
 
@@ -1190,11 +1228,7 @@ export default function VentasAuditoria() {
             <MiniStat label="PDFs" value={pdfResumen.pdfsProcesados} />
             <MiniStat label="Creditos PDF" value={pdfResumen.dispositivosCreditoPdf ?? pdfResumen.registrosPdf} tone="blue" />
             <MiniStat label="Creditos RVE" value={pdfResumen.dispositivosCreditoRve} tone="slate" />
-            <MiniStat
-              label="Dif. creditos"
-              value={pdfResumen.diferenciaCredito}
-              tone={getDiferenciaCreditoTone(pdfResumen.diferenciaCredito)}
-            />
+
             <MiniStat label="Validos PDF" value={pdfResumen.registrosPdfValidos ?? pdfResumen.registrosPdf} />
             <MiniStat label="Comparados" value={pdfResumen.ventasComparadas} />
             <MiniStat

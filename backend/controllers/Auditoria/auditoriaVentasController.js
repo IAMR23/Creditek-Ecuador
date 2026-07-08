@@ -716,6 +716,31 @@ exports.activarEntregaAuditoria = async (req, res) => {
   }
 };
 
+const crearResumenEstadoEntregaVendedor = (vendedor) => ({
+  vendedor,
+  total: 0,
+  entregado: 0,
+  pendiente: 0,
+  noEntregado: 0,
+  transito: 0,
+});
+
+const getClaveEstadoEntregaDashboard = (estado) => {
+  const valor = normalizarTexto(estado);
+
+  if (["entrega", "entregado", "entregada"].includes(valor)) {
+    return "entregado";
+  }
+
+  if (valor === "pendiente") return "pendiente";
+
+  if (["no entregado", "no entregada"].includes(valor)) {
+    return "noEntregado";
+  }
+
+  return "transito";
+};
+
 exports.obtenerEntregasPorVendedorDashboard = async ({
   fechaInicio,
   fechaFin,
@@ -741,7 +766,7 @@ exports.obtenerEntregasPorVendedorDashboard = async ({
 
   const entregas = await Entrega.findAll({
     where: whereEntrega,
-    attributes: ["id"],
+    attributes: ["id", "estado"],
     include: [
       {
         model: UsuarioAgencia,
@@ -780,11 +805,30 @@ exports.obtenerEntregasPorVendedorDashboard = async ({
     ],
   });
 
-  return entregas.reduce((acc, entrega) => {
+  const resumen = entregas.reduce((acc, entrega) => {
     const vendedor = entrega.usuarioAgencia?.usuario?.nombre || "Sin vendedor";
-    acc[vendedor] = (acc[vendedor] || 0) + 1;
+
+    if (!acc[vendedor]) {
+      acc[vendedor] = crearResumenEstadoEntregaVendedor(vendedor);
+    }
+
+    const claveEstado = getClaveEstadoEntregaDashboard(entrega.estado);
+    acc[vendedor].total += 1;
+    acc[vendedor][claveEstado] += 1;
+
     return acc;
   }, {});
+
+  const porEstado = Object.values(resumen).sort((a, b) => b.total - a.total);
+  const totales = porEstado.reduce((acc, item) => {
+    acc[item.vendedor] = item.total;
+    return acc;
+  }, {});
+
+  return {
+    totales,
+    porEstado,
+  };
 };
 
 const normalizarEstadoActivo = (estado) => {
@@ -912,6 +956,53 @@ const obtenerDiferenciaPrecioVenta = (fila) => {
   return { precioVenta, precioVendedor, diferencia };
 };
 
+const obtenerDiferenciaPrecioAuditoria = (fila) => {
+  if (!fila) return null;
+
+  const precioVenta = toNumero(fila.precioVenta);
+  const precioVendedor = toNumero(fila.precioVendedor);
+
+  if (precioVenta === null || precioVendedor === null) return null;
+
+  const diferencia = Number((precioVenta - precioVendedor).toFixed(2));
+
+  if (Math.abs(diferencia) < 0.01) return null;
+
+  return { precioVenta, precioVendedor, diferencia };
+};
+
+const construirObservacionDiferenciaPrecioAuditoria = (fila) => {
+  const precios = obtenerDiferenciaPrecioAuditoria(fila);
+
+  if (!precios) return null;
+
+  return `DIFERENCIA_PRECIO_CARGA_VENDEDOR CARGA:${precios.precioVenta} VENDEDOR:${precios.precioVendedor} DIFERENCIA:${precios.diferencia}`;
+};
+
+const agregarObservacionDiferenciaPrecioAuditoria = (fila) => {
+  const observacionDiferencia = construirObservacionDiferenciaPrecioAuditoria(fila);
+
+  if (!observacionDiferencia) return fila;
+
+  const observacionActual = String(fila?.observacionError || "").trim();
+
+  if (
+    observacionActual
+      .toUpperCase()
+      .includes("DIFERENCIA_PRECIO_CARGA_VENDEDOR")
+  ) {
+    return fila;
+  }
+
+  return {
+    ...fila,
+    observacionError:
+      !observacionActual || observacionActual.toUpperCase() === "OK"
+        ? observacionDiferencia
+        : `${observacionActual}; ${observacionDiferencia}`,
+  };
+};
+
 const agruparDiferenciasPrecioPorVendedor = (filas = []) => {
   const grupos = new Map();
 
@@ -941,6 +1032,14 @@ const agruparDiferenciasPrecioPorVendedor = (filas = []) => {
   });
 
   return [...grupos.values()];
+};
+
+const esFilaConIncidenciaAuditoriaPdf = (fila) => {
+  const observacion = String(fila?.observacionError || "").trim().toUpperCase();
+
+  return Boolean(
+    (observacion && observacion !== "OK") || obtenerDiferenciaPrecioAuditoria(fila),
+  );
 };
 
 const construirDescripcionDiferenciaPrecio = (grupo) => {
@@ -1689,8 +1788,12 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
     });
   }
 
+  const resultados = [...resultadosPorDetalle.values(), ...filasPdfSinVenta].map(
+    agregarObservacionDiferenciaPrecioAuditoria,
+  );
+
   return {
-    resultados: [...resultadosPorDetalle.values(), ...filasPdfSinVenta],
+    resultados,
     errores,
   };
 };
@@ -2011,7 +2114,7 @@ exports.auditarVentasDesdePdf = async (req, res) => {
         criterioCreditoRve: "formaPago credito",
         ventasComparadas: auditoria.resultados.length,
         erroresDetectados: auditoria.resultados.filter(
-          (fila) => fila.observacionError && fila.observacionError !== "OK",
+          esFilaConIncidenciaAuditoriaPdf,
         ).length,
         erroresExtraccion: Array.isArray(resultado.errores)
           ? resultado.errores.length
