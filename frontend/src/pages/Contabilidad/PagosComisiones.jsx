@@ -55,6 +55,7 @@ const emptyWeekValues = {
   valorVendido: 0,
   totalComisiones: 0,
   noCumpleMetas: 0,
+  valorDescontar: 0,
 };
 
 const emptyMonthlyValues = {
@@ -63,6 +64,8 @@ const emptyMonthlyValues = {
   valorComisionMensual: 0,
   totalComisionesSemanaMensual: 0,
   totalNoCumpleMetas: 0,
+  totalValorDescontar: 0,
+  totalPagar: 0,
 };
 
 const getWeekValues = (row, week) => row?.semanas?.[week.startDate] || emptyWeekValues;
@@ -70,11 +73,19 @@ const getMonthlyValues = (row) => row?.resumenMensual || emptyMonthlyValues;
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
+const cumpleFiltroCargo = (vendedor, cargoFiltro) => {
+  const cargo = String(vendedor.cargo || "").toUpperCase();
+  if (cargoFiltro === "CALL_CENTER") return cargo.includes("CALL CENTER");
+  if (cargoFiltro === "PISO") return cargo.includes("PISO");
+  return true;
+};
 
 export default function PagosComisiones() {
   const [filters, setFilters] = useState(initialFilters);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [vendedorFiltro, setVendedorFiltro] = useState("");
+  const [cargoFiltro, setCargoFiltro] = useState("");
 
   const years = useMemo(() => {
     const currentYear = currentDate.getFullYear();
@@ -88,6 +99,42 @@ export default function PagosComisiones() {
     general: emptyWeekValues,
     resumenMensual: emptyMonthlyValues,
   };
+
+  const vendedoresFiltrados = useMemo(() => vendedores.filter((vendedor) => {
+    if (vendedorFiltro && String(vendedor.usuarioId) !== vendedorFiltro) return false;
+    return cumpleFiltroCargo(vendedor, cargoFiltro);
+  }), [vendedores, vendedorFiltro, cargoFiltro]);
+
+  const vendedoresPorCargo = useMemo(
+    () => vendedores.filter((vendedor) => cumpleFiltroCargo(vendedor, cargoFiltro)),
+    [vendedores, cargoFiltro],
+  );
+
+  const totalVisible = useMemo(() => {
+    if (!vendedorFiltro && !cargoFiltro) return total;
+    const resumen = {
+      semanas: Object.fromEntries(weeks.map((week) => [week.startDate, {
+        ...emptyWeekValues,
+        semanaFutura: vendedoresFiltrados[0]?.semanas?.[week.startDate]?.semanaFutura || false,
+      }])),
+      general: { ...emptyWeekValues },
+      resumenMensual: { ...emptyMonthlyValues },
+    };
+    vendedoresFiltrados.forEach((vendedor) => {
+      weeks.forEach((week) => {
+        const values = getWeekValues(vendedor, week);
+        Object.keys(emptyWeekValues).forEach((key) => {
+          resumen.semanas[week.startDate][key] += Number(values[key] || 0);
+          resumen.general[key] += Number(values[key] || 0);
+        });
+      });
+      const mensual = getMonthlyValues(vendedor);
+      Object.keys(emptyMonthlyValues).forEach((key) => {
+        resumen.resumenMensual[key] += Number(mensual[key] || 0);
+      });
+    });
+    return resumen;
+  }, [cargoFiltro, total, vendedorFiltro, vendedoresFiltrados, weeks]);
 
   const fetchReport = async () => {
     setLoading(true);
@@ -180,14 +227,34 @@ export default function PagosComisiones() {
           <Metric
             icon={<FileSpreadsheet size={18} />}
             label="Vendedores"
-            value={vendedores.length}
+            value={vendedoresFiltrados.length}
           />
-          <Metric label="Unidades vendidas" value={total.general.venden || 0} />
+          <Metric label="Unidades vendidas" value={totalVisible.general.venden || 0} />
           <Metric
-            label="Total comisiones"
-            value={formatCommission(total.general.totalComisiones)}
+            label="Total a pagar"
+            value={formatMoney(totalVisible.resumenMensual.totalPagar)}
           />
         </div>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-sm font-medium text-slate-700">
+              Tipo de cargo
+              <select value={cargoFiltro} onChange={(event) => { setCargoFiltro(event.target.value); setVendedorFiltro(""); }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <option value="">Todos los cargos</option>
+                <option value="CALL_CENTER">Vendedor Call Center</option>
+                <option value="PISO">Vendedor de Piso</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Vendedor
+              <select value={vendedorFiltro} onChange={(event) => setVendedorFiltro(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <option value="">Todos los vendedores del cargo</option>
+                {vendedoresPorCargo.map((vendedor) => <option key={vendedor.usuarioId} value={vendedor.usuarioId}>{vendedor.nombre}</option>)}
+              </select>
+            </label>
+          </div>
+        </section>
 
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
@@ -203,7 +270,7 @@ export default function PagosComisiones() {
                   {weeks.map((week, index) => (
                     <th
                       key={week.startDate}
-                      colSpan={4}
+                      colSpan={5}
                       className={`border border-slate-950 px-3 py-2 text-lg font-black ${blockColors[index % blockColors.length]}`}
                     >
                       {week.label}
@@ -221,14 +288,14 @@ export default function PagosComisiones() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={1 + weeks.length * 4 + 5}
+                      colSpan={1 + weeks.length * 5 + 7}
                       className="border border-slate-300 px-4 py-10 text-center text-slate-500"
                     >
                       Cargando reporte...
                     </td>
                   </tr>
-                ) : vendedores.length ? (
-                  vendedores.map((vendedor, index) => (
+                ) : vendedoresFiltrados.length ? (
+                  vendedoresFiltrados.map((vendedor, index) => (
                     <tr
                       key={vendedor.usuarioId}
                       className={index % 2 === 0 ? "bg-white" : "bg-orange-100"}
@@ -255,7 +322,7 @@ export default function PagosComisiones() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={1 + weeks.length * 4 + 5}
+                      colSpan={1 + weeks.length * 5 + 7}
                       className="border border-slate-300 px-4 py-10 text-center text-slate-500"
                     >
                       No hay vendedores o ventas para el mes seleccionado.
@@ -271,11 +338,11 @@ export default function PagosComisiones() {
                     {weeks.map((week) => (
                       <WeekValues
                         key={`total-${week.startDate}`}
-                        values={total.semanas?.[week.startDate] || emptyWeekValues}
+                        values={totalVisible.semanas?.[week.startDate] || emptyWeekValues}
                         total
                       />
                     ))}
-                    <MonthlyValues values={getMonthlyValues(total)} total />
+                    <MonthlyValues values={getMonthlyValues(totalVisible)} total />
                   </tr>
                 ) : null}
               </tbody>
@@ -314,6 +381,9 @@ function WeekHeader({ color }) {
       <th className="border border-slate-950 bg-blue-800 px-2 py-2 text-xs font-black text-white">
         NO CUMPLE METAS
       </th>
+      <th className="border border-slate-950 bg-red-700 px-2 py-2 text-xs font-black text-white">
+        VALOR A DESCONTAR
+      </th>
     </>
   );
 }
@@ -326,15 +396,24 @@ function WeekValues({ values, total = false }) {
   return (
     <>
       <td className="border border-slate-950 px-2 py-1.5">
-        {values.venden || ""}
+        {values.semanaFutura ? "Pendiente" : values.venden || ""}
       </td>
       <td className="border border-slate-950 px-2 py-1.5">
-        {values.valorVendido ? formatMoney(values.valorVendido) : ""}
+        {values.semanaFutura ? "-" : values.valorVendido ? formatMoney(values.valorVendido) : ""}
       </td>
       <td className="border border-slate-950 px-2 py-1.5">
-        {values.totalComisiones ? formatCommission(values.totalComisiones) : 0}
+        {values.semanaFutura ? "-" : values.totalComisiones ? formatCommission(values.totalComisiones) : 0}
       </td>
-      <td className={noCumpleClass}>{values.noCumpleMetas || 0}</td>
+      <td className={noCumpleClass}>
+        {values.semanaFutura || (!total && values.semanaLaborada === false) ? "-" : values.noCumpleMetas || 0}
+      </td>
+      <td className="border border-slate-950 bg-red-100 px-2 py-1.5 text-red-700">
+        {values.semanaFutura
+          ? "Pendiente"
+          : !total && values.semanaLaborada === false
+            ? "No laborada"
+          : formatMoney(values.valorDescontar || 0)}
+      </td>
     </>
   );
 }
@@ -372,6 +451,18 @@ function MonthlyHeader() {
       >
         Total No Cumple Metas
       </th>
+      <th
+        rowSpan={2}
+        className="border border-slate-950 bg-red-800 px-2 py-2 text-xs font-black text-white"
+      >
+        Total Valor a Descontar
+      </th>
+      <th
+        rowSpan={2}
+        className="border border-slate-950 bg-emerald-800 px-2 py-2 text-xs font-black text-white"
+      >
+        Total a Pagar
+      </th>
     </>
   );
 }
@@ -401,6 +492,12 @@ function MonthlyValues({ values, total = false }) {
       </td>
       <td className="border border-slate-950 bg-blue-700 px-2 py-1.5 text-white">
         {values.totalNoCumpleMetas || 0}
+      </td>
+      <td className="border border-slate-950 bg-red-800 px-2 py-1.5 font-semibold text-white">
+        {formatMoney(values.totalValorDescontar || 0)}
+      </td>
+      <td className="border border-slate-950 bg-emerald-800 px-2 py-1.5 font-bold text-white">
+        {formatMoney(values.totalPagar || 0)}
       </td>
     </>
   );

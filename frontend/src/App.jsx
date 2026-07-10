@@ -96,6 +96,8 @@ import Nomina from "./pages/Contabilidad/Nomina";
 import RolesPago from "./pages/Contabilidad/RolesPago";
 import Comisiones from "./pages/Contabilidad/Comisiones";
 import PagosComisiones from "./pages/Contabilidad/PagosComisiones";
+import SancionesConfiguracion from "./pages/Contabilidad/SancionesConfiguracion";
+import SancionesVentas from "./pages/Contabilidad/SancionesVentas";
 import ExtraccionReportesCaja from "./pages/Contabilidad/ExtraccionReportesCaja";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
@@ -417,6 +419,8 @@ function App() {
                   path="contabilidad/pagos-comisiones"
                   element={protect(<PagosComisiones />, "/contabilidad/pagos-comisiones")}
                 />
+                <Route path="contabilidad/sanciones-configuracion" element={protect(<SancionesConfiguracion />, "/contabilidad/sanciones-configuracion")} />
+                <Route path="contabilidad/sanciones-ventas" element={protect(<SancionesVentas />, "/contabilidad/sanciones-ventas")} />
                 <Route
                   path="contabilidad/extraccion-reportes-caja"
                   element={protect(

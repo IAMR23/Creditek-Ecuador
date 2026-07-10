@@ -1,4 +1,13 @@
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
+const RolPago = require("../models/RolPago");
+
+const CARGO_POR_GRUPO = {
+  "SUPERVISOR CALL CENTER": "SUPERVISOR CALL CENTER",
+  "SUPERVISOR PISO": "SUPERVISOR PISO",
+  "JEFE COMERCIAL PISO": "JEFE COMERCIAL PISO",
+  "VENDEDORES DE PISO Y FURGONETA": "VENDEDOR PISO",
+  "VENDEDORES DE CALL CENTER": "VENDEDOR CALL CENTER",
+};
 
 const COMISIONES_INICIALES = [
   ["SUPERVISOR CALL CENTER", "2 vendedores", "COMISION_SEMANAL", "20", 1, null, null, null, "20", null],
@@ -47,7 +56,7 @@ const COMISIONES_INICIALES = [
   ["VENDEDORES DE PISO Y FURGONETA", null, "COMISION_SEMANAL", "24-27", null, 0.03, null, null, "200 a 240", null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "COMISION_SEMANAL", "28…", null, 0.035, null, null, "280....", null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "BONO_MENSUAL_4_SEMANAS", "48", null, null, null, 60, "SOLO NUEVOS", null],
-  ["VENDEDORES DE PISO Y FURGONETA", null, "BONO_MENSUAL_4_SEMANAS", "52", null, null, null, 80, null, null],
+  ["VENDEDORES DE PISO Y FURGONETA", null, "BONO_MENSUAL_4_SEMANAS", "52", null, null, null, 81, null, null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "BONO_MENSUAL_4_SEMANAS", "60", null, null, null, 100, null, null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "BONO_MENSUAL_4_SEMANAS", "equipo extra", null, null, null, 1.75, "c/u", null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "BONO_MENSUAL_5_SEMANAS", "60", null, null, null, 60, "SOLO NUEVOS", "12*5"],
@@ -103,8 +112,11 @@ const toRecord = (row, index) => {
 
 const seedComisionesConfiguracion = async () => {
   const registros = COMISIONES_INICIALES.map(toRecord);
+  const roles = await RolPago.findAll({ attributes: ["id", "cargo"] });
+  const rolesPorCargo = new Map(roles.map((rol) => [rol.cargo.trim().toUpperCase(), rol.id]));
 
   for (const registro of registros) {
+    registro.rolPagoId = rolesPorCargo.get(CARGO_POR_GRUPO[registro.grupo]?.toUpperCase()) || null;
     const existente = await ComisionConfiguracion.findOne({
       where: {
         grupo: registro.grupo,

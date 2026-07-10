@@ -8,6 +8,7 @@ const Rol = require("../models/Rol");
 const RolPago = require("../models/RolPago");
 const NominaEmpleado = require("../models/NominaEmpleado");
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
+const SancionConfiguracion = require("../models/SancionConfiguracion");
 const {
   getCommercialWeekKey,
   getCommercialWeeksByMonth,
@@ -28,11 +29,26 @@ const toNumber = (value) => {
 const round = (value, decimals = 3) =>
   Number((Number(value || 0)).toFixed(decimals));
 
+const getTodayEcuador = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+};
+
+const isFutureCommercialWeek = (week, today = getTodayEcuador()) =>
+  String(week.startDate || "").slice(0, 10) > today;
+
 const emptyWeekValues = () => ({
   venden: 0,
   valorVendido: 0,
   totalComisiones: 0,
   noCumpleMetas: 0,
+  valorDescontar: 0,
 });
 
 const emptyMonthlyValues = () => ({
@@ -41,6 +57,8 @@ const emptyMonthlyValues = () => ({
   valorComisionMensual: 0,
   totalComisionesSemanaMensual: 0,
   totalNoCumpleMetas: 0,
+  totalValorDescontar: 0,
+  totalPagar: 0,
 });
 
 const buildEmptyWeeks = (weeks) =>
@@ -88,7 +106,19 @@ const getUsuarioPayload = (usuarioAgencia) => {
     nivel: rolPago?.nivel || "",
     rol: rol?.nombre || "",
     agencias: agencia?.nombre ? [agencia.nombre] : [],
+    fechaIngreso: usuario.fechaIngreso || null,
+    fechaSalida: usuario.fechaSalida || null,
   };
+};
+
+const isActiveDuringWeek = ({ fechaIngreso, fechaSalida, week }) => {
+  const inicioSemana = String(week.startDate || "").slice(0, 10);
+  const finSemana = String(week.endDate || "").slice(0, 10);
+  const ingreso = fechaIngreso ? String(fechaIngreso).slice(0, 10) : null;
+  const salida = fechaSalida ? String(fechaSalida).slice(0, 10) : null;
+  if (ingreso && ingreso > finSemana) return false;
+  if (salida && salida < inicioSemana) return false;
+  return true;
 };
 
 const isCargoPagoComisionable = (usuarioPayload) => {
@@ -151,7 +181,7 @@ const buildWeeklyRulesByGroup = (configs) =>
   configs
     .filter((config) => config.periodo === "COMISION_SEMANAL")
     .reduce((acc, config) => {
-      const key = normalizeText(config.grupo);
+      const key = config.rolPagoId ? `ROL:${config.rolPagoId}` : normalizeText(config.grupo);
       if (!acc[key]) acc[key] = [];
 
       const range = parseUnitsRule(config.unidadesVendidas);
@@ -177,7 +207,7 @@ const buildMonthlyRulesByGroup = (configs, weeksCount) => {
   const grouped = {};
 
   configs.forEach((config) => {
-    const key = normalizeText(config.grupo);
+    const key = config.rolPagoId ? `ROL:${config.rolPagoId}` : normalizeText(config.grupo);
     const period = config.periodo;
 
     if (!periodCandidates.includes(period)) return;
@@ -233,13 +263,15 @@ const getMinimumMeta = (rules) => {
 const calculateMonthlyBonus = ({ rules, venden }) => {
   if (!rules?.tiers?.length) return 0;
 
-  const tier = [...rules.tiers]
+  const orderedTiers = [...rules.tiers].sort((a, b) => a.min - b.min);
+  const tier = orderedTiers
     .filter((item) => venden >= item.min)
     .sort((a, b) => b.min - a.min)[0];
 
   if (!tier) return 0;
 
-  const extra = Math.max(0, venden - tier.min) * toNumber(rules.extraPorEquipo);
+  const ultimaMeta = orderedTiers[orderedTiers.length - 1].min;
+  const extra = Math.max(0, venden - ultimaMeta) * toNumber(rules.extraPorEquipo);
   return round(toNumber(tier.bono) + extra, 2);
 };
 
@@ -266,6 +298,25 @@ const calculateCommission = ({ rules, venden, valorVendido }) => {
     noCumpleMetas: 0,
   };
 };
+
+const buildSanctionsByRole = (configs) => {
+  const byRole = {};
+  const byCargo = {};
+  configs.filter((config) => config.activo && config.periodo === "SEMANAL").forEach((config) => {
+    if (config.rolPagoId) byRole[Number(config.rolPagoId)] = config;
+    byCargo[normalizeText(config.cargoReferencia)] = config;
+  });
+  return { byRole, byCargo };
+};
+
+const calculateSalesPenalty = ({ config, unidadesVendidas }) => {
+  if (!config) return 0;
+  const faltantes = Math.max(0, toNumber(config.minimoUnidades) - toNumber(unidadesVendidas));
+  return round(faltantes * toNumber(config.valorMultaUnidad), 2);
+};
+
+const calculateMissingUnits = ({ config, unidadesVendidas }) =>
+  config ? Math.max(0, toNumber(config.minimoUnidades) - toNumber(unidadesVendidas)) : 0;
 
 const parseReportPeriod = ({ year, month }) => {
   const numericYear = Number(year);
@@ -322,7 +373,7 @@ const buildIncludeUsuarioAgencia = () => ({
     {
       model: Usuario,
       as: "usuario",
-      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId"],
+      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida"],
       include: [
         { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
         { model: Rol, as: "rol", attributes: ["id", "nombre"] },
@@ -348,7 +399,7 @@ const obtenerRelacionesVendedores = async () =>
       {
         model: Usuario,
         as: "usuario",
-        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId"],
+        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida"],
         where: { activo: true },
         include: [
           { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
@@ -387,18 +438,18 @@ const obtenerVentasRango = async ({ fechaInicio, fechaFin }) => {
   return ventas.map((venta) => ({ ...venta.toJSON(), origenReporte: "Venta" }));
 };
 
-const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup) => {
-  const rules = vendedor.grupoComision
-    ? weeklyRulesByGroup[normalizeText(vendedor.grupoComision)] || []
-    : [];
-  const monthlyRules = vendedor.grupoComision
-    ? monthlyRulesByGroup[normalizeText(vendedor.grupoComision)] || null
-    : null;
+const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup, sanctionsByRole) => {
+  const rolKey = vendedor.rolPagoId ? `ROL:${vendedor.rolPagoId}` : null;
+  const grupoKey = vendedor.grupoComision ? normalizeText(vendedor.grupoComision) : null;
+  const rules = (rolKey && weeklyRulesByGroup[rolKey]) || (grupoKey && weeklyRulesByGroup[grupoKey]) || [];
+  const monthlyRules = (rolKey && monthlyRulesByGroup[rolKey]) || (grupoKey && monthlyRulesByGroup[grupoKey]) || null;
+  const sanctionConfig = sanctionsByRole.byRole[Number(vendedor.rolPagoId)] || sanctionsByRole.byCargo[normalizeText(vendedor.cargo)] || null;
 
   vendedor.resumenMensual = emptyMonthlyValues();
 
   weeks.forEach((week) => {
     const values = vendedor.semanas[week.startDate];
+    const semanaFutura = isFutureCommercialWeek(week);
     const commission = calculateCommission({
       rules,
       venden: values.venden,
@@ -406,13 +457,26 @@ const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGr
     });
 
     values.valorVendido = round(values.valorVendido, 2);
-    values.totalComisiones = commission.totalComisiones;
-    values.noCumpleMetas = commission.noCumpleMetas;
+    values.totalComisiones = semanaFutura ? 0 : commission.totalComisiones;
+    const semanaLaborada = isActiveDuringWeek({
+      fechaIngreso: vendedor.fechaIngreso,
+      fechaSalida: vendedor.fechaSalida,
+      week,
+    });
+    values.noCumpleMetas = semanaLaborada && !semanaFutura
+      ? calculateMissingUnits({ config: sanctionConfig, unidadesVendidas: values.venden })
+      : 0;
+    values.valorDescontar = semanaLaborada && !semanaFutura
+      ? calculateSalesPenalty({ config: sanctionConfig, unidadesVendidas: values.venden })
+      : 0;
+    values.semanaLaborada = semanaLaborada;
+    values.semanaFutura = semanaFutura;
 
     vendedor.total.venden += values.venden;
     vendedor.total.valorVendido += values.valorVendido;
     vendedor.total.totalComisiones += values.totalComisiones;
     vendedor.total.noCumpleMetas += values.noCumpleMetas;
+    vendedor.total.valorDescontar += values.valorDescontar;
   });
 
   vendedor.total.valorVendido = round(vendedor.total.valorVendido, 2);
@@ -430,6 +494,12 @@ const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGr
     2,
   );
   vendedor.resumenMensual.totalNoCumpleMetas = vendedor.total.noCumpleMetas;
+  vendedor.resumenMensual.totalValorDescontar = round(vendedor.total.valorDescontar, 2);
+  vendedor.resumenMensual.totalPagar = round(
+    vendedor.resumenMensual.totalComisionesSemanaMensual -
+      vendedor.resumenMensual.totalValorDescontar,
+    2,
+  );
 };
 
 const obtenerReportePagosComisiones = async ({ year, month }) => {
@@ -439,17 +509,19 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   const fechaInicio = weeks[0].startDate;
   const fechaFin = weeks[weeks.length - 1].endDate;
 
-  const [relaciones, ventas, configs] = await Promise.all([
+  const [relaciones, ventas, configs, sanciones] = await Promise.all([
     obtenerRelacionesVendedores(),
     obtenerVentasRango({ fechaInicio, fechaFin }),
     ComisionConfiguracion.findAll({
       where: { activo: true },
       order: [["orden", "ASC"]],
     }),
+    SancionConfiguracion.findAll({ where: { activo: true, periodo: "SEMANAL" } }),
   ]);
 
   const weeklyRulesByGroup = buildWeeklyRulesByGroup(configs);
   const monthlyRulesByGroup = buildMonthlyRulesByGroup(configs, weeks.length);
+  const sanctionsByRole = buildSanctionsByRole(sanciones);
   const vendedoresMap = new Map();
 
   relaciones.forEach((relacion) => {
@@ -477,7 +549,7 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   const vendedores = [...vendedoresMap.values()]
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
     .map((vendedor) => {
-      finalizarVendedor(vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup);
+      finalizarVendedor(vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup, sanctionsByRole);
       return vendedor;
     });
 
@@ -494,6 +566,7 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
       total.semanas[week.startDate].valorVendido += values.valorVendido;
       total.semanas[week.startDate].totalComisiones += values.totalComisiones;
       total.semanas[week.startDate].noCumpleMetas += values.noCumpleMetas;
+      total.semanas[week.startDate].valorDescontar += values.valorDescontar;
     });
 
     total.resumenMensual.ventasTvCelulaMensual +=
@@ -506,16 +579,21 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
       vendedor.resumenMensual.totalComisionesSemanaMensual;
     total.resumenMensual.totalNoCumpleMetas +=
       vendedor.resumenMensual.totalNoCumpleMetas;
+    total.resumenMensual.totalValorDescontar +=
+      vendedor.resumenMensual.totalValorDescontar;
+    total.resumenMensual.totalPagar += vendedor.resumenMensual.totalPagar;
   });
 
   weeks.forEach((week) => {
     const values = total.semanas[week.startDate];
+    values.semanaFutura = isFutureCommercialWeek(week);
     values.valorVendido = round(values.valorVendido, 2);
     values.totalComisiones = round(values.totalComisiones);
     total.general.venden += values.venden;
     total.general.valorVendido += values.valorVendido;
     total.general.totalComisiones += values.totalComisiones;
     total.general.noCumpleMetas += values.noCumpleMetas;
+    total.general.valorDescontar += values.valorDescontar;
   });
 
   total.general.valorVendido = round(total.general.valorVendido, 2);
@@ -531,6 +609,11 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
     total.resumenMensual.totalComisionesSemanaMensual,
     2,
   );
+  total.resumenMensual.totalValorDescontar = round(
+    total.resumenMensual.totalValorDescontar,
+    2,
+  );
+  total.resumenMensual.totalPagar = round(total.resumenMensual.totalPagar, 2);
 
   return {
     year: numericYear,
@@ -545,5 +628,9 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
 
 module.exports = {
   isCargoPagoComisionable,
+  calculateSalesPenalty,
+  calculateMonthlyBonus,
+  isActiveDuringWeek,
+  isFutureCommercialWeek,
   obtenerReportePagosComisiones,
 };

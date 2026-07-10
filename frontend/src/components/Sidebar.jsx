@@ -271,6 +271,16 @@ export default function Sidebar({ auth }) {
             path: "/permisos",
           },
           {
+            label: "Configurar sanciones",
+            icon: <LucideTicketPercent size={20} />,
+            path: "/contabilidad/sanciones-configuracion",
+          },
+          {
+            label: "Reporte de sanciones",
+            icon: <FileSpreadsheet size={20} />,
+            path: "/contabilidad/sanciones-ventas",
+          },
+          {
             label: "Permisos de usuarios",
             icon: <MdSecurity size={20} />,
             path: "/asignar-permisos",

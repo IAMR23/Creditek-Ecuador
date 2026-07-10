@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
+const RolPago = require("../models/RolPago");
 
 const toNumberOrNull = (value) => {
   if (value === null || value === undefined || value === "") return null;
@@ -9,6 +10,8 @@ const toNumberOrNull = (value) => {
 
 const serializarComision = (comision) => ({
   id: comision.id,
+  rolPagoId: comision.rolPagoId || null,
+  rolPago: comision.rolPago || null,
   grupo: comision.grupo,
   subgrupo: comision.subgrupo || "",
   periodo: comision.periodo,
@@ -26,15 +29,26 @@ const serializarComision = (comision) => ({
   updatedAt: comision.updatedAt,
 });
 
-const normalizarPayload = (payload = {}) => {
-  const grupo = String(payload.grupo || "").trim();
+const normalizarPayload = async (payload = {}) => {
+  const rolPagoId = Number(payload.rolPagoId);
   const periodo = String(payload.periodo || "").trim();
 
-  if (!grupo) throw new Error("El grupo es obligatorio");
+  if (!Number.isInteger(rolPagoId) || rolPagoId <= 0) {
+    const error = new Error("Debe seleccionar un cargo de Roles de Pago");
+    error.statusCode = 400;
+    throw error;
+  }
+  const rolPago = await RolPago.findOne({ where: { id: rolPagoId, activo: true } });
+  if (!rolPago) {
+    const error = new Error("El rol de pago seleccionado no existe o esta inactivo");
+    error.statusCode = 400;
+    throw error;
+  }
   if (!periodo) throw new Error("El periodo es obligatorio");
 
   return {
-    grupo,
+    rolPagoId,
+    grupo: rolPago.cargo,
     subgrupo: payload.subgrupo ? String(payload.subgrupo).trim() : null,
     periodo,
     unidadesVendidas: payload.unidadesVendidas
@@ -57,6 +71,7 @@ const normalizarPayload = (payload = {}) => {
 
 const listarComisiones = async ({
   grupo,
+  rolPagoId,
   periodo,
   activo = "true",
   q,
@@ -64,6 +79,7 @@ const listarComisiones = async ({
   const where = {};
 
   if (grupo) where.grupo = String(grupo).trim();
+  if (rolPagoId) where.rolPagoId = Number(rolPagoId);
   if (periodo) where.periodo = String(periodo).trim();
   if (q) {
     const term = `%${String(q).trim()}%`;
@@ -83,6 +99,7 @@ const listarComisiones = async ({
 
   const registros = await ComisionConfiguracion.findAll({
     where,
+    include: [{ model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"], required: false }],
     order: [
       ["grupo", "ASC"],
       ["periodo", "ASC"],
@@ -95,7 +112,7 @@ const listarComisiones = async ({
 };
 
 const obtenerComision = async (id) => {
-  const comision = await ComisionConfiguracion.findByPk(id);
+  const comision = await ComisionConfiguracion.findByPk(id, { include: [{ model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"], required: false }] });
 
   if (!comision) {
     const error = new Error("Configuracion de comision no encontrada");
@@ -107,7 +124,7 @@ const obtenerComision = async (id) => {
 };
 
 const crearComision = async (payload) => {
-  const data = normalizarPayload(payload);
+  const data = await normalizarPayload(payload);
   return serializarComision(await ComisionConfiguracion.create(data));
 };
 
@@ -120,7 +137,7 @@ const actualizarComision = async (id, payload) => {
     throw error;
   }
 
-  const data = normalizarPayload({ ...comision.toJSON(), ...payload });
+  const data = await normalizarPayload({ ...comision.toJSON(), ...payload });
   await comision.update(data);
   return serializarComision(comision);
 };

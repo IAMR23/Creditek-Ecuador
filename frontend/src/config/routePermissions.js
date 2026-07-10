@@ -74,6 +74,8 @@ export const ROUTE_PERMISSIONS = {
   "/contabilidad/roles-pago": ["Contabilidad", "Administracion"],
   "/contabilidad/comisiones": ["Contabilidad", "Administracion"],
   "/contabilidad/pagos-comisiones": ["Contabilidad", "Administracion"],
+  "/contabilidad/sanciones-configuracion": ["Contabilidad", "Administracion"],
+  "/contabilidad/sanciones-ventas": ["Contabilidad", "Administracion"],
   "/contabilidad/extraccion-reportes-caja": ["Contabilidad", "Administracion"],
 
   "/entregas-auditoria": "Auditoria",

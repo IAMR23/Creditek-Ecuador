@@ -9,6 +9,13 @@ const ComisionConfiguracion = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+    rolPagoId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: "roles_pago", key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
     grupo: {
       type: DataTypes.STRING,
       allowNull: false,

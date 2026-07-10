@@ -403,8 +403,31 @@ const ensureRolesPagoSchema = async (tables) => {
   `);
 };
 
-const ensureComisionesConfiguracionSchema = async (tables) => {
+const ensureComisionesConfiguracionSchema = async (queryInterface, tables) => {
   if (!tables.includes("comisiones_configuracion")) return;
+
+  if (tables.includes("roles_pago")) {
+    await addColumnIfMissing(
+      queryInterface,
+      "comisiones_configuracion",
+      "rolPagoId",
+      {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: "roles_pago",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
+    );
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS comisiones_configuracion_rol_pago_idx
+      ON comisiones_configuracion ("rolPagoId");
+    `);
+  }
 
   await sequelize.query(`
     CREATE INDEX IF NOT EXISTS comisiones_config_activo_idx
@@ -468,7 +491,7 @@ const ensureDetalleEntregasUbicacionSchema = async (queryInterface, tables) => {
       allowNull: true,
     });
   }
-};
+}; 
 
 const connectDB = async () => {
   try {
@@ -487,7 +510,7 @@ const connectDB = async () => {
     await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
     await ensureUsuariosSchema(queryInterface, tables);
     await ensureRolesPagoSchema(tables);
-    await ensureComisionesConfiguracionSchema(tables);
+    await ensureComisionesConfiguracionSchema(queryInterface, tables);
     await ensureNominaSchema(queryInterface, tables);
     await ensureMapaComercialSchema(tables);
     await ensureDetalleEntregasUbicacionSchema(queryInterface, tables);
@@ -497,6 +520,8 @@ const connectDB = async () => {
       seedComisionesConfiguracion,
     } = require("../seeders/comisionesConfiguracionSeeder");
     await seedComisionesConfiguracion();
+    const { seedSancionesConfiguracion } = require("../seeders/sancionesConfiguracionSeeder");
+    await seedSancionesConfiguracion();
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

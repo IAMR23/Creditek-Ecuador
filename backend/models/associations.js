@@ -48,6 +48,7 @@ const ConciliacionModeloCelular = require('./ConciliacionModeloCelular');
 const MapaComercialZona = require('./MapaComercialZona');
 const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
+const SancionConfiguracion = require('./SancionConfiguracion');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -467,6 +468,11 @@ NominaEmpleado.belongsTo(RolPago, {
   foreignKey: "rolPagoId",
   as: "rolPago",
 });
+
+RolPago.hasMany(SancionConfiguracion, { foreignKey: "rolPagoId", as: "sancionesConfiguracion" });
+SancionConfiguracion.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
+RolPago.hasMany(ComisionConfiguracion, { foreignKey: "rolPagoId", as: "comisionesConfiguracion" });
+ComisionConfiguracion.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
 
 /* GESTIONES COMERCIALES */
 

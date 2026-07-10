@@ -12,6 +12,7 @@ import {
   FileSpreadsheet,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Save,
   Search,
   Trash,
@@ -730,8 +731,36 @@ export default function VentasAuditoria() {
           fila.id === id ? { ...fila, Estado: "Desactivada" } : fila,
         ),
       );
+      Swal.fire("Desactivada", "La venta fue desactivada correctamente", "success");
     } catch (error) {
       console.error(error);
+      Swal.fire("Error", "No se pudo desactivar la venta", "error");
+    }
+  };
+
+  const activarVenta = async (id) => {
+    const confirm = await Swal.fire({
+      title: "¿Activar venta?",
+      text: "La venta volverá a incluirse en los reportes activos.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sí, activar",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await axios.put(`${API_URL}/ventas/${id}`, { activo: true });
+      setFilas((prev) =>
+        prev.map((fila) =>
+          fila.id === id ? { ...fila, Estado: "Activo" } : fila,
+        ),
+      );
+      Swal.fire("Activada", "La venta fue activada correctamente", "success");
+    } catch (error) {
+      console.error(error);
+      Swal.fire("Error", "No se pudo activar la venta", "error");
     }
   };
 
@@ -1386,14 +1415,25 @@ export default function VentasAuditoria() {
                                 <Eye size={17} />
                               </Link>
 
-                              <button
-                                type="button"
-                                onClick={() => desactivarVenta(f.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
-                                title="Desactivar venta"
-                              >
-                                <Trash size={17} />
-                              </button>
+                              {f.Estado === "Desactivada" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => activarVenta(f.id)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                                  title="Activar venta"
+                                >
+                                  <RotateCcw size={17} />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => desactivarVenta(f.id)}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded bg-red-600 text-white hover:bg-red-700"
+                                  title="Desactivar venta"
+                                >
+                                  <Trash size={17} />
+                                </button>
+                              )}
                             </>
                           )
                         ) : (

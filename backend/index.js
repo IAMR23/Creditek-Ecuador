@@ -195,6 +195,8 @@ connectDB()
     app.use("/api/contabilidad/nomina", require("./routes/Contabilidad/nominaRoutes"));
     app.use("/api/contabilidad/roles-pago", require("./routes/Contabilidad/rolesPagoRoutes"));
     app.use("/api/contabilidad/comisiones", require("./routes/Contabilidad/comisionesConfiguracionRoutes"));
+    app.use("/api/contabilidad/sanciones-configuracion", require("./routes/Contabilidad/sancionesConfiguracionRoutes"));
+    app.use("/api/contabilidad/sanciones-ventas", require("./routes/Contabilidad/sancionesVentasRoutes"));
     app.use("/api/contabilidad/pagos-comisiones", require("./routes/Contabilidad/pagosComisionesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
@@ -212,7 +214,7 @@ connectDB()
     console.log(
       "Carpeta uploads que Express está usando:", 
     );
-
+ 
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`Servidor corriendo en el puerto ${PORT}`);
     });
@@ -221,4 +223,5 @@ connectDB()
     console.error("Error al conectar a la base de datos:", err);
     process.exit(1);
   }); 
+  
   

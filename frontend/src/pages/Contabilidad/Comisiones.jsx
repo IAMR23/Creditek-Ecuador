@@ -23,13 +23,14 @@ const PERIODOS = [
 ];
 
 const emptyFilters = {
-  grupo: "",
+  rolPagoId: "",
   periodo: "",
   q: "",
   activo: "true",
 };
 
 const emptyForm = {
+  rolPagoId: "",
   grupo: "",
   subgrupo: "",
   periodo: "COMISION_SEMANAL",
@@ -97,7 +98,7 @@ const agruparComisiones = (items) => {
   const gruposMap = new Map();
 
   items.forEach((row) => {
-    const grupo = row.grupo || "Sin grupo";
+    const grupo = row.rolPago?.cargo || row.grupo || "Sin cargo asignado";
     const subgrupo = row.subgrupo || "General";
 
     if (!gruposMap.has(grupo)) {
@@ -159,6 +160,7 @@ const agruparComisiones = (items) => {
 
 export default function Comisiones() {
   const [rows, setRows] = useState([]);
+  const [rolesPago, setRolesPago] = useState([]);
   const [filters, setFilters] = useState(emptyFilters);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -200,8 +202,21 @@ export default function Comisiones() {
     }
   };
 
+  const fetchRolesPago = async () => {
+    try {
+      const { data } = await api.get("/api/contabilidad/roles-pago", {
+        params: { activo: "true" },
+      });
+      setRolesPago(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error cargando roles de pago", error);
+      Swal.fire("Error", "No se pudieron cargar los cargos de Roles de Pago", "error");
+    }
+  };
+
   useEffect(() => {
     fetchRows();
+    fetchRolesPago();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -214,6 +229,7 @@ export default function Comisiones() {
   const openEdit = (row) => {
     setEditing(row);
     setForm({
+      rolPagoId: row.rolPagoId ?? "",
       grupo: row.grupo || "",
       subgrupo: row.subgrupo || "",
       periodo: row.periodo || "COMISION_SEMANAL",
@@ -241,6 +257,7 @@ export default function Comisiones() {
     try {
       const payload = {
         ...form,
+        rolPagoId: Number(form.rolPagoId),
         comisionPorEquipo: form.comisionPorEquipo === "" ? null : form.comisionPorEquipo,
         porcentaje: form.porcentaje === "" ? null : form.porcentaje,
         bono: form.bono === "" ? null : form.bono,
@@ -333,14 +350,14 @@ export default function Comisiones() {
           </div>
           <div className="grid gap-3 md:grid-cols-[220px_220px_1fr_150px_auto]">
             <select
-              value={filters.grupo}
-              onChange={(event) => setFilters({ ...filters, grupo: event.target.value })}
+              value={filters.rolPagoId}
+              onChange={(event) => setFilters({ ...filters, rolPagoId: event.target.value })}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
             >
-              <option value="">Todos los grupos</option>
-              {grupos.map((grupo) => (
-                <option key={grupo} value={grupo}>
-                  {grupo}
+              <option value="">Todos los cargos</option>
+              {rolesPago.map((rol) => (
+                <option key={rol.id} value={rol.id}>
+                  {rol.cargo}
                 </option>
               ))}
             </select>
@@ -434,12 +451,18 @@ export default function Comisiones() {
             </div>
 
             <div className="grid gap-4 p-5 sm:grid-cols-2">
-              <Field label="Grupo">
-                <input
-                  value={form.grupo}
-                  onChange={(event) => setForm({ ...form, grupo: event.target.value })}
+              <Field label="Cargo / Rol de pago">
+                <select
+                  value={form.rolPagoId}
+                  onChange={(event) => {
+                    const rol = rolesPago.find((item) => String(item.id) === event.target.value);
+                    setForm({ ...form, rolPagoId: event.target.value, grupo: rol?.cargo || "" });
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
+                >
+                  <option value="">Seleccione un cargo</option>
+                  {rolesPago.map((rol) => <option key={rol.id} value={rol.id}>{rol.cargo}</option>)}
+                </select>
               </Field>
 
               <Field label="Subgrupo">

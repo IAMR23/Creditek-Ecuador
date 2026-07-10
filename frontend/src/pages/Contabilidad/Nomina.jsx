@@ -194,7 +194,12 @@ export default function Nomina() {
     const rolPago = rolesPago.find((rol) => String(rol.id) === String(rolPagoId));
 
     if (!rolPago) {
-      setForm((prev) => ({ ...prev, rolPagoId }));
+      setForm((prev) => ({
+        ...prev,
+        rolPagoId,
+        cargo: rolPagoId ? prev.cargo : "",
+        sueldo: rolPagoId ? prev.sueldo : "",
+      }));
       return;
     }
 
@@ -637,11 +642,14 @@ export default function Nomina() {
                   <span className="text-sm font-medium text-slate-700">Cargo</span>
                   <input
                     value={form.cargo}
-                    disabled={readOnly}
+                    disabled={readOnly || Boolean(form.rolPagoId)}
                     onChange={(event) => setForm({ ...form, cargo: event.target.value })}
-                    placeholder="Ej. Jefe de logistica"
+                    placeholder={form.rolPagoId ? "Definido por el rol de pago" : "Ej. Jefe de logistica"}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
                   />
+                  {form.rolPagoId && !readOnly ? (
+                    <span className="text-xs text-slate-500">Se actualiza desde Roles de Pago.</span>
+                  ) : null}
                 </label>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -652,10 +660,13 @@ export default function Nomina() {
                       min="0"
                       step="0.01"
                       value={form.sueldo}
-                      disabled={readOnly}
+                      disabled={readOnly || Boolean(form.rolPagoId)}
                       onChange={(event) => setForm({ ...form, sueldo: event.target.value })}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
                     />
+                    {form.rolPagoId && !readOnly ? (
+                      <span className="text-xs text-slate-500">Suma automática del sueldo base y extra.</span>
+                    ) : null}
                   </label>
 
                   <label className="space-y-1">
