@@ -672,45 +672,29 @@ const CrearVentaCompleta = () => {
     formaPago,
     modelo,
   }) => {
-    return `
-VENTA REGISTRADA ${venta.id || ""}
- Vendedor  ${usuarioInfo.nombre} 
- Agencia: ${usuarioInfo.agenciaPrincipal?.nombre}
- Fecha: ${venta.fecha || "N/A"}
-Cliente:
-- Nombre: ${cliente.cliente || "N/A"}
-- Cédula: ${cliente.cedula || "N/A"}
-- Teléfono: ${cliente.telefono || "N/A"}
-- Correo: ${cliente.correo || "N/A"}
-- Direccion: ${cliente.direccion || "N/A"}
-📍 Origen
-- Origen : ${origen.nombre || "N/A"}
-- Observación: ${venta.observacion || "N/A"}
-Detalle:
-- Dispositivo: ${dispositivoMarcaSeleccionado?.dispositivo?.nombre || "N/A"}
-- Marca: ${dispositivoMarcaSeleccionado?.marca?.nombre || "N/A"}
-- Modelo: ${modelo?.nombre || "N/A"}
-- Forma de Pago: ${formaPago?.nombre || "N/A"}
-- Precio Venta : $${ detalle.precioVendedor || 0}
-- Cantidad: ${detalle.cantidad || 0}
-- Entrada : $${detalle.entrada || 0}
-- Alcance : $${detalle.alcance || 0}
-- Contrato: ${detalle.contrato || "N/A"}
-- Identificador anuncio: ${detalle.identificadorAnuncio || "N/A"}
-- Observación del detalle: ${detalle.observacionDetalle || "N/A"}
-Obsequios:
-${
-  obsequios.length
-    ? obsequios
-        .map((o) => {
-          const info = obsequiosDisponibles.find((d) => d.id === o.obsequioId);
+    const valorTexto = (valor, fallback = "N/A") =>
+      valor === null || valor === undefined || valor === "" ? fallback : valor;
 
-          return `- ${info?.nombre || "Desconocido"} (x${o.cantidad})`;
-        })
-        .join("\n")
-    : "- Ninguno"
-}
-    `;
+    return `VENTA REGISTRADA ${venta.id || ""}
+Vendedor ${valorTexto(usuarioInfo.nombre)}
+Agencia: ${valorTexto(usuarioInfo.agenciaPrincipal?.nombre)}
+Fecha: ${valorTexto(venta.fecha)}
+📍 Origen
+- Origen : ${valorTexto(origen?.nombre)}
+- Observación: ${valorTexto(venta.observacion)}
+Detalle:
+- Dispositivo: ${valorTexto(dispositivoMarcaSeleccionado?.dispositivo?.nombre)}
+- Marca: ${valorTexto(dispositivoMarcaSeleccionado?.marca?.nombre)}
+- Modelo: ${valorTexto(modelo?.nombre)}
+- Forma de Pago: ${valorTexto(formaPago?.nombre)}
+- Precio Venta : $${valorTexto(detalle.precioVendedor, "0")}
+- Cantidad: ${valorTexto(detalle.cantidad, "1")}
+- Entrada : $${valorTexto(detalle.entrada, "0")}
+- Alcance : $${valorTexto(detalle.alcance, "0")}
+- Contrato: ${valorTexto(detalle.contrato)}
+- Observación del detalle: ${valorTexto(detalle.observacionDetalle)}
+Obsequios:
+- Ninguno`;
   };
 
   const observaciones = [

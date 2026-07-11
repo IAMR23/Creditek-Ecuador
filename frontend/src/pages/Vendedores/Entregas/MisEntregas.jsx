@@ -88,66 +88,39 @@ export default function MisEntregas() {
   // Texto detalle entrega
   // ==============================
   const generarTextoEntrega = (entrega) => {
-    const {
-      id,
-      usuarioAgencia,
-      cliente,
-      origen,
-      detalleEntrega,
-      obsequiosEntrega,
-    } = entrega;
+    const valorTexto = (valor, fallback = "N/A") =>
+      valor === null || valor === undefined || valor === "" ? fallback : valor;
+    const fecha = entrega.fecha ? String(entrega.fecha).slice(0, 10) : "N/A";
+    const detalles = entrega.detalleEntrega?.length
+      ? entrega.detalleEntrega
+          .map(
+            (item) => `- Dispositivo: ${valorTexto(
+              item.dispositivoMarca?.dispositivo?.nombre
+            )}
+- Marca: ${valorTexto(item.dispositivoMarca?.marca?.nombre)}
+- Modelo: ${valorTexto(item.modelo?.nombre)}
+- Forma de Pago: ${valorTexto(item.formaPago?.nombre)}
+- Precio Venta : $${valorTexto(item.precioVendedor || item.precioUnitario, "0")}
+- Cantidad: ${valorTexto(item.cantidad, "1")}
+- Entrada : $${valorTexto(item.entrada, "0")}
+- Alcance : $${valorTexto(item.alcance, "0")}
+- Contrato: ${valorTexto(item.contrato)}
+- Observación del detalle: ${valorTexto(item.observacionDetalle)}`
+          )
+          .join("\n")
+      : "- Ninguno";
 
-    let texto = `📄 Detalle de la Entrega #${id}
-
-👤 Vendedor: ${usuarioAgencia.usuario.nombre}
-🏢 Agencia: ${usuarioAgencia.agencia.nombre}
-
-🧍 Cliente
-- Nombre: ${cliente.nombre}
-- Cédula: ${cliente.cedula}
-- Teléfono: ${cliente.telefono}
-- Correo : ${cliente.correo || ""}
-- Dirección: ${cliente.direccion || ""}
-
+    return `ENTREGA REGISTRADA ${entrega.id}
+Vendedor ${valorTexto(entrega.usuarioAgencia?.usuario?.nombre)}
+Agencia: ${valorTexto(entrega.usuarioAgencia?.agencia?.nombre)}
+Fecha: ${fecha}
 📍 Origen
-- Origen: ${origen.nombre}
-- Observacion del origen : ${entrega.observacion || ""} 
-
-🛻 Logistica 
-- Fecha y hora de la llamada: ${entrega.FechaHoraLlamada || ""}
-
-📦 Detalle de la Venta
-`;
-    detalleEntrega.forEach((item, index) => {
-      texto += `
-📌 Producto ${index + 1}
-- Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}
-- Marca: ${item.dispositivoMarca.marca.nombre}
-- Modelo: ${item.modelo.nombre}
-- Precio: $${item.precioVendedor}
-- Contrato : $${item.contrato}
-- Entrada : $${item.entrada} 
-- Alcance : $${item.alcance}
-- Forma de pago: ${item.formaPago.nombre}
-- Identificador anuncio: ${item.identificadorAnuncio || "N/A"}
-- Ubicación del Cliente: ${item.ubicacion || ""}
-- Ubicación del dispositivo: ${item.ubicacionDispositivo || ""}
-`;
-    });
-
-    texto += `
-
-🎁 Obsequios
-`;
-    if (obsequiosEntrega.length === 0) {
-      texto += "(No se registraron obsequios)\n";
-    } else {
-      obsequiosEntrega.forEach((item, index) => {
-        texto += `- ${item.obsequio.nombre} (Cantidad: ${item.cantidad})\n`;
-      });
-    }
-
-    return texto;
+- Origen : ${valorTexto(entrega.origen?.nombre)}
+- Observación: ${valorTexto(entrega.observacion)}
+Detalle:
+${detalles}
+Obsequios:
+- Ninguno`;
   };
   const handleCopiarDatos = async (idEntrega) => {
     try {

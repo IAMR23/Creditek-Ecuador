@@ -93,50 +93,47 @@ export default function MisMetas() {
   const copiarVenta = () => {
     if (!ventaSeleccionada) return;
 
-    let texto = `📄 *Detalle de la Venta #${ventaSeleccionada.id}*\n\n`;
+    const valorTexto = (valor, fallback = "N/A") =>
+      valor === null || valor === undefined || valor === "" ? fallback : valor;
+    const fecha = ventaSeleccionada.fecha
+      ? String(ventaSeleccionada.fecha).slice(0, 10)
+      : "N/A";
+    const detalles = ventaSeleccionada.detalleVenta?.length
+      ? ventaSeleccionada.detalleVenta
+          .map(
+            (item) => `- Dispositivo: ${valorTexto(
+              item.dispositivoMarca?.dispositivo?.nombre
+            )}
+- Marca: ${valorTexto(item.dispositivoMarca?.marca?.nombre)}
+- Modelo: ${valorTexto(item.modelo?.nombre)}
+- Forma de Pago: ${valorTexto(item.formaPago?.nombre)}
+- Precio Venta : $${valorTexto(item.precioVendedor || item.precioUnitario, "0")}
+- Cantidad: ${valorTexto(item.cantidad, "1")}
+- Entrada : $${valorTexto(item.entrada, "0")}
+- Alcance : $${valorTexto(item.alcance, "0")}
+- Contrato: ${valorTexto(item.contrato)}
+- Observación del detalle: ${valorTexto(item.observacionDetalle)}`
+          )
+          .join("\n")
+      : "- Ninguno";
 
-    texto += `👤 *Vendedor:* ${ventaSeleccionada.usuarioAgencia.usuario.nombre}\n`;
-    texto += `🏢 *Agencia:* ${ventaSeleccionada.usuarioAgencia.agencia.nombre}\n`;
-    texto += `🧍 *Cliente*\n`;
-    texto += `- Nombre: ${ventaSeleccionada.cliente.cliente}\n`;
-    texto += `- Cédula: ${ventaSeleccionada.cliente.cedula}\n`;
-    texto += `- Teléfono: ${ventaSeleccionada.cliente.telefono}\n`;
-    texto += `- Correo: ${ventaSeleccionada.cliente.correo}\n`;
-    texto += `- Direccion: ${ventaSeleccionada.cliente.direccion}\n`;
-    texto += `🧍 *Origen*\n`;
-    texto += `- Origen: ${ventaSeleccionada.origen.nombre}\n`;
-    texto += `- Observacion del origen: ${ventaSeleccionada.observacion}\n`;
+    const textoNuevo = `VENTA REGISTRADA ${ventaSeleccionada.id}
+Vendedor ${valorTexto(ventaSeleccionada.usuarioAgencia?.usuario?.nombre)}
+Agencia: ${valorTexto(ventaSeleccionada.usuarioAgencia?.agencia?.nombre)}
+Fecha: ${fecha}
+📍 Origen
+- Origen : ${valorTexto(ventaSeleccionada.origen?.nombre)}
+- Observación: ${valorTexto(ventaSeleccionada.observacion)}
+Detalle:
+${detalles}
+Obsequios:
+- Ninguno`;
 
-    texto += `📦 *Detalle de la Venta*\n`;
-
-    ventaSeleccionada.detalleVenta.forEach((item, index) => {
-      texto += `\n📌 *Producto ${index + 1}*\n`;
-      texto += `- Dispositivo: ${item.dispositivoMarca.dispositivo.nombre}\n`;
-      texto += `- Marca: ${item.dispositivoMarca.marca.nombre}\n`;
-      texto += `- Modelo: ${item.modelo.nombre}\n`;
-      texto += `- Precio: ${item.precioVendedor}\n`;
-      texto += `- Entrada: ${item.entrada}\n`;
-      texto += `- Alcance: ${item.alcance}\n`;
-      texto += `- Forma de pago: ${item.formaPago.nombre}\n`;
-      texto += `- Identificador anuncio: ${item.identificadorAnuncio || "N/A"}\n`;
-      texto += `- Obs: ${item.observacionDetalle}\n`;
-    });
-
-    // 🎁 Obsequios
-    texto += `\n🎁 *Obsequios*\n`;
-    if (ventaSeleccionada.obsequiosVenta.length === 0) {
-      texto += `- No hay obsequios\n`;
-    } else {
-      ventaSeleccionada.obsequiosVenta.forEach((ob) => {
-        texto += `- ${ob.obsequio.nombre} (Cant: ${ob.cantidad})\n`;
-      });
-    }
-
-    navigator.clipboard.writeText(texto);
+    navigator.clipboard.writeText(textoNuevo);
     Swal.fire({
       icon: "success",
-      title: "¡Copiado!",
-      text: "Información copiada al portapapeles",
+      title: "Copiado",
+      text: "Informacion copiada al portapapeles",
       confirmButtonColor: "#3085d6",
     });
     setModalAbierto(false);
