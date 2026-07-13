@@ -116,6 +116,17 @@ export default function MisMetas() {
           )
           .join("\n")
       : "- Ninguno";
+    const obsequios = ventaSeleccionada.obsequiosVenta?.length
+      ? ventaSeleccionada.obsequiosVenta
+          .map(
+            (item) =>
+              `- ${valorTexto(item.obsequio?.nombre, "Obsequio")} (Cantidad: ${valorTexto(
+                item.cantidad,
+                "1"
+              )})`
+          )
+          .join("\n")
+      : "- Ninguno";
 
     const textoNuevo = `VENTA REGISTRADA ${ventaSeleccionada.id}
 Vendedor ${valorTexto(ventaSeleccionada.usuarioAgencia?.usuario?.nombre)}
@@ -127,7 +138,7 @@ Fecha: ${fecha}
 Detalle:
 ${detalles}
 Obsequios:
-- Ninguno`;
+${obsequios}`;
 
     navigator.clipboard.writeText(textoNuevo);
     Swal.fire({

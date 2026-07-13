@@ -674,6 +674,19 @@ const CrearVentaCompleta = () => {
   }) => {
     const valorTexto = (valor, fallback = "N/A") =>
       valor === null || valor === undefined || valor === "" ? fallback : valor;
+    const textoObsequios = obsequios.length
+      ? obsequios
+          .map((item) => {
+            const obsequio = obsequiosDisponibles.find(
+              (disponible) => disponible.id === item.obsequioId,
+            );
+            return `- ${valorTexto(obsequio?.nombre, "Obsequio")} (Cantidad: ${valorTexto(
+              item.cantidad,
+              "1",
+            )})`;
+          })
+          .join("\n")
+      : "- Ninguno";
 
     return `VENTA REGISTRADA ${venta.id || ""}
 Vendedor ${valorTexto(usuarioInfo.nombre)}
@@ -694,7 +707,7 @@ Detalle:
 - Contrato: ${valorTexto(detalle.contrato)}
 - Observación del detalle: ${valorTexto(detalle.observacionDetalle)}
 Obsequios:
-- Ninguno`;
+${textoObsequios}`;
   };
 
   const observaciones = [

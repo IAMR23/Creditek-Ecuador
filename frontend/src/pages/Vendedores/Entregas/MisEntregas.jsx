@@ -109,6 +109,17 @@ export default function MisEntregas() {
           )
           .join("\n")
       : "- Ninguno";
+    const obsequios = entrega.obsequiosEntrega?.length
+      ? entrega.obsequiosEntrega
+          .map(
+            (item) =>
+              `- ${valorTexto(item.obsequio?.nombre, "Obsequio")} (Cantidad: ${valorTexto(
+                item.cantidad,
+                "1"
+              )})`
+          )
+          .join("\n")
+      : "- Ninguno";
 
     return `ENTREGA REGISTRADA ${entrega.id}
 Vendedor ${valorTexto(entrega.usuarioAgencia?.usuario?.nombre)}
@@ -120,7 +131,7 @@ Fecha: ${fecha}
 Detalle:
 ${detalles}
 Obsequios:
-- Ninguno`;
+${obsequios}`;
   };
   const handleCopiarDatos = async (idEntrega) => {
     try {
