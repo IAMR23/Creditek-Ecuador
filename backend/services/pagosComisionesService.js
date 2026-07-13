@@ -123,6 +123,14 @@ const isActiveDuringWeek = ({ fechaIngreso, fechaSalida, week }) => {
   return true;
 };
 
+const isActiveDuringPeriod = ({ fechaIngreso, fechaSalida, fechaInicio, fechaFin }) => {
+  const ingreso = fechaIngreso ? String(fechaIngreso).slice(0, 10) : null;
+  const salida = fechaSalida ? String(fechaSalida).slice(0, 10) : null;
+  if (ingreso && ingreso > fechaFin) return false;
+  if (salida && salida < fechaInicio) return false;
+  return true;
+};
+
 const isCargoPagoComisionable = (usuarioPayload) => {
   const cargo = normalizeText(usuarioPayload.cargo);
 
@@ -449,13 +457,11 @@ const buildIncludeUsuarioAgencia = () => ({
 
 const obtenerRelacionesVendedores = async () =>
   UsuarioAgencia.findAll({
-    where: { activo: true },
     include: [
       {
         model: Usuario,
         as: "usuario",
         attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "jefeComercialId", "supervisorComercialId"],
-        where: { activo: true },
         include: [
           { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
           { model: Rol, as: "rol", attributes: ["id", "nombre"] },
@@ -602,7 +608,15 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
 
   relaciones.forEach((relacion) => {
     const usuarioPayload = getUsuarioPayload(relacion);
-    if (isCargoPagoComisionable(usuarioPayload)) {
+    if (
+      isCargoPagoComisionable(usuarioPayload) &&
+      isActiveDuringPeriod({
+        fechaIngreso: usuarioPayload.fechaIngreso,
+        fechaSalida: usuarioPayload.fechaSalida,
+        fechaInicio,
+        fechaFin,
+      })
+    ) {
       ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     }
   });
@@ -613,6 +627,14 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
 
     const usuarioPayload = getUsuarioPayload(venta.usuarioAgencia);
     if (!isCargoPagoComisionable(usuarioPayload)) return;
+    if (
+      !isActiveDuringPeriod({
+        fechaIngreso: usuarioPayload.fechaIngreso,
+        fechaSalida: usuarioPayload.fechaSalida,
+        fechaInicio,
+        fechaFin,
+      })
+    ) return;
 
     const vendedor = ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     if (!vendedor) return;
@@ -738,6 +760,7 @@ module.exports = {
   calculateMonthlyBonus,
   calculateLeaderAverage,
   isActiveDuringWeek,
+  isActiveDuringPeriod,
   isFutureCommercialWeek,
   obtenerReportePagosComisiones,
 };

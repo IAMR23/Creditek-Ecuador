@@ -546,7 +546,13 @@ export default function PagosComisiones() {
                   vendedoresFiltrados.map((vendedor, index) => (
                     <tr
                       key={vendedor.usuarioId}
-                      className={index % 2 === 0 ? "bg-white" : "bg-orange-100"}
+                      className={
+                        vendedor.fechaSalida
+                          ? "bg-rose-100"
+                          : index % 2 === 0
+                            ? "bg-white"
+                            : "bg-orange-100"
+                      }
                     >
                       <td className="sticky left-0 z-10 border border-slate-950 bg-inherit px-3 py-1.5 text-left font-medium">
                         <div className="leading-tight">
@@ -554,6 +560,11 @@ export default function PagosComisiones() {
                           {vendedor.cargo ? (
                             <span className="block text-[11px] font-normal text-slate-500">
                               {vendedor.cargo}
+                            </span>
+                          ) : null}
+                          {vendedor.fechaSalida ? (
+                            <span className="mt-1 inline-block rounded bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                              Salida: {String(vendedor.fechaSalida).slice(0, 10)}
                             </span>
                           ) : null}
                           {vendedor.esJefeComercial ? (
@@ -644,12 +655,19 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
         return (
           <section
             key={row.usuarioId}
-            className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+            className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
+              row.fechaSalida ? "border-rose-500 ring-2 ring-rose-200" : "border-slate-200"
+            }`}
           >
             <div className="border-b border-slate-200 px-4 py-3">
               <h2 className="text-center text-lg font-black uppercase text-slate-900">
                 Comisiones {row.nombre}
               </h2>
+              {row.fechaSalida ? (
+                <p className="mt-1 text-center text-sm font-bold text-rose-700">
+                  Fecha de salida: {String(row.fechaSalida).slice(0, 10)}
+                </p>
+              ) : null}
               {row.vendedoresJunior?.length ? (
                 <p className="mt-1 text-center text-xs text-slate-500">
                   Juniors: {row.vendedoresJunior.map((junior) => junior.nombre).join(", ")}

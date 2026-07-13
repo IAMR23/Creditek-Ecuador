@@ -4,6 +4,7 @@ const {
   calculateMonthlyBonus,
   isActiveDuringWeek,
   isFutureCommercialWeek,
+  isActiveDuringPeriod,
   buildWeeklyRulesByGroup,
   buildMonthlyRulesByGroup,
   calculateCommission,
@@ -187,6 +188,25 @@ describe("pagosComisionesService", () => {
     expect(isActiveDuringWeek({ fechaIngreso: "2026-07-24", week: { startDate: "2026-07-02", endDate: "2026-07-08" } })).toBe(false);
     expect(isActiveDuringWeek({ fechaIngreso: "2026-07-24", week: { startDate: "2026-07-23", endDate: "2026-07-29" } })).toBe(true);
     expect(isActiveDuringWeek({ fechaSalida: "2026-07-10", week: { startDate: "2026-07-16", endDate: "2026-07-22" } })).toBe(false);
+  });
+
+  test("muestra el mes de salida y excluye al vendedor desde el siguiente mes", () => {
+    const empleado = { fechaIngreso: "2026-01-10", fechaSalida: "2026-07-20" };
+
+    expect(
+      isActiveDuringPeriod({
+        ...empleado,
+        fechaInicio: "2026-07-01",
+        fechaFin: "2026-07-31",
+      }),
+    ).toBe(true);
+    expect(
+      isActiveDuringPeriod({
+        ...empleado,
+        fechaInicio: "2026-08-01",
+        fechaFin: "2026-08-31",
+      }),
+    ).toBe(false);
   });
 
   test("identifica semanas comerciales que aun no han iniciado", () => {
