@@ -26,7 +26,6 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
-import { FaTasks } from "react-icons/fa";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
 
@@ -62,6 +61,7 @@ export default function Sidebar({ auth }) {
     () => ({
       comercial: {
         title: "Gerencia",
+        permission: "Gerencia",
         items: [
           {
             label: "Metas Comerciales",
@@ -118,6 +118,7 @@ export default function Sidebar({ auth }) {
 
       Marketing: {
         title: "Marketing",
+        permission: "Marketing",
         items: [
                    {
             label: "Costo por Venta Marketing",
@@ -140,6 +141,7 @@ export default function Sidebar({ auth }) {
 
       logistica: {
         title: "Logística",
+        permission: "Logistica",
         items: [
                     {
             label: "Costo por Entrega",
@@ -163,6 +165,7 @@ export default function Sidebar({ auth }) {
 
       contabilidad: {
         title: "Contabilidad",
+        permission: "Contabilidad",
         items: [
           {
             label: "Nómina",
@@ -204,6 +207,7 @@ export default function Sidebar({ auth }) {
 
       Auditoria: {
         title: "Auditoría",
+        permission: "Auditoria",
         items: [
           {
             label: "Entregas Auditoría",
@@ -231,6 +235,7 @@ export default function Sidebar({ auth }) {
 
       Sistemas: {
         title: "Sistemas",
+        permission: "Sistemas",
         items: [
           {
             label: "Gestion de Tareas",
@@ -252,6 +257,7 @@ export default function Sidebar({ auth }) {
 
       admin: {
         title: "Administración",
+        permission: "Administracion",
         items: [
           { label: "Usuarios", icon: <Users size={20} />, path: "/usuarios" },
           { label: "Roles", icon: <ShieldCheck size={20} />, path: "/rol" },
@@ -290,6 +296,7 @@ export default function Sidebar({ auth }) {
 
       catalogos: {
         title: "Catálogos",
+        permission: "Catalogos",
         items: [
           { label: "Marcas", icon: <Tag size={20} />, path: "/marcas" },
           { label: "Modelos", icon: <Layers size={20} />, path: "/modelos" },
@@ -334,6 +341,13 @@ export default function Sidebar({ auth }) {
 
     return Object.fromEntries(
       Object.entries(sections)
+        .filter(([, section]) =>
+          hasRouteAccess({
+            rol,
+            permisos,
+            permission: section.permission,
+          }),
+        )
         .map(([key, section]) => [
           key,
           {

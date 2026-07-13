@@ -108,6 +108,8 @@ const getUsuarioPayload = (usuarioAgencia) => {
     agencias: agencia?.nombre ? [agencia.nombre] : [],
     fechaIngreso: usuario.fechaIngreso || null,
     fechaSalida: usuario.fechaSalida || null,
+    jefeComercialId: usuario.jefeComercialId || null,
+    supervisorComercialId: usuario.supervisorComercialId || null,
   };
 };
 
@@ -139,8 +141,13 @@ const isCargoPagoComisionable = (usuarioPayload) => {
   const isAsistenteVendedor =
     cargo === "ASISTENTE VENDEDOR" ||
     cargo.includes("ASISTENTE VENDEDOR");
+  const isJefeComercial = cargo.includes("JEFE COMERCIAL");
+  const isSupervisorComercial =
+    cargo.includes("SUPERVISOR") &&
+    (cargo.includes("PISO") || cargo.includes("CALL CENTER"));
 
-  return isAsistenteVendedor || isVendedorPiso || isVendedorCallCenter;
+  return isAsistenteVendedor || isVendedorPiso || isVendedorCallCenter ||
+    isJefeComercial || isSupervisorComercial;
 };
 
 const resolveGrupoComision = (usuarioPayload) => {
@@ -148,6 +155,18 @@ const resolveGrupoComision = (usuarioPayload) => {
     `${usuarioPayload.cargo} ${usuarioPayload.nivel} ${usuarioPayload.rol}`,
   );
 
+  if (text.includes("JEFE COMERCIAL") && text.includes("CALL CENTER")) {
+    return "JEFE COMERCIAL CALL CENTER";
+  }
+  if (text.includes("JEFE COMERCIAL") && text.includes("PISO")) {
+    return "JEFE COMERCIAL PISO";
+  }
+  if (text.includes("SUPERVISOR") && text.includes("CALL CENTER")) {
+    return "SUPERVISOR CALL CENTER";
+  }
+  if (text.includes("SUPERVISOR") && text.includes("PISO")) {
+    return "SUPERVISOR PISO";
+  }
   if (text.includes("CALL CENTER")) return "VENDEDORES DE CALL CENTER";
   if (text.includes("PISO") || text.includes("FURGONETA") || text.includes("VENDEDOR")) {
     return "VENDEDORES DE PISO Y FURGONETA";
@@ -177,11 +196,13 @@ const parseUnitsRule = (value) => {
   };
 };
 
-const buildWeeklyRulesByGroup = (configs) =>
-  configs
+const buildWeeklyRulesByGroup = (configs) => {
+  const grouped = configs
     .filter((config) => config.periodo === "COMISION_SEMANAL")
     .reduce((acc, config) => {
-      const key = config.rolPagoId ? `ROL:${config.rolPagoId}` : normalizeText(config.grupo);
+      const baseKey = config.rolPagoId ? `ROL:${config.rolPagoId}` : normalizeText(config.grupo);
+      const subgrupo = normalizeText(config.subgrupo);
+      const key = subgrupo ? `${baseKey}|SUB:${subgrupo}` : baseKey;
       if (!acc[key]) acc[key] = [];
 
       const range = parseUnitsRule(config.unidadesVendidas);
@@ -197,6 +218,28 @@ const buildWeeklyRulesByGroup = (configs) =>
       return acc;
     }, {});
 
+  Object.values(grouped).forEach((rules) => {
+    const ordered = [...rules].sort((a, b) => a.range.min - b.range.min);
+    const areThresholdTiers =
+      ordered.length > 1 &&
+      ordered.every(
+        (rule) =>
+          rule.range.max === rule.range.min &&
+          rule.comisionPorEquipo !== null &&
+          rule.porcentaje === null,
+      );
+
+    if (!areThresholdTiers) return;
+
+    ordered.forEach((rule, index) => {
+      const next = ordered[index + 1];
+      rule.range.max = next ? next.range.min - 1 : null;
+    });
+  });
+
+  return grouped;
+};
+
 const getMonthlyPeriodCandidates = (weeksCount) => [
   `BONO_MENSUAL_${weeksCount}_SEMANAS`,
   "BONO_MENSUAL",
@@ -207,6 +250,9 @@ const buildMonthlyRulesByGroup = (configs, weeksCount) => {
   const grouped = {};
 
   configs.forEach((config) => {
+    // El bono mensual se calcula por promedio individual y no cambia por
+    // el numero de vendedores del equipo. En la matriz historica aparece
+    // dentro del bloque "2 vendedores", pero aplica al grupo completo.
     const key = config.rolPagoId ? `ROL:${config.rolPagoId}` : normalizeText(config.grupo);
     const period = config.periodo;
 
@@ -219,8 +265,9 @@ const buildMonthlyRulesByGroup = (configs, weeksCount) => {
       };
     }
 
-    const unidades = normalizeText(config.unidadesVendidas);
-    const range = parseUnitsRule(config.unidadesVendidas);
+    const valorMeta = config.promedioPorVendedor || config.unidadesVendidas;
+    const unidades = normalizeText(valorMeta);
+    const range = parseUnitsRule(valorMeta);
 
     if (range) {
       grouped[key][period].tiers.push({
@@ -273,6 +320,14 @@ const calculateMonthlyBonus = ({ rules, venden }) => {
   const ultimaMeta = orderedTiers[orderedTiers.length - 1].min;
   const extra = Math.max(0, venden - ultimaMeta) * toNumber(rules.extraPorEquipo);
   return round(toNumber(tier.bono) + extra, 2);
+};
+
+const calculateLeaderAverage = ({ totalDispositivos, cantidadSemanas, cantidadJuniors }) => {
+  if (!cantidadSemanas || !cantidadJuniors) return 0;
+  return round(
+    toNumber(totalDispositivos) / toNumber(cantidadSemanas) / toNumber(cantidadJuniors),
+    3,
+  );
 };
 
 const calculateCommission = ({ rules, venden, valorVendido }) => {
@@ -373,7 +428,7 @@ const buildIncludeUsuarioAgencia = () => ({
     {
       model: Usuario,
       as: "usuario",
-      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida"],
+      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "jefeComercialId", "supervisorComercialId"],
       include: [
         { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
         { model: Rol, as: "rol", attributes: ["id", "nombre"] },
@@ -399,7 +454,7 @@ const obtenerRelacionesVendedores = async () =>
       {
         model: Usuario,
         as: "usuario",
-        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida"],
+        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "jefeComercialId", "supervisorComercialId"],
         where: { activo: true },
         include: [
           { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
@@ -441,8 +496,17 @@ const obtenerVentasRango = async ({ fechaInicio, fechaFin }) => {
 const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup, sanctionsByRole) => {
   const rolKey = vendedor.rolPagoId ? `ROL:${vendedor.rolPagoId}` : null;
   const grupoKey = vendedor.grupoComision ? normalizeText(vendedor.grupoComision) : null;
-  const rules = (rolKey && weeklyRulesByGroup[rolKey]) || (grupoKey && weeklyRulesByGroup[grupoKey]) || [];
-  const monthlyRules = (rolKey && monthlyRulesByGroup[rolKey]) || (grupoKey && monthlyRulesByGroup[grupoKey]) || null;
+  const subgrupo = vendedor.vendedoresJunior?.length
+    ? `${vendedor.vendedoresJunior.length} VENDEDORES`
+    : null;
+  const rolSubgrupoKey = rolKey && subgrupo ? `${rolKey}|SUB:${subgrupo}` : null;
+  const grupoSubgrupoKey = grupoKey && subgrupo ? `${grupoKey}|SUB:${subgrupo}` : null;
+  const rules = (rolSubgrupoKey && weeklyRulesByGroup[rolSubgrupoKey]) ||
+    (grupoSubgrupoKey && weeklyRulesByGroup[grupoSubgrupoKey]) ||
+    (rolKey && weeklyRulesByGroup[rolKey]) || (grupoKey && weeklyRulesByGroup[grupoKey]) || [];
+  const monthlyRules = (rolSubgrupoKey && monthlyRulesByGroup[rolSubgrupoKey]) ||
+    (grupoSubgrupoKey && monthlyRulesByGroup[grupoSubgrupoKey]) ||
+    (rolKey && monthlyRulesByGroup[rolKey]) || (grupoKey && monthlyRulesByGroup[grupoKey]) || null;
   const sanctionConfig = sanctionsByRole.byRole[Number(vendedor.rolPagoId)] || sanctionsByRole.byCargo[normalizeText(vendedor.cargo)] || null;
 
   vendedor.resumenMensual = emptyMonthlyValues();
@@ -484,9 +548,21 @@ const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGr
 
   vendedor.resumenMensual.ventasTvCelulaMensual = vendedor.total.venden;
   vendedor.resumenMensual.valorComisionSemanal = vendedor.total.totalComisiones;
+  const esLiderComercial = vendedor.esJefeComercial || vendedor.esSupervisorComercial;
+  const promedioVentasPorJunior = esLiderComercial
+    ? calculateLeaderAverage({
+        totalDispositivos: vendedor.total.venden,
+        cantidadSemanas: weeks.length,
+        cantidadJuniors: vendedor.vendedoresJunior?.length || 0,
+      })
+    : null;
+  const unidadesParaBono = esLiderComercial
+    ? promedioVentasPorJunior
+    : vendedor.total.venden;
+  vendedor.resumenMensual.promedioVentasPorJunior = promedioVentasPorJunior;
   vendedor.resumenMensual.valorComisionMensual = calculateMonthlyBonus({
     rules: monthlyRules,
-    venden: vendedor.total.venden,
+    venden: unidadesParaBono,
   });
   vendedor.resumenMensual.totalComisionesSemanaMensual = round(
     vendedor.resumenMensual.valorComisionSemanal +
@@ -544,6 +620,33 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
     const totals = getSaleTotals(venta);
     vendedor.semanas[weekKey].venden += totals.venden;
     vendedor.semanas[weekKey].valorVendido += totals.valorVendido;
+  });
+
+  const vendedoresBase = [...vendedoresMap.values()];
+  vendedoresBase.forEach((jefe) => {
+    const cargo = normalizeText(jefe.cargo);
+    const esJefe = cargo.includes("JEFE COMERCIAL");
+    const esSupervisor = cargo.includes("SUPERVISOR");
+    if (!esJefe && !esSupervisor) return;
+
+    const juniors = vendedoresBase.filter(
+      (vendedor) => Number(
+        esJefe ? vendedor.jefeComercialId : vendedor.supervisorComercialId,
+      ) === Number(jefe.usuarioId),
+    );
+    jefe.esJefeComercial = esJefe;
+    jefe.esSupervisorComercial = esSupervisor;
+    jefe.vendedoresJunior = juniors.map(({ usuarioId, nombre }) => ({ usuarioId, nombre }));
+    jefe.semanas = buildEmptyWeeks(weeks);
+    jefe.total = emptyWeekValues();
+
+    juniors.forEach((junior) => {
+      weeks.forEach((week) => {
+        const origen = junior.semanas[week.startDate];
+        jefe.semanas[week.startDate].venden += origen.venden;
+        jefe.semanas[week.startDate].valorVendido += origen.valorVendido;
+      });
+    });
   });
 
   const vendedores = [...vendedoresMap.values()]
@@ -628,8 +731,12 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
 
 module.exports = {
   isCargoPagoComisionable,
+  buildWeeklyRulesByGroup,
+  buildMonthlyRulesByGroup,
+  calculateCommission,
   calculateSalesPenalty,
   calculateMonthlyBonus,
+  calculateLeaderAverage,
   isActiveDuringWeek,
   isFutureCommercialWeek,
   obtenerReportePagosComisiones,

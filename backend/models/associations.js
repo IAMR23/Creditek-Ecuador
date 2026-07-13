@@ -55,6 +55,10 @@ Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
 Usuario.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
 RolPago.hasMany(Usuario, { foreignKey: "rolPagoId", as: "usuariosCargoPago" });
+Usuario.belongsTo(Usuario, { foreignKey: "jefeComercialId", as: "jefeComercial" });
+Usuario.hasMany(Usuario, { foreignKey: "jefeComercialId", as: "vendedoresJunior" });
+Usuario.belongsTo(Usuario, { foreignKey: "supervisorComercialId", as: "supervisorComercial" });
+Usuario.hasMany(Usuario, { foreignKey: "supervisorComercialId", as: "juniorsSupervisados" });
 
 // Agencia ↔ Usuario (muchos a muchos)
 Usuario.belongsToMany(Agencia, {

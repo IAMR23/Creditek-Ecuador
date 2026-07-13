@@ -64,6 +64,28 @@ const Usuario = sequelize.define(
       onDelete: "SET NULL",
     },
 
+    jefeComercialId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+
+    supervisorComercialId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+
     fechaIngreso: {
       type: DataTypes.DATEONLY,
       allowNull: true,

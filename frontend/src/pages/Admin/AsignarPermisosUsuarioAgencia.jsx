@@ -26,20 +26,30 @@ export default function AsignarPermisosUsuarioAgencia() {
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(null);
   const [permisosSeleccionados, setPermisosSeleccionados] = useState([]);
   const [busqueda, setBusqueda] = useState("");
+  const [permisoFiltro, setPermisoFiltro] = useState("");
   const [loading, setLoading] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
   const usuariosFiltrados = useMemo(() => {
     const term = busqueda.trim().toLowerCase();
-    if (!term) return usuarios;
 
     return usuarios.filter((usuario) => {
+      const permisosIds = getPermisosIds(usuario);
+      const coincidePermiso =
+        !permisoFiltro ||
+        (permisoFiltro === "sin-permisos"
+          ? permisosIds.length === 0
+          : permisosIds.some((id) => String(id) === permisoFiltro));
+
+      if (!coincidePermiso) return false;
+      if (!term) return true;
+
       const permisosTexto = getPermisosNombres(usuario).join(" ");
       return `${usuario.nombre || ""} ${usuario.email || ""} ${usuario.rol?.nombre || ""} ${permisosTexto}`
         .toLowerCase()
         .includes(term);
     });
-  }, [busqueda, usuarios]);
+  }, [busqueda, permisoFiltro, usuarios]);
 
   const permisosPorSeccion = useMemo(() => {
     return permisos.reduce((acc, permiso) => {
@@ -188,6 +198,23 @@ export default function AsignarPermisosUsuarioAgencia() {
                   className="w-full rounded-lg border border-slate-300 py-2 pl-10 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
+              <select
+                value={permisoFiltro}
+                onChange={(event) => setPermisoFiltro(event.target.value)}
+                aria-label="Filtrar usuarios por permiso"
+                className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              >
+                <option value="">Todos los permisos</option>
+                <option value="sin-permisos">Sin permisos asignados</option>
+                {permisos.map((permiso) => (
+                  <option key={permiso.id} value={String(permiso.id)}>
+                    {permiso.nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-slate-500">
+                {usuariosFiltrados.length} de {usuarios.length} usuarios
+              </p>
             </div>
 
             <div className="max-h-[62vh] overflow-y-auto p-3">
@@ -315,7 +342,12 @@ export default function AsignarPermisosUsuarioAgencia() {
 
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
-            <h2 className="font-semibold text-slate-900">Usuarios con permisos</h2>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="font-semibold text-slate-900">Usuarios con permisos</h2>
+              <span className="text-sm text-slate-500">
+                {usuariosFiltrados.length} resultado(s)
+              </span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">

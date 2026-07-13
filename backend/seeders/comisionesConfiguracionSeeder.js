@@ -47,7 +47,7 @@ const COMISIONES_INICIALES = [
   ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "32", 3, null, null, null, "96", null],
   ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "12", 60, null, null],
   ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "13", 80, null, null],
-  ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "15", 100, null, null],
+  ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "14.50", 100, null, null],
 
   ["VENDEDORES DE PISO Y FURGONETA", null, "COMISION_SEMANAL", "12", null, 0.003, null, null, "8 a 10 usd", null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "COMISION_SEMANAL", "13-15", null, 0.01, null, null, "35 a 65 usd", null],

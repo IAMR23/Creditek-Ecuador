@@ -9,5 +9,7 @@ const requirePagosComisiones = requirePermission("Contabilidad", "Administracion
 router.use(authenticate, requirePagosComisiones);
 
 router.get("/", controller.obtenerReporte);
+router.put("/vendedores/:usuarioId/jefe-comercial", controller.actualizarJefeComercial);
+router.put("/vendedores/:usuarioId/supervisor-comercial", controller.actualizarSupervisorComercial);
 
 module.exports = router;
