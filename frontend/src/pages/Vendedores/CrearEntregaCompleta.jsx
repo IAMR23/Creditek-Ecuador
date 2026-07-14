@@ -448,6 +448,7 @@ Detalle:
 - Entrada : $${valorTexto(detalle.entrada, "0")}
 - Alcance : $${valorTexto(detalle.alcance, "0")}
 - Contrato: ${valorTexto(detalle.contrato)}
+- Identificador anuncio: ${valorTexto(detalle.identificadorAnuncio)}
 - Observación del detalle: ${valorTexto(detalle.observacionDetalle)}
 Obsequios:
 ${textoObsequios}`;

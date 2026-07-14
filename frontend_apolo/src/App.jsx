@@ -37,7 +37,14 @@ export default function App() {
                     <Route path="/roles" element={<Roles />} />
                     <Route path="/usuarios-agencias" element={<UsuariosAgencias />} />
                     <Route path="/control-asistencia" element={<ControlAsistencia />} />
-                    <Route path="/postulaciones" element={<Postulaciones />} />
+                    <Route
+                      path="/postulaciones"
+                      element={<Postulaciones modo="postulacion" />}
+                    />
+                    <Route
+                      path="/entrevistas"
+                      element={<Postulaciones modo="entrevista" />}
+                    />
                     <Route path="*" element={<Navigate to="/usuarios" replace />} />
                   </Routes>
                 </div>

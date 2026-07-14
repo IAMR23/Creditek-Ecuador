@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Eye, Pencil, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Pencil,
+  RefreshCw,
+  Save,
+  Search,
+  Trash2,
+  Undo2,
+  UserCheck,
+  X,
+} from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
 import ModalDetalle from "../../components/PostulacionDetalle";
@@ -7,12 +19,23 @@ import ModalDetalle from "../../components/PostulacionDetalle";
 const dash = "-";
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 const PAGE_SIZE = 10;
-const initialFilters = {
+const createEmptyFilters = () => ({
   q: "",
   fechaDesde: "",
   fechaHasta: "",
   estado: "",
-};
+  edadDesde: "",
+  edadHasta: "",
+  ciudad: "",
+  tituloTercerNivel: "",
+});
+
+const createInitialFilters = (modo) => ({
+  ...createEmptyFilters(),
+  edadDesde: modo === "postulacion" ? "18" : "",
+  edadHasta: modo === "postulacion" ? "35" : "",
+  tituloTercerNivel: modo === "postulacion" ? "no" : "",
+});
 
 const getDatos = (postulacion) => postulacion?.formulario?.datos_personales || {};
 const getVivienda = (postulacion) => postulacion?.formulario?.vivienda_actual || {};
@@ -28,14 +51,20 @@ const formatDate = (date) => {
 const thClass = "px-1.5 py-2 text-[10px] font-bold leading-tight md:px-2 lg:text-xs";
 const tdClass = "min-w-0 break-words px-1.5 py-2 text-[10px] leading-tight text-slate-700 md:px-2 lg:text-xs";
 
-export default function Postulaciones() {
+export default function Postulaciones({ modo = "postulacion" }) {
+  const esEntrevistas = modo === "entrevista";
   const [postulaciones, setPostulaciones] = useState([]);
-  const [filters, setFilters] = useState(initialFilters);
+  const [filters, setFilters] = useState(() => createInitialFilters(modo));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [resumen, setResumen] = useState({ total: 0, noLeidas: 0 });
+  const [resumen, setResumen] = useState({
+    totalGeneral: 0,
+    total: 0,
+    noLeidas: 0,
+    entrevistas: 0,
+  });
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     total: 0,
@@ -48,6 +77,7 @@ export default function Postulaciones() {
   const [observacionesDraft, setObservacionesDraft] = useState({});
   const [savingObservationId, setSavingObservationId] = useState(null);
   const [editingObservationId, setEditingObservationId] = useState(null);
+  const [updatingStageId, setUpdatingStageId] = useState(null);
   const requestIdRef = useRef(0);
 
   const total = useMemo(() => pagination.total || postulaciones.length, [pagination.total, postulaciones.length]);
@@ -61,7 +91,14 @@ export default function Postulaciones() {
   const actualizarResumen = async () => {
     try {
       const res = await api.get("/api/postulaciones/resumen");
-      setResumen(res.data?.data || { total: 0, noLeidas: 0 });
+      setResumen(
+        res.data?.data || {
+          totalGeneral: 0,
+          total: 0,
+          noLeidas: 0,
+          entrevistas: 0,
+        },
+      );
     } catch {
       // La vista principal puede seguir funcionando aunque falle el resumen.
     }
@@ -82,6 +119,11 @@ export default function Postulaciones() {
           fechaDesde: filtersToUse.fechaDesde || undefined,
           fechaHasta: filtersToUse.fechaHasta || undefined,
           estado: filtersToUse.estado || undefined,
+          edadDesde: filtersToUse.edadDesde || undefined,
+          edadHasta: filtersToUse.edadHasta || undefined,
+          ciudad: filtersToUse.ciudad.trim() || undefined,
+          tituloTercerNivel: filtersToUse.tituloTercerNivel || undefined,
+          fase: modo,
         },
       });
       const items = res.data.data || [];
@@ -113,7 +155,7 @@ export default function Postulaciones() {
   };
 
   const limpiarFiltros = () => {
-    setFilters(initialFilters);
+    setFilters(createEmptyFilters());
   };
 
   const irPagina = (nextPage) => {
@@ -216,6 +258,51 @@ export default function Postulaciones() {
     setEditingObservationId(null);
   };
 
+  const actualizarFaseEntrevista = async (postulacion, pasaEntrevista) => {
+    const datos = getDatos(postulacion);
+    const nombre = datos.nombreCompleto || postulacion.nombre || `ID ${postulacion.id}`;
+    const accion = pasaEntrevista ? "pasar a entrevista" : "devolver a postulaciones";
+    const { isConfirmed } = await Swal.fire({
+      title: pasaEntrevista ? "Pasar a entrevista" : "Volver a postulaciones",
+      text: `¿Deseas ${accion} a ${nombre}?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: pasaEntrevista ? "#059669" : "#ea580c",
+      cancelButtonColor: "#64748b",
+      confirmButtonText: pasaEntrevista ? "Sí, pasar" : "Sí, devolver",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!isConfirmed) return;
+
+    try {
+      setUpdatingStageId(postulacion.id);
+      setError("");
+      await api.patch(`/api/postulaciones/${postulacion.id}/entrevista`, {
+        pasaEntrevista,
+      });
+
+      setSelected((prev) => (prev?.id === postulacion.id ? null : prev));
+      const nextPage = postulaciones.length === 1 && page > 1 ? page - 1 : page;
+      await fetchPostulaciones(nextPage, filters);
+
+      Swal.fire(
+        "Actualizado",
+        pasaEntrevista
+          ? "El postulante ahora se encuentra en la sección Entrevistas."
+          : "El postulante regresó a la sección Postulaciones.",
+        "success",
+      );
+    } catch (err) {
+      const message =
+        err.response?.data?.message || "No se pudo actualizar la fase del postulante";
+      setError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setUpdatingStageId(null);
+    }
+  };
+
   const eliminarPostulacion = async (postulacion) => {
     const datos = getDatos(postulacion);
     const nombre = datos.nombreCompleto || postulacion.nombre || `ID ${postulacion.id}`;
@@ -261,70 +348,128 @@ export default function Postulaciones() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-6">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-orange-600">
               Desarrollo Organizacional
             </p>
             <h2 className="mt-1 text-2xl font-bold text-slate-900">
-              Postulaciones
+              {esEntrevistas ? "Entrevistas" : "Postulaciones"}
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              {total} registro{total === 1 ? "" : "s"} disponible{total === 1 ? "" : "s"}.
+              {total} postulante{total === 1 ? "" : "s"} en esta fase.
             </p>
-            <p className="mt-1 text-sm font-medium text-red-600">
-              {resumen.noLeidas} no leida{resumen.noLeidas === 1 ? "" : "s"}.
-            </p>
+            {!esEntrevistas && (
+              <p className="mt-1 text-sm font-medium text-red-600">
+                {resumen.noLeidas} no leida{resumen.noLeidas === 1 ? "" : "s"}.
+              </p>
+            )}
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_150px_150px_150px_auto] lg:items-end">
-            <div className="relative">
-              <Search
-                size={18}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+          <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+            <div className="xl:col-span-2">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Buscar
+              </label>
+              <div className="relative">
+                <Search
+                  size={18}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  value={filters.q}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+                  placeholder="Nombre, telefono o cedula"
+                  className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Edad desde
+              </label>
               <input
-                value={filters.q}
-                onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
-                placeholder="Nombre, telefono o cedula"
-                className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                type="number"
+                min="0"
+                max="120"
+                value={filters.edadDesde}
+                onChange={(e) => setFilters((prev) => ({ ...prev, edadDesde: e.target.value }))}
+                placeholder="Mínima"
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
               />
             </div>
 
-     {/*        <input
-              type="date"
-              value={filters.fechaDesde}
-              onChange={(e) => setFilters((prev) => ({ ...prev, fechaDesde: e.target.value }))}
-              title="Fecha desde"
-              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-            />
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Edad hasta
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="120"
+                value={filters.edadHasta}
+                onChange={(e) => setFilters((prev) => ({ ...prev, edadHasta: e.target.value }))}
+                placeholder="Máxima"
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
 
-            <input
-              type="date"
-              value={filters.fechaHasta}
-              onChange={(e) => setFilters((prev) => ({ ...prev, fechaHasta: e.target.value }))}
-              title="Fecha hasta"
-              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-            /> */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Ciudad
+              </label>
+              <input
+                type="text"
+                value={filters.ciudad}
+                onChange={(e) => setFilters((prev) => ({ ...prev, ciudad: e.target.value }))}
+                placeholder="Escriba una ciudad"
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
 
-            <select
-              value={filters.estado}
-              onChange={(e) => setFilters((prev) => ({ ...prev, estado: e.target.value }))}
-              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-            >
-              <option value="">Todas</option>
-              <option value="leidas">Leidas</option>
-              <option value="no-leidas">No leidas</option>
-            </select>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Título de tercer nivel
+              </label>
+              <select
+                value={filters.tituloTercerNivel}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, tituloTercerNivel: e.target.value }))
+                }
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              >
+                <option value="">Todos</option>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </div>
 
-            <button
-              onClick={limpiarFiltros}
-              disabled={loading}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw size={17} />
-              Limpiar
-            </button>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Estado
+              </label>
+              <select
+                value={filters.estado}
+                onChange={(e) => setFilters((prev) => ({ ...prev, estado: e.target.value }))}
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              >
+                <option value="">Todas</option>
+                <option value="leidas">Leidas</option>
+                <option value="no-leidas">No leidas</option>
+              </select>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={limpiarFiltros}
+                disabled={loading}
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw size={17} />
+                Limpiar
+              </button>
+            </div>
           </div>
         </div>
 
@@ -345,7 +490,9 @@ export default function Postulaciones() {
                 No hay postulaciones para mostrar
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Cuando se envie un formulario, aparecera en esta vista.
+                {esEntrevistas
+                  ? "Los postulantes que pasen a entrevista aparecerán en esta vista."
+                  : "Cuando se envíe un formulario compatible con los filtros, aparecerá aquí."}
               </p>
             </div>
           ) : (
@@ -364,8 +511,8 @@ export default function Postulaciones() {
                   <col className="w-[4%]" />
                   <col className="w-[6%]" />
                   <col className="w-[8%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[7%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
@@ -380,7 +527,9 @@ export default function Postulaciones() {
                     <th className={thClass}>Vivienda</th>
                     <th className={thClass}>Trab.</th>
                     <th className={thClass}>Estado</th>
-                    <th className={thClass}>Fecha</th>
+                    <th className={thClass}>
+                      {esEntrevistas ? "Pase a entrevista" : "Fecha"}
+                    </th>
                     <th className={thClass}>Observacion</th>
                     <th className={`${thClass} text-right`}>Accion</th>
                   </tr>
@@ -440,7 +589,7 @@ export default function Postulaciones() {
                           </span>
                         </td>
                         <td className={tdClass}>
-                          {formatDate(p.createdAt)}
+                          {formatDate(esEntrevistas ? p.pasaEntrevistaAt : p.createdAt)}
                         </td>
                         <td className={tdClass}>
                           {editingObservation ? (
@@ -482,7 +631,31 @@ export default function Postulaciones() {
                           )}
                         </td>
                         <td className={`${tdClass} text-right`}>
-                          <div className="flex justify-end gap-1">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <button
+                              onClick={() => actualizarFaseEntrevista(p, !esEntrevistas)}
+                              disabled={updatingStageId === p.id}
+                              className={`inline-flex h-7 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                esEntrevistas
+                                  ? "bg-orange-500 hover:bg-orange-600"
+                                  : "bg-emerald-600 hover:bg-emerald-700"
+                              }`}
+                              aria-label={
+                                esEntrevistas
+                                  ? "Devolver a postulaciones"
+                                  : "Pasar a entrevista"
+                              }
+                              title={
+                                updatingStageId === p.id
+                                  ? "Actualizando"
+                                  : esEntrevistas
+                                    ? "Devolver a postulaciones"
+                                    : "Pasar a entrevista"
+                              }
+                            >
+                              {esEntrevistas ? <Undo2 size={14} /> : <UserCheck size={14} />}
+                              {esEntrevistas ? "Regresar" : "Pasar a entrevista"}
+                            </button>
                              <button
                                 onClick={() => editarObservacion(p)}
                                 className="inline-flex h-7 w-7 items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-100"

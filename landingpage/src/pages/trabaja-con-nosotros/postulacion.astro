@@ -32,12 +32,18 @@ import FormProgress from "../../components/FormProgress.astro";
         Completa tus datos personales para continuar con el proceso.
       </p>
 
+      <p class="required-note mb-6">
+        <span aria-hidden="true">*</span> Todos los campos de este paso son
+        obligatorios, excepto los que no correspondan por una respuesta
+        condicional.
+      </p>
+
       <!-- 1. Datos personales -->
       <section class="form-section">
         <h3>1. Datos personales</h3>
 
         <div class="mt-5">
-          <label for="nombreCompleto" class="label">Nombre completo</label>
+          <label for="nombreCompleto" class="label required-label">Nombre completo</label>
           <input
             id="nombreCompleto"
             name="nombreCompleto"
@@ -47,12 +53,12 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div>
-          <label for="cedula" class="label">Número de cédula</label>
+          <label for="cedula" class="label required-label">Número de cédula</label>
           <input id="cedula" name="cedula" class="input" />
         </div>
 
         <div class="mt-5">
-          <label for="telefono" class="label">Telefono</label>
+          <label for="telefono" class="label required-label">Telefono</label>
           <input
             id="telefono"
             name="telefono"
@@ -62,7 +68,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-5">
-          <label for="edadCumplida" class="label">Edad cumplida</label>
+          <label for="edadCumplida" class="label required-label">Edad cumplida</label>
           <input
             id="edadCumplida"
             name="edadCumplida"
@@ -73,7 +79,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-5">
-          <label for="numeroHijos" class="label">Numero de hijos</label>
+          <label for="numeroHijos" class="label required-label">Numero de hijos</label>
           <input
             id="numeroHijos"
             name="numeroHijos"
@@ -84,7 +90,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-8">
-          <p class="label mb-3">Estado civil</p>
+          <p class="label required-label mb-3">Estado civil</p>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="radio-card">
@@ -111,11 +117,112 @@ import FormProgress from "../../components/FormProgress.astro";
               <input type="radio" name="estadoCivil" value="Divorciado" class="sr-only" />
               <span>Divorciado</span>
             </label>
+
+            <label class="radio-card">
+              <input type="radio" name="estadoCivil" value="Viudo" class="sr-only" />
+              <span>Viudo</span>
+            </label>
           </div>
         </div>
 
         <div class="mt-8">
-          <p class="label mb-3">Ciudad de nacimiento</p>
+          <p class="label required-label mb-3">¿Tiene título de tercer nivel?</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="radio-card">
+              <input
+                type="radio"
+                name="tieneTituloTercerNivel"
+                value="Si"
+                class="sr-only"
+              />
+              <span>Sí</span>
+            </label>
+
+            <label class="radio-card">
+              <input
+                type="radio"
+                name="tieneTituloTercerNivel"
+                value="No"
+                class="sr-only"
+              />
+              <span>No</span>
+            </label>
+          </div>
+
+          <div id="tituloTercerNivelWrap" class="mt-5 hidden">
+            <label for="tituloTercerNivel" class="label required-label">
+              ¿Qué título posee?
+            </label>
+            <input
+              id="tituloTercerNivel"
+              name="tituloTercerNivel"
+              class="input"
+              type="text"
+              placeholder="Ingrese el nombre de su título"
+            />
+          </div>
+        </div>
+
+        <div class="study-current-section mt-8">
+          <p class="label required-label mb-3">¿Está estudiando actualmente?</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="radio-card">
+              <input
+                type="radio"
+                name="estudiaActualmente"
+                value="Si"
+                class="sr-only"
+              />
+              <span>Sí</span>
+            </label>
+
+            <label class="radio-card">
+              <input
+                type="radio"
+                name="estudiaActualmente"
+                value="No"
+                class="sr-only"
+              />
+              <span>No</span>
+            </label>
+          </div>
+
+          <div
+            id="estudiosActualesWrap"
+            class="study-details mt-5 grid-cols-1 sm:grid-cols-2 gap-5"
+            aria-hidden="true"
+          >
+            <div>
+              <label for="queEstudia" class="label required-label">¿Qué está estudiando?</label>
+              <input
+                id="queEstudia"
+                name="queEstudia"
+                class="input"
+                type="text"
+                placeholder="Carrera, curso o programa"
+              />
+            </div>
+
+            <div>
+              <label for="modalidadEstudio" class="label required-label">
+                Modalidad en la que estudia
+              </label>
+              <select id="modalidadEstudio" name="modalidadEstudio" class="input">
+                <option value="">Seleccione una modalidad</option>
+                <option value="Presencial">Presencial</option>
+                <option value="Semipresencial">Semipresencial</option>
+                <option value="En linea">En línea</option>
+                <option value="Hibrida">Híbrida</option>
+                <option value="Otra">Otra</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-8">
+          <p class="label required-label mb-3">Ciudad de nacimiento</p>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="radio-card">
@@ -144,7 +251,7 @@ import FormProgress from "../../components/FormProgress.astro";
           </p>
 
           <div id="otraCiudadNacimientoWrap" class="mt-5 hidden">
-            <label for="otraCiudadNacimiento" class="label">
+            <label for="otraCiudadNacimiento" class="label required-label">
               Otra ciudad
             </label>
             <input
@@ -158,7 +265,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-5">
-          <label for="direccion" class="label">Direccion</label>
+          <label for="direccion" class="label required-label">Direccion</label>
           <input
             id="direccion"
             name="direccion"
@@ -178,7 +285,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </p>
 
         <div class="mt-5">
-          <label for="tiempoResidenciaQuito" class="label">
+          <label for="tiempoResidenciaQuito" class="label required-label">
             ¿Hace qué tiempo reside en Quito?
           </label>
           <input
@@ -191,7 +298,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-5">
-          <label for="motivoSalidaCiudadNatal" class="label">
+          <label for="motivoSalidaCiudadNatal" class="label required-label">
             Motivo de salida de su ciudad natal
           </label>
           <p class="helper">Sea específico/a.</p>
@@ -316,7 +423,14 @@ import FormProgress from "../../components/FormProgress.astro";
 
                   <div>
                     <label class="label" for={`convive${i}_pariente`}>Pariente</label>
-                    <input id={`convive${i}_pariente`} class="input" name={`convive${i}_pariente`} type="text" />
+                    <select id={`convive${i}_pariente`} class="input" name={`convive${i}_pariente`}>
+                      <option value="">Seleccione una opción</option>
+                      <option value="Madre">Madre</option>
+                      <option value="Padre">Padre</option>
+                      <option value="Hijo">Hijo</option>
+                      <option value="Hermano">Hermano</option>
+                      <option value="Otros">Otros</option>
+                    </select>
                   </div>
 
                   <div>
@@ -423,9 +537,20 @@ import FormProgress from "../../components/FormProgress.astro";
       <section class="form-section mt-10">
         <h2>Observaciones adicionales</h2>
 
+        <div class="note-box mt-5">
+          <p class="font-semibold text-gray-800">Estos logros pueden ser:</p>
+          <p class="mt-2">
+            Describe los principales logros que has alcanzado y menciona las
+            actividades en las que has participado activamente, como proyectos,
+            voluntariados, grupos estudiantiles, equipos deportivos, experiencia
+            laboral mientras cursabas tus estudios u otras actividades
+            extracurriculares.
+          </p>
+        </div>
+
         <div class="mt-5">
           <label for="logrosVida" class="label">
-            Que logros a alcanzado en su vida
+            ¿Qué logros ha alcanzado en su vida?
           </label>
           <textarea
             id="logrosVida"
@@ -507,6 +632,39 @@ import FormProgress from "../../components/FormProgress.astro";
     font-weight: 600;
     color: #374151;
     margin-bottom: 0.25rem;
+  }
+
+  .required-label::after {
+    content: " *";
+    color: #dc2626;
+    font-weight: 800;
+  }
+
+  .required-note {
+    border: 1px solid #fecaca;
+    border-radius: 0.75rem;
+    background: #fef2f2;
+    padding: 0.75rem 1rem;
+    color: #991b1b;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .required-note span {
+    color: #dc2626;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .study-details {
+    display: none !important;
+  }
+
+  .study-current-section:has(
+      input[name="estudiaActualmente"][value="Si"]:checked
+    )
+    .study-details {
+    display: grid !important;
   }
 
   .helper {
@@ -781,6 +939,12 @@ import FormProgress from "../../components/FormProgress.astro";
   const quitoSkipNotice = document.getElementById(
     "quitoSkipNotice",
   ) as HTMLElement | null;
+  const tituloTercerNivelWrap = document.getElementById(
+    "tituloTercerNivelWrap",
+  ) as HTMLElement | null;
+  const estudiosActualesWrap = document.getElementById(
+    "estudiosActualesWrap",
+  ) as HTMLElement | null;
 
   const nextStep1Btn = document.getElementById(
     "nextStep1",
@@ -809,6 +973,7 @@ import FormProgress from "../../components/FormProgress.astro";
     const field = jobForm.elements.namedItem(name) as
       | HTMLInputElement
       | HTMLTextAreaElement
+      | HTMLSelectElement
       | null;
 
     return field?.value?.trim() || "";
@@ -851,6 +1016,41 @@ import FormProgress from "../../components/FormProgress.astro";
     }
   };
 
+  const updateFormacionAcademicaView = () => {
+    const tieneTitulo = getCheckedValue("tieneTituloTercerNivel") === "Si";
+    const estudiaActualmente = getCheckedValue("estudiaActualmente") === "Si";
+    const queEstudia = jobForm.elements.namedItem(
+      "queEstudia",
+    ) as HTMLInputElement | null;
+    const modalidad = jobForm.elements.namedItem(
+      "modalidadEstudio",
+    ) as HTMLSelectElement | null;
+
+    tituloTercerNivelWrap?.classList.toggle("hidden", !tieneTitulo);
+
+    if (estudiosActualesWrap) {
+      estudiosActualesWrap.setAttribute(
+        "aria-hidden",
+        String(!estudiaActualmente),
+      );
+    }
+
+    if (queEstudia) queEstudia.disabled = !estudiaActualmente;
+    if (modalidad) modalidad.disabled = !estudiaActualmente;
+
+    if (!tieneTitulo) {
+      const titulo = jobForm.elements.namedItem(
+        "tituloTercerNivel",
+      ) as HTMLInputElement | null;
+      if (titulo) titulo.value = "";
+    }
+
+    if (!estudiaActualmente) {
+      if (queEstudia) queEstudia.value = "";
+      if (modalidad) modalidad.value = "";
+    }
+  };
+
   const clearStatus = () => {
     formStatus.textContent = "";
     formStatus.className = "status-box hidden";
@@ -874,6 +1074,12 @@ import FormProgress from "../../components/FormProgress.astro";
     field?.classList.add("field-error");
   };
 
+  const markRadioGroup = (name: string) => {
+    jobForm
+      .querySelectorAll(`input[name="${name}"]`)
+      .forEach((field) => field.closest(".radio-card")?.classList.add("field-error"));
+  };
+
   const hasData = (obj: Record<string, string>) =>
     Object.values(obj).some((value) => value !== "");
 
@@ -893,13 +1099,39 @@ import FormProgress from "../../components/FormProgress.astro";
         markField("cedula");
       }
 
+      if (!getValue("telefono")) {
+        missing.push("teléfono");
+        markField("telefono");
+      }
+
       if (!getValue("edadCumplida")) {
         missing.push("edad cumplida");
         markField("edadCumplida");
       }
 
+      if (!getValue("numeroHijos")) {
+        missing.push("número de hijos");
+        markField("numeroHijos");
+      }
+
+      if (!getCheckedValue("estadoCivil")) {
+        missing.push("estado civil");
+        markRadioGroup("estadoCivil");
+      }
+
+      if (!getCheckedValue("tieneTituloTercerNivel")) {
+        missing.push("si tiene título de tercer nivel");
+        markRadioGroup("tieneTituloTercerNivel");
+      }
+
+      if (!getCheckedValue("estudiaActualmente")) {
+        missing.push("si está estudiando actualmente");
+        markRadioGroup("estudiaActualmente");
+      }
+
       if (!getCheckedValue("ciudadNacimiento")) {
         missing.push("ciudad de nacimiento");
+        markRadioGroup("ciudadNacimiento");
       }
 
       if (
@@ -908,6 +1140,44 @@ import FormProgress from "../../components/FormProgress.astro";
       ) {
         missing.push("otra ciudad de nacimiento");
         markField("otraCiudadNacimiento");
+      }
+
+      if (
+        getCheckedValue("tieneTituloTercerNivel") === "Si" &&
+        !getValue("tituloTercerNivel")
+      ) {
+        missing.push("título de tercer nivel");
+        markField("tituloTercerNivel");
+      }
+
+      if (getCheckedValue("estudiaActualmente") === "Si") {
+        if (!getValue("queEstudia")) {
+          missing.push("qué está estudiando");
+          markField("queEstudia");
+        }
+
+        if (!getValue("modalidadEstudio")) {
+          missing.push("modalidad de estudio");
+          markField("modalidadEstudio");
+        }
+      }
+
+      if (!getValue("direccion")) {
+        missing.push("dirección");
+        markField("direccion");
+      }
+
+      const ciudadNacimiento = getCheckedValue("ciudadNacimiento");
+      if (ciudadNacimiento && ciudadNacimiento !== "Quito") {
+        if (!getValue("tiempoResidenciaQuito")) {
+          missing.push("tiempo de residencia en Quito");
+          markField("tiempoResidenciaQuito");
+        }
+
+        if (!getValue("motivoSalidaCiudadNatal")) {
+          missing.push("motivo de salida de su ciudad natal");
+          markField("motivoSalidaCiudadNatal");
+        }
       }
 
       if (missing.length) {
@@ -956,6 +1226,11 @@ import FormProgress from "../../components/FormProgress.astro";
         edadCumplida: getValue("edadCumplida"),
         numeroHijos: getValue("numeroHijos"),
         estadoCivil: getCheckedValue("estadoCivil"),
+        tieneTituloTercerNivel: getCheckedValue("tieneTituloTercerNivel"),
+        tituloTercerNivel: getValue("tituloTercerNivel"),
+        estudiaActualmente: getCheckedValue("estudiaActualmente"),
+        queEstudia: getValue("queEstudia"),
+        modalidadEstudio: getValue("modalidadEstudio"),
         ciudadNacimiento: getCheckedValue("ciudadNacimiento"),
         otraCiudadNacimiento: getValue("otraCiudadNacimiento"),
         direccion: getValue("direccion"),
@@ -981,7 +1256,16 @@ import FormProgress from "../../components/FormProgress.astro";
     .querySelectorAll('input[name="ciudadNacimiento"]')
     .forEach((field) => field.addEventListener("change", updateCiudadNacimientoView));
 
+  jobForm
+    .querySelectorAll(
+      'input[name="tieneTituloTercerNivel"], input[name="estudiaActualmente"]',
+    )
+    .forEach((field) =>
+      field.addEventListener("change", updateFormacionAcademicaView),
+    );
+
   updateCiudadNacimientoView();
+  updateFormacionAcademicaView();
 
   nextStep1Btn?.addEventListener("click", () => {
     if (validateStep(1)) showStep(2);

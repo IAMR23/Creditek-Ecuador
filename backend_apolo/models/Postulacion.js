@@ -34,6 +34,15 @@ const Postulacion = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    pasaEntrevista: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    pasaEntrevistaAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     formulario: {
       type: DataTypes.JSONB,
       allowNull: false,

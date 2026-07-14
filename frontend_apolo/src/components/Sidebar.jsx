@@ -1,6 +1,14 @@
 import { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Building2, ClipboardList, FileText, Shield, Users, UsersRound } from "lucide-react";
+import {
+  Building2,
+  ClipboardList,
+  FileText,
+  Shield,
+  UserCheck,
+  Users,
+  UsersRound,
+} from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
 import { api } from "../api/client";
 
@@ -9,8 +17,10 @@ const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 export default function Sidebar() {
   const auth = useContext(AuthContext);
   const [resumenPostulaciones, setResumenPostulaciones] = useState({
+    totalGeneral: 0,
     total: 0,
     noLeidas: 0,
+    entrevistas: 0,
   });
 
   const linkClass = ({ isActive }) =>
@@ -30,8 +40,10 @@ export default function Sidebar() {
         if (!active) return;
         setResumenPostulaciones(
           res.data?.data || {
+            totalGeneral: 0,
             total: 0,
             noLeidas: 0,
+            entrevistas: 0,
           }
         );
       } catch {
@@ -104,6 +116,14 @@ export default function Sidebar() {
           </span>
           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">
             {resumenPostulaciones.total}
+          </span>
+        </NavLink>
+
+        <NavLink to="/entrevistas" className={linkClass}>
+          <UserCheck size={18} />
+          <span className="flex-1">Entrevistas</span>
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
+            {resumenPostulaciones.entrevistas}
           </span>
         </NavLink>
       </nav>

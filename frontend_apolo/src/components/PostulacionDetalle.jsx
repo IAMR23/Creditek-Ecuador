@@ -8,6 +8,11 @@ const labels = {
   edadCumplida: "Edad cumplida",
   numeroHijos: "Numero de hijos",
   estadoCivil: "Estado civil",
+  tieneTituloTercerNivel: "Tiene titulo de tercer nivel",
+  tituloTercerNivel: "Titulo que posee",
+  estudiaActualmente: "Estudia actualmente",
+  queEstudia: "Que esta estudiando",
+  modalidadEstudio: "Modalidad de estudio",
   ciudadNacimiento: "Ciudad de nacimiento",
   otraCiudadNacimiento: "Otra ciudad",
   direccion: "Direccion",
@@ -34,6 +39,41 @@ const labels = {
   version_formulario: "Version del formulario",
 };
 
+const personalOrder = [
+  "nombreCompleto",
+  "cedula",
+  "telefono",
+  "edadCumplida",
+  "numeroHijos",
+  "estadoCivil",
+  "ciudadNacimiento",
+  "otraCiudadNacimiento",
+  "direccion",
+];
+
+const academicOrder = [
+  "tieneTituloTercerNivel",
+  "tituloTercerNivel",
+  "estudiaActualmente",
+  "queEstudia",
+  "modalidadEstudio",
+];
+
+const knownPersonalKeys = new Set([...personalOrder, ...academicOrder]);
+
+const humanizeKey = (key) =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/^./, (character) => character.toUpperCase());
+
+const formatValue = (value) => {
+  if (value === "" || value === null || value === undefined) return dash;
+  if (typeof value === "boolean") return value ? "Si" : "No";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+};
+
 function Section({ title, children }) {
   return (
     <section className="mb-6">
@@ -54,19 +94,22 @@ function Field({ label, value }) {
         {label}
       </p>
       <div className="min-h-10 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800">
-        {value || dash}
+        {formatValue(value)}
       </div>
     </div>
   );
 }
 
-function FieldGrid({ data = {}, order = [] }) {
-  const keys = order.length ? order : Object.keys(data);
+function FieldGrid({ data = {}, order = [], includeUnordered = true }) {
+  const unorderedKeys = includeUnordered
+    ? Object.keys(data).filter((key) => !order.includes(key))
+    : [];
+  const keys = order.length ? [...order, ...unorderedKeys] : Object.keys(data);
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
       {keys.map((key) => (
-        <Field key={key} label={labels[key] || key} value={data?.[key]} />
+        <Field key={key} label={labels[key] || humanizeKey(key)} value={data?.[key]} />
       ))}
     </div>
   );
@@ -100,6 +143,9 @@ export default function ModalDetalle({ postulacion, onClose }) {
   const trabajos = formulario.historial_laboral || [];
   const observaciones = formulario.observaciones || {};
   const metadata = formulario.metadata || {};
+  const otrosDatosPersonales = Object.fromEntries(
+    Object.entries(datos).filter(([key]) => !knownPersonalKeys.has(key)),
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3">
@@ -130,19 +176,24 @@ export default function ModalDetalle({ postulacion, onClose }) {
           <Section title="Datos personales">
             <FieldGrid
               data={datos}
-              order={[
-                "nombreCompleto",
-                "cedula",
-                "telefono",
-                "edadCumplida",
-                "numeroHijos",
-                "estadoCivil",
-                "ciudadNacimiento",
-                "otraCiudadNacimiento",
-                "direccion",
-              ]}
+              order={personalOrder}
+              includeUnordered={false}
             />
           </Section>
+
+          <Section title="Formacion academica">
+            <FieldGrid
+              data={datos}
+              order={academicOrder}
+              includeUnordered={false}
+            />
+          </Section>
+
+          {Object.keys(otrosDatosPersonales).length > 0 && (
+            <Section title="Otros datos del formulario">
+              <FieldGrid data={otrosDatosPersonales} />
+            </Section>
+          )}
 
           <Section title="Residencia en Quito">
             <FieldGrid data={residencia} order={["tiempoResidenciaQuito", "motivoSalidaCiudadNatal"]} />
