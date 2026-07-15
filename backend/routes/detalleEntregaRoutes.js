@@ -5,6 +5,10 @@ const DispositivoMarca = require("../models/DispositivoMarca");
 const Modelo = require("../models/Modelo");
 const Dispositivo = require("../models/Dispositivo");
 const Marca = require("../models/Marca");
+const {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} = require("../utils/validarUbicacionCliente");
 
 router.get("/entrega/:entregaId", async (req, res) => {
   try {
@@ -96,6 +100,12 @@ router.get("/:id", async (req, res) => {
 // Crear un nuevo detalle de entrega
 router.post("/", async (req, res) => {
   try {
+    if (!esUbicacionClienteValida(req.body?.ubicacion)) {
+      return res.status(400).json({
+        message: MENSAJE_UBICACION_CLIENTE_INVALIDA,
+      });
+    }
+
     const nuevoDetalle = await DetalleEntrega.create({
       ...req.body,
     });
@@ -109,6 +119,12 @@ router.post("/", async (req, res) => {
 // Actualizar un detalle de entrega
 router.put("/:id", async (req, res) => {
   try {
+    if (!esUbicacionClienteValida(req.body?.ubicacion)) {
+      return res.status(400).json({
+        message: MENSAJE_UBICACION_CLIENTE_INVALIDA,
+      });
+    }
+
     const detalle = await DetalleEntrega.findByPk(req.params.id);
     if (!detalle) return res.status(404).json({ message: "No encontrado" });
     await detalle.update(req.body);

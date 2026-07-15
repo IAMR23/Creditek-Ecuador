@@ -1,18 +1,20 @@
-# Prompt fullstack RVE
+# Prompt fullstack RVE / ABS
 
 Usar este prompt cuando una tarea toque backend y frontend.
 
-Trabajar solo en:
+Resolver primero el proyecto activo:
 
-- `backend/`
-- `frontend/`
+| Alias | Backend activo | Frontend activo |
+| --- | --- | --- |
+| RVE | `backend/` | `frontend/` |
+| ABS | `backend_apolo/` | `frontend_apolo/` |
 
-No modificar:
-
-- `backend_apolo/`
-- `frontend_apolo/`
-- Dockerfile
-- docker-compose
+- Trabajar solo en las dos carpetas del proyecto activo.
+- No modificar las carpetas del otro proyecto salvo instrucción explícita.
+- No asumir que RVE y ABS comparten middlewares o configuración de permisos.
+- No modificar:
+  - Dockerfile.
+  - docker-compose.
 
 ## Flujo obligatorio
 
@@ -27,19 +29,24 @@ No modificar:
 
 ## Backend
 
-- Crear rutas en `backend/routes`.
-- Crear lógica en `backend/controllers`.
+- Crear rutas en `<backend_activo>/routes`.
+- Crear lógica en la estructura existente del backend activo. RVE dispone de
+  `controllers/`; verificar la organización de ABS antes de crear carpetas.
 - Usar modelos existentes.
-- Proteger rutas con `authenticate`.
-- Usar `requirePermission` si aplica.
+- Proteger rutas con el middleware propio del proyecto activo.
+- En RVE usar `authenticate` y `requirePermission` si aplica.
+- En ABS revisar `backend_apolo/middleware/auth.js`; no asumir que existe
+  `requirePermission`.
 
 ## Frontend
 
-- Usar `frontend/src/api/client.js`.
+- Usar `<frontend_activo>/src/api/client.js`.
 - Si hay pantalla nueva, registrar en:
-  - `App.jsx`
-  - `Sidebar.jsx`
-  - `routePermissions.js`
+  - `src/App.jsx`.
+  - `src/components/Sidebar.jsx` si corresponde.
+  - En RVE, `src/config/routePermissions.js`.
+  - En ABS, revisar `ProtectedRoute.jsx`; no asumir que existe
+    `routePermissions.js`.
 
 ## Entregable
 

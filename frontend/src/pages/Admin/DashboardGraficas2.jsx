@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
-import html2canvas from "html2canvas";
 import {
   XAxis,
   YAxis,
@@ -186,15 +185,93 @@ const minDataDomain = ([dataMin, dataMax]) => {
   return [dataMin, dataMax];
 };
 
-function CopyButton({ onClick }) {
+const cargarImagen = (src) =>
+  new Promise((resolve, reject) => {
+    const imagen = new Image();
+
+    imagen.onload = () => resolve(imagen);
+    imagen.onerror = () => reject(new Error("No se pudo renderizar el grafico"));
+    imagen.src = src;
+  });
+
+const obtenerPngGrafico = async (contenedor, cache, clave) => {
+  const svgOriginal = contenedor.querySelector("svg");
+
+  if (!svgOriginal) {
+    throw new Error("El grafico aun no esta disponible");
+  }
+
+  const rect = svgOriginal.getBoundingClientRect();
+  const viewBox = svgOriginal.viewBox?.baseVal;
+  const ancho = Math.max(1, Math.round(rect.width || viewBox?.width || 1));
+  const alto = Math.max(1, Math.round(rect.height || viewBox?.height || 1));
+  const svgClonado = svgOriginal.cloneNode(true);
+
+  svgClonado.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svgClonado.setAttribute("width", String(ancho));
+  svgClonado.setAttribute("height", String(alto));
+
+  const contenidoSvg = new XMLSerializer().serializeToString(svgClonado);
+  const firma = `${ancho}x${alto}:${contenidoSvg}`;
+  const copiaGuardada = cache.get(clave);
+
+  if (copiaGuardada?.firma === firma) {
+    return copiaGuardada.blob;
+  }
+
+  const svgBlob = new Blob([contenidoSvg], {
+    type: "image/svg+xml;charset=utf-8",
+  });
+  const urlSvg = URL.createObjectURL(svgBlob);
+
+  try {
+    const imagen = await cargarImagen(urlSvg);
+    const escala = 2;
+    const canvas = document.createElement("canvas");
+
+    canvas.width = ancho * escala;
+    canvas.height = alto * escala;
+
+    const contexto = canvas.getContext("2d");
+
+    if (!contexto) {
+      throw new Error("No se pudo crear la imagen del grafico");
+    }
+
+    contexto.scale(escala, escala);
+    contexto.fillStyle = "#ffffff";
+    contexto.fillRect(0, 0, ancho, alto);
+    contexto.drawImage(imagen, 0, 0, ancho, alto);
+
+    const pngBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+
+        reject(new Error("No se pudo convertir el grafico a PNG"));
+      }, "image/png");
+    });
+
+    cache.set(clave, { firma, blob: pngBlob });
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(urlSvg);
+  }
+};
+
+function CopyButton({ onClick, copiando = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="bg-green-600 text-white px-4 py-2 rounded-lg"
-      title="Copiar grafico"
+      disabled={copiando}
+      className="bg-green-600 text-white px-4 py-2 rounded-lg transition hover:bg-green-700 disabled:cursor-wait disabled:opacity-70"
+      title={copiando ? "Copiando grafico" : "Copiar grafico"}
+      aria-label={copiando ? "Copiando grafico" : "Copiar grafico"}
     >
-      <FaCopy size={18} />
+      <FaCopy size={18} className={copiando ? "animate-pulse" : ""} />
     </button>
   );
 }
@@ -206,6 +283,8 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
   const [loadingCostoVenta, setLoadingCostoVenta] = useState(false);
   const [loadingCostoEntrega, setLoadingCostoEntrega] = useState(false);
   const [loadingCostoEntregaTotal, setLoadingCostoEntregaTotal] = useState(false);
+  const [graficoCopiando, setGraficoCopiando] = useState("");
+  const cacheImagenes = useRef(new Map());
   const refEnganche = useRef(null);
   const refSemana = useRef(null);
   const refGerencia = useRef(null);
@@ -392,23 +471,21 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
     if (!ref.current) return;
 
     try {
-      const canvas = await html2canvas(ref.current, {
-        backgroundColor: "#ffffff",
-        scale: 2,
-        useCORS: true,
-      });
-
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve));
-
-      if (!blob) return;
-
-      if (!window.ClipboardItem) {
+      if (!navigator.clipboard?.write || !window.ClipboardItem) {
         throw new Error("ClipboardItem no disponible");
       }
 
+      setGraficoCopiando(nombre);
+
+      const pngPromise = obtenerPngGrafico(
+        ref.current,
+        cacheImagenes.current,
+        nombre,
+      );
+
       await navigator.clipboard.write([
         new ClipboardItem({
-          "image/png": blob,
+          "image/png": pngPromise,
         }),
       ]);
 
@@ -427,6 +504,8 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         "Usa Chrome o Edge y verifica que el navegador permita copiar imagenes.",
         "error",
       );
+    } finally {
+      setGraficoCopiando("");
     }
   };
 
@@ -479,6 +558,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Ventas Javier por Semana</h3>
           <CopyButton
+            copiando={graficoCopiando === "Ventas Javier por Semana"}
             onClick={() =>
               copiarGrafico(refEnganche, "Ventas Javier por Semana")
             }
@@ -518,6 +598,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
           <h3 className="font-semibold">Ventas por Semana</h3>
 
           <CopyButton
+            copiando={graficoCopiando === "Ventas por Semana"}
             onClick={() => copiarGrafico(refSemana, "Ventas por Semana")}
           />
         </div>
@@ -554,6 +635,9 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Indicador Gerencia por Semana</h3>
           <CopyButton
+            copiando={
+              graficoCopiando === "Indicador Gerencia por Semana"
+            }
             onClick={() => copiarGrafico(refGerencia, "Indicador Gerencia por Semana")}
           />
         </div>
@@ -596,6 +680,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Margen Porcentual por Semana</h3>
           <CopyButton
+            copiando={graficoCopiando === "Margen Porcentual por Semana"}
             onClick={() =>
               copiarGrafico(
                 refMargenPorcentual,
@@ -642,6 +727,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Costo por Venta por Semana</h3>
           <CopyButton
+            copiando={graficoCopiando === "Costo por Venta por Semana"}
             onClick={() => copiarGrafico(refCostoVenta, "Costo por Venta por Semana")}
           />
         </div>
@@ -691,6 +777,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Costo por Entrega por Semana</h3>
           <CopyButton
+            copiando={graficoCopiando === "Costo por Entrega por Semana"}
             onClick={() =>
               copiarGrafico(refCostoEntrega, "Costo por Entrega por Semana")
             }
@@ -742,6 +829,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Tareas Finalizadas por Semana</h3>
           <CopyButton
+            copiando={graficoCopiando === "Tareas Finalizadas por Semana"}
             onClick={() =>
               copiarGrafico(refTareasFinalizadas, "Tareas Finalizadas por Semana")
             }

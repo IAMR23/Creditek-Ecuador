@@ -16,6 +16,10 @@ import {
   User,
 } from "lucide-react";
 import { API_URL } from "../../../config";
+import {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} from "../../utils/validarUbicacionCliente";
 
 const hoyLocal = () => new Date().toLocaleDateString("en-CA");
 
@@ -70,6 +74,7 @@ export default function EntregaAuditoria() {
     observacion: "",
     fecha: hoyLocal(),
     FechaHoraLlamada: "",
+    procesoCompleto: false,
     estado: "Pendiente",
     activo: true,
   });
@@ -80,6 +85,7 @@ export default function EntregaAuditoria() {
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
+    identificadorAnuncio: "",
     formaPagoId: "",
     entrada: "",
     alcance: "",
@@ -125,7 +131,9 @@ export default function EntregaAuditoria() {
   const cargarCatalogos = async () => {
     const [origenesRes, dmRes, formasPagoRes, obsequiosRes] = await Promise.all([
       axios.get(`${API_URL}/origen`),
-      axios.get(`${API_URL}/dispositivoMarca`),
+      axios.get(`${API_URL}/dispositivoMarca`, {
+        params: { soloActivos: true },
+      }),
       axios.get(`${API_URL}/formaPago`),
       axios.get(`${API_URL}/obsequios`),
     ]);
@@ -157,6 +165,7 @@ export default function EntregaAuditoria() {
         observacion: entregaDB.observacion || "",
         fecha: entregaDB.fecha ? String(entregaDB.fecha).slice(0, 10) : hoyLocal(),
         FechaHoraLlamada: formatDatetimeLocal(entregaDB.FechaHoraLlamada),
+        procesoCompleto: Boolean(entregaDB.procesoCompleto),
         estado: entregaDB.estado || "Pendiente",
         activo: entregaDB.activo !== false,
       });
@@ -167,6 +176,7 @@ export default function EntregaAuditoria() {
         dispositivoMarcaId: String(detalleDB.dispositivoMarcaId || ""),
         modeloId: Number(detalleDB.modeloId) || "",
         contrato: detalleDB.contrato || "",
+        identificadorAnuncio: detalleDB.identificadorAnuncio || "",
         formaPagoId: Number(detalleDB.formaPagoId) || "",
         entrada: detalleDB.entrada?.toString() || "",
         alcance: detalleDB.alcance?.toString() || "",
@@ -263,6 +273,15 @@ export default function EntregaAuditoria() {
     setPreview(URL.createObjectURL(file));
   };
 
+  const handleProcesoCompletoChange = (event) => {
+    const procesoCompleto = event.target.checked;
+    setEntrega((prev) => ({
+      ...prev,
+      procesoCompleto,
+      FechaHoraLlamada: procesoCompleto ? "" : prev.FechaHoraLlamada,
+    }));
+  };
+
   const toggleObsequio = (obsequioId) => {
     setObsequios((prev) => {
       const existente = prev.find((item) => item.obsequioId === obsequioId);
@@ -283,6 +302,22 @@ export default function EntregaAuditoria() {
 
   const guardar = async (event) => {
     event.preventDefault();
+
+    if (!esUbicacionClienteValida(detalle.ubicacion)) {
+      Swal.fire("Ubicación inválida", MENSAJE_UBICACION_CLIENTE_INVALIDA, "warning");
+      return;
+    }
+
+    if (!entrega.procesoCompleto && !entrega.FechaHoraLlamada) {
+      Swal.fire("Atención", "Debes ingresar la fecha y hora de la llamada", "warning");
+      return;
+    }
+
+    if (!entrega.procesoCompleto && !foto && !preview) {
+      Swal.fire("Atención", "Debes subir una foto de la llamada", "warning");
+      return;
+    }
+
     setGuardando(true);
 
     try {
@@ -293,6 +328,9 @@ export default function EntregaAuditoria() {
           cliente,
           entrega: {
             ...entrega,
+            FechaHoraLlamada: entrega.procesoCompleto
+              ? null
+              : entrega.FechaHoraLlamada,
             origenId: Number(entrega.origenId),
           },
           detalle: {
@@ -310,7 +348,7 @@ export default function EntregaAuditoria() {
         }),
       );
 
-      if (foto) {
+      if (!entrega.procesoCompleto && foto) {
         const imagenComprimida = await imageCompression(foto, {
           maxSizeMB: 0.4,
           maxWidthOrHeight: 1280,
@@ -481,12 +519,31 @@ export default function EntregaAuditoria() {
         >
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <TextInput type="date" label="Fecha" value={entrega.fecha} onChange={(value) => updateEntrega("fecha", value)} required />
-            <TextInput
-              type="datetime-local"
-              label="Fecha hora llamada"
-              value={entrega.FechaHoraLlamada}
-              onChange={(value) => updateEntrega("FechaHoraLlamada", value)}
-            />
+            <label className="flex items-center gap-3 rounded border border-blue-200 bg-blue-50 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={entrega.procesoCompleto}
+                onChange={handleProcesoCompletoChange}
+                className="h-4 w-4 rounded border-blue-400 text-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-gray-800">
+                  Proceso completo
+                </span>
+                <span className="block text-xs text-gray-500">
+                  No requiere llamada ni foto.
+                </span>
+              </span>
+            </label>
+            {!entrega.procesoCompleto && (
+              <TextInput
+                type="datetime-local"
+                label="Fecha hora llamada"
+                value={entrega.FechaHoraLlamada}
+                onChange={(value) => updateEntrega("FechaHoraLlamada", value)}
+                required
+              />
+            )}
             <SelectInput label="Origen" value={entrega.origenId} onChange={(value) => updateEntrega("origenId", value)} required>
               <option value="">Seleccionar</option>
               {origenes.map((origen) => (
@@ -556,7 +613,19 @@ export default function EntregaAuditoria() {
                 </option>
               ))}
             </SelectInput>
+            <TextInput
+              type="number"
+              label="Cantidad"
+              value={detalle.cantidad}
+              onChange={(value) => updateDetalle("cantidad", value)}
+              required
+            />
             <TextInput label="Contrato" value={detalle.contrato} onChange={(value) => updateDetalle("contrato", value)} />
+            <TextInput
+              label="Identificador del anuncio"
+              value={detalle.identificadorAnuncio}
+              onChange={(value) => updateDetalle("identificadorAnuncio", value)}
+            />
             <TextInput label="Precio sistema" value={detalle.precioUnitario} onChange={(value) => updateDecimalDetalle("precioUnitario", value)} />
             <TextInput label="Precio vendedor" value={detalle.precioVendedor} onChange={(value) => updateDecimalDetalle("precioVendedor", value)} required />
             <TextInput label="Entrada" value={detalle.entrada} onChange={(value) => updateDecimalDetalle("entrada", value)} />
@@ -597,29 +666,31 @@ export default function EntregaAuditoria() {
           </div>
         </Section>
 
-        <Section icon={<ImagePlus size={18} />} title="Foto de llamada">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium text-gray-700">
-                Seleccionar foto
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFoto}
-                className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white"
-              />
-            </label>
-            <div className="flex h-52 items-center justify-center overflow-hidden rounded border border-gray-200 bg-gray-50">
-              {preview ? (
-                <img src={preview} alt="Foto de llamada" className="h-full w-full object-contain" />
-              ) : (
-                <span className="text-sm text-gray-400">Sin foto</span>
-              )}
+        {!entrega.procesoCompleto && (
+          <Section icon={<ImagePlus size={18} />} title="Foto de llamada">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">
+                  Seleccionar foto
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFoto}
+                  className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-gray-900 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white"
+                />
+              </label>
+              <div className="flex h-52 items-center justify-center overflow-hidden rounded border border-gray-200 bg-gray-50">
+                {preview ? (
+                  <img src={preview} alt="Foto de llamada" className="h-full w-full object-contain" />
+                ) : (
+                  <span className="text-sm text-gray-400">Sin foto</span>
+                )}
+              </div>
             </div>
-          </div>
-        </Section>
+          </Section>
+        )}
 
         <Section icon={<Gift size={18} />} title="Obsequios">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

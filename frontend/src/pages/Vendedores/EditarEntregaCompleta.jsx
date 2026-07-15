@@ -5,6 +5,10 @@ import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
 import imageCompression from "browser-image-compression";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} from "../../utils/validarUbicacionCliente";
 
 const EditarEntregaCompleta = () => {
   const { id } = useParams();
@@ -113,6 +117,7 @@ const EditarEntregaCompleta = () => {
           observacion: entregaDB?.observacion || "",
           fecha: fechaFormateada,
           FechaHoraLlamada: formatDatetimeLocal(entregaDB?.FechaHoraLlamada),
+          procesoCompleto: Boolean(entregaDB?.procesoCompleto),
           estado: entregaDB?.estado || "Pendiente",
         });
 
@@ -181,6 +186,7 @@ const EditarEntregaCompleta = () => {
     observacion: "",
     fecha: hoy,
     FechaHoraLlamada: "",
+    procesoCompleto: false,
     estado: "Pendiente",
   });
 
@@ -202,6 +208,8 @@ const EditarEntregaCompleta = () => {
 
   useEffect(() => {
     const handlePaste = (event) => {
+      if (entrega.procesoCompleto) return;
+
       const items = event.clipboardData?.items;
       if (!items) return;
 
@@ -218,13 +226,15 @@ const EditarEntregaCompleta = () => {
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, []);
+  }, [entrega.procesoCompleto]);
 
   useEffect(() => {
     const fetchSelects = async () => {
       try {
         const [dmRes, fpRes] = await Promise.all([
-          axios.get(`${API_URL}/dispositivoMarca`),
+          axios.get(`${API_URL}/dispositivoMarca`, {
+            params: { soloActivos: true },
+          }),
           axios.get(`${API_URL}/formaPago`),
         ]);
         setDispositivoMarcas(dmRes.data);
@@ -353,6 +363,15 @@ useEffect(() => {
   const handleEntregaChange = (e) =>
     setEntrega({ ...entrega, [e.target.name]: e.target.value });
 
+  const handleProcesoCompletoChange = (event) => {
+    const procesoCompleto = event.target.checked;
+    setEntrega((prev) => ({
+      ...prev,
+      procesoCompleto,
+      FechaHoraLlamada: procesoCompleto ? "" : prev.FechaHoraLlamada,
+    }));
+  };
+
   const handleDetalleChange = (e) =>
     setDetalle({ ...detalle, [e.target.name]: e.target.value });
 
@@ -379,8 +398,18 @@ useEffect(() => {
 const handleSubmit = async (e) => {
   e.preventDefault();
 
-  if (!foto && !fotoExistente) {
+  if (!entrega.procesoCompleto && !foto && !fotoExistente) {
     Swal.fire("Atención", "Debes subir una foto", "warning");
+    return;
+  }
+
+  if (!entrega.procesoCompleto && !entrega.FechaHoraLlamada) {
+    Swal.fire("Atención", "Debes ingresar la fecha y hora de la llamada", "warning");
+    return;
+  }
+
+  if (!esUbicacionClienteValida(detalle.ubicacion)) {
+    Swal.fire("Ubicación inválida", MENSAJE_UBICACION_CLIENTE_INVALIDA, "warning");
     return;
   }
 
@@ -396,6 +425,9 @@ const handleSubmit = async (e) => {
         cliente,
         entrega: {
           ...entrega,
+          FechaHoraLlamada: entrega.procesoCompleto
+            ? null
+            : entrega.FechaHoraLlamada,
           usuarioAgenciaId: Number(entrega.usuarioAgenciaId),
           origenId: Number(entrega.origenId),
         },
@@ -416,7 +448,7 @@ const handleSubmit = async (e) => {
     );
 
     // 📷 Foto opcional
-    if (foto) {
+    if (!entrega.procesoCompleto && foto) {
       const options = {
         maxSizeMB: 0.4,
         maxWidthOrHeight: 1280,
@@ -524,6 +556,7 @@ ENTREGA REGISTRADA 🛻 ${entrega.id || ""}
 - Entrada : $${detalle.entrada || 0}
 - Alcance : $${detalle.alcance || 0}
 - Contrato: ${detalle.contrato || "N/A"}
+- Proceso completo: ${entrega.procesoCompleto ? "Sí" : "No"}
 - Identificador anuncio: ${detalle.identificadorAnuncio || "N/A"}
 - Ubicacion del Cliente : ${detalle.ubicacion || "N/A"}
 - Ubicación del Dispositivo : ${detalle.ubicacionDispositivo || "N/A"}
@@ -1035,7 +1068,31 @@ ${
           />
         </div>
 
-        <div className="bg-white p-4 rounded shadow border border-orange-500">
+        <div className="rounded-lg border border-orange-300 bg-orange-50 p-4">
+          <label
+            htmlFor="procesoCompleto"
+            className="flex cursor-pointer items-start gap-3"
+          >
+            <input
+              id="procesoCompleto"
+              type="checkbox"
+              checked={entrega.procesoCompleto}
+              onChange={handleProcesoCompletoChange}
+              className="mt-1 h-4 w-4 rounded border-orange-400 text-orange-600 focus:ring-orange-500"
+            />
+            <span>
+              <span className="block font-semibold text-orange-700">
+                Proceso completo
+              </span>
+              <span className="block text-sm text-gray-600">
+                Activa esta opción cuando no sea necesario registrar la llamada ni subir su foto.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {!entrega.procesoCompleto && (
+          <div className="bg-white p-4 rounded shadow border border-orange-500">
           {/* FECHA Y HORA */}
           <h2 className="text-lg font-semibold text-orange-600 mb-2">
             Fecha y hora de la llamada
@@ -1078,7 +1135,8 @@ ${
               className="block mt-2"
             />
           </label>
-        </div>
+          </div>
+        )}
 
         <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
           🎁 Obsequios

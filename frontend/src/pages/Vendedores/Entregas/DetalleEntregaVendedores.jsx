@@ -3,6 +3,10 @@ import axios from "axios";
 import { API_URL } from "../../../../config";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
+import {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} from "../../../utils/validarUbicacionCliente";
 
 export default function DetalleEntregaVendedores() {
   const { id } = useParams();
@@ -70,7 +74,9 @@ export default function DetalleEntregaVendedores() {
   const fetchSelects = async () => {
     try {
       const [dmRes, fpRes] = await Promise.all([
-        axios.get(`${API_URL}/dispositivoMarca`),
+        axios.get(`${API_URL}/dispositivoMarca`, {
+          params: { soloActivos: true },
+        }),
         axios.get(`${API_URL}/formaPago`),
       ]);
       setDispositivoMarcas(dmRes.data);
@@ -140,6 +146,11 @@ export default function DetalleEntregaVendedores() {
         title: "Campos incompletos",
         text: "Selecciona modelo y forma de pago",
       });
+      return;
+    }
+
+    if (!esUbicacionClienteValida(form.ubicacion)) {
+      Swal.fire("Ubicación inválida", MENSAJE_UBICACION_CLIENTE_INVALIDA, "warning");
       return;
     }
 

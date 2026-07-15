@@ -31,19 +31,24 @@ exports.crearDispositivoMarca = async (req, res) => {
 
 exports.listarDispositivoMarca = async (req, res) => {
   try {
+    const soloActivos = String(req.query.soloActivos || "").toLowerCase() === "true";
+
     const relaciones = await DispositivoMarca.findAll({
+      ...(soloActivos && { where: { activo: true } }),
       include: [
         {
           model: Dispositivo,
           as: "dispositivo",
-          attributes: ["id", "nombre", "activo"]
+          attributes: ["id", "nombre", "activo"],
+          ...(soloActivos && { where: { activo: true }, required: true }),
         },
         {
           model: Marca,
           as: "marca",
-          attributes: ["id", "nombre", "activo"]
-        }
-      ]
+          attributes: ["id", "nombre", "activo"],
+          ...(soloActivos && { where: { activo: true }, required: true }),
+        },
+      ],
     });
 
     res.json(relaciones);

@@ -209,10 +209,15 @@ export default function Dashboard() {
     usuarioInfo,
   ]);
 
-  const generarDataExcel = (porTipoModelo) => {
+  const generarDataExcel = (porTipoModelo, costosHistoricos = {}) => {
     return Object.entries(porTipoModelo)
       .map(([key, venta]) => {
         const [tipo, modelo] = key.split("||");
+        const costoHistorico = costosHistoricos[key];
+        const costo = Number.parseFloat(costoHistorico?.costo);
+        const margenPorcentual = Number.parseFloat(
+          costoHistorico?.margenPorcentual,
+        );
 
         return {
           tipo: tipo.toLowerCase(),
@@ -221,7 +226,10 @@ export default function Dashboard() {
           stock: "",
           proyeccion: "",
           pedido: "",
-          costo: "",
+          costo: Number.isFinite(costo) ? costo : "",
+          margenPorcentual: Number.isFinite(margenPorcentual)
+            ? margenPorcentual
+            : "",
           total: "",
           forma_pago: "contado",
         };
@@ -229,8 +237,8 @@ export default function Dashboard() {
       .sort((a, b) => b.venta - a.venta); // 🔥 ORDEN DESC
   };
 
-  const exportarExcel = (porTipoModelo) => {
-    const data = generarDataExcel(porTipoModelo);
+  const exportarExcel = (porTipoModelo, costosHistoricos) => {
+    const data = generarDataExcel(porTipoModelo, costosHistoricos);
 
     const wsData = [
       [
@@ -240,7 +248,8 @@ export default function Dashboard() {
         "Stock",
         "Proyeccion",
         "Pedido",
-        "Costo",
+        "Costo del Producto",
+        "Margen Porcentual (%)",
         "Total",
         "Forma De Pago",
       ],
@@ -257,6 +266,7 @@ export default function Dashboard() {
         row.proyeccion,
         row.pedido,
         row.costo,
+        row.margenPorcentual,
         { f: `F${excelRow}*G${excelRow}` },
         row.forma_pago,
       ]);
@@ -436,7 +446,14 @@ export default function Dashboard() {
 
           <div className="flex flex-col justify-end">
             <button
-              onClick={() => exportarExcel(estadisticas.porTipoModelo)}
+              type="button"
+              onClick={() =>
+                exportarExcel(
+                  estadisticas?.porTipoModelo || {},
+                  estadisticas?.costosHistoricosPorTipoModelo || {},
+                )
+              }
+              disabled={!estadisticas}
               className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition"
             >
               <FaFileExcel size={18} />

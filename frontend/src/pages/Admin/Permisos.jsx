@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import Swal from "sweetalert2";
-import { API_URL } from "../../../config";
+import { api } from "../../api/client";
 
 export default function Permisos() {
   const [nombre, setNombre] = useState("");
@@ -10,7 +9,7 @@ export default function Permisos() {
 
   const cargarPermisos = async () => {
     try {
-      const { data } = await axios.get(`${API_URL}/api/permisos-catalogo`);
+      const { data } = await api.get("/api/permisos-catalogo");
       setMisPermisos(data);
     } catch (err) {
       console.error(err);
@@ -29,7 +28,7 @@ export default function Permisos() {
     }
 
     try {
-      const { data } = await axios.post(`${API_URL}/api/permisos-catalogo`, {
+      const { data } = await api.post("/api/permisos-catalogo", {
         nombre,
         descripcion,
       });
@@ -58,9 +57,7 @@ export default function Permisos() {
     if (!result.isConfirmed) return;
 
     try {
-      const { data } = await axios.delete(
-        `${API_URL}/api/permisos-catalogo/${permiso.id}`,
-      );
+      const { data } = await api.delete(`/api/permisos-catalogo/${permiso.id}`);
 
       setMisPermisos((prev) => prev.filter((p) => p.id !== permiso.id));
       Swal.fire(

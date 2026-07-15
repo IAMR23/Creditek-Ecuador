@@ -171,9 +171,6 @@ export default function DetalleEntrega() {
     }
   };
 
-  const inputStyle =
-    "w-full p-2 border border-green-300 rounded-lg bg-gray-100 cursor-not-allowed";
-
   const verImagenCompleta = (url) => {
     Swal.fire({
       imageUrl: url,
@@ -297,9 +294,10 @@ export default function DetalleEntrega() {
           border border-green-200
           shadow-inner
           cursor-default
-        "
+                "
               />
             </div>
+
           </div>
         </div>
 
@@ -416,6 +414,24 @@ export default function DetalleEntrega() {
               <Field label="Observación" value={detalle.observacionDetalle} />
             </div>
           ))}
+        </div>
+
+        <div className="flex flex-col space-y-1">
+          <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Proceso completo
+          </label>
+          <input
+            type="text"
+            readOnly
+            value={form.procesoCompleto ? "Sí" : "No"}
+            className="
+          w-full px-4 py-2 rounded-lg
+           text-gray-800
+          border border-green-200
+          shadow-inner
+          cursor-default
+        "
+          />
         </div>
 
         <div className="relative bg-white/80 backdrop-blur-xl border border-green-200 rounded-2xl shadow-lg p-6 space-y-5">

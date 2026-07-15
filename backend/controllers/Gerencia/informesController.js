@@ -10,11 +10,16 @@ const Origen = require("../../models/Origen");
 const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Venta = require("../../models/Venta");
+const CostoHistorico = require("../../models/CostoHistorico");
 
 const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
+const {
+  normalizarFecha,
+  seleccionarCostoHistorico,
+} = require("../../utils/seleccionarCostoHistorico");
 
 exports.obtenerReporte = async ({
   fechaInicio,
@@ -89,7 +94,7 @@ if (origenId && origenId !== "todos") {
   /* ===============================
      QUERY FINAL
   =============================== */
-  return await Venta.findAll({
+  const ventas = await Venta.findAll({
     where: whereVenta,
     attributes: ["id", "fecha", "validada", "observacion", "activo"],
     order: [["fecha", "ASC"]],
@@ -114,7 +119,8 @@ if (origenId && origenId !== "todos") {
         model: DetalleVenta,
         as: "detalleVenta",
         attributes: [
-          "precioVendedor",       
+          "precioVendedor",
+          "modeloId",
           "cierreCaja",
         ],
         include: [
@@ -161,6 +167,61 @@ if (origenId && origenId !== "todos") {
       },
     ],
   });
+
+  const ventasReporte = ventas.map((venta) => venta.toJSON());
+  const modeloIds = [
+    ...new Set(
+      ventasReporte.flatMap((venta) =>
+        (venta.detalleVenta || [])
+          .map((detalle) => Number(detalle.modeloId))
+          .filter(Number.isInteger),
+      ),
+    ),
+  ];
+
+  if (!modeloIds.length) return ventasReporte;
+
+  const costosHistoricos = await CostoHistorico.findAll({
+    where: {
+      modeloId: { [Op.in]: modeloIds },
+      ...(fechaFin && { fechaCompra: { [Op.lte]: fechaFin } }),
+    },
+    attributes: ["id", "modeloId", "fechaCompra", "costo", "margenPorcentual"],
+    order: [
+      ["modeloId", "ASC"],
+      ["fechaCompra", "DESC"],
+      ["id", "DESC"],
+    ],
+    raw: true,
+  });
+
+  const costosPorModelo = new Map();
+  costosHistoricos.forEach((costoHistorico) => {
+    const modeloId = Number(costoHistorico.modeloId);
+    const costos = costosPorModelo.get(modeloId) || [];
+    costos.push(costoHistorico);
+    costosPorModelo.set(modeloId, costos);
+  });
+
+  ventasReporte.forEach((venta) => {
+    const fechaVenta = normalizarFecha(venta.fecha);
+
+    (venta.detalleVenta || []).forEach((detalle) => {
+      const historico = seleccionarCostoHistorico(
+        costosPorModelo.get(Number(detalle.modeloId)) || [],
+        fechaVenta,
+      );
+
+      detalle.costoHistoricoReporte = historico
+        ? {
+            costo: historico.costo,
+            margenPorcentual: historico.margenPorcentual,
+          }
+        : null;
+    });
+  });
+
+  return ventasReporte;
 };
 
 
@@ -209,6 +270,9 @@ exports.formatearReporte = (ventas) => {
         formaPago: detalle.formaPago?.nombre || "",
   
         precioVendedor: detalle.precioVendedor || "",
+        costoProducto: detalle.costoHistoricoReporte?.costo ?? "",
+        margenPorcentual:
+          detalle.costoHistoricoReporte?.margenPorcentual ?? "",
 
         cierreCaja: detalle.cierreCaja || "",
         observaciones: venta.observacion || "",

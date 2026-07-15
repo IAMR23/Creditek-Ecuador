@@ -5,6 +5,13 @@ const DispositivoMarca = require("../../models/DispositivoMarca");
 const Entrega = require("../../models/Entrega");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 const EntregaObsequio = require("../../models/EntregaObsequio");
+const {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} = require("../../utils/validarUbicacionCliente");
+const {
+  resolverProcesoLlamada,
+} = require("../../utils/procesoLlamadaEntrega");
 
 function calcularSemana(fecha) {
   const f = new Date(fecha);
@@ -26,6 +33,29 @@ const crearEntregaCompleta = async (req, res) => {
   try {
     // 🔥 JSON viene stringeado
     const { cliente, entrega, detalle, obsequios } = JSON.parse(req.body.data);
+    const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
+    const procesoLlamada = resolverProcesoLlamada({
+      entrega,
+      archivoPresente: Boolean(req.file),
+      fotoUrl,
+    });
+
+    if (!esUbicacionClienteValida(detalle?.ubicacion)) {
+      await t.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: MENSAJE_UBICACION_CLIENTE_INVALIDA,
+      });
+    }
+
+    if (!procesoLlamada.requisitosCompletos) {
+      await t.rollback();
+      return res.status(400).json({
+        ok: false,
+        message:
+          "La fecha, hora y foto de la llamada son obligatorias cuando el proceso no está completo.",
+      });
+    }
 
 /*     if (!validarCedulaEC(cliente.cedula)) {
       await t.rollback();
@@ -34,9 +64,6 @@ const crearEntregaCompleta = async (req, res) => {
         message: "Cédula inválida según validación oficial del Ecuador",
       });
     } */
-
-    // 🔥 FOTO
-    const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
 
     // 1️⃣ Cliente
     let clienteDB = await Cliente.findOne({
@@ -73,11 +100,11 @@ const crearEntregaCompleta = async (req, res) => {
         origenId: entrega.origenId,
         observacion: entrega.observacion,
         fecha: entrega.fecha,
-        FechaHoraLlamada : entrega.FechaHoraLlamada,
+        FechaHoraLlamada: procesoLlamada.fechaHoraLlamada,
         semana: calcularSemana(entrega.fecha),
         validada: true,
         estado  :entrega.estado,
-        fotoFechaLlamada: fotoUrl,
+        fotoFechaLlamada: procesoLlamada.fotoFechaLlamada,
       },
       { transaction: t },
     );

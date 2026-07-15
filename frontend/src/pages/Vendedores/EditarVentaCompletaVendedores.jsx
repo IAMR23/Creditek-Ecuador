@@ -32,6 +32,8 @@ const EditarVentaCompletaVendedores = () => {
     cliente: "",
     cedula: "",
     telefono: "",
+    correo: "",
+    direccion: "",
   });
 
   const [venta, setVenta] = useState({
@@ -60,7 +62,9 @@ const EditarVentaCompletaVendedores = () => {
   useEffect(() => {
     const fetchSelects = async () => {
       const [dmRes, fpRes] = await Promise.all([
-        axios.get(`${API_URL}/dispositivoMarca`),
+        axios.get(`${API_URL}/dispositivoMarca`, {
+          params: { soloActivos: true },
+        }),
         axios.get(`${API_URL}/formaPago`),
       ]);
       setDispositivoMarcas(dmRes.data);
@@ -126,6 +130,8 @@ const EditarVentaCompletaVendedores = () => {
           cliente: clienteDB?.cliente || "",
           cedula: clienteDB?.cedula || "",
           telefono: clienteDB?.telefono || "",
+          correo: clienteDB?.correo || "",
+          direccion: clienteDB?.direccion || "",
         });
 
         // 🔹 VENTA
@@ -336,6 +342,44 @@ const EditarVentaCompletaVendedores = () => {
               placeholder="Ej: 0991234567"
               value={cliente.telefono}
               onChange={handleClienteChange}
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="correo"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Correo electrónico
+            </label>
+            <input
+              id="correo"
+              type="email"
+              name="correo"
+              placeholder="Ej: soycreditek@gmail.com"
+              value={cliente.correo}
+              onChange={handleClienteChange}
+              required
+              className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="direccion"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Dirección
+            </label>
+            <input
+              id="direccion"
+              type="text"
+              name="direccion"
+              placeholder="Ej: Sangolquí, Parque Turismo"
+              value={cliente.direccion}
+              onChange={handleClienteChange}
+              required
               className="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
             />
           </div>

@@ -72,7 +72,7 @@ export default function EntregaFoto() {
     return valor;
   };
 
-  const generarDetalleEntrega = (detalles = []) => {
+  const generarDetalleEntrega = (detalles = [], procesoCompleto = false) => {
     if (!detalles.length) return "- Ninguno";
 
     return detalles
@@ -88,6 +88,9 @@ export default function EntregaFoto() {
 - Entrada : $${valorTexto(item.entrada, "0")}
 - Alcance : $${valorTexto(item.alcance, "0")}
 - Contrato: ${valorTexto(item.contrato)}
+- Proceso completo: ${procesoCompleto ? "Sí" : "No"}
+- Ubicación del cliente: ${valorTexto(item.ubicacion)}
+- Ubicación del dispositivo: ${valorTexto(item.ubicacionDispositivo)}
 - Observación del detalle: ${valorTexto(item.observacionDetalle)}`
       )
       .join("\n");
@@ -116,7 +119,7 @@ Fecha: ${formatearFecha(entrega.fecha)}
 - Origen : ${valorTexto(entrega.origen?.nombre)}
 - Observación: ${valorTexto(entrega.observacion)}
 Detalle:
-${generarDetalleEntrega(entrega.detalleEntrega)}
+${generarDetalleEntrega(entrega.detalleEntrega, entrega.procesoCompleto)}
 Obsequios:
 ${generarObsequiosEntrega(entrega.obsequiosEntrega)}`;
   };

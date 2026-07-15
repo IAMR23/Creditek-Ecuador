@@ -65,7 +65,9 @@ export default function DetalleVenta() {
   const fetchSelects = async () => {
     try {
       const [dmRes, fpRes] = await Promise.all([
-        axios.get(`${API_URL}/dispositivoMarca`),
+        axios.get(`${API_URL}/dispositivoMarca`, {
+          params: { soloActivos: true },
+        }),
         axios.get(`${API_URL}/formaPago`),
       ]);
       setDispositivoMarcas(dmRes.data);

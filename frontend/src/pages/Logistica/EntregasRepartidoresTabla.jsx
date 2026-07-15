@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { getHoyLocal } from "../../utils/dateUtils";
@@ -14,6 +14,13 @@ const OPCIONES_ERRORES = [
   "No envia el TAG",
 ];
 
+const normalizarTexto = (value) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
 export default function EntregasRepartidoresTabla() {
   const [repartidores, setRepartidores] = useState([]);
   const [entregas, setEntregas] = useState([]);
@@ -25,6 +32,7 @@ export default function EntregasRepartidoresTabla() {
   const [fechaInicio, setFechaInicio] = useState(getHoyLocal());
   const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [estado, setEstado] = useState("");
+  const [busqueda, setBusqueda] = useState("");
 
   // control UI errores
   const [filaAbierta, setFilaAbierta] = useState(null);
@@ -90,6 +98,20 @@ export default function EntregasRepartidoresTabla() {
   useEffect(() => {
     fetchEntregas();
   }, [fetchEntregas]);
+
+  const entregasFiltradas = useMemo(() => {
+    const termino = normalizarTexto(busqueda);
+    if (!termino) return entregas;
+
+    return entregas.filter((entrega) =>
+      [
+        entrega.id,
+        entrega.cliente?.cliente,
+        entrega.cliente?.cedula,
+        entrega.vendedor,
+      ].some((value) => normalizarTexto(value).includes(termino)),
+    );
+  }, [busqueda, entregas]);
 
   const toggleError = (entregaId, errorTexto) => {
     setErroresTemp((prev) => {
@@ -167,7 +189,21 @@ export default function EntregasRepartidoresTabla() {
         </p>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
+        <div>
+          <label className="text-sm font-medium text-gray-700">Buscar</label>
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="ID, cliente, cédula o vendedor"
+            className="w-full mt-1 rounded-xl border-gray-300"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            {entregasFiltradas.length} resultado(s)
+          </p>
+        </div>
+
         <div>
           <label className="text-sm font-medium text-gray-700">
             Repartidor
@@ -175,9 +211,12 @@ export default function EntregasRepartidoresTabla() {
           <select
             value={repartidorSeleccionado}
             onChange={(e) => setRepartidorSeleccionado(e.target.value)}
+            disabled={loadingRepartidores}
             className="w-full mt-1 rounded-xl border-gray-300"
           >
-            <option value="">Todos</option>
+            <option value="">
+              {loadingRepartidores ? "Cargando..." : "Todos"}
+            </option>
             {repartidores.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.usuario.nombre} — {r.agencia.nombre}
@@ -240,6 +279,15 @@ export default function EntregasRepartidoresTabla() {
         </div>
       )}
 
+      {!loading &&
+        !error &&
+        entregas.length > 0 &&
+        entregasFiltradas.length === 0 && (
+          <div className="text-center text-gray-500 mb-4">
+            No se encontraron entregas con la búsqueda ingresada
+          </div>
+        )}
+
       <div className="bg-white rounded-2xl shadow-md border overflow-x-auto">
         <table className="min-w-full text-sm text-left">
           <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
@@ -267,7 +315,7 @@ export default function EntregasRepartidoresTabla() {
           <tbody className="divide-y">
             {!loading &&
               !error &&
-              entregas.flatMap((entrega, j) =>
+              entregasFiltradas.flatMap((entrega, j) =>
                 entrega.detalleEntregas?.length > 0
                   ? entrega.detalleEntregas.map((d, index) => (
                       <tr

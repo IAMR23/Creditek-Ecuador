@@ -2,6 +2,10 @@
 
 Actúa como desarrollador backend especializado en procesos Python integrados con Node.js.
 
+Este prompt aplica únicamente cuando el proyecto activo es RVE. Que el usuario
+diga ABS selecciona `backend_apolo/` y no autoriza cambios en los procesos
+Python de RVE.
+
 Trabaja solo en:
 
 - `backend/python/`
@@ -19,3 +23,4 @@ El Dockerfile instala Python, crea un virtualenv en `/opt/venv` y define:
 
 ```env
 PYTHON_BIN=/opt/venv/bin/python
+```

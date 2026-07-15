@@ -12,6 +12,7 @@ const Obsequio = require("../../models/Obsequio");
 const Origen = require("../../models/Origen");
 const CostoHistorico = require("../../models/CostoHistorico");
 const { Op } = require("sequelize");
+const { normalizarCorreo } = require("../../utils/normalizarCorreo");
 
 const normalizeText = (value) =>
   String(value || "")
@@ -31,6 +32,8 @@ const editarVentaCompleta = async (req, res) => {
     const { ventaId, cliente, venta, detalle, obsequios } = JSON.parse(
       req.body.data,
     );
+
+    cliente.correo = normalizarCorreo(cliente.correo);
 
     // 🔥 FOTO nueva (opcional)
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
@@ -266,7 +269,7 @@ const obtenerVentaCompleta = async (req, res) => {
         {
           model: Cliente,
           as: "cliente",
-          attributes: ["cliente", "cedula", "telefono"],
+          attributes: ["cliente", "cedula", "telefono", "correo", "direccion"],
         },
         { model: Origen, as: "origen", attributes: ["id", "nombre"] },
 
@@ -319,7 +322,13 @@ const obtenerVentaCompleta = async (req, res) => {
     }
 
     res.json({
-      cliente: venta.cliente || { cliente: "", cedula: "", telefono: "" },
+      cliente: venta.cliente || {
+        cliente: "",
+        cedula: "",
+        telefono: "",
+        correo: "",
+        direccion: "",
+      },
       venta: {
         usuarioAgenciaId: venta.usuarioAgenciaId,
         origenId: venta.origenId,

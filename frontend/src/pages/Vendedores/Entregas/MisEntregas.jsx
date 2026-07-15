@@ -105,6 +105,9 @@ export default function MisEntregas() {
 - Entrada : $${valorTexto(item.entrada, "0")}
 - Alcance : $${valorTexto(item.alcance, "0")}
 - Contrato: ${valorTexto(item.contrato)}
+- Proceso completo: ${entrega.procesoCompleto ? "Sí" : "No"}
+- Ubicación del cliente: ${valorTexto(item.ubicacion)}
+- Ubicación del dispositivo: ${valorTexto(item.ubicacionDispositivo)}
 - Observación del detalle: ${valorTexto(item.observacionDetalle)}`
           )
           .join("\n")

@@ -216,6 +216,11 @@ router.get("/ventas2", async (req, res) => {
     const reporte = auditoriaVentasController.formatearReporte(ventas);
 
     const estadisticas = calcularEstadisticasVentas(reporte , fechaInicio);
+    estadisticas.costosHistoricosPorTipoModelo =
+      await auditoriaVentasController.obtenerCostosHistoricosPorTipoModelo(
+        reporte,
+        fechaFin,
+      );
     estadisticas.debugMargen = {
       ...estadisticas.debugMargen,
       rangoFechasAplicado: {

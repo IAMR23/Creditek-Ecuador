@@ -27,6 +27,9 @@ const { Op } = require("sequelize");
 const DetalleVenta = require("../../models/DetalleVenta");
 const { sequelize } = require("../../config/db");
 const VentaObsequio = require("../../models/VentaObsequio");
+const {
+  seleccionarCostoHistorico,
+} = require("../../utils/seleccionarCostoHistorico");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 
@@ -268,6 +271,7 @@ exports.obtenerReporte = async ({
         model: DetalleVenta,
         as: "detalleVenta",
         attributes: [
+          "modeloId",
           "precioUnitario",
           "precioVenta",
           "precioVendedor",
@@ -322,6 +326,66 @@ exports.obtenerReporte = async ({
       },
     ],
   });
+};
+
+exports.obtenerCostosHistoricosPorTipoModelo = async (
+  ventas = [],
+  fechaHasta = null,
+) => {
+  const modelosPorClave = new Map();
+
+  ventas.forEach((venta) => {
+    const modeloId = Number(venta.modeloId);
+    const tipo = String(venta.tipo || "").trim();
+    const modelo = String(venta.modelo || "").trim();
+
+    if (!Number.isInteger(modeloId) || !tipo || !modelo) return;
+    modelosPorClave.set(`${tipo}||${modelo}`, modeloId);
+  });
+
+  const modeloIds = [...new Set(modelosPorClave.values())];
+  if (!modeloIds.length) return {};
+
+  const costosHistoricos = await CostoHistorico.findAll({
+    where: {
+      modeloId: { [Op.in]: modeloIds },
+      ...(fechaHasta && { fechaCompra: { [Op.lte]: fechaHasta } }),
+    },
+    attributes: ["id", "modeloId", "fechaCompra", "costo", "margenPorcentual"],
+    order: [
+      ["modeloId", "ASC"],
+      ["fechaCompra", "DESC"],
+      ["id", "DESC"],
+    ],
+    raw: true,
+  });
+
+  const costosPorModelo = new Map();
+  costosHistoricos.forEach((costoHistorico) => {
+    const modeloId = Number(costoHistorico.modeloId);
+    const costos = costosPorModelo.get(modeloId) || [];
+    costos.push(costoHistorico);
+    costosPorModelo.set(modeloId, costos);
+  });
+
+  return Object.fromEntries(
+    [...modelosPorClave.entries()].map(([clave, modeloId]) => {
+      const historico = seleccionarCostoHistorico(
+        costosPorModelo.get(modeloId) || [],
+        fechaHasta,
+      );
+
+      return [
+        clave,
+        historico
+          ? {
+              costo: historico.costo,
+              margenPorcentual: historico.margenPorcentual,
+            }
+          : null,
+      ];
+    }),
+  );
 };
 
 exports.obtenerReporteGerencia = async ({
@@ -417,6 +481,7 @@ exports.obtenerReporteGerencia = async ({
         model: DetalleVenta,
         as: "detalleVenta",
         attributes: [
+          "modeloId",
           "precioUnitario",
           "precioVenta",
           "precioVendedor",

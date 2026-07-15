@@ -4,6 +4,10 @@ const { sequelize } = require("../config/db");
 
 const DispositivoMarca = require("./DispositivoMarca"); // Cambiado a DispositivoMarca
 const Modelo = require("./Modelo");
+const {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} = require("../utils/validarUbicacionCliente");
 
 const DetalleEntrega = sequelize.define(
   "DetalleEntrega",
@@ -62,6 +66,13 @@ const DetalleEntrega = sequelize.define(
     },
     ubicacion: {
       type: DataTypes.TEXT,
+      validate: {
+        contieneTexto(valor) {
+          if (!esUbicacionClienteValida(valor)) {
+            throw new Error(MENSAJE_UBICACION_CLIENTE_INVALIDA);
+          }
+        },
+      },
     },
     ubicacionDispositivo: {
       type: DataTypes.TEXT,

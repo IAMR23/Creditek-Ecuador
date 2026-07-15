@@ -11,6 +11,9 @@ const Usuario = require("../../models/Usuario");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Entrega = require("../../models/Entrega");
 const EntregaObsequio = require("../../models/EntregaObsequio");
+const {
+  esProcesoCompletoRegistrado,
+} = require("../../utils/procesoLlamadaEntrega");
 
 const { Op } = require("sequelize");
 const DetalleEntrega = require("../../models/DetalleEntrega");
@@ -208,6 +211,7 @@ exports.obtenerEntregaPorId = async (req, res) => {
             timeZone: "America/Guayaquil",
           }).replace("T", " ")
         : null,
+      procesoCompleto: esProcesoCompletoRegistrado(entrega),
 
       fotoValidacion: entrega.fotoValidacion,
       validada: entrega.validada,

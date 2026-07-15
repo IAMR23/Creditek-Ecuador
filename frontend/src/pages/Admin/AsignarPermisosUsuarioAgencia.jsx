@@ -8,7 +8,6 @@ import {
   Users,
 } from "lucide-react";
 import { api } from "../../api/client";
-import { SYSTEM_ROUTES } from "../../config/routePermissions";
 
 const getPermisosIds = (usuario) =>
   (usuario?.permisosAsignados || [])
@@ -66,12 +65,7 @@ export default function AsignarPermisosUsuarioAgencia() {
   };
 
   const cargarPermisos = async () => {
-    const { data } = await api.post("/api/permisos-catalogo/sincronizar", {
-      permisos: SYSTEM_ROUTES.map((ruta) => ({
-        nombre: ruta.permission,
-        descripcion: ruta.descripcion,
-      })),
-    });
+    const { data } = await api.get("/api/permisos-catalogo");
     setPermisos(data || []);
     return data || [];
   };

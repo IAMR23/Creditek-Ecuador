@@ -10,6 +10,14 @@ const Obsequio = require("../../models/Obsequio");
 const Origen = require("../../models/Origen");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 const EntregaObsequio = require("../../models/EntregaObsequio");
+const {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} = require("../../utils/validarUbicacionCliente");
+const {
+  esProcesoCompletoRegistrado,
+  resolverProcesoLlamada,
+} = require("../../utils/procesoLlamadaEntrega");
 
 const editarEntregaCompleta = async (req, res) => {
   const t = await sequelize.transaction();
@@ -20,6 +28,14 @@ const editarEntregaCompleta = async (req, res) => {
 
     // ✅ Data viene stringeada (multipart/form-data)
     const { cliente, entrega, detalle, obsequios } = JSON.parse(req.body.data);
+
+    if (!esUbicacionClienteValida(detalle?.ubicacion)) {
+      await t.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: MENSAJE_UBICACION_CLIENTE_INVALIDA,
+      });
+    }
 
     // ✅ Foto opcional
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
@@ -32,6 +48,21 @@ const editarEntregaCompleta = async (req, res) => {
       return res.status(404).json({
         ok: false,
         message: "Entrega no encontrada",
+      });
+    }
+
+    const procesoLlamada = resolverProcesoLlamada({
+      entrega,
+      archivoPresente: Boolean(req.file || entregaDB.fotoFechaLlamada),
+      fotoUrl: fotoUrl || entregaDB.fotoFechaLlamada,
+    });
+
+    if (!procesoLlamada.requisitosCompletos) {
+      await t.rollback();
+      return res.status(400).json({
+        ok: false,
+        message:
+          "La fecha, hora y foto de la llamada son obligatorias cuando el proceso no está completo.",
       });
     }
 
@@ -88,9 +119,9 @@ const editarEntregaCompleta = async (req, res) => {
         origenId: entrega.origenId,
         observacion: entrega.observacion,
         fecha: entrega.fecha,
-        FechaHoraLlamada: entrega.FechaHoraLlamada,
+        FechaHoraLlamada: procesoLlamada.fechaHoraLlamada,
         estado: entrega.estado,
-        ...(fotoUrl && { fotoFechaLlamada: fotoUrl }),
+        fotoFechaLlamada: procesoLlamada.fotoFechaLlamada,
       },
       { transaction: t }
     );
@@ -235,6 +266,7 @@ const obtenerEntregaCompleta = async (req, res) => {
         usuarioAgenciaId: entrega.usuarioAgenciaId,
         fotoFechaLlamada: entrega.fotoFechaLlamada || null,
         FechaHoraLlamada: entrega.FechaHoraLlamada || null,
+        procesoCompleto: esProcesoCompletoRegistrado(entrega),
         origenId: entrega.origenId,
         origen: entrega.origen || null,
         observacion: entrega.observacion,

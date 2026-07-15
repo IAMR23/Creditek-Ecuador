@@ -5,6 +5,10 @@ import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
 import imageCompression from "browser-image-compression";
 import { useNavigate } from "react-router-dom";
+import {
+  esUbicacionClienteValida,
+  MENSAJE_UBICACION_CLIENTE_INVALIDA,
+} from "../../utils/validarUbicacionCliente";
 
 const CrearEntregaCompleta = () => {
   const [loading, setLoading] = useState(false);
@@ -17,6 +21,7 @@ const CrearEntregaCompleta = () => {
 
   const [foto, setFoto] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [procesoCompleto, setProcesoCompleto] = useState(false);
 
   const [origenSeleccionado, setOrigenSeleccionado] = useState(null);
   const [formaPagoSeleccionada, setFormaPagoSeleccionada] = useState(null);
@@ -31,6 +36,17 @@ const CrearEntregaCompleta = () => {
     if (file) {
       setFoto(file);
       setPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleProcesoCompletoChange = (event) => {
+    const activado = event.target.checked;
+    setProcesoCompleto(activado);
+
+    if (activado) {
+      setEntrega((prev) => ({ ...prev, FechaHoraLlamada: "" }));
+      setFoto(null);
+      setPreview(null);
     }
   };
 
@@ -87,6 +103,8 @@ const CrearEntregaCompleta = () => {
 
   useEffect(() => {
     const handlePaste = (event) => {
+      if (procesoCompleto) return;
+
       const items = event.clipboardData?.items;
       if (!items) return;
 
@@ -103,13 +121,15 @@ const CrearEntregaCompleta = () => {
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, []);
+  }, [procesoCompleto]);
 
   useEffect(() => {
     const fetchSelects = async () => {
       try {
         const [dmRes, fpRes] = await Promise.all([
-          axios.get(`${API_URL}/dispositivoMarca`),
+          axios.get(`${API_URL}/dispositivoMarca`, {
+            params: { soloActivos: true },
+          }),
           axios.get(`${API_URL}/formaPago`),
         ]);
         setDispositivoMarcas(dmRes.data);
@@ -227,8 +247,18 @@ const CrearEntregaCompleta = () => {
 const handleSubmit = async (e) => {
   e.preventDefault();
 
-  if (!foto) {
+  if (!procesoCompleto && !foto) {
     Swal.fire("Atención", "Debes subir una foto", "warning");
+    return;
+  }
+
+  if (!procesoCompleto && !entrega.FechaHoraLlamada) {
+    Swal.fire("Atención", "Debes ingresar la fecha y hora de la llamada", "warning");
+    return;
+  }
+
+  if (!esUbicacionClienteValida(detalle.ubicacion)) {
+    Swal.fire("Ubicación inválida", MENSAJE_UBICACION_CLIENTE_INVALIDA, "warning");
     return;
   }
 
@@ -261,6 +291,8 @@ if (!/^\d{10}$/.test(telefono)) {
         cliente,
         entrega: {
           ...entrega,
+          FechaHoraLlamada: procesoCompleto ? null : entrega.FechaHoraLlamada,
+          procesoCompleto,
           usuarioAgenciaId: Number(entrega.usuarioAgenciaId),
           origenId: Number(entrega.origenId),
         },
@@ -280,14 +312,16 @@ if (!/^\d{10}$/.test(telefono)) {
       })
     );
 
-    const options = {
-      maxSizeMB: 0.4,
-      maxWidthOrHeight: 1280,
-      useWebWorker: true,
-    };
+    if (!procesoCompleto && foto) {
+      const options = {
+        maxSizeMB: 0.4,
+        maxWidthOrHeight: 1280,
+        useWebWorker: true,
+      };
 
-    const imagenComprimida = await imageCompression(foto, options);
-    formData.append("foto", imagenComprimida);
+      const imagenComprimida = await imageCompression(foto, options);
+      formData.append("foto", imagenComprimida);
+    }
 
     const response = await axios.post(
       `${API_URL}/registrar2/entrega-completa`,
@@ -309,6 +343,7 @@ if (!/^\d{10}$/.test(telefono)) {
       modelo: modeloSeleccionado,
       entrega: {
         ...entrega,
+        procesoCompleto,
         id: entregaData.entrega.id,
         fecha: entregaData.entrega.fecha,
       },
@@ -334,6 +369,7 @@ if (!/^\d{10}$/.test(telefono)) {
     // 🔄 Reset UNA SOLA VEZ
     setFoto(null);
     setPreview(null);
+    setProcesoCompleto(false);
     setObsequios([]);
     setCliente({
       cliente: "",
@@ -448,7 +484,10 @@ Detalle:
 - Entrada : $${valorTexto(detalle.entrada, "0")}
 - Alcance : $${valorTexto(detalle.alcance, "0")}
 - Contrato: ${valorTexto(detalle.contrato)}
+- Proceso completo: ${entrega.procesoCompleto ? "Sí" : "No"}
 - Identificador anuncio: ${valorTexto(detalle.identificadorAnuncio)}
+- Ubicación del cliente: ${valorTexto(detalle.ubicacion)}
+- Ubicación del dispositivo: ${valorTexto(detalle.ubicacionDispositivo)}
 - Observación del detalle: ${valorTexto(detalle.observacionDetalle)}
 Obsequios:
 ${textoObsequios}`;
@@ -947,7 +986,31 @@ ${textoObsequios}`;
           />
         </div>
 
-        <div className="bg-white p-4 rounded shadow border border-orange-500">
+        <div className="rounded-lg border border-orange-300 bg-orange-50 p-4">
+          <label
+            htmlFor="procesoCompleto"
+            className="flex cursor-pointer items-start gap-3"
+          >
+            <input
+              id="procesoCompleto"
+              type="checkbox"
+              checked={procesoCompleto}
+              onChange={handleProcesoCompletoChange}
+              className="mt-1 h-4 w-4 rounded border-orange-400 text-orange-600 focus:ring-orange-500"
+            />
+            <span>
+              <span className="block font-semibold text-orange-700">
+                Proceso completo
+              </span>
+              <span className="block text-sm text-gray-600">
+                Activa esta opción cuando no sea necesario registrar la llamada ni subir su foto.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {!procesoCompleto && (
+          <div className="bg-white p-4 rounded shadow border border-orange-500">
           {/* FECHA Y HORA */}
           <h2 className="text-lg font-semibold text-orange-600 mb-2">
             Fecha y hora de la llamada
@@ -989,8 +1052,9 @@ ${textoObsequios}`;
               onChange={handleFoto}
               className="block mt-2"
             />
-          </label>
-        </div>
+            </label>
+          </div>
+        )}
 
         <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
           🎁 Obsequios

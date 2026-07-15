@@ -1,13 +1,19 @@
 ## Reglas críticas frontend
 
-- Trabajar solo en `frontend/`.
-- No modificar `frontend_apolo/`.
-- Para nuevas peticiones HTTP usar `frontend/src/api/client.js`.
+- Resolver primero el frontend activo:
+  - RVE: `frontend/`.
+  - ABS: `frontend_apolo/`.
+- Trabajar solo en el frontend activo y no modificar el frontend del otro
+  proyecto, salvo instrucción explícita.
+- Para nuevas peticiones HTTP usar `src/api/client.js` dentro del frontend
+  activo.
 - Evitar `axios` directo salvo que exista una razón clara.
 - Si se agrega una pantalla nueva, revisar:
-  - `frontend/src/App.jsx`
-  - `frontend/src/components/Sidebar.jsx`
-  - `frontend/src/config/routePermissions.js`
+  - `src/App.jsx` del frontend activo.
+  - `src/components/Sidebar.jsx` del frontend activo.
+  - En RVE, `frontend/src/config/routePermissions.js`.
+  - En ABS, los componentes de rutas protegidas existentes. No asumir que
+    existe `routePermissions.js`.
 - Mantener refresh token automático.
 - No romper rutas protegidas.
 - No romper permisos por rol o usuario.
