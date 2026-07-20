@@ -17,6 +17,7 @@ import { API_URL } from "../../../config";
 const COLORS = {
   semana: "#4ADE80",
   gerencia: "#2563eb",
+  promedioGerencia: "#dc2626",
   enganche: "#16a34a",
   costo: "#f59e0b",
   costoEntrega: "#0891b2",
@@ -90,6 +91,22 @@ const toIndicadorGerenciaArray = (obj = {}, fechaInicio = "2026-01-01") =>
       return {
         name: getRangoSemana(semanaNumero, fechaInicio),
         margen: Number(value) || 0,
+        semanaNumero,
+      };
+    })
+    .sort((a, b) => a.semanaNumero - b.semanaNumero);
+
+const toPromedioIndicadorGerenciaArray = (
+  obj = {},
+  fechaInicio = "2026-01-01",
+) =>
+  Object.entries(obj || {})
+    .map(([name, value]) => {
+      const semanaNumero = Number(String(name).replace(/\D/g, ""));
+
+      return {
+        name: getRangoSemana(semanaNumero, fechaInicio),
+        promedioMargen: Number(value) || 0,
         semanaNumero,
       };
     })
@@ -288,6 +305,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
   const refEnganche = useRef(null);
   const refSemana = useRef(null);
   const refGerencia = useRef(null);
+  const refPromedioGerencia = useRef(null);
   const refCostoVenta = useRef(null);
   const refCostoEntrega = useRef(null);
   const refMargenPorcentual = useRef(null);
@@ -305,6 +323,15 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         fechaInicio,
       ),
     [estadisticas?.indicadorGerenciaPorSemana, fechaInicio],
+  );
+
+  const dataPromedioIndicadorGerencia = useMemo(
+    () =>
+      toPromedioIndicadorGerenciaArray(
+        estadisticas?.promedioIndicadorGerenciaPorSemana,
+        fechaInicio,
+      ),
+    [estadisticas?.promedioIndicadorGerenciaPorSemana, fechaInicio],
   );
 
   const dataMargenPorcentual = useMemo(
@@ -667,6 +694,58 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
                 dataKey="margen"
                 name="Indicador Gerencia"
                 stroke={COLORS.gerencia}
+                strokeWidth={3}
+                dot={{ r: 6 }}
+                activeDot={{ r: 10 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">
+            Promedio Indicador Gerencia por Semana
+          </h3>
+          <CopyButton
+            copiando={
+              graficoCopiando === "Promedio Indicador Gerencia por Semana"
+            }
+            onClick={() =>
+              copiarGrafico(
+                refPromedioGerencia,
+                "Promedio Indicador Gerencia por Semana",
+              )
+            }
+          />
+        </div>
+
+        <div ref={refPromedioGerencia} className="bg-white rounded-xl">
+          <ResponsiveContainer width="100%" height={650}>
+            <LineChart
+              data={dataPromedioIndicadorGerencia}
+              margin={{ top: 20, right: 12, left: 22, bottom: 110 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+              <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
+
+              <YAxis
+                domain={minDataDomain}
+                tickFormatter={(value) => moneyFormatter.format(value)}
+              />
+
+              <Tooltip
+                {...tooltipStyle}
+                formatter={(value) => moneyFormatter.format(Number(value) || 0)}
+              />
+
+              <Line
+                type="linear"
+                dataKey="promedioMargen"
+                name="Promedio por venta"
+                stroke={COLORS.promedioGerencia}
                 strokeWidth={3}
                 dot={{ r: 6 }}
                 activeDot={{ r: 10 }}

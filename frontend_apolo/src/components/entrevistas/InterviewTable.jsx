@@ -50,13 +50,13 @@ function InterviewDateCell({ interview }) {
   );
 }
 
-function ContactDateCell({ interview }) {
-  if (!interview.createdAt) {
+function InterviewPhaseDateCell({ interview }) {
+  if (!interview.pasaEntrevistaAt) {
     return <span className="text-sm font-semibold text-slate-400">-</span>;
   }
 
   return (
-    <p className="font-semibold text-slate-800">{formatInterviewDate(interview.createdAt)}</p>
+    <p className="font-semibold text-slate-800">{formatInterviewDate(interview.pasaEntrevistaAt)}</p>
   );
 }
 
@@ -140,7 +140,7 @@ function MobileCard(props) {
     <article className="space-y-4 border-b border-slate-100 p-4 last:border-b-0">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Fecha</p>
-        <div className="mt-1"><ContactDateCell interview={interview} /></div>
+        <div className="mt-1"><InterviewPhaseDateCell interview={interview} /></div>
       </div>
       <CandidateCell interview={interview} />
       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -218,7 +218,7 @@ export default function InterviewTable({
               const email = getCandidateEmail(interview);
               return (
                 <tr key={interview.id} className="align-middle transition hover:bg-slate-50/80">
-                  <td className="px-5 py-4 text-sm"><ContactDateCell interview={interview} /></td>
+                  <td className="px-5 py-4 text-sm"><InterviewPhaseDateCell interview={interview} /></td>
                   <td className="max-w-[260px] px-5 py-4"><CandidateCell interview={interview} /></td>
                   <td className="px-4 py-4 text-sm">
                     <p className="font-semibold text-slate-700">{getCandidatePhone(interview)}</p>

@@ -248,6 +248,11 @@ export default function Sidebar({ auth }) {
             path: "/sistemas/mapa-comercial",
           },
           {
+            label: "Inventarios",
+            icon: <Boxes size={20} />,
+            path: "/sistemas/inventarios",
+          },
+          {
             label: "Normalizacion dispositivos",
             icon: <ClipboardList size={20} />,
             path: "/conciliacion-facturas",

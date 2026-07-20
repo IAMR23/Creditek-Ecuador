@@ -15,6 +15,7 @@ describe("calcularEstadisticasVentas", () => {
     );
 
     expect(estadisticas.indicadorGerenciaPorSemana["Semana 1"]).toBe(50);
+    expect(estadisticas.promedioIndicadorGerenciaPorSemana["Semana 1"]).toBe(50);
     expect(estadisticas.precioVentaPorSemana["Semana 1"]).toBe(200);
     expect(estadisticas.costoPorSemana["Semana 1"]).toBe(100);
     expect(estadisticas.margenPorcentualPorSemana["Semana 1"]).toBe(50);
@@ -61,6 +62,7 @@ describe("calcularEstadisticasVentas", () => {
     );
 
     expect(estadisticas.indicadorGerenciaPorSemana["Semana 1"]).toBe(150);
+    expect(estadisticas.promedioIndicadorGerenciaPorSemana["Semana 1"]).toBe(50);
     expect(estadisticas.costoPorSemana["Semana 1"]).toBe(500);
     expect(estadisticas.margenPorcentualPorSemana["Semana 1"]).toBe(30);
     expect(estadisticas.margenPorcentualTotal).toBe(30);
@@ -70,5 +72,19 @@ describe("calcularEstadisticasVentas", () => {
       margenPorcentaje: 30,
       cantidadRegistros: 3,
     });
+  });
+
+  test("calcula el promedio semanal como margen total dividido para ventas", () => {
+    const estadisticas = calcularEstadisticasVentas(
+      [
+        { fecha: "2026-07-16", margen: 10 },
+        { fecha: "2026-07-17", margen: 21 },
+      ],
+      "2026-07-16",
+    );
+
+    expect(estadisticas.porSemana["Semana 1"]).toBe(2);
+    expect(estadisticas.indicadorGerenciaPorSemana["Semana 1"]).toBe(31);
+    expect(estadisticas.promedioIndicadorGerenciaPorSemana["Semana 1"]).toBe(15.5);
   });
 });

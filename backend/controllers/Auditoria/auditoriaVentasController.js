@@ -1640,7 +1640,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
   );
   const filasPdfSinVenta = [];
   const errores = [];
-  const detallesCelularAsignados = new Set();
+  const detallesAsignados = new Set();
 
   for (const record of registrosPdf) {
     const codigoPdf = record.codigo_pdf || "";
@@ -1669,12 +1669,9 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       }))
       .sort((a, b) => b.similitudCliente - a.similitudCliente);
 
-    const candidatosDisponibles =
-      tipo === "CELULAR"
-        ? candidatos.filter(
-            (venta) => !detallesCelularAsignados.has(Number(venta.detalleVentaId)),
-          )
-        : candidatos;
+    const candidatosDisponibles = candidatos.filter(
+      (venta) => !detallesAsignados.has(Number(venta.detalleVentaId)),
+    );
 
     const matchPorImei =
       tipo === "CELULAR" && record.imei
@@ -1694,6 +1691,10 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
     if (!match) {
       const detalleCelularYaAsignado =
         tipo === "CELULAR" &&
+        candidatos.length > 0 &&
+        candidatosDisponibles.length === 0;
+      const detalleTvYaAsignado =
+        tipo === "TV" &&
         candidatos.length > 0 &&
         candidatosDisponibles.length === 0;
       const candidatosModeloDiferente = ventasFlatten
@@ -1717,12 +1718,9 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
           if (a.fechaOk !== b.fechaOk) return a.fechaOk ? -1 : 1;
           return b.similitudCliente - a.similitudCliente;
         });
-      const candidatosModeloDiferenteDisponibles =
-        tipo === "CELULAR"
-          ? candidatosModeloDiferente.filter(
-              (venta) => !detallesCelularAsignados.has(Number(venta.detalleVentaId)),
-            )
-          : candidatosModeloDiferente;
+      const candidatosModeloDiferenteDisponibles = candidatosModeloDiferente.filter(
+        (venta) => !detallesAsignados.has(Number(venta.detalleVentaId)),
+      );
       const matchModeloDiferentePorReferencia = referenciaRecordPdf
         ? candidatosModeloDiferenteDisponibles.find(
             (venta) => venta.fechaOk && venta.similitudCliente >= 85 && venta.referenciaOk,
@@ -1735,9 +1733,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
         );
 
       if (!detalleCelularYaAsignado && matchModeloDiferente) {
-        if (tipo === "CELULAR") {
-          detallesCelularAsignados.add(Number(matchModeloDiferente.detalleVentaId));
-        }
+        detallesAsignados.add(Number(matchModeloDiferente.detalleVentaId));
 
         if (referenciaRecordPdf) {
           await DetalleVenta.update(
@@ -1800,6 +1796,10 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
         detalleError.push("DETALLE_RVE_YA_ASIGNADO_A_OTRO_IMEI");
       }
 
+      if (detalleTvYaAsignado) {
+        detalleError.push("DETALLE_RVE_YA_ASIGNADO_A_OTRO_REGISTRO_PDF");
+      }
+
       filasPdfSinVenta.push(
         crearFilaPdfSinMatch({
           record,
@@ -1811,9 +1811,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       continue;
     }
 
-    if (tipo === "CELULAR") {
-      detallesCelularAsignados.add(Number(match.detalleVentaId));
-    }
+    detallesAsignados.add(Number(match.detalleVentaId));
 
     if (tipo === "CELULAR" && record.imei) {
       await DetalleVenta.update(
@@ -1862,6 +1860,8 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
     errores,
   };
 };
+
+exports.auditarRegistrosPdf = auditarRegistrosPdf;
 
 
 const obtenerDiaSemana = (fecha) => {

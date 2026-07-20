@@ -80,6 +80,7 @@ import Bonos from "./pages/Admin/Bonos";
 import TasksPage from "./pages/Tareas/TaskPage";
 import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
 import MapaComercial from "./pages/Sistemas/MapaComercial";
+import Inventarios from "./pages/Sistemas/Inventarios";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 
 import { TaskNotificationProvider } from "./context/TaskNotificationContext";
@@ -436,6 +437,10 @@ function App() {
                 <Route
                   path="sistemas/mapa-comercial"
                   element={protect(<MapaComercial />, "/sistemas/mapa-comercial")}
+                />
+                <Route
+                  path="sistemas/inventarios"
+                  element={protect(<Inventarios />, "/sistemas/inventarios")}
                 />
               </Route>
 

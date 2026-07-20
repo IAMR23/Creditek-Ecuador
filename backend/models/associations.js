@@ -49,6 +49,7 @@ const MapaComercialZona = require('./MapaComercialZona');
 const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
+const InventarioSistema = require('./InventarioSistema');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -576,6 +577,33 @@ MapaComercialZona.belongsTo(Agencia, {
 Agencia.hasMany(MapaComercialZona, {
   foreignKey: "agenciaId",
   as: "mapaComercialZonas",
+});
+
+/* INVENTARIO SISTEMAS */
+
+InventarioSistema.belongsTo(Agencia, {
+  foreignKey: "agenciaId",
+  as: "agencia",
+});
+
+Agencia.hasMany(InventarioSistema, {
+  foreignKey: "agenciaId",
+  as: "inventariosSistemas",
+});
+
+InventarioSistema.belongsTo(Usuario, {
+  foreignKey: "responsableId",
+  as: "responsable",
+});
+
+InventarioSistema.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+
+InventarioSistema.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
 });
 
 MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {

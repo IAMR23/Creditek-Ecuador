@@ -14,7 +14,7 @@ const interviewStatusLabels = {
 
 const labels = {
   estado: "Estado",
-  fechaContacto: "Fecha de contacto",
+  fechaPaseEntrevista: "Fecha de pase a entrevista",
   fechaHora: "Fecha y hora",
   entrevistador: "Entrevistador",
   rolEntrevistador: "Rol del entrevistador",
@@ -174,7 +174,7 @@ export default function ModalDetalle({ postulacion, onClose }) {
     estado:
       interviewStatusLabels[postulacion?.estadoEntrevista] ||
       (postulacion?.fechaEntrevista ? "Agendada" : "Pendiente de agendar"),
-    fechaContacto: formatDateTime(postulacion?.createdAt),
+    fechaPaseEntrevista: formatDateTime(postulacion?.pasaEntrevistaAt),
     fechaHora: formatDateTime(postulacion?.fechaEntrevista),
     entrevistador:
       postulacion?.entrevistador?.nombre || postulacion?.entrevistador?.email || dash,

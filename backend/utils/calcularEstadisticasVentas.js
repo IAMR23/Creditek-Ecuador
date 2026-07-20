@@ -104,6 +104,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     porTipoModelo: {},
     porSemana: {},
     indicadorGerenciaPorSemana: {},
+    promedioIndicadorGerenciaPorSemana: {},
     precioVentaPorSemana: {},
     costoPorSemana: {},
     margenPorcentualPorSemana: {},
@@ -303,8 +304,11 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   semanasMargen.forEach((key) => {
     const utilidad = redondear2(stats.indicadorGerenciaPorSemana[key]);
     const costo = redondear2(stats.costoPorSemana[key]);
+    const ventasSemana = normalizarNumero(stats.porSemana[key]);
 
     stats.indicadorGerenciaPorSemana[key] = utilidad;
+    stats.promedioIndicadorGerenciaPorSemana[key] =
+      ventasSemana === 0 ? 0 : redondear2(utilidad / ventasSemana);
     stats.costoPorSemana[key] = costo;
     stats.precioVentaPorSemana[key] = redondear2(stats.precioVentaPorSemana[key]);
 
