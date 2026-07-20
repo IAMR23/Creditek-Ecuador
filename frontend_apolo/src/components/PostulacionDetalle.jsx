@@ -2,7 +2,25 @@ import { X } from "lucide-react";
 
 const dash = "-";
 
+const interviewStatusLabels = {
+  PENDIENTE: "Pendiente de agendar",
+  AGENDADA: "Agendada",
+  CONFIRMADA: "Confirmada",
+  REPROGRAMADA: "Reprogramada",
+  REALIZADA: "Realizada",
+  NO_ASISTIO: "No asistió",
+  CANCELADA: "Cancelada",
+};
+
 const labels = {
+  estado: "Estado",
+  fechaHora: "Fecha y hora",
+  duracion: "Duración",
+  entrevistador: "Entrevistador",
+  rolEntrevistador: "Rol del entrevistador",
+  modalidad: "Modalidad",
+  lugarOEnlace: "Lugar o enlace",
+  observacionesEntrevista: "Observaciones de la entrevista",
   nombreCompleto: "Nombre completo",
   cedula: "Cedula",
   edadCumplida: "Edad cumplida",
@@ -13,8 +31,8 @@ const labels = {
   estudiaActualmente: "Estudia actualmente",
   queEstudia: "Que esta estudiando",
   modalidadEstudio: "Modalidad de estudio",
-  ciudadNacimiento: "Ciudad de nacimiento",
-  otraCiudadNacimiento: "Otra ciudad",
+  ciudadNacimiento: "Ciudad de residencia",
+  otraCiudadNacimiento: "Otra ciudad de residencia",
   direccion: "Direccion",
   tiempoResidenciaQuito: "Tiempo de residencia en Quito",
   motivoSalidaCiudadNatal: "Motivo de salida de ciudad natal",
@@ -72,6 +90,15 @@ const formatValue = (value) => {
   if (typeof value === "boolean") return value ? "Si" : "No";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+};
+
+const formatDateTime = (value) => {
+  if (!value) return dash;
+  return new Date(value).toLocaleString("es-EC", {
+    timeZone: "America/Guayaquil",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 };
 
 function Section({ title, children }) {
@@ -143,6 +170,24 @@ export default function ModalDetalle({ postulacion, onClose }) {
   const trabajos = formulario.historial_laboral || [];
   const observaciones = formulario.observaciones || {};
   const metadata = formulario.metadata || {};
+  const interviewData = {
+    estado:
+      interviewStatusLabels[postulacion?.estadoEntrevista] ||
+      (postulacion?.fechaEntrevista ? "Agendada" : "Pendiente de agendar"),
+    fechaHora: formatDateTime(postulacion?.fechaEntrevista),
+    duracion: postulacion?.entrevistaDuracionMinutos
+      ? `${postulacion.entrevistaDuracionMinutos} minutos`
+      : dash,
+    entrevistador:
+      postulacion?.entrevistador?.nombre || postulacion?.entrevistador?.email || dash,
+    rolEntrevistador: postulacion?.entrevistador?.rol?.nombre || dash,
+    modalidad: postulacion?.entrevistaModalidad || dash,
+    lugarOEnlace:
+      postulacion?.entrevistaModalidad === "VIRTUAL"
+        ? postulacion?.entrevistaEnlace || dash
+        : postulacion?.entrevistaLugar || dash,
+    observacionesEntrevista: postulacion?.entrevistaObservaciones || dash,
+  };
   const otrosDatosPersonales = Object.fromEntries(
     Object.entries(datos).filter(([key]) => !knownPersonalKeys.has(key)),
   );
@@ -173,6 +218,12 @@ export default function ModalDetalle({ postulacion, onClose }) {
         </div>
 
         <div className="overflow-y-auto px-5 py-5">
+          {(postulacion?.pasaEntrevista || postulacion?.fechaEntrevista) && (
+            <Section title="Entrevista">
+              <FieldGrid data={interviewData} />
+            </Section>
+          )}
+
           <Section title="Datos personales">
             <FieldGrid
               data={datos}

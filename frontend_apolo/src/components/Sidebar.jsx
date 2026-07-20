@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
+  Archive,
   Building2,
   ClipboardList,
   FileText,
@@ -21,6 +22,7 @@ export default function Sidebar() {
     total: 0,
     noLeidas: 0,
     entrevistas: 0,
+    descartados: 0,
   });
 
   const linkClass = ({ isActive }) =>
@@ -44,6 +46,7 @@ export default function Sidebar() {
             total: 0,
             noLeidas: 0,
             entrevistas: 0,
+            descartados: 0,
           }
         );
       } catch {
@@ -124,6 +127,14 @@ export default function Sidebar() {
           <span className="flex-1">Entrevistas</span>
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
             {resumenPostulaciones.entrevistas}
+          </span>
+        </NavLink>
+
+        <NavLink to="/descartados" className={linkClass}>
+          <Archive size={18} />
+          <span className="flex-1">Descartados</span>
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">
+            {resumenPostulaciones.descartados}
           </span>
         </NavLink>
       </nav>

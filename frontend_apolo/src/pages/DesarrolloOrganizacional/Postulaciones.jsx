@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Archive,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -7,7 +9,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  Trash2,
   Undo2,
   UserCheck,
   X,
@@ -48,22 +49,34 @@ const formatDate = (date) => {
   });
 };
 
+const toDateTimeLocal = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+};
+
 const thClass = "px-1.5 py-2 text-[10px] font-bold leading-tight md:px-2 lg:text-xs";
 const tdClass = "min-w-0 break-words px-1.5 py-2 text-[10px] leading-tight text-slate-700 md:px-2 lg:text-xs";
 
 export default function Postulaciones({ modo = "postulacion" }) {
   const esEntrevistas = modo === "entrevista";
+  const esDescartados = modo === "descartado";
   const [postulaciones, setPostulaciones] = useState([]);
   const [filters, setFilters] = useState(() => createInitialFilters(modo));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [deletingId, setDeletingId] = useState(null);
+  const [updatingDiscardId, setUpdatingDiscardId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [resumen, setResumen] = useState({
     totalGeneral: 0,
     total: 0,
     noLeidas: 0,
     entrevistas: 0,
+    descartados: 0,
   });
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -78,6 +91,8 @@ export default function Postulaciones({ modo = "postulacion" }) {
   const [savingObservationId, setSavingObservationId] = useState(null);
   const [editingObservationId, setEditingObservationId] = useState(null);
   const [updatingStageId, setUpdatingStageId] = useState(null);
+  const [entrevistaDrafts, setEntrevistaDrafts] = useState({});
+  const [savingInterviewDateId, setSavingInterviewDateId] = useState(null);
   const requestIdRef = useRef(0);
 
   const total = useMemo(() => pagination.total || postulaciones.length, [pagination.total, postulaciones.length]);
@@ -85,6 +100,14 @@ export default function Postulaciones({ modo = "postulacion" }) {
   const syncObservacionesDraft = (items = []) => {
     setObservacionesDraft(
       Object.fromEntries(items.map((item) => [item.id, item.observacion || ""]))
+    );
+  };
+
+  const syncEntrevistaDrafts = (items = []) => {
+    setEntrevistaDrafts(
+      Object.fromEntries(
+        items.map((item) => [item.id, toDateTimeLocal(item.fechaEntrevista)]),
+      ),
     );
   };
 
@@ -97,6 +120,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
           total: 0,
           noLeidas: 0,
           entrevistas: 0,
+          descartados: 0,
         },
       );
     } catch {
@@ -140,6 +164,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
 
       setPostulaciones(items);
       syncObservacionesDraft(items);
+      syncEntrevistaDrafts(items);
       setPagination(paginationData);
       setPage(paginationData.page || pageToLoad);
       await actualizarResumen();
@@ -303,37 +328,101 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }
   };
 
-  const eliminarPostulacion = async (postulacion) => {
+  const guardarFechaEntrevista = async (postulacion) => {
+    const draft = entrevistaDrafts[postulacion.id] || "";
+    const parsedDate = draft ? new Date(draft) : null;
+
+    if (parsedDate && Number.isNaN(parsedDate.getTime())) {
+      Swal.fire("Fecha no valida", "Ingresa una fecha y hora validas.", "warning");
+      return;
+    }
+
+    try {
+      setSavingInterviewDateId(postulacion.id);
+      setError("");
+      const res = await api.patch(
+        `/api/postulaciones/${postulacion.id}/fecha-entrevista`,
+        {
+          fechaEntrevista: parsedDate ? parsedDate.toISOString() : null,
+        },
+      );
+      const postulacionActualizada = res.data?.data;
+
+      setPostulaciones((prev) =>
+        prev.map((item) =>
+          item.id === postulacion.id
+            ? {
+                ...item,
+                fechaEntrevista: postulacionActualizada?.fechaEntrevista || null,
+              }
+            : item,
+        ),
+      );
+      setEntrevistaDrafts((prev) => ({
+        ...prev,
+        [postulacion.id]: toDateTimeLocal(postulacionActualizada?.fechaEntrevista),
+      }));
+
+      Swal.fire(
+        "Guardado",
+        parsedDate
+          ? "La fecha y hora de la entrevista fueron guardadas."
+          : "La fecha y hora de la entrevista fueron eliminadas.",
+        "success",
+      );
+    } catch (err) {
+      const message =
+        err.response?.data?.message || "No se pudo guardar la fecha de la entrevista";
+      setError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setSavingInterviewDateId(null);
+    }
+  };
+
+  const actualizarDescarte = async (postulacion, descartada) => {
     const datos = getDatos(postulacion);
     const nombre = datos.nombreCompleto || postulacion.nombre || `ID ${postulacion.id}`;
+    const seccionRestaurada = postulacion.pasaEntrevista ? "Entrevistas" : "Postulaciones";
     const { isConfirmed } = await Swal.fire({
-      title: "Eliminar postulacion",
-      text: `Deseas eliminar la postulacion de ${nombre}? Esta accion no se puede deshacer.`,
-      icon: "warning",
+      title: descartada ? "Descartar postulante" : "Restaurar postulante",
+      text: descartada
+        ? `¿Deseas mover a ${nombre} a la sección Descartados? El registro no se eliminará de la base de datos.`
+        : `¿Deseas restaurar a ${nombre} en la sección ${seccionRestaurada}?`,
+      icon: descartada ? "warning" : "question",
       showCancelButton: true,
-      confirmButtonColor: "#dc2626",
+      confirmButtonColor: descartada ? "#dc2626" : "#059669",
       cancelButtonColor: "#64748b",
-      confirmButtonText: "Si, eliminar",
+      confirmButtonText: descartada ? "Sí, descartar" : "Sí, restaurar",
       cancelButtonText: "Cancelar",
     });
 
     if (!isConfirmed) return;
 
     try {
-      setDeletingId(postulacion.id);
+      setUpdatingDiscardId(postulacion.id);
       setError("");
-      await api.delete(`/api/postulaciones/${postulacion.id}`);
+      await api.patch(`/api/postulaciones/${postulacion.id}/descartada`, {
+        descartada,
+      });
       setSelected((prev) => (prev?.id === postulacion.id ? null : prev));
       const nextPage = postulaciones.length === 1 && page > 1 ? page - 1 : page;
       await fetchPostulaciones(nextPage, filters);
       window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
-      Swal.fire("Eliminada", "La postulacion fue eliminada correctamente", "success");
+      Swal.fire(
+        "Actualizado",
+        descartada
+          ? "El postulante fue enviado a Descartados sin eliminarlo de la base de datos."
+          : `El postulante fue restaurado en ${seccionRestaurada}.`,
+        "success",
+      );
     } catch (err) {
-      const message = err.response?.data?.message || "No se pudo eliminar la postulacion";
+      const message =
+        err.response?.data?.message || "No se pudo actualizar el estado del postulante";
       setError(message);
       Swal.fire("Error", message, "error");
     } finally {
-      setDeletingId(null);
+      setUpdatingDiscardId(null);
     }
   };
 
@@ -343,7 +432,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [filters]);
+  }, [filters, modo]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
@@ -354,12 +443,12 @@ export default function Postulaciones({ modo = "postulacion" }) {
               Desarrollo Organizacional
             </p>
             <h2 className="mt-1 text-2xl font-bold text-slate-900">
-              {esEntrevistas ? "Entrevistas" : "Postulaciones"}
+              {esDescartados ? "Descartados" : esEntrevistas ? "Entrevistas" : "Postulaciones"}
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              {total} postulante{total === 1 ? "" : "s"} en esta fase.
+              {total} postulante{total === 1 ? "" : "s"} en esta sección.
             </p>
-            {!esEntrevistas && (
+            {!esEntrevistas && !esDescartados && (
               <p className="mt-1 text-sm font-medium text-red-600">
                 {resumen.noLeidas} no leida{resumen.noLeidas === 1 ? "" : "s"}.
               </p>
@@ -490,9 +579,11 @@ export default function Postulaciones({ modo = "postulacion" }) {
                 No hay postulaciones para mostrar
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                {esEntrevistas
-                  ? "Los postulantes que pasen a entrevista aparecerán en esta vista."
-                  : "Cuando se envíe un formulario compatible con los filtros, aparecerá aquí."}
+                {esDescartados
+                  ? "Los postulantes descartados aparecerán en esta vista y podrán restaurarse."
+                  : esEntrevistas
+                    ? "Los postulantes que pasen a entrevista aparecerán en esta vista."
+                    : "Cuando se envíe un formulario compatible con los filtros, aparecerá aquí."}
               </p>
             </div>
           ) : (
@@ -510,9 +601,9 @@ export default function Postulaciones({ modo = "postulacion" }) {
                   <col className="w-[6%]" />
                   <col className="w-[4%]" />
                   <col className="w-[6%]" />
+                  <col className={esEntrevistas ? "w-[14%]" : "w-[8%]"} />
                   <col className="w-[8%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[12%]" />
+                  <col className={esEntrevistas ? "w-[10%]" : "w-[12%]"} />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
@@ -528,7 +619,11 @@ export default function Postulaciones({ modo = "postulacion" }) {
                     <th className={thClass}>Trab.</th>
                     <th className={thClass}>Estado</th>
                     <th className={thClass}>
-                      {esEntrevistas ? "Pase a entrevista" : "Fecha"}
+                      {esDescartados
+                        ? "Fecha de descarte"
+                        : esEntrevistas
+                          ? "Fecha y hora de entrevista"
+                          : "Fecha"}
                     </th>
                     <th className={thClass}>Observacion</th>
                     <th className={`${thClass} text-right`}>Accion</th>
@@ -589,7 +684,35 @@ export default function Postulaciones({ modo = "postulacion" }) {
                           </span>
                         </td>
                         <td className={tdClass}>
-                          {formatDate(esEntrevistas ? p.pasaEntrevistaAt : p.createdAt)}
+                          {esEntrevistas ? (
+                            <div className="space-y-1.5">
+                              <input
+                                type="datetime-local"
+                                value={entrevistaDrafts[p.id] ?? ""}
+                                onChange={(e) =>
+                                  setEntrevistaDrafts((prev) => ({
+                                    ...prev,
+                                    [p.id]: e.target.value,
+                                  }))
+                                }
+                                aria-label={`Fecha y hora de entrevista para ${
+                                  datos.nombreCompleto || p.nombre || `postulante ${p.id}`
+                                }`}
+                                className="h-8 w-full rounded-md border border-slate-300 bg-white px-1.5 text-[10px] text-slate-800 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                              />
+                              <button
+                                onClick={() => guardarFechaEntrevista(p)}
+                                disabled={savingInterviewDateId === p.id}
+                                className="inline-flex h-7 w-full items-center justify-center gap-1 rounded-md bg-orange-500 px-2 text-[10px] font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <CalendarClock size={12} />
+                                {savingInterviewDateId === p.id ? "Guardando..." : "Guardar"}
+                              </button>
+                              <p className="text-[9px] leading-tight text-slate-500">
+                                Pasó a entrevista: {formatDate(p.pasaEntrevistaAt)}
+                              </p>
+                            </div>
+                          ) : formatDate(esDescartados ? p.descartadaAt : p.createdAt)}
                         </td>
                         <td className={tdClass}>
                           {editingObservation ? (
@@ -632,30 +755,45 @@ export default function Postulaciones({ modo = "postulacion" }) {
                         </td>
                         <td className={`${tdClass} text-right`}>
                           <div className="flex flex-wrap justify-end gap-1">
-                            <button
-                              onClick={() => actualizarFaseEntrevista(p, !esEntrevistas)}
-                              disabled={updatingStageId === p.id}
-                              className={`inline-flex h-7 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                                esEntrevistas
-                                  ? "bg-orange-500 hover:bg-orange-600"
-                                  : "bg-emerald-600 hover:bg-emerald-700"
-                              }`}
-                              aria-label={
-                                esEntrevistas
-                                  ? "Devolver a postulaciones"
-                                  : "Pasar a entrevista"
-                              }
-                              title={
-                                updatingStageId === p.id
-                                  ? "Actualizando"
-                                  : esEntrevistas
+                            {esDescartados ? (
+                              <button
+                                onClick={() => actualizarDescarte(p, false)}
+                                disabled={updatingDiscardId === p.id}
+                                className="inline-flex h-7 items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 text-[10px] font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label="Restaurar postulante"
+                                title={
+                                  updatingDiscardId === p.id ? "Restaurando" : "Restaurar"
+                                }
+                              >
+                                <Undo2 size={14} />
+                                Restaurar
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => actualizarFaseEntrevista(p, !esEntrevistas)}
+                                disabled={updatingStageId === p.id}
+                                className={`inline-flex h-7 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  esEntrevistas
+                                    ? "bg-orange-500 hover:bg-orange-600"
+                                    : "bg-emerald-600 hover:bg-emerald-700"
+                                }`}
+                                aria-label={
+                                  esEntrevistas
                                     ? "Devolver a postulaciones"
                                     : "Pasar a entrevista"
-                              }
-                            >
-                              {esEntrevistas ? <Undo2 size={14} /> : <UserCheck size={14} />}
-                              {esEntrevistas ? "Regresar" : "Pasar a entrevista"}
-                            </button>
+                                }
+                                title={
+                                  updatingStageId === p.id
+                                    ? "Actualizando"
+                                    : esEntrevistas
+                                      ? "Devolver a postulaciones"
+                                      : "Pasar a entrevista"
+                                }
+                              >
+                                {esEntrevistas ? <Undo2 size={14} /> : <UserCheck size={14} />}
+                                {esEntrevistas ? "Regresar" : "Pasar a entrevista"}
+                              </button>
+                            )}
                              <button
                                 onClick={() => editarObservacion(p)}
                                 className="inline-flex h-7 w-7 items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-700 transition hover:bg-slate-100"
@@ -671,15 +809,19 @@ export default function Postulaciones({ modo = "postulacion" }) {
                             >
                               <Eye size={14} />
                             </button>
-                            <button
-                              onClick={() => eliminarPostulacion(p)}
-                              disabled={deletingId === p.id}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 px-2 text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                              aria-label="Eliminar postulacion"
-                              title={deletingId === p.id ? "Eliminando" : "Eliminar"}
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {!esDescartados && (
+                              <button
+                                onClick={() => actualizarDescarte(p, true)}
+                                disabled={updatingDiscardId === p.id}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-red-600 px-2 text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label="Descartar postulante"
+                                title={
+                                  updatingDiscardId === p.id ? "Descartando" : "Descartar"
+                                }
+                              >
+                                <Archive size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

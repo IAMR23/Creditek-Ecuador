@@ -222,7 +222,7 @@ import FormProgress from "../../components/FormProgress.astro";
         </div>
 
         <div class="mt-8">
-          <p class="label required-label mb-3">Ciudad de nacimiento</p>
+          <p class="label required-label mb-3">Ciudad de residencia</p>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label class="radio-card">
@@ -247,12 +247,12 @@ import FormProgress from "../../components/FormProgress.astro";
           </div>
 
           <p id="quitoSkipNotice" class="helper mt-3 hidden">
-            Si naciste en Quito, pasa directamente a la seccion 2, en Informacion de Vivienda actual.
+            Si resides en Quito, pasa directamente a la seccion 2, en Informacion de Vivienda actual.
           </p>
 
           <div id="otraCiudadNacimientoWrap" class="mt-5 hidden">
             <label for="otraCiudadNacimiento" class="label required-label">
-              Otra ciudad
+              Otra ciudad de residencia
             </label>
             <input
               id="otraCiudadNacimiento"
@@ -1130,7 +1130,7 @@ import FormProgress from "../../components/FormProgress.astro";
       }
 
       if (!getCheckedValue("ciudadNacimiento")) {
-        missing.push("ciudad de nacimiento");
+        missing.push("ciudad de residencia");
         markRadioGroup("ciudadNacimiento");
       }
 
@@ -1138,7 +1138,7 @@ import FormProgress from "../../components/FormProgress.astro";
         getCheckedValue("ciudadNacimiento") === "Otra" &&
         !getValue("otraCiudadNacimiento")
       ) {
-        missing.push("otra ciudad de nacimiento");
+        missing.push("otra ciudad de residencia");
         markField("otraCiudadNacimiento");
       }
 

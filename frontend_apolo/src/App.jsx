@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import Usuarios from "./pages/Admin/Usuarios.jsx";
 import ControlAsistencia from "./pages/DesarrolloOrganizacional/ControlAsistencia.jsx";
+import Entrevistas from "./pages/DesarrolloOrganizacional/Entrevistas.jsx";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones.jsx";
 import Agencias from "./pages/Admin/Agencias.jsx";
 import Roles from "./pages/Admin/Roles.jsx";
@@ -39,11 +40,15 @@ export default function App() {
                     <Route path="/control-asistencia" element={<ControlAsistencia />} />
                     <Route
                       path="/postulaciones"
-                      element={<Postulaciones modo="postulacion" />}
+                      element={<Postulaciones key="postulaciones" modo="postulacion" />}
                     />
                     <Route
                       path="/entrevistas"
-                      element={<Postulaciones modo="entrevista" />}
+                      element={<Entrevistas />}
+                    />
+                    <Route
+                      path="/descartados"
+                      element={<Postulaciones key="descartados" modo="descartado" />}
                     />
                     <Route path="*" element={<Navigate to="/usuarios" replace />} />
                   </Routes>

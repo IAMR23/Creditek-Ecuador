@@ -2,9 +2,22 @@ const express = require("express");
 const { Op, json, literal, where: sequelizeWhere } = require("sequelize");
 
 const Postulacion = require("../models/Postulacion");
+const Usuario = require("../models/Usuario");
 const auth = require("../middleware/auth");
 
 const router = express.Router();
+const INTERVIEW_STATUSES = [
+  "PENDIENTE",
+  "AGENDADA",
+  "CONFIRMADA",
+  "REPROGRAMADA",
+  "REALIZADA",
+  "NO_ASISTIO",
+  "CANCELADA",
+];
+const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
+const INTERVIEW_DURATIONS = [15, 30, 45, 60];
+const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
 
 const isEmptyValue = (value) => value === "" || value === null || value === undefined;
 
@@ -89,6 +102,8 @@ const buildListWhere = (query = {}) => {
   const ciudad = typeof query.ciudad === "string" ? query.ciudad.trim() : "";
   const estado = typeof query.estado === "string" ? query.estado.toLowerCase() : "";
   const fase = typeof query.fase === "string" ? query.fase.toLowerCase() : "";
+  const estadoEntrevista = String(query.estadoEntrevista || "").toUpperCase();
+  const entrevistadorId = parsePositiveInt(query.entrevistadorId, null);
   const tituloTercerNivel = ["si", "no"].includes(
     String(query.tituloTercerNivel || "").toLowerCase(),
   )
@@ -98,6 +113,10 @@ const buildListWhere = (query = {}) => {
   const edadHasta = parseOptionalAge(query.edadHasta);
   const noLeidas = String(query.noLeidas || "").toLowerCase() === "true";
   const createdAtRange = parseDateRange(query);
+  const interviewDateRange = parseDateRange({
+    fechaDesde: query.entrevistaFechaDesde,
+    fechaHasta: query.entrevistaFechaHasta,
+  });
 
   if (q) {
     where[Op.or] = [
@@ -109,9 +128,21 @@ const buildListWhere = (query = {}) => {
 
   if (estado === "leidas") where.leida = true;
   if (estado === "no-leidas" || noLeidas) where.leida = false;
-  if (fase === "postulacion") where.pasaEntrevista = false;
-  if (fase === "entrevista") where.pasaEntrevista = true;
+  if (fase === "postulacion") {
+    where.pasaEntrevista = false;
+    where.descartada = false;
+  }
+  if (fase === "entrevista") {
+    where.pasaEntrevista = true;
+    where.descartada = false;
+  }
+  if (fase === "descartado") where.descartada = true;
+  if (INTERVIEW_STATUSES.includes(estadoEntrevista)) {
+    where.estadoEntrevista = estadoEntrevista;
+  }
+  if (entrevistadorId) where.entrevistadorId = entrevistadorId;
   if (createdAtRange) where.createdAt = createdAtRange;
+  if (interviewDateRange) where.fechaEntrevista = interviewDateRange;
 
   if (ciudad) {
     andConditions.push({
@@ -249,14 +280,65 @@ const normalizePayload = (data = {}) => {
 };
 
 const buildResumen = async () => {
-  const [totalGeneral, total, noLeidas, entrevistas] = await Promise.all([
+  const guayaquilNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  const today = guayaquilNow.toISOString().slice(0, 10);
+  const todayStart = guayaquilDayStartUtc(today);
+  const todayEnd = guayaquilDayEndUtc(today);
+  const nextSevenDaysEnd = new Date(todayEnd.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const activeInterviewWhere = { pasaEntrevista: true, descartada: false };
+
+  const [
+    totalGeneral,
+    total,
+    noLeidas,
+    entrevistas,
+    descartados,
+    pendientesAgendar,
+    agendadasHoy,
+    porConfirmar,
+    reprogramaciones,
+  ] = await Promise.all([
     Postulacion.count(),
-    Postulacion.count({ where: { pasaEntrevista: false } }),
-    Postulacion.count({ where: { leida: false, pasaEntrevista: false } }),
-    Postulacion.count({ where: { pasaEntrevista: true } }),
+    Postulacion.count({ where: { pasaEntrevista: false, descartada: false } }),
+    Postulacion.count({ where: { leida: false, pasaEntrevista: false, descartada: false } }),
+    Postulacion.count({ where: { pasaEntrevista: true, descartada: false } }),
+    Postulacion.count({ where: { descartada: true } }),
+    Postulacion.count({
+      where: { ...activeInterviewWhere, fechaEntrevista: null },
+    }),
+    Postulacion.count({
+      where: {
+        ...activeInterviewWhere,
+        estadoEntrevista: { [Op.notIn]: ["CANCELADA", "NO_ASISTIO"] },
+        fechaEntrevista: { [Op.between]: [todayStart, todayEnd] },
+      },
+    }),
+    Postulacion.count({
+      where: {
+        ...activeInterviewWhere,
+        estadoEntrevista: { [Op.in]: ["AGENDADA", "REPROGRAMADA"] },
+      },
+    }),
+    Postulacion.count({
+      where: {
+        ...activeInterviewWhere,
+        estadoEntrevista: "REPROGRAMADA",
+        fechaEntrevista: { [Op.between]: [todayStart, nextSevenDaysEnd] },
+      },
+    }),
   ]);
 
-  return { totalGeneral, total, noLeidas, entrevistas };
+  return {
+    totalGeneral,
+    total,
+    noLeidas,
+    entrevistas,
+    descartados,
+    pendientesAgendar,
+    agendadasHoy,
+    porConfirmar,
+    reprogramaciones,
+  };
 };
 
 const validatePayload = (payload) => {
@@ -277,9 +359,9 @@ const validatePayload = (payload) => {
   if (!datos.estudiaActualmente) {
     errors.push("Debe indicar si estudia actualmente");
   }
-  if (!datos.ciudadNacimiento) errors.push("Ciudad de nacimiento es obligatoria");
+  if (!datos.ciudadNacimiento) errors.push("Ciudad de residencia es obligatoria");
   if (datos.ciudadNacimiento === "Otra" && !datos.otraCiudadNacimiento) {
-    errors.push("Debe especificar la ciudad de nacimiento");
+    errors.push("Debe especificar la ciudad de residencia");
   }
   if (!datos.direccion) errors.push("Direccion es obligatoria");
   if (datos.ciudadNacimiento && datos.ciudadNacimiento !== "Quito") {
@@ -369,10 +451,27 @@ router.get("/", auth, async (req, res) => {
     const limit = parsePositiveInt(req.query.limit, 10, 100);
     const offset = (page - 1) * limit;
     const where = buildListWhere(req.query);
+    const fase = String(req.query.fase || "").toLowerCase();
 
     const { count, rows } = await Postulacion.findAndCountAll({
       where,
-      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          association: "entrevistador",
+          attributes: ["id", "nombre", "email"],
+          include: [{ association: "rol", attributes: ["id", "nombre"] }],
+          required: false,
+        },
+      ],
+      distinct: true,
+      order:
+        fase === "entrevista"
+          ? [
+              [literal('"fechaEntrevista" IS NULL'), "ASC"],
+              ["fechaEntrevista", "ASC"],
+              ["pasaEntrevistaAt", "DESC"],
+            ]
+          : [["createdAt", "DESC"]],
       limit,
       offset,
     });
@@ -455,6 +554,13 @@ router.patch("/:id/entrevista", auth, async (req, res) => {
       });
     }
 
+    if (postulacion.descartada) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe restaurar al postulante antes de cambiarlo de fase",
+      });
+    }
+
     postulacion.pasaEntrevista = pasaEntrevista;
     postulacion.pasaEntrevistaAt = pasaEntrevista ? new Date() : null;
     await postulacion.save();
@@ -475,6 +581,345 @@ router.patch("/:id/entrevista", auth, async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al actualizar la fase de la postulacion",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/fecha-entrevista", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      fechaEntrevista: rawFechaEntrevista,
+      duracionMinutos,
+      entrevistadorId,
+      modalidad,
+      lugar,
+      enlace,
+      observaciones,
+    } = req.body || {};
+
+    if (rawFechaEntrevista === undefined) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe enviar la fecha y hora de la entrevista",
+      });
+    }
+
+    let fechaEntrevista = null;
+
+    if (rawFechaEntrevista !== null && rawFechaEntrevista !== "") {
+      fechaEntrevista = new Date(rawFechaEntrevista);
+
+      if (Number.isNaN(fechaEntrevista.getTime())) {
+        return res.status(400).json({
+          ok: false,
+          message: "La fecha y hora de la entrevista no son validas",
+        });
+      }
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    if (!postulacion.pasaEntrevista || postulacion.descartada) {
+      return res.status(400).json({
+        ok: false,
+        message: "Solo se puede agendar a un postulante que se encuentre en Entrevistas",
+      });
+    }
+
+    const fullSchedulePayload =
+      duracionMinutos !== undefined ||
+      entrevistadorId !== undefined ||
+      modalidad !== undefined ||
+      lugar !== undefined ||
+      enlace !== undefined ||
+      observaciones !== undefined;
+    const interviewerFieldProvided = Object.prototype.hasOwnProperty.call(
+      req.body || {},
+      "entrevistadorId",
+    );
+    const interviewerIdProvided =
+      interviewerFieldProvided && entrevistadorId !== null && entrevistadorId !== "";
+
+    if (fechaEntrevista && fechaEntrevista.getTime() < Date.now() - 60 * 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "La entrevista no puede agendarse en una fecha anterior",
+      });
+    }
+
+    let interviewer = null;
+    let duration = null;
+    let normalizedModality = null;
+    let normalizedLocation = null;
+    let normalizedLink = null;
+    let normalizedObservations = null;
+
+    if (fechaEntrevista && fullSchedulePayload) {
+      duration = Number(duracionMinutos);
+      normalizedModality = String(modalidad || "").toUpperCase();
+      normalizedLocation = typeof lugar === "string" ? lugar.trim() : "";
+      normalizedLink = typeof enlace === "string" ? enlace.trim() : "";
+      normalizedObservations =
+        typeof observaciones === "string" ? observaciones.trim() : "";
+
+      if (!INTERVIEW_DURATIONS.includes(duration)) {
+        return res.status(400).json({
+          ok: false,
+          message: "La duracion debe ser de 15, 30, 45 o 60 minutos",
+        });
+      }
+
+      if (!INTERVIEW_MODALITIES.includes(normalizedModality)) {
+        return res.status(400).json({
+          ok: false,
+          message: "La modalidad debe ser presencial o virtual",
+        });
+      }
+
+      if (normalizedModality === "PRESENCIAL" && !normalizedLocation) {
+        return res.status(400).json({
+          ok: false,
+          message: "El lugar es obligatorio para una entrevista presencial",
+        });
+      }
+
+      if (normalizedModality === "VIRTUAL") {
+        try {
+          const meetingUrl = new URL(normalizedLink);
+          if (!["http:", "https:"].includes(meetingUrl.protocol)) throw new Error();
+        } catch {
+          return res.status(400).json({
+            ok: false,
+            message: "Debe ingresar un enlace valido para la entrevista virtual",
+          });
+        }
+      }
+
+      if (normalizedObservations.length > 1000) {
+        return res.status(400).json({
+          ok: false,
+          message: "Las observaciones no pueden superar 1000 caracteres",
+        });
+      }
+
+      if (interviewerIdProvided) {
+        interviewer = await Usuario.findOne({
+          where: { id: entrevistadorId, activo: true },
+        });
+
+        if (!interviewer) {
+          return res.status(400).json({
+            ok: false,
+            message: "El entrevistador seleccionado no esta activo",
+          });
+        }
+
+        const proposedStart = fechaEntrevista.getTime();
+        const proposedEnd = proposedStart + duration * 60 * 1000;
+        const possibleConflicts = await Postulacion.findAll({
+          where: {
+            id: { [Op.ne]: postulacion.id },
+            pasaEntrevista: true,
+            descartada: false,
+            entrevistadorId: interviewer.id,
+            estadoEntrevista: { [Op.in]: ACTIVE_INTERVIEW_STATUSES },
+            fechaEntrevista: {
+              [Op.gt]: new Date(proposedStart - 60 * 60 * 1000),
+              [Op.lt]: new Date(proposedEnd),
+            },
+          },
+          attributes: ["id", "fechaEntrevista", "entrevistaDuracionMinutos"],
+        });
+        const conflict = possibleConflicts.some((item) => {
+          const existingStart = new Date(item.fechaEntrevista).getTime();
+          const existingDuration = item.entrevistaDuracionMinutos || 45;
+          const existingEnd = existingStart + existingDuration * 60 * 1000;
+          return existingStart < proposedEnd && existingEnd > proposedStart;
+        });
+
+        if (conflict) {
+          return res.status(409).json({
+            ok: false,
+            code: "INTERVIEW_SCHEDULE_CONFLICT",
+            message: "El entrevistador ya tiene otra entrevista en ese horario",
+          });
+        }
+      }
+    }
+
+    const previousInterviewDate = postulacion.fechaEntrevista
+      ? new Date(postulacion.fechaEntrevista).getTime()
+      : null;
+    const scheduleChanged = Boolean(
+      previousInterviewDate &&
+        fechaEntrevista &&
+        previousInterviewDate !== fechaEntrevista.getTime(),
+    );
+
+    postulacion.fechaEntrevista = fechaEntrevista;
+    postulacion.estadoEntrevista = fechaEntrevista
+      ? scheduleChanged
+        ? "REPROGRAMADA"
+        : previousInterviewDate
+          ? postulacion.estadoEntrevista || "AGENDADA"
+          : "AGENDADA"
+      : "PENDIENTE";
+
+    if (scheduleChanged) {
+      postulacion.entrevistaReprogramaciones =
+        Number(postulacion.entrevistaReprogramaciones || 0) + 1;
+    }
+
+    if (fullSchedulePayload) {
+      postulacion.entrevistaDuracionMinutos = fechaEntrevista ? duration : null;
+      if (interviewerFieldProvided) {
+        postulacion.entrevistadorId = fechaEntrevista ? interviewer?.id || null : null;
+      }
+      postulacion.entrevistaModalidad = fechaEntrevista ? normalizedModality : null;
+      postulacion.entrevistaLugar =
+        fechaEntrevista && normalizedModality === "PRESENCIAL" ? normalizedLocation : null;
+      postulacion.entrevistaEnlace =
+        fechaEntrevista && normalizedModality === "VIRTUAL" ? normalizedLink : null;
+      postulacion.entrevistaObservaciones = fechaEntrevista
+        ? normalizedObservations || null
+        : null;
+    }
+    await postulacion.save();
+
+    const updatedPostulacion = await Postulacion.findByPk(postulacion.id, {
+      include: [
+        {
+          association: "entrevistador",
+          attributes: ["id", "nombre", "email"],
+          include: [{ association: "rol", attributes: ["id", "nombre"] }],
+          required: false,
+        },
+      ],
+    });
+
+    return res.json({
+      ok: true,
+      message: fechaEntrevista
+        ? "Fecha y hora de entrevista guardadas"
+        : "Fecha y hora de entrevista eliminadas",
+      data: updatedPostulacion,
+    });
+  } catch (error) {
+    console.error("Error guardando la fecha de entrevista:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al guardar la fecha y hora de la entrevista",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/estado-entrevista", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const estadoEntrevista = String(req.body?.estadoEntrevista || "").toUpperCase();
+
+    if (!INTERVIEW_STATUSES.includes(estadoEntrevista)) {
+      return res.status(400).json({
+        ok: false,
+        message: "El estado de entrevista no es valido",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    if (!postulacion.pasaEntrevista || postulacion.descartada) {
+      return res.status(400).json({
+        ok: false,
+        message: "El postulante no se encuentra en la seccion Entrevistas",
+      });
+    }
+
+    if (estadoEntrevista !== "PENDIENTE" && !postulacion.fechaEntrevista) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe agendar la entrevista antes de cambiar su estado",
+      });
+    }
+
+    postulacion.estadoEntrevista = estadoEntrevista;
+    await postulacion.save();
+
+    const resumen = await buildResumen();
+
+    return res.json({
+      ok: true,
+      message: "Estado de entrevista actualizado",
+      data: postulacion,
+      resumen,
+    });
+  } catch (error) {
+    console.error("Error actualizando el estado de entrevista:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al actualizar el estado de entrevista",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/descartada", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { descartada } = req.body || {};
+
+    if (typeof descartada !== "boolean") {
+      return res.status(400).json({
+        ok: false,
+        message: "El estado de descarte debe ser verdadero o falso",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    postulacion.descartada = descartada;
+    postulacion.descartadaAt = descartada ? new Date() : null;
+    await postulacion.save();
+
+    const resumen = await buildResumen();
+
+    return res.json({
+      ok: true,
+      message: descartada ? "Postulante enviado a Descartados" : "Postulante restaurado",
+      data: postulacion,
+      resumen,
+    });
+  } catch (error) {
+    console.error("Error actualizando el descarte de la postulacion:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al actualizar el descarte de la postulacion",
       error: error.message,
     });
   }
