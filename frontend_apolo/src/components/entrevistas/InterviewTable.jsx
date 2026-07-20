@@ -45,11 +45,18 @@ function InterviewDateCell({ interview }) {
       <p className="font-semibold text-slate-800">{formatInterviewDate(interview.fechaEntrevista)}</p>
       <p className="mt-1 text-xs text-slate-500">
         {formatInterviewTime(interview.fechaEntrevista)}
-        {interview.entrevistaDuracionMinutos
-          ? ` · ${interview.entrevistaDuracionMinutos} min`
-          : ""}
       </p>
     </div>
+  );
+}
+
+function ContactDateCell({ interview }) {
+  if (!interview.createdAt) {
+    return <span className="text-sm font-semibold text-slate-400">-</span>;
+  }
+
+  return (
+    <p className="font-semibold text-slate-800">{formatInterviewDate(interview.createdAt)}</p>
   );
 }
 
@@ -131,6 +138,10 @@ function MobileCard(props) {
 
   return (
     <article className="space-y-4 border-b border-slate-100 p-4 last:border-b-0">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Fecha</p>
+        <div className="mt-1"><ContactDateCell interview={interview} /></div>
+      </div>
       <CandidateCell interview={interview} />
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
@@ -189,9 +200,10 @@ export default function InterviewTable({
       </div>
 
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[980px] border-collapse text-left">
+        <table className="w-full min-w-[1120px] border-collapse text-left">
           <thead>
             <tr className="border-y border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+              <th className="px-5 py-3 font-bold">Fecha</th>
               <th className="px-5 py-3 font-bold">Aspirante</th>
               <th className="px-4 py-3 font-bold">Contacto</th>
               <th className="px-4 py-3 font-bold">Ciudad</th>
@@ -206,6 +218,7 @@ export default function InterviewTable({
               const email = getCandidateEmail(interview);
               return (
                 <tr key={interview.id} className="align-middle transition hover:bg-slate-50/80">
+                  <td className="px-5 py-4 text-sm"><ContactDateCell interview={interview} /></td>
                   <td className="max-w-[260px] px-5 py-4"><CandidateCell interview={interview} /></td>
                   <td className="px-4 py-4 text-sm">
                     <p className="font-semibold text-slate-700">{getCandidatePhone(interview)}</p>

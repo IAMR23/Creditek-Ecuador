@@ -16,7 +16,6 @@ const INTERVIEW_STATUSES = [
   "CANCELADA",
 ];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
-const INTERVIEW_DURATIONS = [15, 30, 45, 60];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
 
 const isEmptyValue = (value) => value === "" || value === null || value === undefined;
@@ -591,7 +590,6 @@ router.patch("/:id/fecha-entrevista", auth, async (req, res) => {
     const { id } = req.params;
     const {
       fechaEntrevista: rawFechaEntrevista,
-      duracionMinutos,
       entrevistadorId,
       modalidad,
       lugar,
@@ -636,7 +634,6 @@ router.patch("/:id/fecha-entrevista", auth, async (req, res) => {
     }
 
     const fullSchedulePayload =
-      duracionMinutos !== undefined ||
       entrevistadorId !== undefined ||
       modalidad !== undefined ||
       lugar !== undefined ||
@@ -657,26 +654,17 @@ router.patch("/:id/fecha-entrevista", auth, async (req, res) => {
     }
 
     let interviewer = null;
-    let duration = null;
     let normalizedModality = null;
     let normalizedLocation = null;
     let normalizedLink = null;
     let normalizedObservations = null;
 
     if (fechaEntrevista && fullSchedulePayload) {
-      duration = Number(duracionMinutos);
       normalizedModality = String(modalidad || "").toUpperCase();
       normalizedLocation = typeof lugar === "string" ? lugar.trim() : "";
       normalizedLink = typeof enlace === "string" ? enlace.trim() : "";
       normalizedObservations =
         typeof observaciones === "string" ? observaciones.trim() : "";
-
-      if (!INTERVIEW_DURATIONS.includes(duration)) {
-        return res.status(400).json({
-          ok: false,
-          message: "La duracion debe ser de 15, 30, 45 o 60 minutos",
-        });
-      }
 
       if (!INTERVIEW_MODALITIES.includes(normalizedModality)) {
         return res.status(400).json({
@@ -724,7 +712,7 @@ router.patch("/:id/fecha-entrevista", auth, async (req, res) => {
         }
 
         const proposedStart = fechaEntrevista.getTime();
-        const proposedEnd = proposedStart + duration * 60 * 1000;
+        const proposedEnd = proposedStart + 45 * 60 * 1000;
         const possibleConflicts = await Postulacion.findAll({
           where: {
             id: { [Op.ne]: postulacion.id },
@@ -780,7 +768,7 @@ router.patch("/:id/fecha-entrevista", auth, async (req, res) => {
     }
 
     if (fullSchedulePayload) {
-      postulacion.entrevistaDuracionMinutos = fechaEntrevista ? duration : null;
+      postulacion.entrevistaDuracionMinutos = null;
       if (interviewerFieldProvided) {
         postulacion.entrevistadorId = fechaEntrevista ? interviewer?.id || null : null;
       }

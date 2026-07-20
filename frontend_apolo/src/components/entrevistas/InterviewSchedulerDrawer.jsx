@@ -19,7 +19,6 @@ const fieldClass =
 const createForm = (candidate) => ({
   fecha: toEcuadorDateInput(candidate?.fechaEntrevista),
   hora: toEcuadorTimeInput(candidate?.fechaEntrevista),
-  duracionMinutos: String(candidate?.entrevistaDuracionMinutos || 45),
   modalidad: candidate?.entrevistaModalidad || "PRESENCIAL",
   lugar: candidate?.entrevistaLugar || "",
   enlace: candidate?.entrevistaEnlace || "",
@@ -121,7 +120,6 @@ export default function InterviewSchedulerDrawer({
     if (!candidate) nextErrors.candidate = "Selecciona un aspirante.";
     if (!form.fecha) nextErrors.fecha = "La fecha es obligatoria.";
     if (!form.hora) nextErrors.hora = "La hora es obligatoria.";
-    if (!form.duracionMinutos) nextErrors.duracionMinutos = "Selecciona una duración.";
     if (!form.modalidad) nextErrors.modalidad = "Selecciona una modalidad.";
     if (form.fecha && form.fecha < today) nextErrors.fecha = "La fecha no puede ser anterior a hoy.";
     if (form.modalidad === "PRESENCIAL" && !form.lugar.trim()) {
@@ -159,7 +157,6 @@ export default function InterviewSchedulerDrawer({
       setErrors({});
       await onSubmit(candidate, {
         fechaEntrevista: combineEcuadorDateTime(form.fecha, form.hora),
-        duracionMinutos: Number(form.duracionMinutos),
         modalidad: form.modalidad,
         lugar: form.modalidad === "PRESENCIAL" ? form.lugar.trim() : null,
         enlace: form.modalidad === "VIRTUAL" ? form.enlace.trim() : null,
@@ -242,14 +239,6 @@ export default function InterviewSchedulerDrawer({
               </label>
             </div>
 
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-bold text-slate-700">Duración *</span>
-              <select value={form.duracionMinutos} onChange={update("duracionMinutos")} className={fieldClass}>
-                {[15, 30, 45, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutos</option>)}
-              </select>
-              {errors.duracionMinutos && <p className="mt-1 text-xs font-semibold text-red-600">{errors.duracionMinutos}</p>}
-            </label>
-
             <fieldset>
               <legend className="mb-2 text-xs font-bold text-slate-700">Modalidad *</legend>
               <div className="flex gap-5">
@@ -287,17 +276,6 @@ export default function InterviewSchedulerDrawer({
               <textarea value={form.observaciones} onChange={update("observaciones")} rows={4} maxLength={1000} placeholder="Agrega información útil para la entrevista" className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100" />
               {errors.observaciones && <p className="mt-1 text-xs font-semibold text-red-600">{errors.observaciones}</p>}
             </label>
-
-            <section className="space-y-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
-              <label className="flex items-start gap-3 text-sm text-slate-500">
-                <input type="checkbox" disabled className="mt-0.5 h-4 w-4" />
-                <span><strong className="block text-slate-600">Enviar confirmación al aspirante</strong>Requiere integración de correo o mensajería.</span>
-              </label>
-              <label className="flex items-start gap-3 text-sm text-slate-500">
-                <input type="checkbox" disabled className="mt-0.5 h-4 w-4" />
-                <span><strong className="block text-slate-600">Enviar recordatorio 24 horas antes</strong>Automatización pendiente de configurar.</span>
-              </label>
-            </section>
 
             {errors.general && (
               <div role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">

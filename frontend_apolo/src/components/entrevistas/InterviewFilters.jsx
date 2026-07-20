@@ -4,7 +4,7 @@ import { INTERVIEW_STATUS } from "../../utils/interviews";
 const inputClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-100";
 
-export default function InterviewFilters({ filters, interviewers, onChange, onClear }) {
+export default function InterviewFilters({ filters, onChange, onClear }) {
   const update = (key) => (event) => onChange({ ...filters, [key]: event.target.value });
 
   return (
@@ -50,16 +50,6 @@ export default function InterviewFilters({ filters, interviewers, onChange, onCl
       </label>
 
       <label className="xl:col-span-2">
-        <span className="sr-only">Entrevistador</span>
-        <select value={filters.entrevistadorId} onChange={update("entrevistadorId")} className={inputClass}>
-          <option value="">Todos los entrevistadores</option>
-          {interviewers.map((user) => (
-            <option key={user.id} value={user.id}>{user.nombre || user.email}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="xl:col-span-1">
         <span className="sr-only">Ciudad</span>
         <input
           value={filters.ciudad}
@@ -72,7 +62,7 @@ export default function InterviewFilters({ filters, interviewers, onChange, onCl
       <button
         type="button"
         onClick={onClear}
-        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 xl:col-span-1"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 xl:col-span-2"
       >
         <Trash2 size={16} aria-hidden="true" />
         <span className="xl:sr-only 2xl:not-sr-only">Limpiar</span>

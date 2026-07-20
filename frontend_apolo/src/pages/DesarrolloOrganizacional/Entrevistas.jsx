@@ -15,7 +15,6 @@ const EMPTY_FILTERS = {
   q: "",
   estadoEntrevista: "",
   periodo: "",
-  entrevistadorId: "",
   ciudad: "",
 };
 const EMPTY_PAGINATION = {
@@ -35,7 +34,6 @@ const EMPTY_SUMMARY = {
 
 export default function Entrevistas() {
   const [interviews, setInterviews] = useState([]);
-  const [interviewers, setInterviewers] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -56,15 +54,14 @@ export default function Entrevistas() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([api.get("/usuarios"), api.get("/agencias")])
-      .then(([usersResponse, agenciesResponse]) => {
+    api.get("/agencias")
+      .then((agenciesResponse) => {
         if (!active) return;
-        setInterviewers((usersResponse.data || []).filter((user) => user.activo !== false));
         setAgencies((agenciesResponse.data || []).filter((agency) => agency.activo !== false));
       })
       .catch(() => {
         if (!active) return;
-        setError("No se pudieron cargar entrevistadores o agencias.");
+        setError("No se pudieron cargar las agencias.");
       });
 
     return () => {
@@ -92,7 +89,6 @@ export default function Entrevistas() {
               estadoEntrevista: filters.estadoEntrevista || undefined,
               entrevistaFechaDesde: dateRange.desde || undefined,
               entrevistaFechaHasta: dateRange.hasta || undefined,
-              entrevistadorId: filters.entrevistadorId || undefined,
               ciudad: filters.ciudad.trim() || undefined,
             },
           }),
@@ -329,7 +325,6 @@ export default function Entrevistas() {
 
         <InterviewFilters
           filters={filters}
-          interviewers={interviewers}
           onChange={changeFilters}
           onClear={() => changeFilters(EMPTY_FILTERS)}
         />

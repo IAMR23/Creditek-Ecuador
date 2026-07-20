@@ -1,7 +1,6 @@
 .env
 pgadmin-config
 postgres-backups
-IntegraDent/ 
 
 .env.example
 !backend/.env.example
