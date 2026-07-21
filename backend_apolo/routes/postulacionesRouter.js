@@ -466,9 +466,8 @@ router.get("/", auth, async (req, res) => {
       order:
         fase === "entrevista"
           ? [
-              [literal('"fechaEntrevista" IS NULL'), "ASC"],
-              ["fechaEntrevista", "ASC"],
-              ["pasaEntrevistaAt", "DESC"],
+              [literal('"pasaEntrevistaAt" DESC NULLS LAST')],
+              ["id", "DESC"],
             ]
           : [["createdAt", "DESC"]],
       limit,
