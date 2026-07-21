@@ -34,6 +34,19 @@ const idPositivo = (value) => {
   return Number.isInteger(numero) && numero > 0 ? numero : null;
 };
 
+const normalizarPrecio = (value) => {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return { valido: true, valor: null };
+  }
+
+  const numero = Number(value);
+  if (!Number.isFinite(numero) || numero < 0 || numero > 9999999999.99) {
+    return { valido: false, valor: null };
+  }
+
+  return { valido: true, valor: Number(numero.toFixed(2)) };
+};
+
 const resolverDispositivo = (value) => {
   const opcion = normalizarOpcion(value);
   return (
@@ -49,12 +62,16 @@ const validarInventario = (payload = {}) => {
   const estado = normalizarOpcion(payload.estado || "OPERATIVO");
   const agenciaId = idPositivo(payload.agenciaId);
   const responsableId = idPositivo(payload.responsableId);
+  const precio = normalizarPrecio(payload.precio);
   const errores = [];
 
   if (!dispositivo) errores.push("El dispositivo seleccionado no es válido");
   if (!ESTADOS_VALIDOS.has(estado)) errores.push("El estado no es válido");
   if (!agenciaId) errores.push("La agencia es obligatoria");
   if (!responsableId) errores.push("La persona responsable es obligatoria");
+  if (!precio.valido) {
+    errores.push("El precio debe ser un valor valido mayor o igual a cero");
+  }
 
   return {
     errores,
@@ -62,6 +79,7 @@ const validarInventario = (payload = {}) => {
       nombre: dispositivo?.label || null,
       marca: limpiarTexto(payload.marca, 80),
       modelo: limpiarTexto(payload.modelo, 120),
+      precio: precio.valor,
       estado,
       observacion: limpiarTexto(payload.observacion, 3000),
       agenciaId,
@@ -82,6 +100,10 @@ const serializarInventario = (registro) => {
     dispositivoValor: dispositivo?.value || normalizarOpcion(item.nombre),
     marca: item.marca || "",
     modelo: item.modelo || "",
+    precio:
+      item.precio === null || item.precio === undefined
+        ? null
+        : Number(item.precio),
     estado: item.estado,
     observacion: item.observacion || "",
     agenciaId: item.agenciaId,

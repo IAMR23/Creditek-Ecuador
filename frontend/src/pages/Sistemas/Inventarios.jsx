@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import {
   Boxes,
@@ -33,6 +33,7 @@ const crearItemFormulario = (data = {}) => ({
   dispositivo: data.dispositivo || "LAPTOP",
   marca: data.marca || "",
   modelo: data.modelo || "",
+  precio: data.precio ?? "",
   estado: data.estado || "OPERATIVO",
   observacion: data.observacion || "",
 });
@@ -62,8 +63,8 @@ const resumenInicial = {
 const estadoConfig = {
   OPERATIVO: {
     label: "Operativo",
-    badge: "border-green-200 bg-green-50 text-green-700",
-    border: "border-t-green-500",
+    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    border: "border-t-emerald-500",
   },
   EN_MANTENIMIENTO: {
     label: "En mantenimiento",
@@ -96,6 +97,19 @@ const formatFecha = (value) => {
   });
 };
 
+const formatPrecio = (value) => {
+  if (value === null || value === undefined || value === "") return "Sin precio";
+
+  const precio = Number(value);
+  if (!Number.isFinite(precio)) return "Sin precio";
+
+  return new Intl.NumberFormat("es-EC", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  }).format(precio);
+};
+
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.message || fallback;
 
@@ -106,100 +120,26 @@ function DispositivoIcono({ value, size = 22 }) {
 
 function StatCard({ label, value, icon, tone = "green" }) {
   const tones = {
-    green: "bg-green-100 text-green-700",
-    gray: "bg-gray-100 text-gray-700",
+    green: "bg-emerald-50 text-emerald-700",
+    gray: "bg-slate-100 text-slate-600",
     amber: "bg-amber-100 text-amber-700",
     red: "bg-red-100 text-red-700",
   };
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
             {label}
           </p>
-          <p className="mt-1 text-3xl font-black text-gray-900">{value}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-800">{value}</p>
         </div>
-        <div className={`rounded-xl p-3 ${tones[tone] || tones.green}`}>
+        <div className={`rounded-lg p-2.5 ${tones[tone] || tones.green}`}>
           {icon}
         </div>
       </div>
     </div>
-  );
-}
-
-function InventarioCard({ item, onEdit, onDelete }) {
-  const estado = estadoConfig[item.estado] || estadoConfig.OPERATIVO;
-  const detalleEquipo = [item.marca, item.modelo].filter(Boolean).join(" · ");
-
-  return (
-    <article
-      className={`flex min-h-[340px] flex-col rounded-2xl border border-t-4 border-gray-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${estado.border}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className="inline-flex rounded-xl bg-gray-900 p-3 text-green-400">
-          <DispositivoIcono value={item.dispositivoValor} size={24} />
-        </span>
-        <span className={`rounded-full border px-3 py-1 text-xs font-bold ${estado.badge}`}>
-          {estado.label}
-        </span>
-      </div>
-
-      <div className="mt-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-green-600">
-          Dispositivo
-        </p>
-        <h2 className="mt-1 text-xl font-black text-gray-900">{item.dispositivo}</h2>
-        <p className="mt-1 min-h-5 text-sm font-medium text-gray-500">
-          {detalleEquipo || "Sin marca o modelo registrado"}
-        </p>
-      </div>
-
-      <div className="mt-5 space-y-3 text-sm text-gray-700">
-        <p className="flex items-center gap-2">
-          <Building2 size={17} className="shrink-0 text-green-600" />
-          <span className="truncate font-medium">
-            {item.agencia?.nombre || "Sin agencia"}
-          </span>
-        </p>
-        <p className="flex items-center gap-2">
-          <UserRound size={17} className="shrink-0 text-green-600" />
-          <span className="truncate">
-            {item.responsable?.nombre || "Sin responsable"}
-          </span>
-        </p>
-      </div>
-
-      <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3 text-sm text-gray-600">
-        <p className="line-clamp-3 min-h-[60px]">
-          {item.observacion || "Sin observaciones registradas."}
-        </p>
-      </div>
-
-      <div className="mt-auto pt-4">
-        <p className="mb-3 text-right text-xs text-gray-400">
-          Actualizado {formatFecha(item.updatedAt)}
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => onEdit(item)}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-green-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-green-700"
-          >
-            <Pencil size={16} /> Editar
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(item)}
-            className="inline-flex items-center justify-center rounded-xl border border-red-200 px-3 py-2 text-red-600 transition hover:bg-red-50"
-            title="Desactivar ítem"
-          >
-            <Trash2 size={17} />
-          </button>
-        </div>
-      </div>
-    </article>
   );
 }
 
@@ -226,6 +166,29 @@ export default function Inventarios() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(crearFormInicial);
+
+  const inventariosAgrupados = useMemo(() => {
+    const grupos = new Map();
+
+    inventarios.forEach((item) => {
+      const clave = `${item.responsableId || "sin-responsable"}-${
+        item.agenciaId || "sin-agencia"
+      }`;
+
+      if (!grupos.has(clave)) {
+        grupos.set(clave, {
+          clave,
+          responsable: item.responsable,
+          agencia: item.agencia,
+          items: [],
+        });
+      }
+
+      grupos.get(clave).items.push(item);
+    });
+
+    return Array.from(grupos.values());
+  }, [inventarios]);
 
   const cargarCatalogos = useCallback(async () => {
     try {
@@ -321,6 +284,7 @@ export default function Inventarios() {
           dispositivo: item.dispositivoValor || "LAPTOP",
           marca: item.marca,
           modelo: item.modelo,
+          precio: item.precio,
           estado: item.estado,
           observacion: item.observacion,
         }),
@@ -390,6 +354,7 @@ export default function Inventarios() {
           dispositivo: item.dispositivo,
           marca: item.marca,
           modelo: item.modelo,
+          precio: item.precio === "" ? null : Number(item.precio),
           estado: item.estado,
           observacion: item.observacion,
         })),
@@ -446,37 +411,37 @@ export default function Inventarios() {
   };
 
   const inputClass =
-    "mt-1.5 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100";
+    "mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
   const tableInputClass =
-    "w-full rounded-lg border border-gray-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100";
+    "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1600px]">
-        <header className="overflow-hidden rounded-3xl border border-green-500/30 bg-gray-900 p-6 text-white shadow-xl sm:p-8">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl">
+        <header className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-green-400">
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
                 Sistemas · Control interno
               </p>
-              <h1 className="mt-2 text-3xl font-black sm:text-4xl">
+              <h1 className="mt-1 text-2xl font-bold text-slate-900">
                 Inventario por responsable
               </h1>
-              <p className="mt-2 max-w-3xl text-sm text-gray-300 sm:text-base">
+              <p className="mt-1 max-w-3xl text-sm text-slate-500">
                 Registra cada equipo como un ítem individual y asígnalo a la persona que lo tiene bajo su responsabilidad.
               </p>
             </div>
             <button
               type="button"
               onClick={abrirNuevo}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-green-500 px-5 py-3 font-black text-gray-950 shadow transition hover:bg-green-400"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
             >
-              <Plus size={20} /> Asignar dispositivos
+              <Plus size={18} /> Asignar dispositivos
             </button>
           </div>
         </header>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard label="Ítems registrados" value={resumen.items} icon={<Boxes size={22} />} />
           <StatCard label="Responsables" value={resumen.responsables} icon={<UserRound size={22} />} tone="gray" />
           <StatCard label="Operativos" value={resumen.operativos} icon={<PackageCheck size={22} />} />
@@ -484,72 +449,187 @@ export default function Inventarios() {
           <StatCard label="Fuera de servicio" value={resumen.fueraServicio} icon={<CircleOff size={22} />} tone="red" />
         </section>
 
-        <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.5fr)_repeat(4,minmax(160px,1fr))_auto]">
             <form onSubmit={aplicarBusqueda} className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
                 <input
                   value={busqueda}
                   onChange={(event) => setBusqueda(event.target.value)}
                   placeholder="Buscar dispositivo, marca o modelo"
-                  className="w-full rounded-xl border border-gray-300 py-2.5 pl-10 pr-3 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  className="h-10 w-full rounded-lg border border-slate-300 py-2 pl-10 pr-3 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                 />
               </div>
-              <button type="submit" className="rounded-xl bg-gray-900 px-4 text-white hover:bg-gray-800">
+              <button type="submit" className="rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700">
                 Buscar
               </button>
             </form>
 
-            <select value={filtros.agenciaId} onChange={(event) => actualizarFiltro("agenciaId", event.target.value)} className="rounded-xl border border-gray-300 px-3 py-2.5 focus:border-green-500">
+            <select value={filtros.agenciaId} onChange={(event) => actualizarFiltro("agenciaId", event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-emerald-500">
               <option value="">Todas las agencias</option>
               {catalogos.agencias.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
             </select>
-            <select value={filtros.responsableId} onChange={(event) => actualizarFiltro("responsableId", event.target.value)} className="rounded-xl border border-gray-300 px-3 py-2.5 focus:border-green-500">
+            <select value={filtros.responsableId} onChange={(event) => actualizarFiltro("responsableId", event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-emerald-500">
               <option value="">Todos los responsables</option>
               {catalogos.responsables.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
             </select>
-            <select value={filtros.dispositivo} onChange={(event) => actualizarFiltro("dispositivo", event.target.value)} className="rounded-xl border border-gray-300 px-3 py-2.5 focus:border-green-500">
+            <select value={filtros.dispositivo} onChange={(event) => actualizarFiltro("dispositivo", event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-emerald-500">
               <option value="">Todos los dispositivos</option>
               {catalogos.dispositivos.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
-            <select value={filtros.estado} onChange={(event) => actualizarFiltro("estado", event.target.value)} className="rounded-xl border border-gray-300 px-3 py-2.5 focus:border-green-500">
+            <select value={filtros.estado} onChange={(event) => actualizarFiltro("estado", event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-emerald-500">
               <option value="">Todos los estados</option>
               {catalogos.estados.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
-            <button type="button" onClick={limpiarFiltros} className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-2.5 font-semibold text-gray-600 hover:bg-gray-50">
+            <button type="button" onClick={limpiarFiltros} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50">
               <RefreshCw size={17} /> Limpiar
             </button>
           </div>
         </section>
 
         {loading ? (
-          <div className="mt-8 flex min-h-[300px] items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-500">
-            <RefreshCw className="mr-2 animate-spin text-green-600" size={20} /> Cargando inventario...
+          <div className="mt-5 flex min-h-[260px] items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-500 shadow-sm">
+            <RefreshCw className="mr-2 animate-spin text-emerald-600" size={20} /> Cargando inventario...
           </div>
         ) : inventarios.length === 0 ? (
-          <div className="mt-8 flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center">
-            <CircleOff size={46} className="text-gray-300" />
-            <h2 className="mt-4 text-xl font-black text-gray-800">Sin ítems registrados</h2>
-            <p className="mt-1 text-gray-500">Agrega un dispositivo o cambia los filtros aplicados.</p>
+          <div className="mt-5 flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+            <CircleOff size={40} className="text-slate-300" />
+            <h2 className="mt-3 text-lg font-bold text-slate-700">Sin ítems registrados</h2>
+            <p className="mt-1 text-sm text-slate-500">Agrega un dispositivo o cambia los filtros aplicados.</p>
           </div>
         ) : (
-          <section className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {inventarios.map((item) => (
-              <InventarioCard key={item.id} item={item} onEdit={abrirEditar} onDelete={eliminar} />
-            ))}
+          <section className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-1 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-bold uppercase text-slate-700">
+                  Asignaciones de inventario
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Los equipos están agrupados por responsable y agencia.
+                </p>
+              </div>
+              <p className="text-xs font-semibold text-slate-500">
+                {inventariosAgrupados.length}{" "}
+                {inventariosAgrupados.length === 1 ? "asignación" : "asignaciones"}
+                {" · "}
+                {inventarios.length} {inventarios.length === 1 ? "ítem" : "ítems"}
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1140px] border-collapse text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
+                  <tr>
+                    <th className="border-b border-slate-200 px-4 py-3">Dispositivo</th>
+                    <th className="border-b border-slate-200 px-4 py-3">Marca y modelo</th>
+                    <th className="border-b border-slate-200 px-4 py-3">Precio</th>
+                    <th className="border-b border-slate-200 px-4 py-3">Estado técnico</th>
+                    <th className="border-b border-slate-200 px-4 py-3">Observación</th>
+                    <th className="border-b border-slate-200 px-4 py-3">Actualización</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+
+                {inventariosAgrupados.map((grupo) => (
+                  <tbody key={grupo.clave} className="divide-y divide-slate-100">
+                    <tr className="border-t border-slate-200 bg-emerald-50/60 first:border-t-0">
+                      <td colSpan={7} className="px-4 py-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                            <span className="inline-flex items-center gap-2 font-bold text-slate-800">
+                              <UserRound size={17} className="text-emerald-600" />
+                              {grupo.responsable?.nombre || "Sin responsable"}
+                            </span>
+                            <span className="inline-flex items-center gap-2 text-slate-600">
+                              <Building2 size={17} className="text-emerald-600" />
+                              {grupo.agencia?.nombre || "Sin agencia"}
+                              {grupo.agencia?.ciudad ? ` · ${grupo.agencia.ciudad}` : ""}
+                            </span>
+                          </div>
+                          <span className="w-fit rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">
+                            {grupo.items.length} {grupo.items.length === 1 ? "equipo" : "equipos"}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {grupo.items.map((item) => {
+                      const estado = estadoConfig[item.estado] || estadoConfig.OPERATIVO;
+
+                      return (
+                        <tr key={item.id} className="align-middle hover:bg-slate-50/70">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-700">
+                                <DispositivoIcono value={item.dispositivoValor} size={18} />
+                              </span>
+                              <span className="font-semibold text-slate-800">
+                                {item.dispositivo}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-700">
+                              {item.marca || "Sin marca"}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              {item.modelo || "Sin modelo"}
+                            </p>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
+                            {formatPrecio(item.precio)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${estado.badge}`}>
+                              {estado.label}
+                            </span>
+                          </td>
+                          <td className="max-w-[320px] whitespace-pre-wrap px-4 py-3 text-slate-600">
+                            {item.observacion || "Sin observaciones"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                            {formatFecha(item.updatedAt)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => abrirEditar(item)}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                              >
+                                <Pencil size={15} /> Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => eliminar(item)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                                title="Desactivar ítem"
+                                aria-label={`Desactivar ${item.dispositivo}`}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                ))}
+              </table>
+            </div>
           </section>
         )}
 
         {paginacion.totalPaginas > 1 && (
-          <div className="mt-8 flex items-center justify-center gap-4">
-            <button type="button" disabled={pagina <= 1} onClick={() => setPagina((value) => value - 1)} className="rounded-xl border border-gray-300 bg-white p-2 text-gray-700 disabled:opacity-40">
+          <div className="mt-6 flex items-center justify-center gap-4">
+            <button type="button" disabled={pagina <= 1} onClick={() => setPagina((value) => value - 1)} className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 disabled:opacity-40">
               <ChevronLeft size={20} />
             </button>
-            <span className="text-sm font-bold text-gray-600">
+            <span className="text-sm font-bold text-slate-600">
               Página {paginacion.pagina} de {paginacion.totalPaginas}
             </span>
-            <button type="button" disabled={pagina >= paginacion.totalPaginas} onClick={() => setPagina((value) => value + 1)} className="rounded-xl border border-gray-300 bg-white p-2 text-gray-700 disabled:opacity-40">
+            <button type="button" disabled={pagina >= paginacion.totalPaginas} onClick={() => setPagina((value) => value + 1)} className="rounded-lg border border-slate-300 bg-white p-2 text-slate-600 disabled:opacity-40">
               <ChevronRight size={20} />
             </button>
           </div>
@@ -557,31 +637,31 @@ export default function Inventarios() {
       </div>
 
       {modalAbierto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 p-4 backdrop-blur-sm">
-          <div className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-700 bg-gray-900 px-6 py-5 text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-600/40 p-4 backdrop-blur-sm">
+          <div className="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-green-400">
+                <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
                   Inventario de Sistemas
                 </p>
-                <h2 className="text-2xl font-black">
+                <h2 className="mt-1 text-xl font-bold text-slate-800">
                   {editando ? "Editar asignación" : "Asignar dispositivos"}
                 </h2>
               </div>
-              <button type="button" onClick={cerrarModal} className="rounded-full p-2 text-gray-300 hover:bg-gray-800 hover:text-white" aria-label="Cerrar formulario">
-                <X size={22} />
+              <button type="button" onClick={cerrarModal} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700" aria-label="Cerrar formulario">
+                <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={guardar} className="p-6">
-              <section className="rounded-2xl border border-green-200 bg-green-50/60 p-5">
+            <form onSubmit={guardar} className="p-5">
+              <section className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
                 <div className="mb-4 flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm font-black text-white">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
                     1
                   </span>
                   <div>
-                    <h3 className="font-black text-gray-900">Selecciona a la persona</h3>
-                    <p className="text-sm text-gray-600">
+                    <h3 className="text-sm font-bold text-slate-800">Selecciona a la persona</h3>
+                    <p className="text-sm text-slate-600">
                       Todos los ítems agregados quedarán bajo esta responsabilidad.
                     </p>
                   </div>
@@ -589,7 +669,7 @@ export default function Inventarios() {
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <label>
-                    <span className="text-sm font-bold text-gray-700">Persona responsable *</span>
+                    <span className="text-sm font-bold text-slate-700">Persona responsable *</span>
                     <select value={form.responsableId} onChange={(event) => setForm({ ...form, responsableId: event.target.value })} className={inputClass} required>
                       <option value="">Selecciona un responsable</option>
                       {catalogos.responsables.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
@@ -597,7 +677,7 @@ export default function Inventarios() {
                   </label>
 
                   <label>
-                    <span className="text-sm font-bold text-gray-700">Agencia *</span>
+                    <span className="text-sm font-bold text-slate-700">Agencia *</span>
                     <select value={form.agenciaId} onChange={(event) => setForm({ ...form, agenciaId: event.target.value })} className={inputClass} required>
                       <option value="">Selecciona una agencia</option>
                       {catalogos.agencias.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
@@ -609,12 +689,12 @@ export default function Inventarios() {
               <section className="mt-6">
                 <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-sm font-black text-green-400">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
                       2
                     </span>
                     <div>
-                      <h3 className="font-black text-gray-900">Agrega los dispositivos</h3>
-                      <p className="text-sm text-gray-500">
+                      <h3 className="text-sm font-bold text-slate-800">Agrega los dispositivos</h3>
+                      <p className="text-sm text-slate-500">
                         Puedes registrar varios ítems para la misma persona.
                       </p>
                     </div>
@@ -622,43 +702,45 @@ export default function Inventarios() {
                   <button
                     type="button"
                     onClick={agregarItem}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-300 bg-green-50 px-4 py-2 text-sm font-bold text-green-700 transition hover:bg-green-100"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
                   >
                     <Plus size={17} /> Agregar otro ítem
                   </button>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1120px] table-fixed text-left">
+                    <table className="w-full min-w-[1255px] table-fixed text-left">
                       <colgroup>
                         <col className="w-[64px]" />
                         <col className="w-[210px]" />
                         <col className="w-[175px]" />
                         <col className="w-[155px]" />
                         <col className="w-[175px]" />
+                        <col className="w-[135px]" />
                         <col className="w-[270px]" />
                         <col className="w-[72px]" />
                       </colgroup>
-                      <thead className="bg-gray-900 text-xs uppercase tracking-wide text-gray-300">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                         <tr>
                           <th className="px-3 py-3 text-center">N.º</th>
                           <th className="px-3 py-3">Dispositivo</th>
                           <th className="px-3 py-3">Estado técnico</th>
                           <th className="px-3 py-3">Marca</th>
                           <th className="px-3 py-3">Modelo</th>
+                          <th className="px-3 py-3">Precio</th>
                           <th className="px-3 py-3">Observación</th>
                           <th className="px-3 py-3 text-center">Acción</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
+                      <tbody className="divide-y divide-slate-200">
                         {form.items.map((item, index) => (
-                          <tr key={item.claveTemporal} className="align-top transition hover:bg-green-50/40">
+                          <tr key={item.claveTemporal} className="align-top transition hover:bg-emerald-50/40">
                             <td className="px-3 py-3">
-                              <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900 text-green-400">
+                              <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-700">
                                 <DispositivoIcono value={item.dispositivo} size={18} />
                               </div>
-                              <p className="mt-1 text-center text-xs font-bold text-gray-500">
+                              <p className="mt-1 text-center text-xs font-bold text-slate-500">
                                 {index + 1}
                               </p>
                             </td>
@@ -708,6 +790,19 @@ export default function Inventarios() {
                               />
                             </td>
                             <td className="px-3 py-3">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={item.precio}
+                                onChange={(event) => actualizarItem(index, "precio", event.target.value)}
+                                placeholder="0.00"
+                                className={tableInputClass}
+                                aria-label={`Precio del ítem ${index + 1}`}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
                               <textarea
                                 value={item.observacion}
                                 onChange={(event) => actualizarItem(index, "observacion", event.target.value)}
@@ -730,7 +825,7 @@ export default function Inventarios() {
                                   <Trash2 size={17} />
                                 </button>
                               ) : (
-                                <span className="text-gray-300">—</span>
+                                <span className="text-slate-300">—</span>
                               )}
                             </td>
                           </tr>
@@ -741,11 +836,11 @@ export default function Inventarios() {
                 </div>
               </section>
 
-              <div className="mt-7 flex flex-col-reverse gap-3 border-t border-gray-200 pt-5 sm:flex-row sm:justify-end">
-                <button type="button" onClick={cerrarModal} disabled={guardando} className="rounded-xl border border-gray-300 px-5 py-2.5 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+                <button type="button" onClick={cerrarModal} disabled={guardando} className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
                   Cancelar
                 </button>
-                <button type="submit" disabled={guardando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 font-bold text-white hover:bg-green-700 disabled:opacity-60">
+                <button type="submit" disabled={guardando} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60">
                   {guardando ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
                   {guardando ? "Guardando..." : "Guardar asignación"}
                 </button>

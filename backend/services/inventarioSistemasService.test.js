@@ -25,6 +25,7 @@ describe("inventarioSistemasService", () => {
       responsableId: "9",
       marca: " Dell ",
       modelo: " OptiPlex 7090 ",
+      precio: "750.50",
       observacion: " Equipo de recepción ",
     });
 
@@ -33,6 +34,7 @@ describe("inventarioSistemasService", () => {
       nombre: "Computador de escritorio",
       marca: "Dell",
       modelo: "OptiPlex 7090",
+      precio: 750.5,
       estado: "OPERATIVO",
       observacion: "Equipo de recepción",
       agenciaId: 2,
@@ -52,11 +54,33 @@ describe("inventarioSistemasService", () => {
     );
   });
 
+  test("acepta precio vacio para historicos y rechaza valores negativos", () => {
+    const historico = validarInventario({
+      dispositivo: "Laptop",
+      agenciaId: 2,
+      responsableId: 9,
+      precio: "",
+    });
+    const invalido = validarInventario({
+      dispositivo: "Laptop",
+      agenciaId: 2,
+      responsableId: 9,
+      precio: -1,
+    });
+
+    expect(historico.errores).toEqual([]);
+    expect(historico.data.precio).toBeNull();
+    expect(invalido.errores).toContain(
+      "El precio debe ser un valor valido mayor o igual a cero",
+    );
+  });
+
   test("serializa el nombre interno como dispositivo para el frontend", () => {
     expect(resolverDispositivo("CARGADOR_LAPTOP")?.label).toBe("Cargador de laptop");
     expect(
       serializarInventario({
         id: 1,
+        precio: "49.90",
         nombre: "Audífonos",
         estado: "OPERATIVO",
         activo: true,
@@ -64,6 +88,7 @@ describe("inventarioSistemasService", () => {
     ).toMatchObject({
       dispositivo: "Audífonos",
       dispositivoValor: "AUDIFONOS",
+      precio: 49.9,
     });
   });
 });

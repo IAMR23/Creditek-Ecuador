@@ -11,6 +11,11 @@ import {
 } from "react-icons/md";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
+import {
+  clasesEstadoItemFormula,
+  etiquetaEstadoItemFormula,
+  normalizarItemsFormula,
+} from "../../utils/planBatallaRespuestas";
 
 const ENVIOS_KEY = "planes_batalla_enviados";
 
@@ -314,16 +319,41 @@ function DetallePlan({ plan, onEliminar }) {
                 Sin respuestas registradas.
               </p>
             ) : (
-              Object.entries(respuestas).map(([numero, respuesta]) => (
-                <div key={numero} className="rounded border border-slate-200 p-3">
-                  <p className="text-xs font-black uppercase text-slate-500">
-                    Pregunta {numero}
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                    {respuesta || "-"}
-                  </p>
-                </div>
-              ))
+              Object.entries(respuestas).map(([numero, respuesta]) => {
+                const items = normalizarItemsFormula(respuesta);
+
+                return (
+                  <div key={numero} className="rounded border border-slate-200 p-3">
+                    <p className="text-xs font-black uppercase text-slate-500">
+                      Pregunta {numero}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {items.map((item, itemIndex) => (
+                        <div
+                          key={item.id || itemIndex}
+                          className="rounded border border-slate-200 bg-slate-50 p-3"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-500">
+                              Ítem {itemIndex + 1}
+                            </span>
+                            <span
+                              className={`rounded border px-2 py-1 text-xs font-bold ${
+                                clasesEstadoItemFormula[item.estado]
+                              }`}
+                            >
+                              {etiquetaEstadoItemFormula(item.estado)}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-sm text-slate-800">
+                            {item.descripcion || "-"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

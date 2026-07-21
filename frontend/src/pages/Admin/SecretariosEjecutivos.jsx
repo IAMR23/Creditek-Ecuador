@@ -8,9 +8,17 @@ import {
   Filter,
   Plus,
   Save,
+  Trash2,
   X,
 } from "lucide-react";
 import { API_URL } from "../../../config";
+import {
+  clasesEstadoItemFormula,
+  crearItemFormula,
+  ESTADOS_ITEMS_FORMULA,
+  normalizarItemsFormula,
+  normalizarRespuestasFormula,
+} from "../../utils/planBatallaRespuestas";
 
 const API_ENDPOINT = `${API_URL}/api/gerencia/secretarios-ejecutivos/planes`;
 
@@ -28,6 +36,19 @@ const CONDICIONES = {
       "DESE A CONOCER",
       "DESCUBRA LO QUE NECESITA O DESEA",
       "HAGALO, PRODUZCALO O PRESENTELO",
+    ],
+  },
+  inexistencia_extendida: {
+    label: "Inexistencia Extendida",
+    formula: [
+      "ENCUENTRA Y PONTE EN LÍNEA DE COMUNICACIÓN QUE VAYAS A NECESITAR PARA DAR Y OBTENER INFORMACIÓN RELATIVA A TUS DEBERES Y SUMINISTROS",
+      "DATE A CONOCER, JUNTO CON LA DESIGNACIÓN DE TU PUESTO Y TUS DEBERES, A TODOS LOS TERMINALES QUE NECESITARÁS PARA LA OBTENCIÓN DE INFORMACIÓN Y LA ENTREGA DE DATOS",
+      "DESCUBRE DE TUS SUPERIORES, COMPAÑEROS DE TRABAJO Y CUALQUIER PÚBLICO CON EL QUE PUEDAS NECESITAR PONERTE EN CONTACTO EN EL CUMPLIMIENTO DE TUS OBLIGACIONES, LO QUE CADA UNO DE ELLOS NECESITA Y DESEA",
+      "HAZ, PRODUCE Y PRESENTA LO QUE CADA UNO NECESITA Y DESEA, QUE ESTÉ EN CONFORMIDAD A LA POLÍTICA",
+      "MANTÉN LAS LÍNEAS DE COMUNICACIÓN QUE TIENES Y AMPLÍALAS PARA OBTENER OTRA INFORMACIÓN QUE AHORA ENCUENTRES QUE NECESITAS DE MANERA HABITUAL",
+      "MANTÉN TUS LÍNEAS DE ORIGINACIÓN PARA INFORMAR A OTROS DE LO QUE ESTÁS HACIENDO EXACTAMENTE, PERO SOLO A AQUELLOS QUE REALMENTE NECESITAN LA INFORMACIÓN",
+      "SIMPLIFICA Y HAZ DE FORMA MÁS EFICIENTE LO QUE ESTÁS HACIENDO, PRODUCIÉNDOLO Y PRESENTÁNDOLO DE MODO QUE SE ACERQUE MÁS A LO QUE REALMENTE SE NECESITA Y SE DESEA",
+      "DANDO Y RECIBIENDO INFORMACIÓN PLENA RESPECTO A TUS PRODUCTOS, HAZ, PRODUCE Y PRESENTA, DE MANERA HABITUAL EN TU PUESTO, UN PRODUCTO MEJOR",
     ],
   },
   peligro: {
@@ -91,7 +112,10 @@ const crearDetalleVacio = () =>
 const crearFormInicial = () => ({
   fecha: getHoyLocal(),
   condicion: "inexistencia",
-  respuestasFormula: {},
+  respuestasFormula: normalizarRespuestasFormula(
+    {},
+    CONDICIONES.inexistencia.formula.length,
+  ),
   detalle: crearDetalleVacio(),
   objetivoDia: "Plan de batalla INEXISTENCIA",
   actividadesPlanificadas: "{}",
@@ -174,14 +198,51 @@ export default function SecretariosEjecutivos() {
     setForm((prev) => ({ ...prev, [campo]: value }));
   };
 
-  const actualizarRespuestaFormula = (numero, value) => {
+  const actualizarItemFormula = (numero, itemIndex, campo, value) => {
     setForm((prev) => ({
       ...prev,
       respuestasFormula: {
         ...prev.respuestasFormula,
-        [numero]: value,
+        [numero]: normalizarItemsFormula(prev.respuestasFormula?.[numero], {
+          incluirVacio: true,
+        }).map((item, index) =>
+          index === itemIndex ? { ...item, [campo]: value } : item,
+        ),
       },
     }));
+  };
+
+  const agregarItemFormula = (numero) => {
+    setForm((prev) => ({
+      ...prev,
+      respuestasFormula: {
+        ...prev.respuestasFormula,
+        [numero]: [
+          ...normalizarItemsFormula(prev.respuestasFormula?.[numero], {
+            incluirVacio: true,
+          }),
+          crearItemFormula(),
+        ],
+      },
+    }));
+  };
+
+  const eliminarItemFormula = (numero, itemIndex) => {
+    setForm((prev) => {
+      const items = normalizarItemsFormula(prev.respuestasFormula?.[numero], {
+        incluirVacio: true,
+      });
+
+      if (items.length <= 1) return prev;
+
+      return {
+        ...prev,
+        respuestasFormula: {
+          ...prev.respuestasFormula,
+          [numero]: items.filter((_, index) => index !== itemIndex),
+        },
+      };
+    });
   };
 
   const actualizarDetalle = (bloque, campo, value) => {
@@ -203,11 +264,18 @@ export default function SecretariosEjecutivos() {
   };
 
   const editarPlan = (plan) => {
+    const condicion = plan.condicion || "inexistencia";
+    const cantidadPreguntas =
+      CONDICIONES[condicion]?.formula.length || CONDICIONES.inexistencia.formula.length;
+
     setPlanEditando(plan);
     setForm({
       fecha: plan.fecha || getHoyLocal(),
-      condicion: plan.condicion || "inexistencia",
-      respuestasFormula: plan.respuestasFormula || {},
+      condicion,
+      respuestasFormula: normalizarRespuestasFormula(
+        plan.respuestasFormula,
+        cantidadPreguntas,
+      ),
       detalle: {
         ...crearDetalleVacio(),
         ...(plan.detalle || {}),
@@ -385,24 +453,98 @@ export default function SecretariosEjecutivos() {
                   </h3>
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {preguntasActivas.map((pregunta) => (
-                    <label key={pregunta.numero} className="block p-4">
-                      <span className="mb-2 block text-sm font-bold text-slate-800">
-                        {pregunta.numero}.- {pregunta.texto}
-                      </span>
-                      <textarea
-                        rows={3}
-                        value={form.respuestasFormula?.[pregunta.numero] || ""}
-                        onChange={(event) =>
-                          actualizarRespuestaFormula(
-                            pregunta.numero,
-                            event.target.value,
-                          )
-                        }
-                        className="w-full resize-y rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                      />
-                    </label>
-                  ))}
+                  {preguntasActivas.map((pregunta) => {
+                    const items = normalizarItemsFormula(
+                      form.respuestasFormula?.[pregunta.numero],
+                      { incluirVacio: true },
+                    );
+
+                    return (
+                      <div key={pregunta.numero} className="p-4">
+                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <p className="text-sm font-bold text-slate-800">
+                            {pregunta.numero}.- {pregunta.texto}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => agregarItemFormula(pregunta.numero)}
+                            className="inline-flex shrink-0 items-center justify-center gap-1 rounded border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Plus size={15} />
+                            Agregar ítem
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {items.map((item, itemIndex) => (
+                            <div
+                              key={item.id}
+                              className="grid grid-cols-1 gap-3 rounded border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[170px_1fr_auto]"
+                            >
+                              <label className="block">
+                                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                  Estado
+                                </span>
+                                <select
+                                  value={item.estado}
+                                  onChange={(event) =>
+                                    actualizarItemFormula(
+                                      pregunta.numero,
+                                      itemIndex,
+                                      "estado",
+                                      event.target.value,
+                                    )
+                                  }
+                                  className={`h-10 w-full rounded border px-2 text-sm font-semibold outline-none transition focus:ring-2 focus:ring-slate-200 ${
+                                    clasesEstadoItemFormula[item.estado]
+                                  }`}
+                                >
+                                  {ESTADOS_ITEMS_FORMULA.map((estado) => (
+                                    <option key={estado.value} value={estado.value}>
+                                      {estado.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="block">
+                                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                  Ítem {itemIndex + 1}
+                                </span>
+                                <textarea
+                                  rows={2}
+                                  value={item.descripcion}
+                                  onChange={(event) =>
+                                    actualizarItemFormula(
+                                      pregunta.numero,
+                                      itemIndex,
+                                      "descripcion",
+                                      event.target.value,
+                                    )
+                                  }
+                                  className="w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                />
+                              </label>
+
+                              <div className="flex items-end">
+                                <button
+                                  type="button"
+                                  disabled={items.length <= 1}
+                                  onClick={() =>
+                                    eliminarItemFormula(pregunta.numero, itemIndex)
+                                  }
+                                  aria-label={`Eliminar ítem ${itemIndex + 1}`}
+                                  className="inline-flex h-10 w-full items-center justify-center rounded border border-red-200 px-3 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 lg:w-10"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

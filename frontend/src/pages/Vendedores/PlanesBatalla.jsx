@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import axios from "axios";
 import {
+  MdAdd,
   MdArrowBack,
   MdDeleteOutline,
   MdOutlineAssignmentTurnedIn,
@@ -10,6 +11,13 @@ import {
 } from "react-icons/md";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
+import {
+  clasesEstadoItemFormula,
+  crearItemFormula,
+  ESTADOS_ITEMS_FORMULA,
+  normalizarItemsFormula,
+  normalizarRespuestasFormula,
+} from "../../utils/planBatallaRespuestas";
 
 const STORAGE_KEY = "planes_batalla_borrador";
 const ENVIOS_KEY = "planes_batalla_enviados";
@@ -86,7 +94,10 @@ const crearFormularioInicial = () => ({
   condicion: "inexistencia",
   fechaInicio: new Date().toLocaleDateString("en-CA"),
   fechaFin: "",
-  respuestasFormula: {},
+  respuestasFormula: normalizarRespuestasFormula(
+    {},
+    CONDICIONES.inexistencia.formula.length,
+  ),
   detalle: crearDetalleVacio(),
   observacion: "",
 });
@@ -97,6 +108,9 @@ const normalizarFormularioGuardado = (guardado) => {
 
   const detalleGuardado = guardado.detalle || {};
   const planAnterior = guardado.plan || {};
+  const condicion = CONDICIONES[guardado.condicion]
+    ? guardado.condicion
+    : base.condicion;
 
   const detalle = BLOQUES.reduce((acc, bloque) => {
     if (detalleGuardado[bloque]) {
@@ -123,13 +137,13 @@ const normalizarFormularioGuardado = (guardado) => {
   return {
     ...base,
     ...guardado,
-    condicion: CONDICIONES[guardado.condicion]
-      ? guardado.condicion
-      : base.condicion,
+    condicion,
     fechaInicio: guardado.fechaInicio || guardado.fecha || base.fechaInicio,
     fechaFin: "",
-    respuestasFormula:
-      guardado.respuestasFormula || guardado.accionesPorPaso || {},
+    respuestasFormula: normalizarRespuestasFormula(
+      guardado.respuestasFormula || guardado.accionesPorPaso,
+      CONDICIONES[condicion].formula.length,
+    ),
     detalle,
   };
 };
@@ -207,14 +221,51 @@ export default function PlanesBatalla() {
     setForm((prev) => ({ ...prev, [campo]: value }));
   };
 
-  const actualizarRespuestaFormula = (numero, value) => {
+  const actualizarItemFormula = (numero, itemIndex, campo, value) => {
     setForm((prev) => ({
       ...prev,
       respuestasFormula: {
         ...prev.respuestasFormula,
-        [numero]: value,
+        [numero]: normalizarItemsFormula(prev.respuestasFormula?.[numero], {
+          incluirVacio: true,
+        }).map((item, index) =>
+          index === itemIndex ? { ...item, [campo]: value } : item,
+        ),
       },
     }));
+  };
+
+  const agregarItemFormula = (numero) => {
+    setForm((prev) => ({
+      ...prev,
+      respuestasFormula: {
+        ...prev.respuestasFormula,
+        [numero]: [
+          ...normalizarItemsFormula(prev.respuestasFormula?.[numero], {
+            incluirVacio: true,
+          }),
+          crearItemFormula(),
+        ],
+      },
+    }));
+  };
+
+  const eliminarItemFormula = (numero, itemIndex) => {
+    setForm((prev) => {
+      const items = normalizarItemsFormula(prev.respuestasFormula?.[numero], {
+        incluirVacio: true,
+      });
+
+      if (items.length <= 1) return prev;
+
+      return {
+        ...prev,
+        respuestasFormula: {
+          ...prev.respuestasFormula,
+          [numero]: items.filter((_, index) => index !== itemIndex),
+        },
+      };
+    });
   };
 
   const actualizarDetalle = (bloque, campo, value) => {
@@ -372,21 +423,98 @@ export default function PlanesBatalla() {
               </div>
 
               <div className="divide-y divide-slate-100">
-                {preguntasActivas.map((pregunta) => (
-                  <label key={pregunta.numero} className="block p-4">
-                    <span className="mb-2 block text-sm font-bold text-slate-800">
-                      {pregunta.numero}.- {pregunta.texto}
-                    </span>
-                    <textarea
-                      rows={3}
-                      value={form.respuestasFormula?.[pregunta.numero] || ""}
-                      onChange={(event) =>
-                        actualizarRespuestaFormula(pregunta.numero, event.target.value)
-                      }
-                      className="w-full resize-y rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                    />
-                  </label>
-                ))}
+                {preguntasActivas.map((pregunta) => {
+                  const items = normalizarItemsFormula(
+                    form.respuestasFormula?.[pregunta.numero],
+                    { incluirVacio: true },
+                  );
+
+                  return (
+                    <div key={pregunta.numero} className="p-4">
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <p className="text-sm font-bold text-slate-800">
+                          {pregunta.numero}.- {pregunta.texto}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => agregarItemFormula(pregunta.numero)}
+                          className="inline-flex shrink-0 items-center justify-center gap-1 rounded border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                        >
+                          <MdAdd size={17} />
+                          Agregar ítem
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {items.map((item, itemIndex) => (
+                          <div
+                            key={item.id}
+                            className="grid grid-cols-1 gap-3 rounded border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[170px_1fr_auto]"
+                          >
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                Estado
+                              </span>
+                              <select
+                                value={item.estado}
+                                onChange={(event) =>
+                                  actualizarItemFormula(
+                                    pregunta.numero,
+                                    itemIndex,
+                                    "estado",
+                                    event.target.value,
+                                  )
+                                }
+                                className={`h-10 w-full rounded border px-2 text-sm font-semibold outline-none transition focus:ring-2 focus:ring-slate-200 ${
+                                  clasesEstadoItemFormula[item.estado]
+                                }`}
+                              >
+                                {ESTADOS_ITEMS_FORMULA.map((estado) => (
+                                  <option key={estado.value} value={estado.value}>
+                                    {estado.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                Ítem {itemIndex + 1}
+                              </span>
+                              <textarea
+                                rows={2}
+                                value={item.descripcion}
+                                onChange={(event) =>
+                                  actualizarItemFormula(
+                                    pregunta.numero,
+                                    itemIndex,
+                                    "descripcion",
+                                    event.target.value,
+                                  )
+                                }
+                                className="w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                              />
+                            </label>
+
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                disabled={items.length <= 1}
+                                onClick={() =>
+                                  eliminarItemFormula(pregunta.numero, itemIndex)
+                                }
+                                aria-label={`Eliminar ítem ${itemIndex + 1}`}
+                                className="inline-flex h-10 w-full items-center justify-center rounded border border-red-200 px-3 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 lg:w-10"
+                              >
+                                <MdDeleteOutline size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 

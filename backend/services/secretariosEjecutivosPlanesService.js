@@ -6,6 +6,7 @@ const ESTADOS_VALIDOS = ["PENDIENTE", "EN_PROGRESO", "FINALIZADO"];
 const PRIORIDADES_VALIDAS = ["BAJA", "MEDIA", "ALTA"];
 const CONDICIONES_VALIDAS = [
   "inexistencia",
+  "inexistencia_extendida",
   "peligro",
   "emergencia",
   "normal",

@@ -298,6 +298,15 @@ const ensureSistemasTareasSchema = async (queryInterface, tables) => {
   `);
 };
 
+const ensureInventarioSistemasSchema = async (queryInterface, tables) => {
+  if (!tables.includes("sistemas_inventarios")) return;
+
+  await addColumnIfMissing(queryInterface, "sistemas_inventarios", "precio", {
+    type: Sequelize.DECIMAL(12, 2),
+    allowNull: true,
+  });
+};
+
 const ensureSecretariosEjecutivosPlanesSchema = async (queryInterface, tables) => {
   if (!tables.includes("secretarios_ejecutivos_planes")) return;
 
@@ -507,6 +516,7 @@ const connectDB = async () => {
     await ensureMovimientoCajaSchema(queryInterface, tables);
     await ensureMarketingSchema(queryInterface, tables);
     await ensureSistemasTareasSchema(queryInterface, tables);
+    await ensureInventarioSistemasSchema(queryInterface, tables);
     await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
     await ensureUsuariosSchema(queryInterface, tables);
     await ensureRolesPagoSchema(tables);

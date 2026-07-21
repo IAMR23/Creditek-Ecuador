@@ -4,6 +4,11 @@ import Swal from "sweetalert2";
 import { Eye, Filter, Trash2, X } from "lucide-react";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
+import {
+  clasesEstadoItemFormula,
+  etiquetaEstadoItemFormula,
+  normalizarItemsFormula,
+} from "../../utils/planBatallaRespuestas";
 
 const CONDICIONES = [
   { value: "todos", label: "Todas" },
@@ -61,12 +66,14 @@ const filtrosIniciales = {
   agenciaId: "todos",
   vendedorId: "todos",
   fechaInicio: getHoyLocal(),
+  fechaFin: getHoyLocal(),
   condicion: "todos",
 };
 
 const crearFiltrosIniciales = () => ({
   ...filtrosIniciales,
   fechaInicio: getHoyLocal(),
+  fechaFin: getHoyLocal(),
 });
 
 const getAuthHeaders = () => ({
@@ -128,7 +135,6 @@ export default function VerPlanesBatalla() {
       Object.entries(filtros).forEach(([key, value]) => {
         if (value && value !== "todos") params[key] = value;
       });
-      if (filtros.fechaInicio) params.fechaFin = filtros.fechaInicio;
 
       const { data } = await axios.get(`${API_URL}/api/planes-batalla`, {
         headers: getAuthHeaders(),
@@ -252,10 +258,19 @@ export default function VerPlanesBatalla() {
             </SelectFiltro>
 
             <InputFiltro
-              label="Fecha"
+              label="Fecha inicio"
               type="date"
               value={filtros.fechaInicio}
               onChange={(value) => actualizarFiltro("fechaInicio", value)}
+              max={filtros.fechaFin || undefined}
+            />
+
+            <InputFiltro
+              label="Fecha fin"
+              type="date"
+              value={filtros.fechaFin}
+              onChange={(value) => actualizarFiltro("fechaFin", value)}
+              min={filtros.fechaInicio || undefined}
             />
 
             <div className="flex items-end">
@@ -384,15 +399,43 @@ function DetallePlan({ plan, onEliminar }) {
             {PREGUNTAS_POR_CONDICION[plan.plan?.condicion]?.length ? (
               PREGUNTAS_POR_CONDICION[plan.plan.condicion].map((pregunta, index) => {
                 const numero = String(index + 1);
+                const items = normalizarItemsFormula(respuestas[numero]);
 
                 return (
                   <div key={numero} className="rounded border border-slate-200 p-3">
                     <p className="text-sm font-bold text-slate-900">
                       {numero}.- {pregunta}
                     </p>
-                    <p className="mt-2 whitespace-pre-wrap rounded bg-slate-50 p-3 text-sm text-slate-800">
-                      {respuestas[numero] || "-"}
-                    </p>
+                    {items.length === 0 ? (
+                      <p className="mt-2 rounded bg-slate-50 p-3 text-sm text-slate-500">
+                        Sin ítems registrados.
+                      </p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {items.map((item, itemIndex) => (
+                          <div
+                            key={item.id || itemIndex}
+                            className="rounded border border-slate-200 bg-slate-50 p-3"
+                          >
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-slate-500">
+                                Ítem {itemIndex + 1}
+                              </span>
+                              <span
+                                className={`rounded border px-2 py-1 text-xs font-bold ${
+                                  clasesEstadoItemFormula[item.estado]
+                                }`}
+                              >
+                                {etiquetaEstadoItemFormula(item.estado)}
+                              </span>
+                            </div>
+                            <p className="whitespace-pre-wrap text-sm text-slate-800">
+                              {item.descripcion || "-"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -401,16 +444,41 @@ function DetallePlan({ plan, onEliminar }) {
                 Sin respuestas registradas.
               </p>
             ) : (
-              Object.entries(respuestas).map(([numero, respuesta]) => (
-                <div key={numero} className="rounded border border-slate-200 p-3">
-                  <p className="text-xs font-black uppercase text-slate-500">
-                    Pregunta {numero}
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                    {respuesta || "-"}
-                  </p>
-                </div>
-              ))
+              Object.entries(respuestas).map(([numero, respuesta]) => {
+                const items = normalizarItemsFormula(respuesta);
+
+                return (
+                  <div key={numero} className="rounded border border-slate-200 p-3">
+                    <p className="text-xs font-black uppercase text-slate-500">
+                      Pregunta {numero}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {items.map((item, itemIndex) => (
+                        <div
+                          key={item.id || itemIndex}
+                          className="rounded border border-slate-200 bg-slate-50 p-3"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-500">
+                              Ítem {itemIndex + 1}
+                            </span>
+                            <span
+                              className={`rounded border px-2 py-1 text-xs font-bold ${
+                                clasesEstadoItemFormula[item.estado]
+                              }`}
+                            >
+                              {etiquetaEstadoItemFormula(item.estado)}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-sm text-slate-800">
+                            {item.descripcion || "-"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

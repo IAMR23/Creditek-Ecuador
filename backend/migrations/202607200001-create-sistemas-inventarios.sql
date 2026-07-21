@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS sistemas_inventarios (
   nombre VARCHAR(120) NOT NULL,
   marca VARCHAR(80),
   modelo VARCHAR(120),
+  precio NUMERIC(12, 2) CHECK (precio IS NULL OR precio >= 0),
   estado VARCHAR(40) NOT NULL DEFAULT 'OPERATIVO'
     CHECK (estado IN ('OPERATIVO', 'EN_MANTENIMIENTO', 'FUERA_DE_SERVICIO')),
   observacion TEXT,

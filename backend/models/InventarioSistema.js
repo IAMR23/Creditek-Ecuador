@@ -21,6 +21,13 @@ const InventarioSistema = sequelize.define(
       type: DataTypes.STRING(120),
       allowNull: true,
     },
+    precio: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: {
+        min: 0,
+      },
+    },
     estado: {
       type: DataTypes.STRING(40),
       allowNull: false,
