@@ -50,6 +50,8 @@ const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const InventarioSistema = require('./InventarioSistema');
+const ControlFinancieroCarga = require('./ControlFinancieroCarga');
+const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -604,6 +606,29 @@ InventarioSistema.belongsTo(Usuario, {
 InventarioSistema.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
+});
+
+/* CONTROL FINANCIERO */
+
+ControlFinancieroCarga.hasMany(ControlFinancieroRegistro, {
+  foreignKey: "cargaId",
+  as: "registros",
+  onDelete: "CASCADE",
+});
+
+ControlFinancieroRegistro.belongsTo(ControlFinancieroCarga, {
+  foreignKey: "cargaId",
+  as: "carga",
+});
+
+Usuario.hasMany(ControlFinancieroCarga, {
+  foreignKey: "usuarioId",
+  as: "cargasControlFinanciero",
+});
+
+ControlFinancieroCarga.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
 });
 
 MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {

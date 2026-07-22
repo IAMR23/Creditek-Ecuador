@@ -1,5 +1,5 @@
+/* eslint-disable react/prop-types */
 import { useMemo, useRef, useState } from "react";
-import axios from "axios";
 import Swal from "sweetalert2";
 import {
   Download,
@@ -11,9 +11,9 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { API_URL } from "../../../config";
+import { api } from "../../api/client";
 
-const API_ENDPOINT = `${API_URL}/api/contabilidad/reportes-caja/extraer`;
+const API_ENDPOINT = "/api/contabilidad/reportes-caja-ventas/extraer";
 const AGENCIAS = ["NUEVA AURORA", "CAUPICHO", "SANGOLQUI", "OTROS"];
 
 const crearAsignacionVacia = (orden = 0) => ({
@@ -38,19 +38,28 @@ const getFilenameFromDisposition = (disposition) => {
 };
 
 export default function ExtraccionReportesCaja() {
-  const inputRef = useRef(null);
-  const [files, setFiles] = useState([]);
+  const reportesCajaInputRef = useRef(null);
+  const ventasTvInputRef = useRef(null);
+  const ventasCelularInputRef = useRef(null);
+  const [reportesCaja, setReportesCaja] = useState([]);
+  const [ventasTv, setVentasTv] = useState([]);
+  const [ventasCelular, setVentasCelular] = useState([]);
   const [loading, setLoading] = useState(false);
   const [lastSummary, setLastSummary] = useState(null);
   const [asignaciones, setAsignaciones] = useState([]);
 
+  const totalArchivos = reportesCaja.length + ventasTv.length + ventasCelular.length;
   const totalSize = useMemo(
-    () => files.reduce((total, file) => total + file.size, 0),
-    [files],
+    () =>
+      [...reportesCaja, ...ventasTv, ...ventasCelular].reduce(
+        (total, file) => total + file.size,
+        0,
+      ),
+    [reportesCaja, ventasTv, ventasCelular],
   );
 
-  const handleFiles = (event) => {
-    const selected = Array.from(event.target.files || []);
+  const handleFiles = (archivos, setFiles) => {
+    const selected = Array.from(archivos || []);
     const pdfs = selected.filter(
       (file) =>
         file.type === "application/pdf" ||
@@ -65,7 +74,7 @@ export default function ExtraccionReportesCaja() {
     setLastSummary(null);
   };
 
-  const clearFiles = () => {
+  const clearFiles = (setFiles, inputRef) => {
     setFiles([]);
     setLastSummary(null);
     if (inputRef.current) inputRef.current.value = "";
@@ -86,8 +95,12 @@ export default function ExtraccionReportesCaja() {
   };
 
   const generarExcel = async () => {
-    if (!files.length) {
-      Swal.fire("Faltan PDFs", "Selecciona al menos un PDF para procesar.", "info");
+    if (!reportesCaja.length) {
+      Swal.fire(
+        "Faltan reportes de caja",
+        "Selecciona al menos un PDF de reporte de caja para generar el cierre.",
+        "info",
+      );
       return;
     }
 
@@ -105,7 +118,9 @@ export default function ExtraccionReportesCaja() {
     }
 
     const formData = new FormData();
-    files.forEach((file) => formData.append("pdfs", file));
+    reportesCaja.forEach((file) => formData.append("reportesCaja", file));
+    ventasTv.forEach((file) => formData.append("ventasTv", file));
+    ventasCelular.forEach((file) => formData.append("ventasCelular", file));
     formData.append(
       "asignacionesAgencias",
       JSON.stringify(
@@ -123,7 +138,7 @@ export default function ExtraccionReportesCaja() {
     setLastSummary(null);
 
     try {
-      const response = await axios.post(API_ENDPOINT, formData, {
+      const response = await api.post(API_ENDPOINT, formData, {
         responseType: "blob",
         headers: {
           "Content-Type": "multipart/form-data",
@@ -135,9 +150,10 @@ export default function ExtraccionReportesCaja() {
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
+      const fechaReporte = response.headers["x-rve-fecha-reporte"] || "REPORTE";
       const filename =
         getFilenameFromDisposition(response.headers["content-disposition"]) ||
-        `REPORTE_CAJA_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        `CIERRE_CAJA_${fechaReporte.replace(/-/g, "")}.xlsx`;
 
       link.href = url;
       link.download = filename;
@@ -146,13 +162,45 @@ export default function ExtraccionReportesCaja() {
       link.remove();
       window.URL.revokeObjectURL(url);
 
+      const cargaNueva =
+        response.headers["x-rve-control-financiero-carga-nueva"] === "1";
+      const archivosAgregados = Number(
+        response.headers["x-rve-archivos-agregados"] || 0,
+      );
+      const archivosOmitidos = Number(
+        response.headers["x-rve-archivos-omitidos"] || 0,
+      );
+
       setLastSummary({
         registros: Number(response.headers["x-rve-registros"] || 0),
         noLeidas: Number(response.headers["x-rve-no-leidas"] || 0),
+        ventasTv: Number(response.headers["x-rve-ventas-tv"] || 0),
+        ventasCelular: Number(response.headers["x-rve-ventas-celular"] || 0),
+        cargaId: Number(
+          response.headers["x-rve-control-financiero-carga"] || 0,
+        ),
+        cargaNueva,
+        archivosAgregados,
+        archivosOmitidos,
         archivo: filename,
       });
 
-      Swal.fire("Listo", "El Excel fue generado correctamente.", "success");
+      if (!archivosAgregados && archivosOmitidos) {
+        Swal.fire(
+          "Archivos repetidos",
+          "El Excel fue generado, pero los archivos ya estaban guardados en la carga de ese dia.",
+          "info",
+        );
+      } else {
+        const detalleOmitidos = archivosOmitidos
+          ? ` Se omitieron ${archivosOmitidos} archivo(s) repetido(s).`
+          : "";
+        Swal.fire(
+          "Listo",
+          `El Excel fue generado y se agregaron ${archivosAgregados} archivo(s) a Control financiero.${detalleOmitidos}`,
+          "success",
+        );
+      }
     } catch (error) {
       console.error("Error generando reporte de caja", error);
 
@@ -188,14 +236,15 @@ export default function ExtraccionReportesCaja() {
                 Extraccion de reportes caja
               </h1>
               <p className="mt-1 text-sm text-slate-600">
-                Sube los PDFs de reportes y descarga el Excel consolidado.
+                Consolida los reportes de caja y adjunta las ventas de TV y celular
+                en un solo Excel.
               </p>
             </div>
 
             <button
               type="button"
               onClick={generarExcel}
-              disabled={loading || !files.length}
+              disabled={loading || !reportesCaja.length}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
@@ -205,43 +254,42 @@ export default function ExtraccionReportesCaja() {
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-            <label className="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-emerald-300 bg-emerald-50/40 p-6 text-center transition hover:bg-emerald-50">
-              <Upload className="mb-3 text-emerald-600" size={34} />
-              <span className="text-base font-semibold text-slate-900">
-                Elegir PDFs
-              </span>
-              <span className="mt-1 text-sm text-slate-500">
-                Puedes seleccionar varios archivos a la vez.
-              </span>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="application/pdf,.pdf"
-                multiple
-                className="hidden"
-                onChange={handleFiles}
-              />
-            </label>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <SelectorPdfs
+              titulo="Reportes de caja"
+              descripcion="PDFs de cobranzas usados para construir el cierre."
+              requerido
+              files={reportesCaja}
+              inputRef={reportesCajaInputRef}
+              loading={loading}
+              onFiles={(files) => handleFiles(files, setReportesCaja)}
+            />
+            <SelectorPdfs
+              titulo="Ventas TV"
+              descripcion="Contrato, fecha, vendedor, cliente, modelo, ventas y entradas."
+              files={ventasTv}
+              inputRef={ventasTvInputRef}
+              loading={loading}
+              onFiles={(files) => handleFiles(files, setVentasTv)}
+            />
+            <SelectorPdfs
+              titulo="Ventas celular"
+              descripcion="Incluye las columnas de ventas y el IMEI del equipo."
+              files={ventasCelular}
+              inputRef={ventasCelularInputRef}
+              loading={loading}
+              onFiles={(files) => handleFiles(files, setVentasCelular)}
+            />
+          </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase text-slate-500">PDFs</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">{files.length}</p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase text-slate-500">Tamano</p>
-                <p className="mt-2 text-2xl font-bold text-slate-900">
-                  {formatBytes(totalSize)}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase text-slate-500">Estado</p>
-                <p className="mt-2 text-sm font-semibold text-emerald-700">
-                  {loading ? "Procesando" : files.length ? "Listo" : "Pendiente"}
-                </p>
-              </div>
-            </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <ResumenCarga label="PDFs totales" value={totalArchivos} />
+            <ResumenCarga label="Tamano total" value={formatBytes(totalSize)} />
+            <ResumenCarga
+              label="Estado"
+              value={loading ? "Procesando" : reportesCaja.length ? "Listo" : "Pendiente"}
+              destacado
+            />
           </div>
         </section>
 
@@ -358,50 +406,191 @@ export default function ExtraccionReportesCaja() {
           )}
         </section>
 
-        {files.length > 0 && (
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-200 p-4">
-              <div className="flex items-center gap-2">
-                <FileText size={18} className="text-emerald-600" />
-                <h2 className="font-semibold text-slate-900">Archivos seleccionados</h2>
-              </div>
-              <button
-                type="button"
-                onClick={clearFiles}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                <X size={16} />
-                Limpiar
-              </button>
-            </div>
-
-            <div className="divide-y divide-slate-100">
-              {files.map((file) => (
-                <div
-                  key={`${file.name}-${file.size}-${file.lastModified}`}
-                  className="flex items-center justify-between gap-4 p-4"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900">{file.name}</p>
-                    <p className="text-sm text-slate-500">{formatBytes(file.size)}</p>
-                  </div>
-                  <FileSpreadsheet className="shrink-0 text-emerald-600" size={20} />
-                </div>
-              ))}
-            </div>
+        {totalArchivos > 0 && (
+          <section className="grid gap-4 lg:grid-cols-3">
+            <GrupoArchivos
+              titulo="Reportes de caja"
+              files={reportesCaja}
+              loading={loading}
+              onClear={() => clearFiles(setReportesCaja, reportesCajaInputRef)}
+            />
+            <GrupoArchivos
+              titulo="Ventas TV"
+              files={ventasTv}
+              loading={loading}
+              onClear={() => clearFiles(setVentasTv, ventasTvInputRef)}
+            />
+            <GrupoArchivos
+              titulo="Ventas celular"
+              files={ventasCelular}
+              loading={loading}
+              onClear={() => clearFiles(setVentasCelular, ventasCelularInputRef)}
+            />
           </section>
-        )} 
+        )}
 
         {lastSummary && (
           <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             <p className="font-semibold">Ultimo archivo generado: {lastSummary.archivo}</p>
             <p className="mt-1">
-              Registros: {lastSummary.registros} | Filas no leidas:{" "}
+              Caja: {lastSummary.registros} | Ventas TV: {lastSummary.ventasTv} |
+              Ventas celular: {lastSummary.ventasCelular} | Filas no leidas:{" "}
               {lastSummary.noLeidas}
             </p>
+            {lastSummary.cargaId > 0 && (
+              <div className="mt-1 font-medium">
+                <p>
+                  {lastSummary.cargaNueva ? "Creada" : "Actualizada"} carga #
+                  {lastSummary.cargaId} en Control financiero.
+                </p>
+                <p>
+                  Archivos agregados: {lastSummary.archivosAgregados} | Repetidos
+                  omitidos: {lastSummary.archivosOmitidos}
+                </p>
+              </div>
+            )}
           </section>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SelectorPdfs({
+  titulo,
+  descripcion,
+  requerido = false,
+  files,
+  inputRef,
+  loading,
+  onFiles,
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragEnter = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!loading) setIsDragging(true);
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDragLeave = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+    if (!loading) onFiles(event.dataTransfer.files);
+  };
+
+  return (
+    <label
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`flex min-h-52 cursor-pointer flex-col rounded-lg border-2 border-dashed p-5 transition ${
+        isDragging
+          ? "scale-[1.01] border-emerald-500 bg-emerald-100 ring-4 ring-emerald-100"
+          : "border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50"
+      } ${loading ? "cursor-not-allowed opacity-70" : ""}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <Upload className="text-emerald-600" size={30} />
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 shadow-sm">
+          {files.length} PDF{files.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <span className="mt-5 text-base font-semibold text-slate-900">
+        {titulo} {requerido && <span className="text-red-500">*</span>}
+      </span>
+      <span className="mt-1 flex-1 text-sm text-slate-500">{descripcion}</span>
+      <span className="mt-4 text-sm font-semibold text-emerald-700">
+        {loading
+          ? "Procesando..."
+          : isDragging
+            ? "Suelta los PDFs aqui"
+            : "Seleccionar archivos o arrastrarlos aqui"}
+      </span>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        disabled={loading}
+        className="hidden"
+        onChange={(event) => onFiles(event.target.files)}
+      />
+    </label>
+  );
+}
+
+function ResumenCarga({ label, value, destacado = false }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p
+        className={`mt-2 font-bold ${
+          destacado ? "text-sm text-emerald-700" : "text-2xl text-slate-900"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function GrupoArchivos({ titulo, files, loading, onClear }) {
+  if (!files.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
+        <p className="font-semibold text-slate-700">{titulo}</p>
+        <p className="mt-2">Sin archivos seleccionados.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText size={18} className="shrink-0 text-emerald-600" />
+          <h2 className="truncate font-semibold text-slate-900">{titulo}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={loading}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+        >
+          <X size={14} />
+          Limpiar
+        </button>
+      </div>
+
+      <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+        {files.map((file) => (
+          <div
+            key={`${file.name}-${file.size}-${file.lastModified}`}
+            className="flex items-center justify-between gap-3 p-3"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-slate-900">{file.name}</p>
+              <p className="text-xs text-slate-500">{formatBytes(file.size)}</p>
+            </div>
+            <FileSpreadsheet className="shrink-0 text-emerald-600" size={18} />
+          </div>
+        ))}
       </div>
     </div>
   );

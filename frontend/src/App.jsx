@@ -100,6 +100,7 @@ import PagosComisiones from "./pages/Contabilidad/PagosComisiones";
 import SancionesConfiguracion from "./pages/Contabilidad/SancionesConfiguracion";
 import SancionesVentas from "./pages/Contabilidad/SancionesVentas";
 import ExtraccionReportesCaja from "./pages/Contabilidad/ExtraccionReportesCaja";
+import ControlFinanciero from "./pages/Contabilidad/ControlFinanciero";
 import { ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
 import {
@@ -427,6 +428,13 @@ function App() {
                   element={protect(
                     <ExtraccionReportesCaja />,
                     "/contabilidad/extraccion-reportes-caja",
+                  )}
+                />
+                <Route
+                  path="contabilidad/control-financiero"
+                  element={protect(
+                    <ControlFinanciero />,
+                    "/contabilidad/control-financiero",
                   )}
                 />
                 <Route path="tasks" element={protect(<TasksPage />, "/tasks")} />

@@ -198,6 +198,11 @@ export default function Sidebar({ auth }) {
             path: "/contabilidad/extraccion-reportes-caja",
           },
           {
+            label: "Control financiero",
+            icon: <BarChart3 size={20} />,
+            path: "/contabilidad/control-financiero",
+          },
+          {
             label: "Bonos",
             icon: <LucideTicketPercent size={20} />,
             path: "/bonos",

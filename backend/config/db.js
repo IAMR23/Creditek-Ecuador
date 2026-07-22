@@ -502,14 +502,95 @@ const ensureDetalleEntregasUbicacionSchema = async (queryInterface, tables) => {
   }
 }; 
 
+const ensureControlFinancieroPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("control_financiero_cargas")) return;
+
+  const columns = await queryInterface.describeTable("control_financiero_cargas");
+  if (!columns.fechaReporte) {
+    await queryInterface.addColumn(
+      "control_financiero_cargas",
+      "fechaReporte",
+      {
+        type: Sequelize.DATEONLY,
+        allowNull: true,
+      },
+    );
+  }
+
+  if (!tables.includes("control_financiero_registros")) return;
+
+  const registroColumns = await queryInterface.describeTable(
+    "control_financiero_registros",
+  );
+  if (!registroColumns.archivoHash) {
+    await queryInterface.addColumn(
+      "control_financiero_registros",
+      "archivoHash",
+      {
+        type: Sequelize.STRING(64),
+        allowNull: true,
+      },
+    );
+  }
+
+  await sequelize.query(`
+    UPDATE control_financiero_registros
+    SET "archivoOrigen" = regexp_replace(
+      "archivoOrigen",
+      '^[0-9]{10,}-[a-f0-9]{8}-',
+      '',
+      'i'
+    )
+    WHERE "archivoOrigen" ~* '^[0-9]{10,}-[a-f0-9]{8}-';
+  `);
+
+  await sequelize.query(`
+    WITH candidatas AS (
+      SELECT
+        "cargaId",
+        id,
+        substring(fecha FROM '[0-9]{1,2}/[0-9]{1,2}/[0-9]{2}') AS fecha_pdf
+      FROM control_financiero_registros
+      WHERE "tipoRegistro" = 'CAJA'
+        AND fecha ~ '[0-9]{1,2}/[0-9]{1,2}/[0-9]{2}'
+    ),
+    primeras AS (
+      SELECT DISTINCT ON ("cargaId")
+        "cargaId",
+        fecha_pdf
+      FROM candidatas
+      WHERE fecha_pdf IS NOT NULL
+      ORDER BY "cargaId", id
+    ),
+    normalizadas AS (
+      SELECT
+        "cargaId",
+        CASE
+          WHEN split_part(fecha_pdf, '/', 1)::INTEGER > 12
+            THEN to_date(fecha_pdf, 'DD/MM/YY')
+          ELSE to_date(fecha_pdf, 'MM/DD/YY')
+        END AS fecha_reporte
+      FROM primeras
+    )
+    UPDATE control_financiero_cargas AS carga
+    SET "fechaReporte" = normalizadas.fecha_reporte,
+        "updatedAt" = NOW()
+    FROM normalizadas
+    WHERE carga.id = normalizadas."cargaId"
+      AND carga."fechaReporte" IS NULL;
+  `);
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
     console.log("Conectado a PostgreSQL exitosamente");
 
+    const queryInterface = sequelize.getQueryInterface();
+    await ensureControlFinancieroPreSyncSchema(queryInterface);
     await sequelize.sync({});
 
-    const queryInterface = sequelize.getQueryInterface();
     const tables = await queryInterface.showAllTables();
 
     await ensureCierreCajaSchema(queryInterface, tables);

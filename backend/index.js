@@ -72,7 +72,18 @@ const corsOptions = {
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  exposedHeaders: ["Content-Disposition", "X-RVE-Registros", "X-RVE-No-Leidas"],
+  exposedHeaders: [
+    "Content-Disposition",
+    "X-RVE-Registros",
+    "X-RVE-No-Leidas",
+    "X-RVE-Ventas-TV",
+    "X-RVE-Ventas-Celular",
+    "X-RVE-Control-Financiero-Carga",
+    "X-RVE-Fecha-Reporte",
+    "X-RVE-Control-Financiero-Carga-Nueva",
+    "X-RVE-Archivos-Agregados",
+    "X-RVE-Archivos-Omitidos",
+  ],
   maxAge: 3600,
 };
 
@@ -192,6 +203,8 @@ connectDB()
     app.use("/api/gestion-comercial", require("./routes/Comercial/gestionRoutes"));
     app.use("/api/contabilidad", require("./routes/Contabilidad/CajaRoutes"));
     app.use("/api/contabilidad/reportes-caja", require("./routes/Contabilidad/reportesCajaRoutes"));
+    app.use("/api/contabilidad/reportes-caja-ventas", require("./routes/Contabilidad/reportesCajaVentasRoutes"));
+    app.use("/api/contabilidad/control-financiero", require("./routes/Contabilidad/controlFinancieroRoutes"));
     app.use("/api/contabilidad/nomina", require("./routes/Contabilidad/nominaRoutes"));
     app.use("/api/contabilidad/roles-pago", require("./routes/Contabilidad/rolesPagoRoutes"));
     app.use("/api/contabilidad/comisiones", require("./routes/Contabilidad/comisionesConfiguracionRoutes"));
