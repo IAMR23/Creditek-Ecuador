@@ -87,6 +87,7 @@ export default function Entrevistas() {
               limit,
               q: filters.q.trim() || undefined,
               estadoEntrevista: filters.estadoEntrevista || undefined,
+              entrevistaPeriodo: filters.periodo || undefined,
               entrevistaFechaDesde: dateRange.desde || undefined,
               entrevistaFechaHasta: dateRange.hasta || undefined,
               ciudad: filters.ciudad.trim() || undefined,

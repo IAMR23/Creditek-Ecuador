@@ -17,6 +17,7 @@ const INTERVIEW_STATUSES = [
 ];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
+const GUAYAQUIL_OFFSET_MS = 5 * 60 * 60 * 1000;
 
 const isEmptyValue = (value) => value === "" || value === null || value === undefined;
 
@@ -72,6 +73,18 @@ const guayaquilDayEndUtc = (value) => {
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1, 4, 59, 59, 999));
 };
 
+const getGuayaquilDate = (now = Date.now()) =>
+  new Date(now - GUAYAQUIL_OFFSET_MS).toISOString().slice(0, 10);
+
+const addDaysToDateOnly = (value, days) => {
+  const parts = parseDateOnlyParts(value);
+  if (!parts) return null;
+
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days))
+    .toISOString()
+    .slice(0, 10);
+};
+
 const parseDateRange = ({ fecha, fechaDesde, fechaHasta } = {}) => {
   const desde = fechaDesde || fecha;
   const hasta = fechaHasta || fecha;
@@ -91,7 +104,25 @@ const parseDateRange = ({ fecha, fechaDesde, fechaHasta } = {}) => {
   if (start) range[Op.gte] = start;
   if (end) range[Op.lte] = end;
 
-  return Object.keys(range).length ? range : null;
+  return Reflect.ownKeys(range).length ? range : null;
+};
+
+const parseInterviewPeriodRange = (value) => {
+  const period = String(value || "").toLowerCase();
+  const daysByPeriod = new Map([
+    ["hoy", 1],
+    ["7", 7],
+    ["30", 30],
+  ]);
+  const days = daysByPeriod.get(period);
+
+  if (!days) return null;
+
+  const today = getGuayaquilDate();
+  return parseDateRange({
+    fechaDesde: today,
+    fechaHasta: addDaysToDateOnly(today, days - 1),
+  });
 };
 
 const buildListWhere = (query = {}) => {
@@ -112,10 +143,12 @@ const buildListWhere = (query = {}) => {
   const edadHasta = parseOptionalAge(query.edadHasta);
   const noLeidas = String(query.noLeidas || "").toLowerCase() === "true";
   const createdAtRange = parseDateRange(query);
-  const interviewDateRange = parseDateRange({
-    fechaDesde: query.entrevistaFechaDesde,
-    fechaHasta: query.entrevistaFechaHasta,
-  });
+  const interviewDateRange =
+    parseInterviewPeriodRange(query.entrevistaPeriodo) ||
+    parseDateRange({
+      fechaDesde: query.entrevistaFechaDesde,
+      fechaHasta: query.entrevistaFechaHasta,
+    });
 
   if (q) {
     where[Op.or] = [
@@ -279,8 +312,7 @@ const normalizePayload = (data = {}) => {
 };
 
 const buildResumen = async () => {
-  const guayaquilNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
-  const today = guayaquilNow.toISOString().slice(0, 10);
+  const today = getGuayaquilDate();
   const todayStart = guayaquilDayStartUtc(today);
   const todayEnd = guayaquilDayEndUtc(today);
   const nextSevenDaysEnd = new Date(todayEnd.getTime() + 6 * 24 * 60 * 60 * 1000);

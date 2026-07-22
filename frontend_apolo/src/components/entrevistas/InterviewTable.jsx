@@ -139,7 +139,7 @@ function MobileCard(props) {
   return (
     <article className="space-y-4 border-b border-slate-100 p-4 last:border-b-0">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Fecha</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pase a entrevista</p>
         <div className="mt-1"><InterviewPhaseDateCell interview={interview} /></div>
       </div>
       <CandidateCell interview={interview} />
@@ -203,7 +203,7 @@ export default function InterviewTable({
         <table className="w-full min-w-[1120px] border-collapse text-left">
           <thead>
             <tr className="border-y border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-              <th className="px-5 py-3 font-bold">Fecha</th>
+              <th className="px-5 py-3 font-bold">Pase a entrevista</th>
               <th className="px-5 py-3 font-bold">Aspirante</th>
               <th className="px-4 py-3 font-bold">Contacto</th>
               <th className="px-4 py-3 font-bold">Ciudad</th>
