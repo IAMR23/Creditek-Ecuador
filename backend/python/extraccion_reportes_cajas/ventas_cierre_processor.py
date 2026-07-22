@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import pdfplumber
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -416,11 +416,24 @@ def procesar(
     asignaciones_agencias=None,
     salida_datos: Path | None = None,
 ):
-    resumen_caja, registros_caja = procesar_reportes_caja_con_detalle(
-        reportes_caja,
-        salida,
-        asignaciones_agencias or [],
-    )
+    if not reportes_caja and not ventas_tv_pdfs and not ventas_celular_pdfs:
+        raise ValueError(
+            "Selecciona al menos un PDF de caja, ventas TV o ventas celular."
+        )
+
+    if reportes_caja:
+        resumen_caja, registros_caja = procesar_reportes_caja_con_detalle(
+            reportes_caja,
+            salida,
+            asignaciones_agencias or [],
+        )
+        wb = load_workbook(salida)
+        hoja_inicial = None
+    else:
+        resumen_caja = {"registros": 0, "noLeidas": 0, "archivos": []}
+        registros_caja = []
+        wb = Workbook()
+        hoja_inicial = wb.active
 
     ventas_tv, errores_tv = extraer_ventas(ventas_tv_pdfs, "TV")
     ventas_celular, errores_celular = extraer_ventas(
@@ -438,7 +451,6 @@ def procesar(
             "No se extrajo ninguna venta de celular. Revisa que los PDFs incluyan la columna IMEI."
         )
 
-    wb = load_workbook(salida)
     for nombre_hoja in ("Filas no leidas", "Errores ventas"):
         if nombre_hoja in wb.sheetnames:
             del wb[nombre_hoja]
@@ -450,7 +462,10 @@ def procesar(
         ventas_celular,
         COLUMNAS_CELULAR,
     )
+    if hoja_inicial is not None and hoja_inicial.title in wb.sheetnames:
+        del wb[hoja_inicial.title]
     errores_ventas = [*errores_tv, *errores_celular]
+    salida.parent.mkdir(parents=True, exist_ok=True)
     wb.save(salida)
 
     if salida_datos:

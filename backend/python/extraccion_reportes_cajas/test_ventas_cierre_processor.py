@@ -103,6 +103,57 @@ class VentasCierreProcessorTest(unittest.TestCase):
             self.assertEqual(len(datos["registrosCaja"]), 1)
             self.assertEqual(len(datos["ventasTv"]), 2)
 
+    def test_genera_excel_con_solo_un_tipo_de_ventas(self):
+        casos = [
+            (
+                "tv",
+                [PDFS_DIR / "ReportUphone_CierreCajaVentas_IAMRS2.pdf"],
+                [],
+                "ventasTv",
+            ),
+            (
+                "celular",
+                [],
+                [PDFS_DIR / "AURORA 17 AL 19.pdf"],
+                "ventasCelular",
+            ),
+        ]
+
+        for nombre, ventas_tv, ventas_celular, clave_esperada in casos:
+            with self.subTest(tipo=nombre), tempfile.TemporaryDirectory() as temp_dir:
+                salida = Path(temp_dir) / f"cierre-{nombre}.xlsx"
+                salida_datos = Path(temp_dir) / f"control-{nombre}.json"
+
+                resumen = processor.procesar(
+                    [],
+                    ventas_tv,
+                    ventas_celular,
+                    salida,
+                    [],
+                    salida_datos,
+                )
+
+                wb = load_workbook(salida, data_only=False)
+                self.assertEqual(wb.sheetnames, ["Ventas TV", "Ventas Celular"])
+                self.assertEqual(resumen["registrosCaja"], 0)
+                self.assertGreater(resumen[clave_esperada], 0)
+
+                with salida_datos.open("r", encoding="utf-8") as archivo_datos:
+                    datos = json.load(archivo_datos)
+
+                self.assertEqual(datos["registrosCaja"], [])
+                self.assertGreater(len(datos[clave_esperada]), 0)
+
+    def test_rechaza_generacion_sin_archivos(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(ValueError, "al menos un PDF"):
+                processor.procesar(
+                    [],
+                    [],
+                    [],
+                    Path(temp_dir) / "cierre.xlsx",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

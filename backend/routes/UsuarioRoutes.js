@@ -7,6 +7,12 @@ const UsuarioRol = require("../models/UsuarioRol");
 const RolPago = require("../models/RolPago");
 const NominaEmpleado = require("../models/NominaEmpleado");
 const bcrypt = require("bcryptjs");
+const {
+  condicionCampoNormalizado,
+  crearBaseUsuarioDesdeEmail,
+  esUsuarioValido,
+  normalizarUsuario,
+} = require("../utils/usuarioLogin");
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
 
@@ -29,6 +35,24 @@ const normalizarTexto = (value) =>
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
+
+const buscarUsuarioPorNombre = (nombreUsuario) =>
+  Usuario.findOne({
+    where: condicionCampoNormalizado("usuario", nombreUsuario),
+  });
+
+const generarUsuarioDisponible = async (email) => {
+  const base = crearBaseUsuarioDesdeEmail(email);
+  let candidato = base;
+  let sufijo = 2;
+
+  while (await buscarUsuarioPorNombre(candidato)) {
+    candidato = `${base.slice(0, 46)}_${sufijo}`;
+    sufijo += 1;
+  }
+
+  return candidato;
+};
 
 const sincronizarRolesUsuario = async (usuarioId, rolIds) => {
   await UsuarioRol.destroy({ where: { usuarioId } });
@@ -92,6 +116,7 @@ router.post("/", async (req, res) => {
       nombre,
       cedula,
       email,
+      usuario: nombreUsuario,
       password,
       rolId,
       rolIds,
@@ -116,6 +141,23 @@ router.post("/", async (req, res) => {
     const existing = await Usuario.findOne({ where: { email } });
     if (existing) {
       return res.status(400).json({ message: "El email ya está registrado." });
+    }
+
+    const usuarioNormalizado = nombreUsuario
+      ? normalizarUsuario(nombreUsuario)
+      : await generarUsuarioDisponible(email);
+
+    if (!esUsuarioValido(usuarioNormalizado)) {
+      return res.status(400).json({
+        message:
+          "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, numeros, punto, guion o guion bajo.",
+      });
+    }
+
+    if (await buscarUsuarioPorNombre(usuarioNormalizado)) {
+      return res.status(400).json({
+        message: "El nombre de usuario ya esta registrado.",
+      });
     }
 
     const rolesIdsNormalizados = normalizarRolIds(rolId, rolIds);
@@ -148,6 +190,7 @@ router.post("/", async (req, res) => {
       nombre,
       cedula,
       email,
+      usuario: usuarioNormalizado,
       password: hashedPassword,
       rolId: rolesIdsNormalizados[0],
       fechaIngreso,
@@ -167,6 +210,11 @@ router.post("/", async (req, res) => {
     res.status(201).json(usuarioSinPassword);
   } catch (error) {
     console.error("Error creando usuario:", error);
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({
+        message: "El email o nombre de usuario ya esta registrado.",
+      });
+    }
     res.status(500).json({ message: "Error al crear el usuario", error });
   }
 });
@@ -259,6 +307,7 @@ const actualizarUsuario = async (req, res) => {
       nombre,
       cedula,
       email,
+      usuario: nombreUsuario,
       password,
       rolId,
       rolIds,
@@ -284,6 +333,26 @@ const actualizarUsuario = async (req, res) => {
         return res.status(400).json({ message: "El email ya está en uso." });
       }
       usuario.email = email;
+    }
+
+    if (nombreUsuario !== undefined) {
+      const usuarioNormalizado = normalizarUsuario(nombreUsuario);
+
+      if (!esUsuarioValido(usuarioNormalizado)) {
+        return res.status(400).json({
+          message:
+            "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, numeros, punto, guion o guion bajo.",
+        });
+      }
+
+      const existeUsuario = await buscarUsuarioPorNombre(usuarioNormalizado);
+      if (existeUsuario && Number(existeUsuario.id) !== Number(usuario.id)) {
+        return res.status(400).json({
+          message: "El nombre de usuario ya esta registrado.",
+        });
+      }
+
+      usuario.usuario = usuarioNormalizado;
     }
 
     // ========== VALIDAR PASSWORD SOLO SI LO ENVIAN ==========
@@ -363,6 +432,11 @@ const actualizarUsuario = async (req, res) => {
     const { password: _, ...usuarioSinPassword } = usuario.toJSON();
     res.json(usuarioSinPassword);
   } catch (error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(400).json({
+        message: "El email o nombre de usuario ya esta registrado.",
+      });
+    }
     res.status(500).json({ message: "Error al actualizar usuario", error });
   }
 };

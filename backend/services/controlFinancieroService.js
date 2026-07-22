@@ -53,10 +53,10 @@ const extraerFechaIso = (value) => {
   ).padStart(2, "0")}`;
 };
 
-const obtenerFechaReporte = (registrosCaja = []) => {
+const obtenerFechaReporte = (registros = []) => {
   const frecuencias = new Map();
 
-  registrosCaja.forEach((registro) => {
+  registros.forEach((registro) => {
     const fecha = extraerFechaIso(registro.FECHA);
     if (fecha) frecuencias.set(fecha, (frecuencias.get(fecha) || 0) + 1);
   });
@@ -268,8 +268,10 @@ const guardarCargaControlFinanciero = async ({
   const listas = obtenerListas(datos);
   const totalRegistros = listas.caja.length + listas.tv.length + listas.celular.length;
 
-  if (!listas.caja.length) {
-    throw new Error("No existen registros de caja para guardar en control financiero.");
+  if (!totalRegistros) {
+    throw new Error(
+      "No existen registros validos para guardar en control financiero.",
+    );
   }
 
   if (totalRegistros > MAX_REGISTROS_POR_CARGA) {
@@ -283,10 +285,14 @@ const guardarCargaControlFinanciero = async ({
     ...listas.tv.map((item) => normalizarVenta(item, "VENTA_TV")),
     ...listas.celular.map((item) => normalizarVenta(item, "VENTA_CELULAR")),
   ];
-  const fechaReporte = obtenerFechaReporte(listas.caja);
+  const fechaReporte = obtenerFechaReporte([
+    ...listas.caja,
+    ...listas.tv,
+    ...listas.celular,
+  ]);
 
   if (!fechaReporte) {
-    throw new Error("No se pudo determinar la fecha del reporte desde los PDFs de caja.");
+    throw new Error("No se pudo determinar la fecha desde los PDFs procesados.");
   }
 
   return sequelize.transaction(async (transaction) => {
@@ -296,7 +302,7 @@ const guardarCargaControlFinanciero = async ({
     );
 
     let carga = await ControlFinancieroCarga.findOne({
-      where: { fechaReporte },
+      where: { fechaReporte, estado: "ACTIVA" },
       order: [["id", "ASC"]],
       transaction,
       lock: transaction.LOCK.UPDATE,
@@ -328,6 +334,7 @@ const guardarCargaControlFinanciero = async ({
         {
           archivoGenerado: texto(archivoGenerado, 255),
           fechaReporte,
+          estado: "ACTIVA",
           ...resumenNuevo,
           usuarioId: Number(usuarioId) || null,
         },

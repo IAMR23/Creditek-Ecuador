@@ -7,6 +7,12 @@ CREATE TABLE IF NOT EXISTS control_financiero_cargas (
   id SERIAL PRIMARY KEY,
   "archivoGenerado" VARCHAR(255) NOT NULL,
   "fechaReporte" DATE,
+  estado VARCHAR(20) NOT NULL DEFAULT 'ACTIVA'
+    CHECK (estado IN ('ACTIVA', 'ANULADA', 'REEMPLAZADA')),
+  "motivoAnulacion" TEXT,
+  "anuladoPor" INTEGER REFERENCES usuarios(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  "anuladoEn" TIMESTAMP WITH TIME ZONE,
   "registrosCaja" INTEGER NOT NULL DEFAULT 0 CHECK ("registrosCaja" >= 0),
   "registrosVentasTv" INTEGER NOT NULL DEFAULT 0 CHECK ("registrosVentasTv" >= 0),
   "registrosVentasCelular" INTEGER NOT NULL DEFAULT 0 CHECK ("registrosVentasCelular" >= 0),
@@ -50,6 +56,9 @@ ON control_financiero_cargas ("createdAt" DESC);
 
 CREATE INDEX IF NOT EXISTS control_financiero_cargas_fecha_reporte_idx
 ON control_financiero_cargas ("fechaReporte" DESC);
+
+CREATE INDEX IF NOT EXISTS control_financiero_cargas_estado_fecha_idx
+ON control_financiero_cargas (estado, "fechaReporte" DESC);
 
 CREATE INDEX IF NOT EXISTS control_financiero_cargas_usuario_idx
 ON control_financiero_cargas ("usuarioId");

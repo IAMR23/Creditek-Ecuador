@@ -631,6 +631,16 @@ ControlFinancieroCarga.belongsTo(Usuario, {
   as: "usuario",
 });
 
+Usuario.hasMany(ControlFinancieroCarga, {
+  foreignKey: "anuladoPor",
+  as: "cargasAnuladasControlFinanciero",
+});
+
+ControlFinancieroCarga.belongsTo(Usuario, {
+  foreignKey: "anuladoPor",
+  as: "usuarioAnulador",
+});
+
 MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {
   foreignKey: "zonaId",
   as: "zona",

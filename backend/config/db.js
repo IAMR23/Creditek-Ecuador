@@ -347,6 +347,67 @@ const ensureSecretariosEjecutivosPlanesSchema = async (queryInterface, tables) =
 const ensureUsuariosSchema = async (queryInterface, tables) => {
   if (!tables.includes("usuarios")) return;
 
+  await addColumnIfMissing(queryInterface, "usuarios", "usuario", {
+    type: Sequelize.STRING(50),
+    allowNull: true,
+  });
+
+  await sequelize.query(`
+    WITH candidatos AS (
+      SELECT
+        id,
+        CASE
+          WHEN LENGTH(
+            REGEXP_REPLACE(
+              LOWER(SPLIT_PART(email, '@', 1)),
+              '[^a-z0-9._-]',
+              '',
+              'g'
+            )
+          ) >= 3
+          THEN LEFT(
+            REGEXP_REPLACE(
+              LOWER(SPLIT_PART(email, '@', 1)),
+              '[^a-z0-9._-]',
+              '',
+              'g'
+            ),
+            38
+          )
+          ELSE 'usuario'
+        END AS base
+      FROM usuarios
+      WHERE usuario IS NULL OR BTRIM(usuario) = ''
+    ),
+    repetidos AS (
+      SELECT
+        id,
+        base,
+        COUNT(*) OVER (PARTITION BY base) AS total
+      FROM candidatos
+    )
+    UPDATE usuarios AS u
+    SET usuario = CASE
+      WHEN r.total = 1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM usuarios AS existente
+          WHERE existente.id <> r.id
+            AND LOWER(existente.usuario) = r.base
+        )
+      THEN r.base
+      ELSE LEFT(r.base, 38) || '_' || r.id::text
+    END
+    FROM repetidos AS r
+    WHERE u.id = r.id;
+  `);
+
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS usuarios_usuario_lower_unique
+    ON usuarios (LOWER(usuario))
+    WHERE usuario IS NOT NULL;
+  `);
+
   await addColumnIfMissing(queryInterface, "usuarios", "entidadFinanciera", {
     type: Sequelize.STRING,
     allowNull: true,
@@ -517,6 +578,51 @@ const ensureControlFinancieroPreSyncSchema = async (queryInterface) => {
       },
     );
   }
+
+  await addColumnIfMissing(queryInterface, "control_financiero_cargas", "estado", {
+    type: Sequelize.STRING(20),
+    allowNull: false,
+    defaultValue: "ACTIVA",
+  });
+  await addColumnIfMissing(
+    queryInterface,
+    "control_financiero_cargas",
+    "motivoAnulacion",
+    {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "control_financiero_cargas",
+    "anuladoPor",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "control_financiero_cargas",
+    "anuladoEn",
+    {
+      type: Sequelize.DATE,
+      allowNull: true,
+    },
+  );
+
+  await sequelize.query(`
+    UPDATE control_financiero_cargas
+    SET estado = 'ACTIVA'
+    WHERE estado IS NULL;
+  `);
 
   if (!tables.includes("control_financiero_registros")) return;
 

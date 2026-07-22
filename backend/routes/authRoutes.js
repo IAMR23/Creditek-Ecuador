@@ -10,6 +10,10 @@ const Rol = require("../models/Rol");
 const UsuarioPermiso = require("../models/UsuarioPermiso");
 const Permiso = require("../models/Permiso");
 const {
+  condicionIdentificadorLogin,
+  normalizarIdentificador,
+} = require("../utils/usuarioLogin");
+const {
   JWT_SECRET,
   JWT_REFRESH_SECRET,
   JWT_ACCESS_EXPIRES_IN,
@@ -181,9 +185,18 @@ const clearRefreshCookie = (res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password, rolId } = req.body;
+    const { password, rolId } = req.body;
+    const identificador = normalizarIdentificador(
+      req.body.identificador || req.body.email || req.body.usuario,
+    );
 
-    const usuario = await getUsuarioConRoles({ email });
+    if (!identificador || !password) {
+      return res.status(400).json({ message: "Usuario o contrasena incorrectos" });
+    }
+
+    const usuario = await getUsuarioConRoles(
+      condicionIdentificadorLogin(identificador),
+    );
 
     if (!usuario) {
       return res.status(400).json({ message: "Usuario o contrasena incorrectos" });

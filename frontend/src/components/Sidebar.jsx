@@ -85,11 +85,7 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/revision-gestiones-comercial",
           },
-          {
-            label: "Base de Datos Ventas",
-            icon: <BarChart3 size={20} />,
-            path: "/bdd-ventas",
-          },
+        
 
 
           {
@@ -173,7 +169,7 @@ export default function Sidebar({ auth }) {
             path: "/nomina",
           },
           {
-            label: "Roles de pago",
+            label: "Niveles Jerarquicos",
             icon: <DollarSign size={20} />,
             path: "/contabilidad/roles-pago",
           },
@@ -261,6 +257,11 @@ export default function Sidebar({ auth }) {
             label: "Normalizacion dispositivos",
             icon: <ClipboardList size={20} />,
             path: "/conciliacion-facturas",
+          },
+            {
+            label: "Base de Datos Ventas",
+            icon: <BarChart3 size={20} />,
+            path: "/bdd-ventas",
           },
         ],
       },

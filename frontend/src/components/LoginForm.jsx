@@ -10,7 +10,7 @@ import { setAccessToken } from "../api/client";
 
 function LoginForm({ setAuth }) {
   const [credentials, setCredentials] = useState({
-    email: "",
+    identificador: "",
     password: "",
   });
 
@@ -95,14 +95,15 @@ function LoginForm({ setAuth }) {
         >
           <div className="mb-4">
             <label className="block text-gray-700 font-medium mb-1">
-              Email
+              Correo o usuario
             </label>
             <input
-              type="email"
-              name="email"
+              type="text"
+              name="identificador"
               autoComplete="username"
-              value={credentials.email}
+              value={credentials.identificador}
               onChange={handleChange}
+              placeholder="correo@empresa.com o usuario"
               className="w-full border border-[#7F6DF2] rounded-lg p-3 focus:ring-2 focus:ring-[#9D1DF2] outline-none"
               required
             />

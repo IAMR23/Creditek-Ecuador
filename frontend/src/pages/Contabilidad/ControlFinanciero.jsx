@@ -2,18 +2,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  Ban,
   ChevronLeft,
   ChevronRight,
+  Download,
   DollarSign,
   FileSpreadsheet,
   Monitor,
   RefreshCw,
   Search,
   Smartphone,
-  Trash2,
 } from "lucide-react";
+import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import {
+  crearLibroControlFinanciero,
+  crearNombreExcelControlFinanciero,
+} from "../../utils/controlFinancieroExcel";
+import { FaFileExcel } from "react-icons/fa";
 
 const money = new Intl.NumberFormat("es-EC", {
   style: "currency",
@@ -24,6 +31,7 @@ const money = new Intl.NumberFormat("es-EC", {
 const filtrosIniciales = {
   fechaInicio: "",
   fechaFin: "",
+  estado: "ACTIVA",
 };
 
 const registrosIniciales = {
@@ -40,6 +48,12 @@ const tabs = [
   { id: "ventasTv", label: "Ventas TV", icon: Monitor },
   { id: "ventasCelular", label: "Ventas celular", icon: Smartphone },
 ];
+
+const ETIQUETAS_EXPORTACION = {
+  caja: "Caja",
+  ventasTv: "Ventas TV",
+  ventasCelular: "Ventas celular",
+};
 
 const formatFechaHora = (value) => {
   if (!value) return "-";
@@ -113,9 +127,9 @@ const crearResumenCaja = (registros) => {
   };
 };
 
-function StatCard({ label, value, icon, tone = "emerald" }) {
+function StatCard({ label, value, icon, tone = "green" }) {
   const tones = {
-    emerald: "bg-emerald-50 text-emerald-700",
+    green: "bg-green-50 text-green-700",
     blue: "bg-blue-50 text-blue-700",
     amber: "bg-amber-50 text-amber-700",
     violet: "bg-violet-50 text-violet-700",
@@ -131,11 +145,30 @@ function StatCard({ label, value, icon, tone = "emerald" }) {
           </p>
           <p className="mt-1 text-xl font-bold text-slate-900">{value}</p>
         </div>
-        <div className={`rounded-lg p-2.5 ${tones[tone] || tones.emerald}`}>
+        <div className={`rounded-lg p-2.5 ${tones[tone] || tones.green}`}>
           {icon}
         </div>
       </div>
     </div>
+  );
+}
+
+function EstadoBadge({ estado }) {
+  const estadoNormalizado = String(estado || "ACTIVA").toUpperCase();
+  const estilos = {
+    ACTIVA: "border-green-200 bg-green-50 text-green-700",
+    ANULADA: "border-red-200 bg-red-50 text-red-700",
+    REEMPLAZADA: "border-amber-200 bg-amber-50 text-amber-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${
+        estilos[estadoNormalizado] || estilos.ACTIVA
+      }`}
+    >
+      {estadoNormalizado}
+    </span>
   );
 }
 
@@ -147,9 +180,9 @@ function TablaResumenCaja({
 }) {
   return (
     <div>
-      <div className="flex flex-col gap-1 bg-emerald-600 px-4 py-2 text-white sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-1 bg-green-600 px-4 py-2 text-white sm:flex-row sm:items-center sm:justify-between">
         <span className="text-sm font-bold uppercase">Resumen general</span>
-        <span className="text-xs text-emerald-50">
+        <span className="text-xs text-green-50">
           Selecciona una agencia para filtrar sus cuotas
         </span>
       </div>
@@ -187,10 +220,10 @@ function TablaResumenCaja({
                       seleccionar();
                     }
                   }}
-                  className={`cursor-pointer border-t transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-400 ${
+                  className={`cursor-pointer border-t transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-green-400 ${
                     seleccionada
-                      ? "border-emerald-200 bg-emerald-100"
-                      : "border-slate-100 hover:bg-emerald-50"
+                      ? "border-green-200 bg-green-100"
+                      : "border-slate-100 hover:bg-green-50"
                   }`}
                 >
                   <td className="px-4 py-3 font-medium text-slate-900">
@@ -208,7 +241,7 @@ function TablaResumenCaja({
                 </tr>
               );
             })}
-            <tr className="border-t-2 border-slate-300 bg-emerald-50 font-bold text-slate-900">
+            <tr className="border-t-2 border-slate-300 bg-green-50 font-bold text-slate-900">
               <td className="px-4 py-3">{total.agencia}</td>
               <td className="px-4 py-3 text-right">{money.format(total.uphone)}</td>
               <td className="px-4 py-3 text-right">{money.format(total.creditv)}</td>
@@ -231,7 +264,7 @@ function TablaCuotasCaja({ producto, registros }) {
 
   return (
     <section>
-      <div className="bg-emerald-600 px-4 py-2 text-sm font-bold uppercase text-white">
+      <div className="bg-green-600 px-4 py-2 text-sm font-bold uppercase text-white">
         {producto}
       </div>
       <div className="overflow-x-auto">
@@ -336,14 +369,14 @@ function VistaCaja({ resumen, registros }) {
         onSeleccionarAgencia={seleccionarAgencia}
       />
       {agenciaSeleccionada && (
-        <div className="mx-4 flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold text-emerald-800">
+        <div className="mx-4 flex flex-col gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold text-green-800">
             Mostrando cuotas de: {agenciaSeleccionada}
           </p>
           <button
             type="button"
             onClick={() => setAgenciaSeleccionada(null)}
-            className="text-left text-sm font-semibold text-emerald-700 hover:text-emerald-900 sm:text-right"
+            className="text-left text-sm font-semibold text-green-700 hover:text-green-900 sm:text-right"
           >
             Quitar filtro
           </button>
@@ -393,7 +426,7 @@ function TablaRegistros({ tipo, registros }) {
   if (!registros.length) {
     return (
       <div className="p-10 text-center text-sm text-slate-500">
-        Esta carga no contiene registros para la sección seleccionada.
+        No existen registros para la sección seleccionada.
       </div>
     );
   }
@@ -451,10 +484,13 @@ export default function ControlFinanciero() {
   const [busqueda, setBusqueda] = useState("");
   const [loadingCargas, setLoadingCargas] = useState(true);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
-  const [eliminandoCarga, setEliminandoCarga] = useState(false);
+  const [anulandoCarga, setAnulandoCarga] = useState(false);
+  const [consolidadoVentas, setConsolidadoVentas] = useState(null);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   const cargarDetalle = useCallback(async (id) => {
     if (!id) {
+      setConsolidadoVentas(null);
       setCargaSeleccionada(null);
       setRegistros(registrosIniciales);
       return;
@@ -465,6 +501,7 @@ export default function ControlFinanciero() {
       const { data } = await api.get(
         `/api/contabilidad/control-financiero/cargas/${id}`,
       );
+      setConsolidadoVentas(null);
       setCargaSeleccionada(data.carga || null);
       setRegistros(data.registros || registrosIniciales);
     } catch (error) {
@@ -479,6 +516,42 @@ export default function ControlFinanciero() {
       setLoadingDetalle(false);
     }
   }, []);
+
+  const cargarConsolidadoVentas = async () => {
+    if (filtrosAplicados.estado !== "ACTIVA" || loadingDetalle) return;
+
+    try {
+      setLoadingDetalle(true);
+      const params = Object.fromEntries(
+        Object.entries({
+          fechaInicio: filtrosAplicados.fechaInicio,
+          fechaFin: filtrosAplicados.fechaFin,
+        }).filter(([, value]) => value),
+      );
+      const { data } = await api.get(
+        "/api/contabilidad/control-financiero/cargas/consolidado-ventas",
+        { params },
+      );
+
+      setConsolidadoVentas(data.resumen || null);
+      setCargaSeleccionada(null);
+      setRegistros({
+        caja: [],
+        ventasTv: data.registros?.ventasTv || [],
+        ventasCelular: data.registros?.ventasCelular || [],
+      });
+      setTabActivo("ventasTv");
+      setBusqueda("");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        getErrorMessage(error, "No se pudo consolidar las cargas activas."),
+        "error",
+      );
+    } finally {
+      setLoadingDetalle(false);
+    }
+  };
 
   const cargarCargas = useCallback(async () => {
     try {
@@ -503,6 +576,7 @@ export default function ControlFinanciero() {
       await cargarDetalle(nuevasCargas[0]?.id || null);
     } catch (error) {
       setCargas([]);
+      setConsolidadoVentas(null);
       setCargaSeleccionada(null);
       setRegistros(registrosIniciales);
       Swal.fire(
@@ -519,17 +593,34 @@ export default function ControlFinanciero() {
     cargarCargas();
   }, [cargarCargas]);
 
-  const eliminarCarga = async () => {
-    if (!cargaSeleccionada || eliminandoCarga) return;
+  const anularCarga = async () => {
+    if (
+      !cargaSeleccionada ||
+      cargaSeleccionada.estado !== "ACTIVA" ||
+      anulandoCarga
+    ) {
+      return;
+    }
 
     const confirmacion = await Swal.fire({
-      title: `¿Eliminar carga #${cargaSeleccionada.id}?`,
-      text: "Una vez aceptado, esto no se puede deshacer.",
+      title: `¿Anular carga #${cargaSeleccionada.id}?`,
+      text: "Esta carga dejará de considerarse en los totales activos, pero sus registros se conservarán como historial.",
       icon: "warning",
+      input: "textarea",
+      inputLabel: "Motivo de anulación",
+      inputPlaceholder: "Escribe el motivo de la anulación...",
+      inputAttributes: {
+        maxlength: "1000",
+        "aria-label": "Motivo de anulación",
+      },
+      inputValidator: (value) =>
+        String(value || "").trim()
+          ? undefined
+          : "El motivo de anulación es obligatorio.",
       showCancelButton: true,
-      confirmButtonText: "Sí, eliminar",
+      confirmButtonText: "Sí, anular",
       cancelButtonText: "Cancelar",
-      confirmButtonColor: "#dc2626",
+      confirmButtonColor: "#d97706",
       cancelButtonColor: "#64748b",
       reverseButtons: true,
     });
@@ -537,18 +628,23 @@ export default function ControlFinanciero() {
     if (!confirmacion.isConfirmed) return;
 
     try {
-      setEliminandoCarga(true);
-      await api.delete(
-        `/api/contabilidad/control-financiero/cargas/${cargaSeleccionada.id}`,
+      setAnulandoCarga(true);
+      await api.patch(
+        `/api/contabilidad/control-financiero/cargas/${cargaSeleccionada.id}/anular`,
+        { motivo: String(confirmacion.value || "").trim() },
       );
 
       await Swal.fire(
-        "Carga eliminada",
-        "La carga y todos sus registros fueron eliminados.",
+        "Carga anulada",
+        "La carga fue anulada y todos sus registros se conservaron como historial.",
         "success",
       );
 
-      if (cargas.length === 1 && pagina > 1) {
+      if (
+        filtrosAplicados.estado === "ACTIVA" &&
+        cargas.length === 1 &&
+        pagina > 1
+      ) {
         setPagina((actual) => Math.max(1, actual - 1));
       } else {
         await cargarCargas();
@@ -556,11 +652,11 @@ export default function ControlFinanciero() {
     } catch (error) {
       Swal.fire(
         "Error",
-        getErrorMessage(error, "No se pudo eliminar la carga."),
+        getErrorMessage(error, "No se pudo anular la carga."),
         "error",
       );
     } finally {
-      setEliminandoCarga(false);
+      setAnulandoCarga(false);
     }
   };
 
@@ -582,6 +678,55 @@ export default function ControlFinanciero() {
     () => crearResumenCaja(registros.caja || []),
     [registros.caja],
   );
+  const modoConsolidado = Boolean(consolidadoVentas);
+  const tabsVisibles = modoConsolidado
+    ? tabs.filter(({ id }) => id !== "caja")
+    : tabs;
+
+  const exportarSeccionExcel = async () => {
+    const registrosExportar = registros[tabActivo] || [];
+    if (!registrosExportar.length || exportandoExcel) {
+      if (!registrosExportar.length) {
+        Swal.fire(
+          "Sin datos",
+          "No existen registros en esta sección para exportar.",
+          "info",
+        );
+      }
+      return;
+    }
+
+    try {
+      setExportandoExcel(true);
+      const contexto = modoConsolidado
+        ? `Consolidado de ${consolidadoVentas.cargas} cargas activas`
+        : `Carga #${cargaSeleccionada.id} - ${formatFechaReporte(
+            cargaSeleccionada.fechaReporte,
+          )}`;
+      const workbook = crearLibroControlFinanciero({
+        tipo: tabActivo,
+        registros: registrosExportar,
+        resumenCaja,
+        contexto,
+      });
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const nombreArchivo = crearNombreExcelControlFinanciero({
+        tipo: tabActivo,
+        carga: cargaSeleccionada,
+        consolidado: modoConsolidado,
+        filtros: filtrosAplicados,
+      });
+      saveAs(blob, nombreArchivo);
+    } catch (error) {
+      console.error("Error exportando control financiero:", error);
+      Swal.fire("Error", "No se pudo generar el archivo Excel.", "error");
+    } finally {
+      setExportandoExcel(false);
+    }
+  };
 
   const registrosVisibles = useMemo(() => {
     const termino = busqueda.trim().toLocaleLowerCase("es");
@@ -613,7 +758,7 @@ export default function ControlFinanciero() {
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-emerald-700">
+              <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-green-700">
                 <BarChart3 size={18} /> Contabilidad
               </p>
               <h1 className="mt-1 text-2xl font-bold text-slate-900">Control financiero</h1>
@@ -624,7 +769,7 @@ export default function ControlFinanciero() {
 
             <form
               onSubmit={aplicarFiltros}
-              className="grid gap-3 sm:grid-cols-[150px_150px_auto] sm:items-end"
+              className="grid gap-3 sm:grid-cols-[150px_150px_160px_auto] sm:items-end"
             >
               <label className="grid gap-1 text-xs font-semibold text-slate-600">
                 Reporte desde
@@ -654,6 +799,23 @@ export default function ControlFinanciero() {
                   className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 />
               </label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                Estado
+                <select
+                  value={filtros.estado}
+                  onChange={(event) =>
+                    setFiltros((actual) => ({
+                      ...actual,
+                      estado: event.target.value,
+                    }))
+                  }
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                >
+                  <option value="ACTIVA">Activas</option>
+                  <option value="ANULADA">Anuladas</option>
+                  <option value="TODAS">Todas</option>
+                </select>
+              </label>
               <button
                 type="submit"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 text-sm font-semibold text-white hover:bg-slate-700"
@@ -670,7 +832,22 @@ export default function ControlFinanciero() {
               <h2 className="font-semibold text-slate-900">Cargas generadas</h2>
               <p className="text-sm text-slate-500">{paginacion.total} cargas guardadas</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {filtrosAplicados.estado === "ACTIVA" && paginacion.total > 0 && (
+                <button
+                  type="button"
+                  onClick={cargarConsolidadoVentas}
+                  disabled={loadingCargas || loadingDetalle}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition disabled:opacity-50 ${
+                    modoConsolidado
+                      ? "border-green-500 bg-green-600 text-white"
+                      : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                  }`}
+                >
+                  <FileSpreadsheet size={17} />
+                  {modoConsolidado ? "Todas seleccionadas" : "Seleccionar todas"}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={pagina <= 1 || loadingCargas}
@@ -712,14 +889,17 @@ export default function ControlFinanciero() {
                     onClick={() => cargarDetalle(carga.id)}
                     className={`min-w-64 rounded-lg border p-4 text-left transition ${
                       activa
-                        ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
-                        : "border-slate-200 hover:border-emerald-200 hover:bg-slate-50"
+                        ? "border-green-400 bg-green-50 ring-2 ring-green-100"
+                        : "border-slate-200 hover:border-green-200 hover:bg-slate-50"
                     }`}
                   >
                     <p className="truncate font-semibold text-slate-900">
                       Carga #{carga.id}
                     </p>
-                    <p className="mt-1 text-sm font-medium text-emerald-700">
+                    <div className="mt-2">
+                      <EstadoBadge estado={carga.estado} />
+                    </div>
+                    <p className="mt-1 text-sm font-medium text-green-700">
                       {formatFechaReporte(carga.fechaReporte)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -741,51 +921,113 @@ export default function ControlFinanciero() {
           )}
         </section>
 
-        {cargaSeleccionada && (
+        {(cargaSeleccionada || consolidadoVentas) && (
           <>
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <StatCard
-                label="Pagos de caja"
-                value={money.format(cargaSeleccionada.totalPagosCaja)}
-                icon={<DollarSign size={20} />}
-              />
+              {modoConsolidado ? (
+                <StatCard
+                  label="Cargas activas"
+                  value={consolidadoVentas.cargas}
+                  icon={<FileSpreadsheet size={20} />}
+                />
+              ) : (
+                <StatCard
+                  label="Pagos de caja"
+                  value={money.format(cargaSeleccionada.totalPagosCaja)}
+                  icon={<DollarSign size={20} />}
+                />
+              )}
               <StatCard
                 label="Ventas TV"
-                value={money.format(cargaSeleccionada.totalVentasTv)}
+                value={money.format(
+                  modoConsolidado
+                    ? consolidadoVentas.totalVentasTv
+                    : cargaSeleccionada.totalVentasTv,
+                )}
                 icon={<Monitor size={20} />}
                 tone="blue"
               />
               <StatCard
                 label="Entradas TV"
-                value={money.format(cargaSeleccionada.totalEntradasTv)}
+                value={money.format(
+                  modoConsolidado
+                    ? consolidadoVentas.totalEntradasTv
+                    : cargaSeleccionada.totalEntradasTv,
+                )}
                 icon={<DollarSign size={20} />}
                 tone="amber"
               />
               <StatCard
                 label="Ventas celular"
-                value={money.format(cargaSeleccionada.totalVentasCelular)}
+                value={money.format(
+                  modoConsolidado
+                    ? consolidadoVentas.totalVentasCelular
+                    : cargaSeleccionada.totalVentasCelular,
+                )}
                 icon={<Smartphone size={20} />}
                 tone="violet"
               />
               <StatCard
                 label="Entradas celular"
-                value={money.format(cargaSeleccionada.totalEntradasCelular)}
+                value={money.format(
+                  modoConsolidado
+                    ? consolidadoVentas.totalEntradasCelular
+                    : cargaSeleccionada.totalEntradasCelular,
+                )}
                 icon={<DollarSign size={20} />}
                 tone="cyan"
               />
             </section>
 
+            {cargaSeleccionada?.estado === "ANULADA" && (
+              <section className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Ban size={18} />
+                      <h2 className="font-bold">Carga anulada</h2>
+                    </div>
+                    <p className="mt-2 text-sm">
+                      Esta carga se conserva como historial y no forma parte de
+                      los totales activos.
+                    </p>
+                    <p className="mt-2 text-sm">
+                      <span className="font-semibold">Motivo:</span>{" "}
+                      {cargaSeleccionada.motivoAnulacion || "No disponible"}
+                    </p>
+                  </div>
+                  <div className="text-sm sm:text-right">
+                    <p className="font-semibold">
+                      {cargaSeleccionada.usuarioAnulador?.nombre ||
+                        "Usuario no disponible"}
+                    </p>
+                    <p>{formatFechaHora(cargaSeleccionada.anuladoEn)}</p>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <FileSpreadsheet size={19} className="text-emerald-600" />
+                    <FileSpreadsheet size={19} className="text-green-600" />
                     <h2 className="truncate font-semibold text-slate-900">
-                      {cargaSeleccionada.archivoGenerado}
+                      {modoConsolidado
+                        ? "Consolidado de todas las cargas activas"
+                        : cargaSeleccionada.archivoGenerado}
                     </h2>
+                    {!modoConsolidado && (
+                      <EstadoBadge estado={cargaSeleccionada.estado} />
+                    )}
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    Generado por {cargaSeleccionada.usuario?.nombre || "usuario no disponible"}
+                    {modoConsolidado
+                      ? `${consolidadoVentas.cargas} cargas incluidas. Las cuotas no forman parte de este consolidado.`
+                      : `Generado por ${
+                          cargaSeleccionada.usuario?.nombre ||
+                          "usuario no disponible"
+                        }`}
                   </p>
                 </div>
                 <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
@@ -799,23 +1041,38 @@ export default function ControlFinanciero() {
                       value={busqueda}
                       onChange={(event) => setBusqueda(event.target.value)}
                       placeholder="Buscar en la tabla..."
-                      className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-emerald-400"
+                      className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-green-400"
                     />
                   </label>
                   <button
                     type="button"
-                    onClick={eliminarCarga}
-                    disabled={eliminandoCarga}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={exportarSeccionExcel}
+                    disabled={
+                      exportandoExcel || !(registros[tabActivo]?.length > 0)
+                    }
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Trash2 size={17} />
-                    {eliminandoCarga ? "Eliminando..." : "Eliminar carga"}
+                    <FaFileExcel size={17} />
+                    {exportandoExcel
+                      ? "Generando..."
+                      : `Exportar`}
                   </button>
+                  {cargaSeleccionada?.estado === "ACTIVA" && (
+                    <button
+                      type="button"
+                      onClick={anularCarga}
+                      disabled={anulandoCarga}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Ban size={17} />
+                      {anulandoCarga ? "Anulando..." : "Anular carga"}
+                    </button>
+                  )}
                 </div>
               </div>
 
               <div className="flex overflow-x-auto border-b border-slate-200 px-4">
-                {tabs.map(({ id, label, icon: Icon }) => (
+                {tabsVisibles.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
                     type="button"
@@ -825,7 +1082,7 @@ export default function ControlFinanciero() {
                     }}
                     className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold ${
                       tabActivo === id
-                        ? "border-emerald-500 text-emerald-700"
+                        ? "border-green-500 text-green-700"
                         : "border-transparent text-slate-500 hover:text-slate-800"
                     }`}
                   >
@@ -842,7 +1099,7 @@ export default function ControlFinanciero() {
               ) : (
                 tabActivo === "caja" ? (
                   <VistaCaja
-                    key={cargaSeleccionada.id}
+                    key={cargaSeleccionada?.id}
                     resumen={resumenCaja}
                     registros={registrosVisibles}
                   />

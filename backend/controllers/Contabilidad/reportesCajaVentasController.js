@@ -184,11 +184,14 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
 
   try {
     const reportesCaja = req.files?.reportesCaja || [];
-    if (!reportesCaja.length) {
+    const ventasTv = req.files?.ventasTv || [];
+    const ventasCelular = req.files?.ventasCelular || [];
+    if (!reportesCaja.length && !ventasTv.length && !ventasCelular.length) {
       await limpiarTemporal(tempRoot);
       return res.status(400).json({
         ok: false,
-        message: "Sube al menos un PDF de reporte de caja para generar el cierre.",
+        message:
+          "Sube al menos un PDF de caja, ventas TV o ventas celular para generar el Excel.",
       });
     }
 
@@ -217,9 +220,13 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
     const datosControlFinanciero = JSON.parse(
       await fsp.readFile(dataOutputFile, "utf8"),
     );
-    const fechaReporte = obtenerFechaReporte(datosControlFinanciero.registrosCaja);
+    const fechaReporte = obtenerFechaReporte([
+      ...(datosControlFinanciero.registrosCaja || []),
+      ...(datosControlFinanciero.ventasTv || []),
+      ...(datosControlFinanciero.ventasCelular || []),
+    ]);
     if (!fechaReporte) {
-      throw new Error("No se pudo determinar la fecha del reporte desde el PDF de caja.");
+      throw new Error("No se pudo determinar la fecha desde los PDFs procesados.");
     }
     const filename = `CIERRE_CAJA_${fechaReporte.replace(/-/g, "")}.xlsx`;
     const persistencia = await guardarCargaControlFinanciero({

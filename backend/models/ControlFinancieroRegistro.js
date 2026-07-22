@@ -109,6 +109,14 @@ const ControlFinancieroRegistro = sequelize.define(
         fields: ["cargaId", "archivoHash"],
       },
     ],
+    hooks: {
+      beforeDestroy() {
+        throw new Error("Los registros financieros no se pueden eliminar.");
+      },
+      beforeBulkDestroy() {
+        throw new Error("Los registros financieros no se pueden eliminar.");
+      },
+    },
   },
 );
 

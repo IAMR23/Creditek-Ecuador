@@ -95,10 +95,10 @@ export default function ExtraccionReportesCaja() {
   };
 
   const generarExcel = async () => {
-    if (!reportesCaja.length) {
+    if (!totalArchivos) {
       Swal.fire(
-        "Faltan reportes de caja",
-        "Selecciona al menos un PDF de reporte de caja para generar el cierre.",
+        "Faltan archivos",
+        "Selecciona al menos un PDF de caja, ventas TV o ventas celular.",
         "info",
       );
       return;
@@ -236,15 +236,15 @@ export default function ExtraccionReportesCaja() {
                 Extraccion de reportes caja
               </h1>
               <p className="mt-1 text-sm text-slate-600">
-                Consolida los reportes de caja y adjunta las ventas de TV y celular
-                en un solo Excel.
+                Procesa reportes de caja, ventas TV y ventas celular. Puedes
+                generar el Excel con uno o varios tipos.
               </p>
             </div>
 
             <button
               type="button"
               onClick={generarExcel}
-              disabled={loading || !reportesCaja.length}
+              disabled={loading || !totalArchivos}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
@@ -258,7 +258,6 @@ export default function ExtraccionReportesCaja() {
             <SelectorPdfs
               titulo="Reportes de caja"
               descripcion="PDFs de cobranzas usados para construir el cierre."
-              requerido
               files={reportesCaja}
               inputRef={reportesCajaInputRef}
               loading={loading}
@@ -287,7 +286,7 @@ export default function ExtraccionReportesCaja() {
             <ResumenCarga label="Tamano total" value={formatBytes(totalSize)} />
             <ResumenCarga
               label="Estado"
-              value={loading ? "Procesando" : reportesCaja.length ? "Listo" : "Pendiente"}
+              value={loading ? "Procesando" : totalArchivos ? "Listo" : "Pendiente"}
               destacado
             />
           </div>
@@ -459,7 +458,6 @@ export default function ExtraccionReportesCaja() {
 function SelectorPdfs({
   titulo,
   descripcion,
-  requerido = false,
   files,
   inputRef,
   loading,
@@ -512,7 +510,7 @@ function SelectorPdfs({
         </span>
       </div>
       <span className="mt-5 text-base font-semibold text-slate-900">
-        {titulo} {requerido && <span className="text-red-500">*</span>}
+        {titulo}
       </span>
       <span className="mt-1 flex-1 text-sm text-slate-500">{descripcion}</span>
       <span className="mt-4 text-sm font-semibold text-emerald-700">

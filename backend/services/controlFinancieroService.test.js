@@ -134,14 +134,100 @@ describe("controlFinancieroService", () => {
     );
   });
 
-  test("rechaza cargas sin registros de caja", async () => {
+  test("guarda una carga que contiene solamente ventas TV", async () => {
+    const resultado = await guardarCargaControlFinanciero({
+      usuarioId: 7,
+      archivoGenerado: "CIERRE_CAJA_20260723.xlsx",
+      datos: {
+        registrosCaja: [],
+        ventasTv: [
+          {
+            CONTRATO: "TV-200",
+            FECHA: "7/23/26 11:00 AM",
+            VENDEDOR: "VENDEDOR TV",
+            CLIENTE: "CLIENTE TV",
+            MODELO: "TV 43",
+            VENTAS: 450,
+            ENTRADAS: 45,
+            ARCHIVO: "tv.pdf",
+            ARCHIVO_HASH: "d".repeat(64),
+          },
+        ],
+        ventasCelular: [],
+      },
+    });
+
+    expect(resultado.registrosAgregados).toBe(1);
+    expect(ControlFinancieroCarga.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fechaReporte: "2026-07-23",
+        registrosCaja: 0,
+        registrosVentasTv: 1,
+        registrosVentasCelular: 0,
+        totalPagosCaja: 0,
+        totalVentasTv: 450,
+        totalEntradasTv: 45,
+      }),
+      expect.any(Object),
+    );
+    expect(ControlFinancieroRegistro.bulkCreate.mock.calls[0][0][0]).toEqual(
+      expect.objectContaining({ tipoRegistro: "VENTA_TV", cargaId: 19 }),
+    );
+  });
+
+  test("guarda una carga que contiene solamente ventas celular", async () => {
+    const resultado = await guardarCargaControlFinanciero({
+      usuarioId: 7,
+      archivoGenerado: "CIERRE_CAJA_20260724.xlsx",
+      datos: {
+        registrosCaja: [],
+        ventasTv: [],
+        ventasCelular: [
+          {
+            CONTRATO: "CEL-300",
+            FECHA: "7/24/26 12:00 PM",
+            VENDEDOR: "VENDEDOR CELULAR",
+            CLIENTE: "CLIENTE CELULAR",
+            MODELO: "CELULAR X",
+            IMEI: "123456789012345",
+            VENTAS: 300,
+            ENTRADAS: 30,
+            ARCHIVO: "celular.pdf",
+            ARCHIVO_HASH: "e".repeat(64),
+          },
+        ],
+      },
+    });
+
+    expect(resultado.registrosAgregados).toBe(1);
+    expect(ControlFinancieroCarga.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fechaReporte: "2026-07-24",
+        registrosCaja: 0,
+        registrosVentasTv: 0,
+        registrosVentasCelular: 1,
+        totalVentasCelular: 300,
+        totalEntradasCelular: 30,
+      }),
+      expect.any(Object),
+    );
+    expect(ControlFinancieroRegistro.bulkCreate.mock.calls[0][0][0]).toEqual(
+      expect.objectContaining({
+        tipoRegistro: "VENTA_CELULAR",
+        cargaId: 19,
+        imei: "123456789012345",
+      }),
+    );
+  });
+
+  test("rechaza una carga sin registros validos de ningun tipo", async () => {
     await expect(
       guardarCargaControlFinanciero({
         usuarioId: 7,
         archivoGenerado: "CIERRE_CAJA.xlsx",
         datos: { registrosCaja: [], ventasTv: [], ventasCelular: [] },
       }),
-    ).rejects.toThrow("No existen registros de caja");
+    ).rejects.toThrow("No existen registros validos");
 
     expect(ControlFinancieroCarga.create).not.toHaveBeenCalled();
   });
@@ -213,6 +299,11 @@ describe("controlFinancieroService", () => {
         archivosAgregados: 2,
         archivosOmitidos: 1,
         registrosAgregados: 2,
+      }),
+    );
+    expect(ControlFinancieroCarga.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { fechaReporte: "2026-07-21", estado: "ACTIVA" },
       }),
     );
     expect(ControlFinancieroCarga.create).not.toHaveBeenCalled();

@@ -17,6 +17,32 @@ const ControlFinancieroCarga = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: true,
     },
+    estado: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "ACTIVA",
+      validate: {
+        isIn: [["ACTIVA", "ANULADA", "REEMPLAZADA"]],
+      },
+    },
+    motivoAnulacion: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    anuladoPor: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+    anuladoEn: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     registrosCaja: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -77,8 +103,24 @@ const ControlFinancieroCarga = sequelize.define(
         name: "control_financiero_cargas_fecha_reporte_idx",
         fields: ["fechaReporte"],
       },
+      {
+        name: "control_financiero_cargas_estado_fecha_idx",
+        fields: ["estado", "fechaReporte"],
+      },
       { name: "control_financiero_cargas_usuario_idx", fields: ["usuarioId"] },
     ],
+    hooks: {
+      beforeDestroy() {
+        throw new Error(
+          "Las cargas de control financiero no se eliminan; deben anularse.",
+        );
+      },
+      beforeBulkDestroy() {
+        throw new Error(
+          "Las cargas de control financiero no se eliminan; deben anularse.",
+        );
+      },
+    },
   },
 );
 

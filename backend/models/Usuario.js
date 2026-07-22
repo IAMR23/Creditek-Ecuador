@@ -30,6 +30,23 @@ const Usuario = sequelize.define(
       },
     },
 
+    usuario: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      set(value) {
+        const usuarioNormalizado = String(value || "")
+          .trim()
+          .toLowerCase();
+        this.setDataValue("usuario", usuarioNormalizado || null);
+      },
+      validate: {
+        is: {
+          args: /^[a-z0-9._-]{3,50}$/,
+          msg: "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, numeros, punto, guion o guion bajo.",
+        },
+      },
+    },
+
     password: {
       type: DataTypes.STRING,
       allowNull: false,

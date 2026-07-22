@@ -22,6 +22,7 @@ export default function Usuarios() {
     nombre: "",
     cedula: "",
     email: "",
+    usuario: "",
     password: "",
     rolId: "",
     rolIds: [],
@@ -40,6 +41,7 @@ export default function Usuarios() {
     nombre: "",
     cedula: "",
     email: "",
+    usuario: "",
     password: "",
     rolId: "",
     rolIds: [],
@@ -65,6 +67,7 @@ export default function Usuarios() {
       nombre: usuario.nombre || "",
       cedula: usuario.cedula || "",
       email: usuario.email || "",
+      usuario: usuario.usuario || "",
       password: "",
       rolId: rolIds[0] || "",
       rolIds,
@@ -87,6 +90,7 @@ export default function Usuarios() {
       nombre: "",
       cedula: "",
       email: "",
+      usuario: "",
       password: "",
       rolId: "",
       rolIds: [],
@@ -153,6 +157,7 @@ export default function Usuarios() {
         nombre: form.nombre,
         cedula: form.cedula,
         email: form.email,
+        usuario: form.usuario,
         password: form.password,
         rolId: form.rolIds[0] || form.rolId,
         rolIds: form.rolIds,
@@ -169,6 +174,7 @@ export default function Usuarios() {
         nombre: "",
         cedula: "",
         email: "",
+        usuario: "",
         password: "",
         rolId: "",
         rolIds: [],
@@ -207,6 +213,7 @@ export default function Usuarios() {
         nombre: editForm.nombre,
         cedula: editForm.cedula,
         email: editForm.email,
+        usuario: editForm.usuario,
         password: editForm.password || undefined,
         rolId: editForm.rolIds[0] || editForm.rolId,
         rolIds: editForm.rolIds,
@@ -246,11 +253,13 @@ export default function Usuarios() {
         if (!q) return true;
         const nombre = (u.nombre || "").toLowerCase();
         const email = (u.email || "").toLowerCase();
+        const usuario = (u.usuario || "").toLowerCase();
         const cedula = (u.cedula || "").toLowerCase();
         const telefono = (u.telefono || "").toLowerCase();
         return (
           nombre.includes(q) ||
           email.includes(q) ||
+          usuario.includes(q) ||
           cedula.includes(q) ||
           telefono.includes(q)
         );
@@ -353,6 +362,25 @@ export default function Usuarios() {
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Nombre de usuario
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: juan.perez"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={form.usuario}
+                  onChange={(e) =>
+                    setForm({ ...form, usuario: e.target.value.toLowerCase() })
+                  }
+                  pattern="[a-z0-9._-]{3,50}"
+                  title="Use entre 3 y 50 letras, numeros, puntos, guiones o guiones bajos"
+                  autoComplete="username"
+                  required
                 />
               </div>
 
@@ -529,7 +557,7 @@ export default function Usuarios() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Buscar por nombre, email, cédula o teléfono"
+                  placeholder="Buscar por nombre, usuario, email, cédula o teléfono"
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
                   value={filters.q}
                   onChange={(e) =>
@@ -610,6 +638,9 @@ export default function Usuarios() {
                       <div>
                         <p className="font-semibold text-slate-900">
                           {u.nombre}
+                        </p>
+                        <p className="text-xs font-medium text-emerald-700">
+                          @{u.usuario || "sin-usuario"}
                         </p>
                         <p className="text-sm text-slate-500">{u.email}</p>
                       </div>
@@ -713,6 +744,9 @@ export default function Usuarios() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-bold text-slate-900">{u.nombre}</h3>
+                    <p className="text-xs font-medium text-emerald-700">
+                      @{u.usuario || "sin-usuario"}
+                    </p>
                     <p className="mt-1 text-sm text-slate-500">{u.email}</p>
                   </div>
 
@@ -889,6 +923,28 @@ export default function Usuarios() {
                       onChange={(e) =>
                         setEditForm({ ...editForm, email: e.target.value })
                       }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Nombre de usuario
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: juan.perez"
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={editForm.usuario}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          usuario: e.target.value.toLowerCase(),
+                        })
+                      }
+                      pattern="[a-z0-9._-]{3,50}"
+                      title="Use entre 3 y 50 letras, numeros, puntos, guiones o guiones bajos"
+                      autoComplete="username"
+                      required
                     />
                   </div>
 

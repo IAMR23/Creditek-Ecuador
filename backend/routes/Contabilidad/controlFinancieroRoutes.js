@@ -10,7 +10,8 @@ const router = express.Router();
 router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
 
 router.get("/cargas", controller.listarCargas);
+router.get("/cargas/consolidado-ventas", controller.consolidarVentas);
 router.get("/cargas/:id", controller.obtenerCarga);
-router.delete("/cargas/:id", controller.eliminarCarga);
+router.patch("/cargas/:id/anular", controller.anularCarga);
 
 module.exports = router;
