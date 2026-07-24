@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
-import axios from "axios";
 import {
   MdAdd,
   MdArrowBack,
@@ -10,17 +9,20 @@ import {
   MdSend,
 } from "react-icons/md";
 import Swal from "sweetalert2";
-import { API_URL } from "../../../config";
+import { api } from "../../api/client";
 import {
   clasesEstadoItemFormula,
+  crearItemDetalle,
   crearItemFormula,
   ESTADOS_ITEMS_FORMULA,
+  normalizarItemsDetalle,
   normalizarItemsFormula,
   normalizarRespuestasFormula,
 } from "../../utils/planBatallaRespuestas";
 
 const STORAGE_KEY = "planes_batalla_borrador";
 const ENVIOS_KEY = "planes_batalla_enviados";
+const TIEMPO_LIMITE_GUARDADO_MS = 30000;
 
 const CONDICIONES = {
   inexistencia: {
@@ -30,6 +32,19 @@ const CONDICIONES = {
       "DESE A CONOCER",
       "DESCUBRA LO QUE NECESITA O DESEA",
       "HÁGALO, PRODUZCALO O PRESÉNTELO",
+    ],
+  },
+  inexistencia_extendida: {
+    label: "Inexistencia Extendida",
+    formula: [
+      "ENCUENTRA Y PONTE EN LÍNEA DE COMUNICACIÓN QUE VAYAS A NECESITAR PARA DAR Y OBTENER INFORMACIÓN RELATIVA A TUS DEBERES Y SUMINISTROS",
+      "DATE A CONOCER, JUNTO CON LA DESIGNACIÓN DE TU PUESTO Y TUS DEBERES, A TODOS LOS TERMINALES QUE NECESITARÁS PARA LA OBTENCIÓN DE INFORMACIÓN Y LA ENTREGA DE DATOS",
+      "DESCUBRE DE TUS SUPERIORES, COMPAÑEROS DE TRABAJO Y CUALQUIER PÚBLICO CON EL QUE PUEDAS NECESITAR PONERTE EN CONTACTO EN EL CUMPLIMIENTO DE TUS OBLIGACIONES, LO QUE CADA UNO DE ELLOS NECESITA Y DESEA",
+      "HAZ, PRODUCE Y PRESENTA LO QUE CADA UNO NECESITA Y DESEA, QUE ESTÉ EN CONFORMIDAD A LA POLÍTICA",
+      "MANTÉN LAS LÍNEAS DE COMUNICACIÓN QUE TIENES Y AMPLÍALAS PARA OBTENER OTRA INFORMACIÓN QUE AHORA ENCUENTRES QUE NECESITAS DE MANERA HABITUAL",
+      "MANTÉN TUS LÍNEAS DE ORIGINACIÓN PARA INFORMAR A OTROS DE LO QUE ESTÁS HACIENDO EXACTAMENTE, PERO SOLO A AQUELLOS QUE REALMENTE NECESITAN LA INFORMACIÓN",
+      "SIMPLIFICA Y HAZ DE FORMA MÁS EFICIENTE LO QUE ESTÁS HACIENDO, PRODUCIÉNDOLO Y PRESENTÁNDOLO DE MODO QUE SE ACERQUE MÁS A LO QUE REALMENTE SE NECESITA Y SE DESEA",
+      "DANDO Y RECIBIENDO INFORMACIÓN PLENA RESPECTO A TUS PRODUCTOS, HAZ, PRODUCE Y PRESENTA, DE MANERA HABITUAL EN TU PUESTO, UN PRODUCTO MEJOR",
     ],
   },
   peligro: {
@@ -86,7 +101,9 @@ const ESTADOS = ["Pendiente", "En progreso", "Completado", "Bloqueado"];
 
 const crearDetalleVacio = () =>
   BLOQUES.reduce((acc, bloque) => {
-    acc[bloque] = { estado: "Pendiente", descripcion: "" };
+    acc[bloque] = [
+      crearItemDetalle({}, { estadoPredeterminado: "Pendiente" }),
+    ];
     return acc;
   }, {});
 
@@ -113,24 +130,15 @@ const normalizarFormularioGuardado = (guardado) => {
     : base.condicion;
 
   const detalle = BLOQUES.reduce((acc, bloque) => {
-    if (detalleGuardado[bloque]) {
-      acc[bloque] = {
-        estado: detalleGuardado[bloque].estado || "Pendiente",
-        descripcion: detalleGuardado[bloque].descripcion || "",
-      };
-      return acc;
-    }
+    const detalleBloque =
+      detalleGuardado[bloque] !== undefined
+        ? detalleGuardado[bloque]
+        : planAnterior[bloque];
 
-    const filasAnteriores = Array.isArray(planAnterior[bloque])
-      ? planAnterior[bloque]
-      : [];
-    const primeraFilaConDatos =
-      filasAnteriores.find((fila) => fila?.estado || fila?.descripcion) || {};
-
-    acc[bloque] = {
-      estado: primeraFilaConDatos.estado || "Pendiente",
-      descripcion: primeraFilaConDatos.descripcion || "",
-    };
+    acc[bloque] = normalizarItemsDetalle(detalleBloque, {
+      incluirVacio: true,
+      estadoPredeterminado: "Pendiente",
+    });
     return acc;
   }, {});
 
@@ -159,10 +167,6 @@ const leerUsuarioToken = () => {
   }
 };
 
-const getAuthHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-});
-
 const getUsuarioAgenciaId = (usuario) =>
   usuario?.agenciaPrincipal?.usuarioAgenciaId || usuario?.usuarioAgenciaId || "";
 
@@ -173,6 +177,9 @@ const getStorageKey = (usuario) => {
     : STORAGE_KEY;
 };
 
+const getIdempotenciaStorageKey = (usuario) =>
+  `${getStorageKey(usuario)}_idempotencia`;
+
 const getEnviosKey = (usuario) => {
   const usuarioAgenciaId = getUsuarioAgenciaId(usuario);
   return usuarioAgenciaId
@@ -180,10 +187,36 @@ const getEnviosKey = (usuario) => {
     : ENVIOS_KEY;
 };
 
+const guardarPlanEnCache = (planes, planGuardado, planId = null) => {
+  const lista = Array.isArray(planes) ? planes : [];
+  if (!planId) return [planGuardado, ...lista];
+
+  let encontrado = false;
+  const actualizados = lista.map((plan) => {
+    if (String(plan.id) !== String(planId)) return plan;
+    encontrado = true;
+    return planGuardado;
+  });
+
+  return encontrado ? actualizados : [planGuardado, ...actualizados];
+};
+
+const crearClaveIdempotencia = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
 export default function PlanesBatalla() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const planEnEdicion = location.state?.planEditar || null;
+  const planIdEdicion = planEnEdicion?.id || null;
   const [usuario, setUsuario] = useState(null);
   const [form, setForm] = useState(crearFormularioInicial);
+  const [guardando, setGuardando] = useState(false);
+  const guardandoRef = useRef(false);
+  const claveIdempotenciaRef = useRef(crearClaveIdempotencia());
 
   const condicionActual = CONDICIONES[form.condicion] || CONDICIONES.inexistencia;
   const agencia = usuario?.agenciaPrincipal;
@@ -201,6 +234,21 @@ export default function PlanesBatalla() {
     const usuarioToken = leerUsuarioToken();
     setUsuario(usuarioToken);
 
+    if (planEnEdicion?.plan) {
+      setForm(normalizarFormularioGuardado(planEnEdicion.plan));
+      return;
+    }
+
+    const claveGuardada = localStorage.getItem(
+      getIdempotenciaStorageKey(usuarioToken),
+    );
+    claveIdempotenciaRef.current =
+      claveGuardada || crearClaveIdempotencia();
+    localStorage.setItem(
+      getIdempotenciaStorageKey(usuarioToken),
+      claveIdempotenciaRef.current,
+    );
+
     try {
       setForm(
         normalizarFormularioGuardado(
@@ -210,12 +258,16 @@ export default function PlanesBatalla() {
     } catch {
       setForm(crearFormularioInicial());
     }
-  }, []);
+  }, [planEnEdicion]);
 
   useEffect(() => {
-    if (!usuario) return;
+    if (!usuario || planEnEdicion) return;
     localStorage.setItem(getStorageKey(usuario), JSON.stringify(form));
-  }, [form, usuario]);
+    localStorage.setItem(
+      getIdempotenciaStorageKey(usuario),
+      claveIdempotenciaRef.current,
+    );
+  }, [form, planEnEdicion, usuario]);
 
   const actualizarCampo = (campo, value) => {
     setForm((prev) => ({ ...prev, [campo]: value }));
@@ -268,93 +320,209 @@ export default function PlanesBatalla() {
     });
   };
 
-  const actualizarDetalle = (bloque, campo, value) => {
+  const actualizarItemDetalle = (bloque, itemIndex, campo, value) => {
     setForm((prev) => ({
       ...prev,
       detalle: {
         ...prev.detalle,
-        [bloque]: {
-          ...(prev.detalle[bloque] || {}),
-          [campo]: value,
-        },
+        [bloque]: normalizarItemsDetalle(prev.detalle?.[bloque], {
+          incluirVacio: true,
+          estadoPredeterminado: "Pendiente",
+        }).map((item, index) =>
+          index === itemIndex ? { ...item, [campo]: value } : item,
+        ),
       },
     }));
   };
 
+  const agregarItemDetalle = (bloque) => {
+    setForm((prev) => ({
+      ...prev,
+      detalle: {
+        ...prev.detalle,
+        [bloque]: [
+          ...normalizarItemsDetalle(prev.detalle?.[bloque], {
+            incluirVacio: true,
+            estadoPredeterminado: "Pendiente",
+          }),
+          crearItemDetalle({}, { estadoPredeterminado: "Pendiente" }),
+        ],
+      },
+    }));
+  };
+
+  const eliminarItemDetalle = (bloque, itemIndex) => {
+    setForm((prev) => {
+      const items = normalizarItemsDetalle(prev.detalle?.[bloque], {
+        incluirVacio: true,
+        estadoPredeterminado: "Pendiente",
+      });
+
+      if (items.length <= 1) return prev;
+
+      return {
+        ...prev,
+        detalle: {
+          ...prev.detalle,
+          [bloque]: items.filter((_, index) => index !== itemIndex),
+        },
+      };
+    });
+  };
+
   const limpiarPlan = async () => {
     const confirm = await Swal.fire({
-      title: "Limpiar plan?",
-      text: "Se borrara el borrador actual.",
+      title: planEnEdicion ? "Restaurar plan?" : "Limpiar plan?",
+      text: planEnEdicion
+        ? "Se descartaran los cambios realizados en esta edicion."
+        : "Se borrara el borrador actual.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Si, limpiar",
+      confirmButtonText: planEnEdicion ? "Si, restaurar" : "Si, limpiar",
       cancelButtonText: "Cancelar",
     });
 
     if (!confirm.isConfirmed) return;
 
-    const nuevoFormulario = crearFormularioInicial();
+    const nuevoFormulario = planEnEdicion?.plan
+      ? normalizarFormularioGuardado(planEnEdicion.plan)
+      : crearFormularioInicial();
     setForm(nuevoFormulario);
-    localStorage.setItem(getStorageKey(usuario), JSON.stringify(nuevoFormulario));
+    if (!planEnEdicion) {
+      claveIdempotenciaRef.current = crearClaveIdempotencia();
+      localStorage.setItem(
+        getIdempotenciaStorageKey(usuario),
+        claveIdempotenciaRef.current,
+      );
+      localStorage.setItem(
+        getStorageKey(usuario),
+        JSON.stringify(nuevoFormulario),
+      );
+    }
   };
 
   const enviarPlan = async () => {
+    if (guardandoRef.current) return;
+
     if (!form.condicion) {
       Swal.fire("Validacion", "Selecciona una condicion", "warning");
       return;
     }
 
+    guardandoRef.current = true;
+    setGuardando(true);
+
     const envioLocal = {
-      id: Date.now(),
-      enviadoEn: new Date().toISOString(),
+      id: planIdEdicion || claveIdempotenciaRef.current,
+      enviadoEn: planEnEdicion?.enviadoEn || new Date().toISOString(),
       usuario: {
-        id: usuario?.id || null,
-        nombre: usuario?.nombre || "",
-        usuarioAgenciaId: agencia?.usuarioAgenciaId || null,
+        id: planEnEdicion?.usuario?.id || usuario?.id || null,
+        nombre: planEnEdicion?.usuario?.nombre || usuario?.nombre || "",
+        usuarioAgenciaId:
+          planEnEdicion?.usuario?.usuarioAgenciaId ||
+          agencia?.usuarioAgenciaId ||
+          null,
       },
       agencia: {
-        id: agencia?.agenciaId || null,
-        nombre: agencia?.nombre || "",
+        id: planEnEdicion?.agencia?.id || agencia?.agenciaId || null,
+        nombre: planEnEdicion?.agencia?.nombre || agencia?.nombre || "",
       },
       plan: form,
     };
 
     try {
-      const { data } = await axios.post(
-        `${API_URL}/api/planes-batalla`,
-        { ...form, fechaFin: null },
-        { headers: getAuthHeaders() },
-      );
+      const payload = {
+        ...form,
+        fechaFin: null,
+        ...(!planIdEdicion && {
+          claveIdempotencia: claveIdempotenciaRef.current,
+        }),
+      };
+      const { data } = planIdEdicion
+        ? await api.put(`/api/planes-batalla/${planIdEdicion}`, payload, {
+            timeout: TIEMPO_LIMITE_GUARDADO_MS,
+          })
+        : await api.post("/api/planes-batalla", payload, {
+            timeout: TIEMPO_LIMITE_GUARDADO_MS,
+          });
 
       const enviosKey = getEnviosKey(usuario);
       const enviosPrevios = JSON.parse(localStorage.getItem(enviosKey) || "[]");
       localStorage.setItem(
         enviosKey,
-        JSON.stringify([data.plan || envioLocal, ...enviosPrevios]),
+        JSON.stringify(
+          guardarPlanEnCache(
+            enviosPrevios,
+            data.plan || envioLocal,
+            planIdEdicion || claveIdempotenciaRef.current,
+          ),
+        ),
       );
-      localStorage.removeItem(getStorageKey(usuario));
+      if (!planEnEdicion) {
+        localStorage.removeItem(getStorageKey(usuario));
+        localStorage.removeItem(getIdempotenciaStorageKey(usuario));
+      }
       setForm(crearFormularioInicial());
 
       await Swal.fire({
         icon: "success",
-        title: "Completado plan de batalla",
-        text: "Exitos esta semana",
+        title: planEnEdicion
+          ? "Plan de batalla actualizado"
+          : "Completado plan de batalla",
+        text: planEnEdicion
+          ? "Los cambios fueron guardados correctamente."
+          : "Exitos esta semana",
         confirmButtonText: "Aceptar",
       });
-      navigate("/vendedor-panel");
+      navigate(
+        planEnEdicion ? "/mis-planes-batalla" : "/vendedor-panel",
+        { replace: true },
+      );
     } catch (error) {
+      if (planEnEdicion && error.response) {
+        await Swal.fire({
+          icon: "error",
+          title: "No se pudo actualizar el plan",
+          text:
+            error.response?.data?.message ||
+            "El servidor rechazo la actualizacion.",
+          confirmButtonText: "Aceptar",
+        });
+        return;
+      }
+
       const enviosKey = getEnviosKey(usuario);
       const enviosPrevios = JSON.parse(localStorage.getItem(enviosKey) || "[]");
-      localStorage.setItem(enviosKey, JSON.stringify([envioLocal, ...enviosPrevios]));
+      localStorage.setItem(
+        enviosKey,
+        JSON.stringify(
+          guardarPlanEnCache(
+            enviosPrevios,
+            envioLocal,
+            planIdEdicion || claveIdempotenciaRef.current,
+          ),
+        ),
+      );
 
       await Swal.fire({
         icon: "warning",
-        title: "Plan guardado localmente",
+        title: planEnEdicion
+          ? "Cambios guardados localmente"
+          : "Plan guardado localmente",
         text:
           error.response?.data?.message ||
-          "No se pudo enviar al servidor. Se guardo una copia local.",
+          (planEnEdicion
+            ? "No se pudo conectar con el servidor. Se actualizo la copia local."
+            : "No se pudo enviar al servidor. Se guardo una copia local."),
         confirmButtonText: "Aceptar",
       });
+
+      if (planEnEdicion) {
+        navigate("/mis-planes-batalla", { replace: true });
+      }
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(false);
     }
   };
 
@@ -366,10 +534,14 @@ export default function PlanesBatalla() {
             <div>
               <div className="mb-2 inline-flex items-center gap-2 rounded bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
                 <MdOutlineAssignmentTurnedIn size={16} />
-                Plan de batalla semanal
+                {planEnEdicion
+                  ? "Editando plan de batalla"
+                  : "Plan de batalla semanal"}
               </div>
               <h1 className="text-2xl font-bold text-slate-950">
-                Manejo para la formula por condicion
+                {planEnEdicion
+                  ? "Actualizar plan de batalla"
+                  : "Manejo para la formula por condicion"}
               </h1>
             </div>
 
@@ -519,41 +691,99 @@ export default function PlanesBatalla() {
             </section>
 
             <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-              <div className="grid grid-cols-[170px_1fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-600">
-                <div>Estado</div>
-                <div>Descripcion</div>
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-600">
+                Estado y descripción por ítem
               </div>
 
               <div className="divide-y divide-slate-100">
-                {BLOQUES.map((bloque) => (
-                  <div key={bloque} className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-[170px_1fr]">
-                    <div>
-                      <p className="mb-2 text-sm font-bold text-slate-900">{bloque}</p>
-                      <select
-                        value={form.detalle[bloque]?.estado || "Pendiente"}
-                        onChange={(event) =>
-                          actualizarDetalle(bloque, "estado", event.target.value)
-                        }
-                        className="h-10 w-full rounded border border-slate-300 bg-white px-2 text-sm font-semibold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                      >
-                        {ESTADOS.map((estado) => (
-                          <option key={estado} value={estado}>
-                            {estado}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                {BLOQUES.map((bloque) => {
+                  const items = normalizarItemsDetalle(form.detalle?.[bloque], {
+                    incluirVacio: true,
+                    estadoPredeterminado: "Pendiente",
+                  });
 
-                    <textarea
-                      rows={3}
-                      value={form.detalle[bloque]?.descripcion || ""}
-                      onChange={(event) =>
-                        actualizarDetalle(bloque, "descripcion", event.target.value)
-                      }
-                      className="w-full resize-y rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                    />
-                  </div>
-                ))}
+                  return (
+                    <div key={bloque} className="p-4">
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm font-bold text-slate-900">{bloque}</p>
+                        <button
+                          type="button"
+                          onClick={() => agregarItemDetalle(bloque)}
+                          className="inline-flex shrink-0 items-center justify-center gap-1 rounded border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                        >
+                          <MdAdd size={17} />
+                          Agregar ítem
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {items.map((item, itemIndex) => (
+                          <div
+                            key={item.id}
+                            className="grid grid-cols-1 gap-3 rounded border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[170px_1fr_auto]"
+                          >
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                Estado
+                              </span>
+                              <select
+                                value={item.estado}
+                                onChange={(event) =>
+                                  actualizarItemDetalle(
+                                    bloque,
+                                    itemIndex,
+                                    "estado",
+                                    event.target.value,
+                                  )
+                                }
+                                className="h-10 w-full rounded border border-slate-300 bg-white px-2 text-sm font-semibold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                              >
+                                {ESTADOS.map((estado) => (
+                                  <option key={estado} value={estado}>
+                                    {estado}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <label className="block">
+                              <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                Ítem {itemIndex + 1}
+                              </span>
+                              <textarea
+                                rows={2}
+                                value={item.descripcion}
+                                onChange={(event) =>
+                                  actualizarItemDetalle(
+                                    bloque,
+                                    itemIndex,
+                                    "descripcion",
+                                    event.target.value,
+                                  )
+                                }
+                                className="w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                              />
+                            </label>
+
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                disabled={items.length <= 1}
+                                onClick={() =>
+                                  eliminarItemDetalle(bloque, itemIndex)
+                                }
+                                aria-label={`Eliminar ítem ${itemIndex + 1} de ${bloque}`}
+                                className="inline-flex h-10 w-full items-center justify-center rounded border border-red-200 px-3 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 lg:w-10"
+                              >
+                                <MdDeleteOutline size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -572,7 +802,13 @@ export default function PlanesBatalla() {
             <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
-                onClick={() => navigate("/vendedor-panel")}
+                onClick={() =>
+                  navigate(
+                    planEnEdicion
+                      ? "/mis-planes-batalla"
+                      : "/vendedor-panel",
+                  )
+                }
                 className="inline-flex items-center justify-center gap-2 rounded border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
               >
                 <MdArrowBack size={18} />
@@ -583,18 +819,24 @@ export default function PlanesBatalla() {
                 <button
                   type="button"
                   onClick={limpiarPlan}
-                  className="inline-flex items-center justify-center gap-2 rounded border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
+                  disabled={guardando}
+                  className="inline-flex items-center justify-center gap-2 rounded border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <MdDeleteOutline size={18} />
-                  Limpiar
+                  {planEnEdicion ? "Restaurar" : "Limpiar"}
                 </button>
                 <button
                   type="button"
                   onClick={enviarPlan}
-                  className="inline-flex items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+                  disabled={guardando}
+                  className="inline-flex items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <MdSend size={18} />
-                  Enviar plan
+                  {guardando
+                    ? "Guardando..."
+                    : planEnEdicion
+                      ? "Guardar cambios"
+                      : "Enviar plan"}
                 </button>
               </div>
             </div>

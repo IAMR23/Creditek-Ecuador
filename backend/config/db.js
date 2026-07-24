@@ -344,8 +344,38 @@ const ensureSecretariosEjecutivosPlanesSchema = async (queryInterface, tables) =
   );
 };
 
+const ensurePlanesBatallaSchema = async (queryInterface, tables) => {
+  if (!tables.includes("planes_batalla")) return;
+
+  await addColumnIfMissing(
+    queryInterface,
+    "planes_batalla",
+    "claveIdempotencia",
+    {
+      type: Sequelize.STRING(64),
+      allowNull: true,
+    },
+  );
+
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS planes_batalla_usuario_clave_idempotencia_unique
+    ON planes_batalla ("usuarioAgenciaId", "claveIdempotencia")
+    WHERE "claveIdempotencia" IS NOT NULL;
+  `);
+};
+
 const ensureUsuariosSchema = async (queryInterface, tables) => {
   if (!tables.includes("usuarios")) return;
+
+  await addColumnIfMissing(
+    queryInterface,
+    "usuarios",
+    "fechaSalidaRegistradaAt",
+    {
+      type: Sequelize.DATE,
+      allowNull: true,
+    },
+  );
 
   await addColumnIfMissing(queryInterface, "usuarios", "usuario", {
     type: Sequelize.STRING(50),
@@ -705,6 +735,7 @@ const connectDB = async () => {
     await ensureSistemasTareasSchema(queryInterface, tables);
     await ensureInventarioSistemasSchema(queryInterface, tables);
     await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
+    await ensurePlanesBatallaSchema(queryInterface, tables);
     await ensureUsuariosSchema(queryInterface, tables);
     await ensureRolesPagoSchema(tables);
     await ensureComisionesConfiguracionSchema(queryInterface, tables);

@@ -1,12 +1,13 @@
 const {
   DISPOSITIVOS,
+  obtenerResumenInventario,
   resolverDispositivo,
   serializarInventario,
   validarInventario,
 } = require("./inventarioSistemasService");
 
 describe("inventarioSistemasService", () => {
-  test("expone exactamente los seis dispositivos permitidos", () => {
+  test("expone exactamente los ocho dispositivos permitidos", () => {
     expect(DISPOSITIVOS.map((item) => item.label)).toEqual([
       "Laptop",
       "Computador de escritorio",
@@ -14,7 +15,42 @@ describe("inventarioSistemasService", () => {
       "Celular",
       "Cargador de laptop",
       "Cargador de celular",
+      "Impresora",
+      "Regulador de voltaje",
     ]);
+  });
+
+  test("cuenta los activos por tipo de dispositivo", () => {
+    const resumen = obtenerResumenInventario([
+      { nombre: "Laptop", estado: "OPERATIVO", responsableId: 3 },
+      { nombre: "LAPTOP", estado: "EN_MANTENIMIENTO", responsableId: 3 },
+      { nombre: "Impresora", estado: "OPERATIVO", responsableId: 5 },
+      {
+        nombre: "Regulador de voltaje",
+        estado: "FUERA_DE_SERVICIO",
+        responsableId: 5,
+      },
+    ]);
+
+    expect(resumen).toMatchObject({
+      items: 4,
+      operativos: 2,
+      mantenimiento: 1,
+      fueraServicio: 1,
+      responsables: 2,
+    });
+    expect(resumen.porDispositivo).toHaveLength(8);
+    expect(
+      resumen.porDispositivo.find((item) => item.value === "LAPTOP"),
+    ).toMatchObject({ label: "Laptop", cantidad: 2 });
+    expect(
+      resumen.porDispositivo.find((item) => item.value === "IMPRESORA"),
+    ).toMatchObject({ label: "Impresora", cantidad: 1 });
+    expect(
+      resumen.porDispositivo.find(
+        (item) => item.value === "REGULADOR_VOLTAJE",
+      ),
+    ).toMatchObject({ label: "Regulador de voltaje", cantidad: 1 });
   });
 
   test("normaliza un item individual asignado a un responsable", () => {

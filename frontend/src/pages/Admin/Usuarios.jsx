@@ -6,6 +6,39 @@ import { api } from "../../api/client";
 
 const normalizeText = (value) => (value?.trim() ? value.trim() : null);
 
+const obtenerCamposObligatoriosFaltantes = (
+  datos,
+  { passwordObligatoria = false } = {},
+) => {
+  const faltantes = [];
+
+  if (!String(datos.email || "").trim()) faltantes.push("Correo electrónico");
+  if (!String(datos.usuario || "").trim()) faltantes.push("Nombre de usuario");
+  if (passwordObligatoria && !String(datos.password || "").trim()) {
+    faltantes.push("Contraseña");
+  }
+  if (!Array.isArray(datos.rolIds) || datos.rolIds.length === 0) {
+    faltantes.push("Al menos un rol");
+  }
+
+  return faltantes;
+};
+
+const obtenerMensajeError = (error, mensajePredeterminado) => {
+  const respuesta = error.response?.data;
+  const detalles = Array.isArray(respuesta?.details)
+    ? respuesta.details
+    : respuesta?.detail
+      ? [respuesta.detail]
+      : [];
+  const mensajes = [
+    respuesta?.message || mensajePredeterminado,
+    ...detalles,
+  ].filter(Boolean);
+
+  return [...new Set(mensajes)].join("\n");
+};
+
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -151,9 +184,22 @@ export default function Usuarios() {
 
   const crearUsuario = async (e) => {
     e.preventDefault();
+    const camposFaltantes = obtenerCamposObligatoriosFaltantes(form, {
+      passwordObligatoria: true,
+    });
+
+    if (camposFaltantes.length > 0) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Campos obligatorios",
+        text: `Complete: ${camposFaltantes.join(", ")}.`,
+      });
+      return;
+    }
+
     try {
       setLoading(true);
-      await axios.post(`${API_URL}/usuarios`, {
+      await api.post("/usuarios", {
         nombre: form.nombre,
         cedula: form.cedula,
         email: form.email,
@@ -198,8 +244,8 @@ export default function Usuarios() {
     } catch (error) {
       Swal.fire({
         icon: "error",
-        title: "Error",
-        text: error.response?.data?.message || "No se pudo crear el usuario",
+        title: "No se pudo crear el usuario",
+        text: obtenerMensajeError(error, "No se pudo crear el usuario"),
       });
     } finally {
       setLoading(false);
@@ -208,8 +254,19 @@ export default function Usuarios() {
 
   const actualizarUsuario = async (e) => {
     e.preventDefault();
+    const camposFaltantes = obtenerCamposObligatoriosFaltantes(editForm);
+
+    if (camposFaltantes.length > 0) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Campos obligatorios",
+        text: `Complete: ${camposFaltantes.join(", ")}.`,
+      });
+      return;
+    }
+
     try {
-      await axios.put(`${API_URL}/usuarios/${editForm.id}`, {
+      await api.put(`/usuarios/${editForm.id}`, {
         nombre: editForm.nombre,
         cedula: editForm.cedula,
         email: editForm.email,
@@ -239,9 +296,8 @@ export default function Usuarios() {
     } catch (error) {
       Swal.fire({
         icon: "error",
-        title: "Error",
-        text:
-          error.response?.data?.message || "No se pudo actualizar el usuario",
+        title: "No se pudo actualizar el usuario",
+        text: obtenerMensajeError(error, "No se pudo actualizar el usuario"),
       });
     }
   };
@@ -322,6 +378,9 @@ export default function Usuarios() {
               Registra un nuevo usuario con su información personal y rol
               asignado.
             </p>
+            <p className="mt-2 text-xs font-semibold text-red-600">
+              Los campos marcados con * son obligatorios.
+            </p>
           </div>
 
           <form onSubmit={crearUsuario} className="p-6">
@@ -354,7 +413,7 @@ export default function Usuarios() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
-                  Correo electrónico
+                  Correo electrónico <span className="text-red-600">*</span>
                 </label>
                 <input
                   type="email"
@@ -362,12 +421,13 @@ export default function Usuarios() {
                   className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
-                  Nombre de usuario
+                  Nombre de usuario <span className="text-red-600">*</span>
                 </label>
                 <input
                   type="text"
@@ -386,7 +446,7 @@ export default function Usuarios() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
-                  Contraseña
+                  Contraseña <span className="text-red-600">*</span>
                 </label>
                 <input
                   type="password"
@@ -396,14 +456,25 @@ export default function Usuarios() {
                   onChange={(e) =>
                     setForm({ ...form, password: e.target.value })
                   }
+                  minLength={6}
+                  pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,}"
+                  title="Use mínimo 6 caracteres e incluya letras y números"
+                  required
                 />
+                <p className="text-xs text-slate-500">
+                  Mínimo 6 caracteres, con letras y números.
+                </p>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
-                  Rol del usuario
+                  Rol del usuario <span className="text-red-600">*</span>
                 </label>
-                <div className="max-h-36 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+                <div
+                  className="max-h-36 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3"
+                  role="group"
+                  aria-required="true"
+                >
                   {roles.map((r) => (
                     <label key={r.id} className="mb-2 flex items-center gap-2 text-sm text-slate-700">
                       <input
@@ -849,6 +920,9 @@ export default function Usuarios() {
                       Actualiza la información y permisos principales del
                       usuario.
                     </p>
+                    <p className="mt-2 text-xs font-semibold text-red-600">
+                      Los campos marcados con * son obligatorios.
+                    </p>
                   </div>
 
                   <button
@@ -913,7 +987,7 @@ export default function Usuarios() {
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-slate-700">
-                      Correo electrónico
+                      Correo electrónico <span className="text-red-600">*</span>
                     </label>
                     <input
                       type="email"
@@ -923,12 +997,13 @@ export default function Usuarios() {
                       onChange={(e) =>
                         setEditForm({ ...editForm, email: e.target.value })
                       }
+                      required
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-slate-700">
-                      Nombre de usuario
+                      Nombre de usuario <span className="text-red-600">*</span>
                     </label>
                     <input
                       type="text"
@@ -960,14 +1035,24 @@ export default function Usuarios() {
                       onChange={(e) =>
                         setEditForm({ ...editForm, password: e.target.value })
                       }
+                      minLength={6}
+                      pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,}"
+                      title="Use mínimo 6 caracteres e incluya letras y números"
                     />
+                    <p className="text-xs text-slate-500">
+                      Opcional. Si se llena, debe incluir letras y números.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-slate-700">
-                      Rol
+                      Rol <span className="text-red-600">*</span>
                     </label>
-                    <div className="max-h-36 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+                    <div
+                      className="max-h-36 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3"
+                      role="group"
+                      aria-required="true"
+                    >
                       {roles.map((r) => (
                         <label key={r.id} className="mb-2 flex items-center gap-2 text-sm text-slate-700">
                           <input

@@ -7,6 +7,7 @@ const Agencia = require("../models/Agencia");
 const { authenticate, requirePermission } = require("../middleware/authMiddleware");
 
 const router = express.Router();
+const CLAVE_IDEMPOTENCIA_REGEX = /^[a-zA-Z0-9._:-]{8,64}$/;
 
 const includeUsuarioAgencia = ({ agenciaId, vendedorId } = {}) => ({
   model: UsuarioAgencia,
@@ -78,7 +79,18 @@ const buildWherePlanes = ({ fechaInicio, fechaFin, condicion } = {}) => {
   return where;
 };
 
+const buscarPlanPorClaveIdempotencia = (usuarioAgenciaId, claveIdempotencia) =>
+  PlanBatalla.findOne({
+    where: {
+      usuarioAgenciaId,
+      claveIdempotencia,
+    },
+    include: [includeUsuarioAgencia()],
+  });
+
 router.post("/", authenticate, async (req, res) => {
+  let claveIdempotencia = null;
+
   try {
     const usuarioAgenciaId = req.user?.usuarioAgenciaId;
     if (!usuarioAgenciaId) {
@@ -95,10 +107,34 @@ router.post("/", authenticate, async (req, res) => {
       respuestasFormula,
       detalle,
       observacion,
+      claveIdempotencia: claveIdempotenciaRecibida,
     } = req.body;
 
     if (!condicion) {
       return res.status(400).json({ ok: false, message: "La condicion es obligatoria" });
+    }
+
+    if (claveIdempotenciaRecibida) {
+      claveIdempotencia = String(claveIdempotenciaRecibida).trim();
+      if (!CLAVE_IDEMPOTENCIA_REGEX.test(claveIdempotencia)) {
+        return res.status(400).json({
+          ok: false,
+          message: "La clave de envio no es valida",
+        });
+      }
+
+      const planExistente = await buscarPlanPorClaveIdempotencia(
+        usuarioAgenciaId,
+        claveIdempotencia,
+      );
+
+      if (planExistente) {
+        return res.json({
+          ok: true,
+          deduplicado: true,
+          plan: serializarPlan(planExistente),
+        });
+      }
     }
 
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
@@ -116,6 +152,7 @@ router.post("/", authenticate, async (req, res) => {
       respuestasFormula: respuestasFormula || {},
       detalle: detalle || {},
       observacion: observacion || "",
+      claveIdempotencia,
     });
 
     const planCompleto = await PlanBatalla.findByPk(plan.id, {
@@ -127,6 +164,24 @@ router.post("/", authenticate, async (req, res) => {
       plan: serializarPlan(planCompleto),
     });
   } catch (error) {
+    if (
+      claveIdempotencia &&
+      error.name === "SequelizeUniqueConstraintError"
+    ) {
+      const planExistente = await buscarPlanPorClaveIdempotencia(
+        req.user.usuarioAgenciaId,
+        claveIdempotencia,
+      );
+
+      if (planExistente) {
+        return res.json({
+          ok: true,
+          deduplicado: true,
+          plan: serializarPlan(planExistente),
+        });
+      }
+    }
+
     console.error("Error creando plan de batalla:", error);
     return res.status(500).json({
       ok: false,
@@ -182,6 +237,79 @@ router.get(
     }
   },
 );
+
+router.put("/:id", authenticate, async (req, res) => {
+  try {
+    const usuarioAgenciaId = req.user?.usuarioAgenciaId;
+    if (!usuarioAgenciaId) {
+      return res.status(400).json({
+        ok: false,
+        message: "Usuario sin relacion usuario-agencia",
+      });
+    }
+
+    const plan = await PlanBatalla.findOne({
+      where: {
+        id: req.params.id,
+        usuarioAgenciaId,
+      },
+    });
+
+    if (!plan) {
+      return res.status(404).json({
+        ok: false,
+        message: "Plan no encontrado",
+      });
+    }
+
+    const {
+      condicion,
+      fechaInicio,
+      fechaFin,
+      respuestasFormula,
+      detalle,
+      observacion,
+    } = req.body;
+
+    if (!condicion) {
+      return res.status(400).json({
+        ok: false,
+        message: "La condicion es obligatoria",
+      });
+    }
+
+    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+      return res.status(400).json({
+        ok: false,
+        message: "La fecha inicio no puede ser mayor que la fecha fin",
+      });
+    }
+
+    await plan.update({
+      condicion,
+      fechaInicio: fechaInicio || null,
+      fechaFin: fechaFin || null,
+      respuestasFormula: respuestasFormula || {},
+      detalle: detalle || {},
+      observacion: observacion || "",
+    });
+
+    const planCompleto = await PlanBatalla.findByPk(plan.id, {
+      include: [includeUsuarioAgencia()],
+    });
+
+    return res.json({
+      ok: true,
+      plan: serializarPlan(planCompleto),
+    });
+  } catch (error) {
+    console.error("Error actualizando plan de batalla:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo actualizar el plan de batalla",
+    });
+  }
+});
 
 router.delete("/:id", authenticate, async (req, res) => {
   try {

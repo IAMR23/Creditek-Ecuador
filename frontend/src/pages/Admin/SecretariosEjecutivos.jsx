@@ -3,7 +3,6 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import {
   CheckCircle2,
-  ClipboardList,
   Edit3,
   Filter,
   Plus,
@@ -14,8 +13,10 @@ import {
 import { API_URL } from "../../../config";
 import {
   clasesEstadoItemFormula,
+  crearItemDetalle,
   crearItemFormula,
   ESTADOS_ITEMS_FORMULA,
+  normalizarItemsDetalle,
   normalizarItemsFormula,
   normalizarRespuestasFormula,
 } from "../../utils/planBatallaRespuestas";
@@ -105,7 +106,9 @@ const getHoyLocal = () => new Date().toLocaleDateString("en-CA");
 
 const crearDetalleVacio = () =>
   BLOQUES.reduce((acc, bloque) => {
-    acc[bloque] = { estado: "PENDIENTE", descripcion: "" };
+    acc[bloque] = [
+      crearItemDetalle({}, { estadoPredeterminado: "PENDIENTE" }),
+    ];
     return acc;
   }, {});
 
@@ -245,17 +248,54 @@ export default function SecretariosEjecutivos() {
     });
   };
 
-  const actualizarDetalle = (bloque, campo, value) => {
+  const actualizarItemDetalle = (bloque, itemIndex, campo, value) => {
     setForm((prev) => ({
       ...prev,
       detalle: {
         ...prev.detalle,
-        [bloque]: {
-          ...(prev.detalle[bloque] || { estado: "PENDIENTE", descripcion: "" }),
-          [campo]: value,
-        },
+        [bloque]: normalizarItemsDetalle(prev.detalle?.[bloque], {
+          incluirVacio: true,
+          estadoPredeterminado: "PENDIENTE",
+        }).map((item, index) =>
+          index === itemIndex ? { ...item, [campo]: value } : item,
+        ),
       },
     }));
+  };
+
+  const agregarItemDetalle = (bloque) => {
+    setForm((prev) => ({
+      ...prev,
+      detalle: {
+        ...prev.detalle,
+        [bloque]: [
+          ...normalizarItemsDetalle(prev.detalle?.[bloque], {
+            incluirVacio: true,
+            estadoPredeterminado: "PENDIENTE",
+          }),
+          crearItemDetalle({}, { estadoPredeterminado: "PENDIENTE" }),
+        ],
+      },
+    }));
+  };
+
+  const eliminarItemDetalle = (bloque, itemIndex) => {
+    setForm((prev) => {
+      const items = normalizarItemsDetalle(prev.detalle?.[bloque], {
+        incluirVacio: true,
+        estadoPredeterminado: "PENDIENTE",
+      });
+
+      if (items.length <= 1) return prev;
+
+      return {
+        ...prev,
+        detalle: {
+          ...prev.detalle,
+          [bloque]: items.filter((_, index) => index !== itemIndex),
+        },
+      };
+    });
   };
 
   const limpiarForm = () => {
@@ -276,10 +316,13 @@ export default function SecretariosEjecutivos() {
         plan.respuestasFormula,
         cantidadPreguntas,
       ),
-      detalle: {
-        ...crearDetalleVacio(),
-        ...(plan.detalle || {}),
-      },
+      detalle: BLOQUES.reduce((acc, bloque) => {
+        acc[bloque] = normalizarItemsDetalle(plan.detalle?.[bloque], {
+          incluirVacio: true,
+          estadoPredeterminado: "PENDIENTE",
+        });
+        return acc;
+      }, {}),
       objetivoDia: plan.objetivoDia || "",
       actividadesPlanificadas: plan.actividadesPlanificadas || "",
       prioridad: plan.prioridad || "MEDIA",
@@ -549,44 +592,100 @@ export default function SecretariosEjecutivos() {
               </div>
 
               <div className="lg:col-span-4 rounded-lg border border-slate-200 bg-white">
-                <div className="grid grid-cols-[170px_1fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-600">
-                  <div>Estado</div>
-                  <div>Descripcion</div>
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-600">
+                  Estado y descripción por ítem
                 </div>
                 <div className="divide-y divide-slate-100">
-                  {BLOQUES.map((bloque) => (
-                    <div
-                      key={bloque}
-                      className="grid grid-cols-1 gap-3 p-4 lg:grid-cols-[170px_1fr]"
-                    >
-                      <div>
-                        <p className="mb-2 text-sm font-bold text-slate-900">
-                          {bloque}
-                        </p>
-                        <select
-                          value={form.detalle[bloque]?.estado || "PENDIENTE"}
-                          onChange={(event) =>
-                            actualizarDetalle(bloque, "estado", event.target.value)
-                          }
-                          className="h-10 w-full rounded border border-slate-300 bg-white px-2 text-sm font-semibold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                        >
-                          {ESTADOS.map((estado) => (
-                            <option key={estado.value} value={estado.value}>
-                              {estado.label}
-                            </option>
+                  {BLOQUES.map((bloque) => {
+                    const items = normalizarItemsDetalle(form.detalle?.[bloque], {
+                      incluirVacio: true,
+                      estadoPredeterminado: "PENDIENTE",
+                    });
+
+                    return (
+                      <div key={bloque} className="p-4">
+                        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-sm font-bold text-slate-900">
+                            {bloque}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => agregarItemDetalle(bloque)}
+                            className="inline-flex shrink-0 items-center justify-center gap-1 rounded border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                          >
+                            <Plus size={15} />
+                            Agregar ítem
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {items.map((item, itemIndex) => (
+                            <div
+                              key={item.id}
+                              className="grid grid-cols-1 gap-3 rounded border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[170px_1fr_auto]"
+                            >
+                              <label className="block">
+                                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                  Estado
+                                </span>
+                                <select
+                                  value={item.estado}
+                                  onChange={(event) =>
+                                    actualizarItemDetalle(
+                                      bloque,
+                                      itemIndex,
+                                      "estado",
+                                      event.target.value,
+                                    )
+                                  }
+                                  className="h-10 w-full rounded border border-slate-300 bg-white px-2 text-sm font-semibold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                >
+                                  {ESTADOS.map((estado) => (
+                                    <option key={estado.value} value={estado.value}>
+                                      {estado.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="block">
+                                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
+                                  Ítem {itemIndex + 1}
+                                </span>
+                                <textarea
+                                  rows={2}
+                                  value={item.descripcion}
+                                  onChange={(event) =>
+                                    actualizarItemDetalle(
+                                      bloque,
+                                      itemIndex,
+                                      "descripcion",
+                                      event.target.value,
+                                    )
+                                  }
+                                  className="w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                />
+                              </label>
+
+                              <div className="flex items-end">
+                                <button
+                                  type="button"
+                                  disabled={items.length <= 1}
+                                  onClick={() =>
+                                    eliminarItemDetalle(bloque, itemIndex)
+                                  }
+                                  aria-label={`Eliminar ítem ${itemIndex + 1} de ${bloque}`}
+                                  className="inline-flex h-10 w-full items-center justify-center rounded border border-red-200 px-3 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 lg:w-10"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
                           ))}
-                        </select>
+                        </div>
                       </div>
-                      <textarea
-                        rows={3}
-                        value={form.detalle[bloque]?.descripcion || ""}
-                        onChange={(event) =>
-                          actualizarDetalle(bloque, "descripcion", event.target.value)
-                        }
-                        className="w-full resize-y rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

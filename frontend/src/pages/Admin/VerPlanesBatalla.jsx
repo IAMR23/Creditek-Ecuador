@@ -7,12 +7,14 @@ import { nombreCortoUsuario } from "../../utils/nombres";
 import {
   clasesEstadoItemFormula,
   etiquetaEstadoItemFormula,
+  normalizarItemsDetalle,
   normalizarItemsFormula,
 } from "../../utils/planBatallaRespuestas";
 
 const CONDICIONES = [
   { value: "todos", label: "Todas" },
   { value: "inexistencia", label: "Inexistencia" },
+  { value: "inexistencia_extendida", label: "Inexistencia Extendida" },
   { value: "peligro", label: "Peligro" },
   { value: "emergencia", label: "Emergencia" },
   { value: "normal", label: "Normal" },
@@ -30,6 +32,16 @@ const PREGUNTAS_POR_CONDICION = {
     "DESE A CONOCER",
     "DESCUBRA LO QUE NECESITA O DESEA",
     "HÁGALO, PRODUZCALO O PRESÉNTELO",
+  ],
+  inexistencia_extendida: [
+    "ENCUENTRA Y PONTE EN LÍNEA DE COMUNICACIÓN QUE VAYAS A NECESITAR PARA DAR Y OBTENER INFORMACIÓN RELATIVA A TUS DEBERES Y SUMINISTROS",
+    "DATE A CONOCER, JUNTO CON LA DESIGNACIÓN DE TU PUESTO Y TUS DEBERES, A TODOS LOS TERMINALES QUE NECESITARÁS PARA LA OBTENCIÓN DE INFORMACIÓN Y LA ENTREGA DE DATOS",
+    "DESCUBRE DE TUS SUPERIORES, COMPAÑEROS DE TRABAJO Y CUALQUIER PÚBLICO CON EL QUE PUEDAS NECESITAR PONERTE EN CONTACTO EN EL CUMPLIMIENTO DE TUS OBLIGACIONES, LO QUE CADA UNO DE ELLOS NECESITA Y DESEA",
+    "HAZ, PRODUCE Y PRESENTA LO QUE CADA UNO NECESITA Y DESEA, QUE ESTÉ EN CONFORMIDAD A LA POLÍTICA",
+    "MANTÉN LAS LÍNEAS DE COMUNICACIÓN QUE TIENES Y AMPLÍALAS PARA OBTENER OTRA INFORMACIÓN QUE AHORA ENCUENTRES QUE NECESITAS DE MANERA HABITUAL",
+    "MANTÉN TUS LÍNEAS DE ORIGINACIÓN PARA INFORMAR A OTROS DE LO QUE ESTÁS HACIENDO EXACTAMENTE, PERO SOLO A AQUELLOS QUE REALMENTE NECESITAN LA INFORMACIÓN",
+    "SIMPLIFICA Y HAZ DE FORMA MÁS EFICIENTE LO QUE ESTÁS HACIENDO, PRODUCIÉNDOLO Y PRESENTÁNDOLO DE MODO QUE SE ACERQUE MÁS A LO QUE REALMENTE SE NECESITA Y SE DESEA",
+    "DANDO Y RECIBIENDO INFORMACIÓN PLENA RESPECTO A TUS PRODUCTOS, HAZ, PRODUCE Y PRESENTA, DE MANERA HABITUAL EN TU PUESTO, UN PRODUCTO MEJOR",
   ],
   peligro: [
     "PASE POR ALTO HÁBITOS O RUTINAS NORMALES",
@@ -499,21 +511,29 @@ function DetallePlan({ plan, onEliminar }) {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(detalle).map(([bloque, item]) => (
-                  <tr key={bloque} className="border-b border-slate-100">
-                    <td className="px-3 py-3 font-bold text-slate-900">
-                      {bloque}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                        {item?.estado || "-"}
-                      </span>
-                    </td>
-                    <td className="whitespace-pre-wrap px-3 py-3 text-slate-700">
-                      {item?.descripcion || "-"}
-                    </td>
-                  </tr>
-                ))}
+                {Object.entries(detalle).flatMap(([bloque, valor]) =>
+                  normalizarItemsDetalle(valor).map((item, itemIndex) => (
+                    <tr
+                      key={`${bloque}-${item.id}`}
+                      className="border-b border-slate-100"
+                    >
+                      <td className="px-3 py-3 font-bold text-slate-900">
+                        {bloque}
+                        <span className="mt-1 block text-xs font-semibold text-slate-500">
+                          Ítem {itemIndex + 1}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                          {item.estado || "-"}
+                        </span>
+                      </td>
+                      <td className="whitespace-pre-wrap px-3 py-3 text-slate-700">
+                        {item.descripcion || "-"}
+                      </td>
+                    </tr>
+                  )),
+                )}
               </tbody>
             </table>
           </div>

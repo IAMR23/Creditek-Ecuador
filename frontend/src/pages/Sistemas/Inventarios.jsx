@@ -14,6 +14,7 @@ import {
   PackageCheck,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   Save,
   Search,
@@ -22,6 +23,7 @@ import {
   UserRound,
   Wrench,
   X,
+  Zap,
 } from "lucide-react";
 import { api } from "../../api/client";
 
@@ -58,6 +60,7 @@ const resumenInicial = {
   mantenimiento: 0,
   fueraServicio: 0,
   responsables: 0,
+  porDispositivo: [],
 };
 
 const estadoConfig = {
@@ -85,6 +88,19 @@ const iconosDispositivo = {
   CELULAR: Smartphone,
   CARGADOR_LAPTOP: Cable,
   CARGADOR_CELULAR: Cable,
+  IMPRESORA: Printer,
+  REGULADOR_VOLTAJE: Zap,
+};
+
+const nombresContadorDispositivo = {
+  LAPTOP: "Laptops",
+  COMPUTADOR_ESCRITORIO: "Computadores de escritorio",
+  AUDIFONOS: "Audífonos",
+  CELULAR: "Celulares",
+  CARGADOR_LAPTOP: "Cargadores de laptop",
+  CARGADOR_CELULAR: "Cargadores de celular",
+  IMPRESORA: "Impresoras",
+  REGULADOR_VOLTAJE: "Reguladores de voltaje",
 };
 
 const formatFecha = (value) => {
@@ -166,6 +182,18 @@ export default function Inventarios() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(crearFormInicial);
+
+  const conteosDispositivos = useMemo(
+    () =>
+      catalogos.dispositivos.map((dispositivo) => ({
+        ...dispositivo,
+        cantidad:
+          resumen.porDispositivo?.find(
+            (item) => item.value === dispositivo.value,
+          )?.cantidad || 0,
+      })),
+    [catalogos.dispositivos, resumen.porDispositivo],
+  );
 
   const inventariosAgrupados = useMemo(() => {
     const grupos = new Map();
@@ -447,6 +475,43 @@ export default function Inventarios() {
           <StatCard label="Operativos" value={resumen.operativos} icon={<PackageCheck size={22} />} />
           <StatCard label="Mantenimiento" value={resumen.mantenimiento} icon={<Wrench size={22} />} tone="amber" />
           <StatCard label="Fuera de servicio" value={resumen.fueraServicio} icon={<CircleOff size={22} />} tone="red" />
+        </section>
+
+        <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">
+              Activos por tipo de dispositivo
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Conteo de registros activos según los filtros aplicados.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {conteosDispositivos.map((dispositivo) => (
+              <div
+                key={dispositivo.value}
+                className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="shrink-0 rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                    <DispositivoIcono value={dispositivo.value} size={20} />
+                  </span>
+                  <p className="text-sm font-semibold text-slate-700">
+                    {nombresContadorDispositivo[dispositivo.value] ||
+                      dispositivo.label}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-2xl font-bold leading-none text-slate-900">
+                    {dispositivo.cantidad}
+                  </p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                    {dispositivo.cantidad === 1 ? "activo" : "activos"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

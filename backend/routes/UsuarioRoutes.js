@@ -15,6 +15,66 @@ const {
 } = require("../utils/usuarioLogin");
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+const ETIQUETAS_CAMPOS_USUARIO = {
+  email: "Correo electrónico",
+  password: "Contraseña",
+  rolId: "Rol",
+  usuario: "Nombre de usuario",
+};
+
+const obtenerDetallesValidacion = (error) =>
+  (Array.isArray(error.errors) ? error.errors : []).map((item) => {
+    const etiqueta = ETIQUETAS_CAMPOS_USUARIO[item.path] || item.path || "Campo";
+
+    if (item.type === "notNull Violation") {
+      return `${etiqueta} es obligatorio.`;
+    }
+
+    if (item.validatorKey === "isEmail") {
+      return `${etiqueta} debe tener un formato válido.`;
+    }
+
+    return `${etiqueta}: ${item.message}`;
+  });
+
+const responderErrorPersistenciaUsuario = (
+  res,
+  error,
+  mensajePredeterminado,
+) => {
+  if (error.name === "SequelizeUniqueConstraintError") {
+    return res.status(400).json({
+      message: "El email o nombre de usuario ya esta registrado.",
+    });
+  }
+
+  if (
+    error.name === "SequelizeValidationError" ||
+    error.name === "SequelizeDatabaseError"
+  ) {
+    const details = obtenerDetallesValidacion(error);
+    return res.status(error.name === "SequelizeValidationError" ? 400 : 500).json({
+      message:
+        error.name === "SequelizeValidationError"
+          ? "Revise los datos ingresados."
+          : mensajePredeterminado,
+      details: details.length > 0 ? details : undefined,
+      detail: details.length === 0 ? error.message : undefined,
+    });
+  }
+
+  if (error.name === "SequelizeForeignKeyConstraintError") {
+    return res.status(400).json({
+      message: "Uno de los valores seleccionados ya no existe.",
+      detail: error.message,
+    });
+  }
+
+  return res.status(500).json({
+    message: mensajePredeterminado,
+    detail: error.message || "Error interno no identificado.",
+  });
+};
 
 const normalizarRolIds = (rolId, rolIds) => {
   const ids = Array.isArray(rolIds) ? rolIds : rolId ? [rolId] : [];
@@ -107,6 +167,11 @@ const sincronizarRolPagoNominaUsuario = async (usuarioId, rolPago) => {
   );
 };
 
+const emitirActualizacionNovedadesPersonal = (req) => {
+  const io = req.app.get("io");
+  if (io) io.emit("novedades-personal:actualizar");
+};
+
 // ===========================
 // 🔹 CREAR USUARIO
 // ===========================
@@ -129,23 +194,38 @@ router.post("/", async (req, res) => {
       rolPagoId,
     } = req.body;
 
+    const rolesIdsNormalizados = normalizarRolIds(rolId, rolIds);
+    const emailNormalizado = String(email || "").trim().toLowerCase();
+    const camposFaltantes = [];
+
+    if (!emailNormalizado) camposFaltantes.push("Correo electrónico");
+    if (!String(password || "").trim()) camposFaltantes.push("Contraseña");
+    if (rolesIdsNormalizados.length === 0) camposFaltantes.push("Al menos un rol");
+
+    if (camposFaltantes.length > 0) {
+      return res.status(400).json({
+        message: "Complete los campos obligatorios.",
+        details: camposFaltantes.map((campo) => `${campo} es obligatorio.`),
+      });
+    }
+
     // Validar contraseña
     if (!passwordRegex.test(password)) {
       return res.status(400).json({
         message:
-          "La contraseña debe tener mínimo 8 caracteres, con mayúsculas, minúsculas, números y un carácter especial.",
+          "La contraseña debe tener mínimo 6 caracteres e incluir letras y números.",
       });
     }
 
     // Email duplicado
-    const existing = await Usuario.findOne({ where: { email } });
+    const existing = await Usuario.findOne({ where: { email: emailNormalizado } });
     if (existing) {
       return res.status(400).json({ message: "El email ya está registrado." });
     }
 
     const usuarioNormalizado = nombreUsuario
       ? normalizarUsuario(nombreUsuario)
-      : await generarUsuarioDisponible(email);
+      : await generarUsuarioDisponible(emailNormalizado);
 
     if (!esUsuarioValido(usuarioNormalizado)) {
       return res.status(400).json({
@@ -158,14 +238,6 @@ router.post("/", async (req, res) => {
       return res.status(400).json({
         message: "El nombre de usuario ya esta registrado.",
       });
-    }
-
-    const rolesIdsNormalizados = normalizarRolIds(rolId, rolIds);
-
-    if (rolesIdsNormalizados.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Debe asignar al menos un rol." });
     }
 
     try {
@@ -189,12 +261,13 @@ router.post("/", async (req, res) => {
     const nuevoUsuario = await Usuario.create({
       nombre,
       cedula,
-      email,
+      email: emailNormalizado,
       usuario: usuarioNormalizado,
       password: hashedPassword,
       rolId: rolesIdsNormalizados[0],
       fechaIngreso,
-      fechaSalida,
+      fechaSalida: fechaSalida || null,
+      fechaSalidaRegistradaAt: fechaSalida ? new Date() : null,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -205,17 +278,17 @@ router.post("/", async (req, res) => {
 
     await sincronizarRolesUsuario(nuevoUsuario.id, rolesIdsNormalizados);
     await sincronizarRolPagoNominaUsuario(nuevoUsuario.id, rolPago);
+    emitirActualizacionNovedadesPersonal(req);
 
     const { password: _, ...usuarioSinPassword } = nuevoUsuario.toJSON();
     res.status(201).json(usuarioSinPassword);
   } catch (error) {
     console.error("Error creando usuario:", error);
-    if (error.name === "SequelizeUniqueConstraintError") {
-      return res.status(400).json({
-        message: "El email o nombre de usuario ya esta registrado.",
-      });
-    }
-    res.status(500).json({ message: "Error al crear el usuario", error });
+    return responderErrorPersistenciaUsuario(
+      res,
+      error,
+      "Error al crear el usuario.",
+    );
   }
 });
 
@@ -327,12 +400,23 @@ const actualizarUsuario = async (req, res) => {
     }
 
     // ========== VALIDAR EMAIL SOLO SI CAMBIA ==========
-    if (email && email !== usuario.email) {
-      const existeEmail = await Usuario.findOne({ where: { email } });
+    if (email !== undefined) {
+      const emailNormalizado = String(email || "").trim().toLowerCase();
+      if (!emailNormalizado) {
+        return res.status(400).json({
+          message: "Complete los campos obligatorios.",
+          details: ["Correo electrónico es obligatorio."],
+        });
+      }
+
+      const existeEmail =
+        emailNormalizado !== usuario.email
+          ? await Usuario.findOne({ where: { email: emailNormalizado } })
+          : null;
       if (existeEmail) {
         return res.status(400).json({ message: "El email ya está en uso." });
       }
-      usuario.email = email;
+      usuario.email = emailNormalizado;
     }
 
     if (nombreUsuario !== undefined) {
@@ -360,7 +444,7 @@ const actualizarUsuario = async (req, res) => {
       if (!passwordRegex.test(password)) {
         return res.status(400).json({
           message:
-            "La contraseña debe tener mínimo 8 caracteres, con mayúsculas, minúsculas, números, y un carácter especial.",
+            "La contraseña debe tener mínimo 6 caracteres e incluir letras y números.",
         });
       }
       usuario.password = await bcrypt.hash(password, 10);
@@ -406,7 +490,18 @@ const actualizarUsuario = async (req, res) => {
     if (cedula !== undefined) usuario.cedula = cedula;
     if (activo !== undefined) usuario.activo = activo;
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
-    if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalida;
+    let seRegistroFechaSalida = false;
+    if (fechaSalida !== undefined) {
+      const nuevaFechaSalida = fechaSalida || null;
+      seRegistroFechaSalida = !usuario.fechaSalida && Boolean(nuevaFechaSalida);
+      usuario.fechaSalida = nuevaFechaSalida;
+
+      if (seRegistroFechaSalida) {
+        usuario.fechaSalidaRegistradaAt = new Date();
+      } else if (!nuevaFechaSalida) {
+        usuario.fechaSalidaRegistradaAt = null;
+      }
+    }
     if (numeroCuenta !== undefined) usuario.numeroCuenta = numeroCuenta;
     if (entidadFinanciera !== undefined) usuario.entidadFinanciera = entidadFinanciera;
     if (direccion !== undefined) usuario.direccion = direccion;
@@ -429,15 +524,19 @@ const actualizarUsuario = async (req, res) => {
       );
     }
 
+    if (seRegistroFechaSalida || fechaIngreso !== undefined) {
+      emitirActualizacionNovedadesPersonal(req);
+    }
+
     const { password: _, ...usuarioSinPassword } = usuario.toJSON();
     res.json(usuarioSinPassword);
   } catch (error) {
-    if (error.name === "SequelizeUniqueConstraintError") {
-      return res.status(400).json({
-        message: "El email o nombre de usuario ya esta registrado.",
-      });
-    }
-    res.status(500).json({ message: "Error al actualizar usuario", error });
+    console.error("Error actualizando usuario:", error);
+    return responderErrorPersistenciaUsuario(
+      res,
+      error,
+      "Error al actualizar usuario.",
+    );
   }
 };
 

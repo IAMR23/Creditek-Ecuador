@@ -1,5 +1,11 @@
 /* eslint-disable react/prop-types */
-import { FaCalendarCheck, FaDoorOpen, FaTimes, FaUserClock } from "react-icons/fa";
+import {
+  FaCalendarCheck,
+  FaDoorOpen,
+  FaTimes,
+  FaUserClock,
+  FaUserPlus,
+} from "react-icons/fa";
 
 const formatearFecha = (fecha) => {
   if (!fecha) return "Fecha no disponible";
@@ -71,7 +77,8 @@ function AlertasPersonalModal({ alertas, cargando, error, fecha, onClose }) {
               </span>
               <p className="font-semibold text-gray-700">Sin novedades para hoy</p>
               <p className="mt-1 max-w-xs text-sm text-gray-500">
-                No hay ingresos que cumplan 15 días ni salidas registradas en esta fecha.
+                No hay usuarios creados, ingresos que cumplan 15 días ni fechas
+                de salida registradas hoy.
               </p>
             </div>
           )}
@@ -80,6 +87,7 @@ function AlertasPersonalModal({ alertas, cargando, error, fecha, onClose }) {
             <div className="space-y-3">
               {alertas.map((alerta) => {
                 const esSalida = alerta.tipo === "FECHA_SALIDA";
+                const esCreacion = alerta.tipo === "USUARIO_CREADO";
 
                 return (
                   <article
@@ -87,17 +95,27 @@ function AlertasPersonalModal({ alertas, cargando, error, fecha, onClose }) {
                     className={`flex gap-3 rounded-xl border p-4 ${
                       esSalida
                         ? "border-orange-200 bg-orange-50"
-                        : "border-blue-200 bg-blue-50"
+                        : esCreacion
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-blue-200 bg-blue-50"
                     }`}
                   >
                     <span
                       className={`mt-0.5 rounded-lg p-2 ${
                         esSalida
                           ? "bg-orange-100 text-orange-600"
-                          : "bg-blue-100 text-blue-600"
+                          : esCreacion
+                            ? "bg-emerald-100 text-emerald-600"
+                            : "bg-blue-100 text-blue-600"
                       }`}
                     >
-                      {esSalida ? <FaDoorOpen /> : <FaUserClock />}
+                      {esSalida ? (
+                        <FaDoorOpen />
+                      ) : esCreacion ? (
+                        <FaUserPlus />
+                      ) : (
+                        <FaUserClock />
+                      )}
                     </span>
                     <div className="min-w-0">
                       <h3 className="font-bold text-gray-800">{alerta.titulo}</h3>
@@ -105,7 +123,12 @@ function AlertasPersonalModal({ alertas, cargando, error, fecha, onClose }) {
                         {alerta.mensaje}
                       </p>
                       <p className="mt-2 text-xs font-medium text-gray-500">
-                        Fecha registrada: {formatearFecha(alerta.fechaReferencia)}
+                        {esSalida
+                          ? "Fecha de salida"
+                          : esCreacion
+                            ? "Fecha de creación"
+                            : "Fecha de ingreso"}
+                        : {formatearFecha(alerta.fechaReferencia)}
                       </p>
                     </div>
                   </article>

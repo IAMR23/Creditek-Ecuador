@@ -6,6 +6,7 @@ import {
   MdAdd,
   MdArrowBack,
   MdDeleteOutline,
+  MdEdit,
   MdOutlineAssignmentTurnedIn,
   MdVisibility,
 } from "react-icons/md";
@@ -14,6 +15,7 @@ import { API_URL } from "../../../config";
 import {
   clasesEstadoItemFormula,
   etiquetaEstadoItemFormula,
+  normalizarItemsDetalle,
   normalizarItemsFormula,
 } from "../../utils/planBatallaRespuestas";
 
@@ -21,6 +23,7 @@ const ENVIOS_KEY = "planes_batalla_enviados";
 
 const CONDICIONES_LABELS = {
   inexistencia: "Inexistencia",
+  inexistencia_extendida: "Inexistencia Extendida",
   peligro: "Peligro",
   emergencia: "Emergencia",
   normal: "Normal",
@@ -165,6 +168,12 @@ export default function MisPlanesBatalla() {
     }
   };
 
+  const editarPlan = (plan) => {
+    navigate("/planes-batalla", {
+      state: { planEditar: plan },
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-5 text-slate-900 md:px-6">
       <div className="mx-auto max-w-7xl">
@@ -266,7 +275,11 @@ export default function MisPlanesBatalla() {
               </div>
             </section>
 
-            <DetallePlan plan={planSeleccionado} onEliminar={eliminarPlan} />
+            <DetallePlan
+              plan={planSeleccionado}
+              onEditar={editarPlan}
+              onEliminar={eliminarPlan}
+            />
           </div>
         )}
       </div>
@@ -274,7 +287,7 @@ export default function MisPlanesBatalla() {
   );
 }
 
-function DetallePlan({ plan, onEliminar }) {
+function DetallePlan({ plan, onEditar, onEliminar }) {
   if (!plan) return null;
 
   const condicion =
@@ -292,14 +305,24 @@ function DetallePlan({ plan, onEliminar }) {
           <h2 className="text-xl font-bold text-slate-950">{condicion}</h2>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onEliminar(plan.id)}
-          className="inline-flex items-center justify-center gap-2 rounded border border-red-200 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
-        >
-          <MdDeleteOutline size={18} />
-          Eliminar
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => onEditar(plan)}
+            className="inline-flex items-center justify-center gap-2 rounded border border-blue-200 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50"
+          >
+            <MdEdit size={18} />
+            Editar
+          </button>
+          <button
+            type="button"
+            onClick={() => onEliminar(plan.id)}
+            className="inline-flex items-center justify-center gap-2 rounded border border-red-200 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
+          >
+            <MdDeleteOutline size={18} />
+            Eliminar
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 md:grid-cols-3">
@@ -374,21 +397,29 @@ function DetallePlan({ plan, onEliminar }) {
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(detalle).map(([bloque, item]) => (
-                  <tr key={bloque} className="border-b border-slate-100">
-                    <td className="px-3 py-3 font-bold text-slate-900">
-                      {bloque}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                        {item?.estado || "-"}
-                      </span>
-                    </td>
-                    <td className="whitespace-pre-wrap px-3 py-3 text-slate-700">
-                      {item?.descripcion || "-"}
-                    </td>
-                  </tr>
-                ))}
+                {Object.entries(detalle).flatMap(([bloque, valor]) =>
+                  normalizarItemsDetalle(valor).map((item, itemIndex) => (
+                    <tr
+                      key={`${bloque}-${item.id}`}
+                      className="border-b border-slate-100"
+                    >
+                      <td className="px-3 py-3 font-bold text-slate-900">
+                        {bloque}
+                        <span className="mt-1 block text-xs font-semibold text-slate-500">
+                          Ítem {itemIndex + 1}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                          {item.estado || "-"}
+                        </span>
+                      </td>
+                      <td className="whitespace-pre-wrap px-3 py-3 text-slate-700">
+                        {item.descripcion || "-"}
+                      </td>
+                    </tr>
+                  )),
+                )}
               </tbody>
             </table>
           </div>

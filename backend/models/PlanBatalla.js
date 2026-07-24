@@ -46,6 +46,10 @@ const PlanBatalla = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    claveIdempotencia: {
+      type: DataTypes.STRING(64),
+      allowNull: true,
+    },
   },
   {
     tableName: "planes_batalla",

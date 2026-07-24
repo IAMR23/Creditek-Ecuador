@@ -30,6 +30,39 @@ export const crearItemFormula = (item = {}) => ({
   estado: normalizarEstado(item.estado),
 });
 
+export const crearItemDetalle = (
+  item = {},
+  { estadoPredeterminado = "Pendiente" } = {},
+) => {
+  const valor =
+    item && typeof item === "object" ? item : { descripcion: item };
+
+  return {
+    id: valor.id || generarIdItem(),
+    descripcion: String(valor.descripcion ?? valor.texto ?? ""),
+    estado: String(valor.estado || estadoPredeterminado),
+  };
+};
+
+export const normalizarItemsDetalle = (
+  detalle,
+  { incluirVacio = false, estadoPredeterminado = "Pendiente" } = {},
+) => {
+  const valores = Array.isArray(detalle)
+    ? detalle
+    : detalle === undefined || detalle === null
+      ? []
+      : [detalle];
+
+  const items = valores.map((item) =>
+    crearItemDetalle(item, { estadoPredeterminado }),
+  );
+
+  return items.length || !incluirVacio
+    ? items
+    : [crearItemDetalle({}, { estadoPredeterminado })];
+};
+
 export const normalizarItemsFormula = (
   respuesta,
   { incluirVacio = false } = {},

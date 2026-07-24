@@ -5,6 +5,10 @@ const Agencia = require("../models/Agencia");
 const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Asistencia = require("../models/Asistencia");
+const { sequelize } = require("../config/db");
+const {
+  sincronizarSalidaUsuarioRve,
+} = require("../services/rveSyncService");
 
 const router = express.Router();
 
@@ -45,17 +49,23 @@ const normalizarObservacion = (observacion) => {
 
 const validarFechaISO = (fecha) => /^\d{4}-\d{2}-\d{2}$/.test(String(fecha));
 
-const obtenerUsuarioAgenciaIds = async (usuarioId) => {
+const obtenerUsuarioAgenciaIds = async (usuarioId, transaction = null) => {
   const relaciones = await UsuarioAgencia.findAll({
     where: { usuarioId },
     attributes: ["id"],
+    transaction,
   });
 
   return relaciones.map((relacion) => relacion.id);
 };
 
-const obtenerUsuarioAgenciaIdParaGuardar = async ({ usuarioId, usuarioAgenciaIdActivo, fecha }) => {
-  const usuarioAgenciaIds = await obtenerUsuarioAgenciaIds(usuarioId);
+const obtenerContextoAsistenciaUsuario = async ({
+  usuarioId,
+  usuarioAgenciaIdActivo,
+  fecha,
+  transaction = null,
+}) => {
+  const usuarioAgenciaIds = await obtenerUsuarioAgenciaIds(usuarioId, transaction);
   const existente = await Asistencia.findOne({
     where: {
       usuarioAgenciaId: { [Op.in]: usuarioAgenciaIds },
@@ -65,9 +75,116 @@ const obtenerUsuarioAgenciaIdParaGuardar = async ({ usuarioId, usuarioAgenciaIdA
       ["updatedAt", "DESC"],
       ["id", "DESC"],
     ],
+    transaction,
   });
 
-  return existente?.usuarioAgenciaId || usuarioAgenciaIdActivo;
+  return {
+    existente,
+    usuarioAgenciaIds,
+    usuarioAgenciaIdParaGuardar:
+      existente?.usuarioAgenciaId || usuarioAgenciaIdActivo,
+  };
+};
+
+const normalizarFechaSalida = (fechaSalida) => fechaSalida || null;
+
+const actualizarFechaSalidaUsuario = async ({
+  usuarioId,
+  fechaSalida,
+  transaction,
+  sincronizarAunqueNoCambie = false,
+}) => {
+  const usuario = await Usuario.findByPk(usuarioId, { transaction });
+
+  if (!usuario) {
+    console.error(
+      `No se pudo actualizar fechaSalida: no existe el usuario ABS ${usuarioId}.`,
+    );
+    return null;
+  }
+
+  const fechaAnterior = normalizarFechaSalida(usuario.fechaSalida);
+  const fechaNueva = normalizarFechaSalida(fechaSalida);
+  const cambio = fechaAnterior !== fechaNueva;
+
+  if (cambio) {
+    usuario.fechaSalida = fechaNueva;
+    await usuario.save({ transaction });
+  }
+
+  if (!cambio && !sincronizarAunqueNoCambie) return null;
+
+  return {
+    usuarioId: usuario.id,
+    cedula: usuario.cedula,
+    fechaSalida: fechaNueva,
+    desactivar: false,
+  };
+};
+
+const recalcularFechaSalidaUsuario = async ({
+  usuarioId,
+  fechasSalidaRemovidas,
+  transaction,
+}) => {
+  const usuarioAgenciaIds = await obtenerUsuarioAgenciaIds(usuarioId, transaction);
+  const otraSalida = usuarioAgenciaIds.length
+    ? await Asistencia.findOne({
+        where: {
+          usuarioAgenciaId: { [Op.in]: usuarioAgenciaIds },
+          estado: "salida",
+        },
+        order: [
+          ["fecha", "ASC"],
+          ["id", "ASC"],
+        ],
+        transaction,
+      })
+    : null;
+
+  if (otraSalida) {
+    return actualizarFechaSalidaUsuario({
+      usuarioId,
+      fechaSalida: otraSalida.fecha,
+      transaction,
+    });
+  }
+
+  const usuario = await Usuario.findByPk(usuarioId, { transaction });
+  if (!usuario) {
+    console.error(
+      `No se pudo recalcular fechaSalida: no existe el usuario ABS ${usuarioId}.`,
+    );
+    return null;
+  }
+
+  const fechaActual = normalizarFechaSalida(usuario.fechaSalida);
+  if (!fechaActual || !fechasSalidaRemovidas.has(fechaActual)) return null;
+
+  usuario.fechaSalida = null;
+  await usuario.save({ transaction });
+
+  return {
+    usuarioId: usuario.id,
+    cedula: usuario.cedula,
+    fechaSalida: null,
+    desactivar: false,
+  };
+};
+
+const sincronizarCambiosConRve = async (cambios) => {
+  await Promise.all(
+    cambios.filter(Boolean).map(async (cambio) => {
+      try {
+        await sincronizarSalidaUsuarioRve(cambio);
+      } catch (error) {
+        console.error(
+          `No se pudo sincronizar la salida en RVE para el usuario ABS ${cambio.usuarioId}:`,
+          error.message,
+        );
+      }
+    }),
+  );
 };
 
 const obtenerFechasEnRango = (fechaInicio, fechaFin) => {
@@ -192,6 +309,7 @@ router.post("/", async (req, res) => {
   try {
     const { agenciaId, usuarioAgenciaId, fecha, estado, observacion } = req.body;
     const observacionNormalizada = normalizarObservacion(observacion);
+    const estadoNormalizado = !estado || estado === "libre" ? null : estado;
 
     if (!agenciaId || !usuarioAgenciaId || !fecha) {
       return res
@@ -201,6 +319,10 @@ router.post("/", async (req, res) => {
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) {
       return res.status(400).json({ message: "fecha debe tener formato YYYY-MM-DD." });
+    }
+
+    if (estadoNormalizado && !ESTADOS_VALIDOS.has(estadoNormalizado)) {
+      return res.status(400).json({ message: "Estado de asistencia inválido." });
     }
 
     const ua = await UsuarioAgencia.findByPk(usuarioAgenciaId);
@@ -215,35 +337,69 @@ router.post("/", async (req, res) => {
         .json({ message: "El usuarioAgenciaId no pertenece a la agenciaId enviada." });
     }
 
-    const estadoNormalizado = !estado || estado === "libre" ? null : estado;
+    let record = null;
+    let asistenciaEliminada = false;
+    const cambiosRve = [];
 
-    const usuarioAgenciaIdParaGuardar = await obtenerUsuarioAgenciaIdParaGuardar({
-      usuarioId: ua.usuarioId,
-      usuarioAgenciaIdActivo: usuarioAgenciaId,
-      fecha,
+    await sequelize.transaction(async (transaction) => {
+      const {
+        existente,
+        usuarioAgenciaIdParaGuardar,
+      } = await obtenerContextoAsistenciaUsuario({
+        usuarioId: ua.usuarioId,
+        usuarioAgenciaIdActivo: usuarioAgenciaId,
+        fecha,
+        transaction,
+      });
+      const eraSalida = existente?.estado === "salida";
+
+      if (!estadoNormalizado && !observacionNormalizada) {
+        await Asistencia.destroy({
+          where: { usuarioAgenciaId: usuarioAgenciaIdParaGuardar, fecha },
+          transaction,
+        });
+        asistenciaEliminada = true;
+      } else {
+        [record] = await Asistencia.upsert(
+          {
+            usuarioAgenciaId: usuarioAgenciaIdParaGuardar,
+            fecha,
+            estado: estadoNormalizado,
+            observacion: observacionNormalizada,
+          },
+          { returning: true, transaction },
+        );
+      }
+
+      if (estadoNormalizado === "salida") {
+        cambiosRve.push(
+          await actualizarFechaSalidaUsuario({
+            usuarioId: ua.usuarioId,
+            fechaSalida: fecha,
+            transaction,
+            sincronizarAunqueNoCambie: true,
+          }),
+        );
+      } else if (eraSalida) {
+        cambiosRve.push(
+          await recalcularFechaSalidaUsuario({
+            usuarioId: ua.usuarioId,
+            fechasSalidaRemovidas: new Set([fecha]),
+            transaction,
+          }),
+        );
+      }
     });
 
-    if (!estadoNormalizado && !observacionNormalizada) {
-      await Asistencia.destroy({ where: { usuarioAgenciaId: usuarioAgenciaIdParaGuardar, fecha } });
+    await sincronizarCambiosConRve(cambiosRve);
+
+    if (asistenciaEliminada) {
       return res.json({ ok: true, message: "Asistencia eliminada." });
     }
 
-    if (estadoNormalizado && !ESTADOS_VALIDOS.has(estadoNormalizado)) {
-      return res.status(400).json({ message: "Estado de asistencia inválido." });
-    }
-
-    const [record] = await Asistencia.upsert(
-      {
-        usuarioAgenciaId: usuarioAgenciaIdParaGuardar,
-        fecha,
-        estado: estadoNormalizado,
-        observacion: observacionNormalizada,
-      },
-      { returning: true }
-    );
-
     return res.status(201).json(record);
   } catch (error) {
+    console.error("Error al guardar asistencia en ABS:", error);
     return res.status(500).json({ message: "Error al guardar asistencia", error });
   }
 });
@@ -306,22 +462,105 @@ router.post("/masivo", async (req, res) => {
 
     const fechas = obtenerFechasEnRango(fechaInicio, fechaFin);
     const idsValidos = usuarioAgencias.map((ua) => ua.id);
+    const usuarioIds = [...new Set(usuarioAgencias.map((ua) => ua.usuarioId))];
+    const cambiosRve = [];
+    let asistenciasEliminadas = false;
 
-    if (!estadoNormalizado && !observacionNormalizada) {
-      const usuarioIds = usuarioAgencias.map((ua) => ua.usuarioId);
+    await sequelize.transaction(async (transaction) => {
       const relacionesUsuarios = await UsuarioAgencia.findAll({
         where: { usuarioId: { [Op.in]: usuarioIds } },
-        attributes: ["id"],
+        attributes: ["id", "usuarioId"],
+        transaction,
       });
       const idsTodasRelaciones = relacionesUsuarios.map((ua) => ua.id);
+      const usuarioIdPorRelacion = new Map(
+        relacionesUsuarios.map((ua) => [ua.id, ua.usuarioId]),
+      );
+      const salidasRemovidasPorUsuario = new Map();
 
-      await Asistencia.destroy({
-        where: {
-          usuarioAgenciaId: { [Op.in]: idsTodasRelaciones },
-          fecha: { [Op.in]: fechas },
-        },
-      });
+      if (estadoNormalizado !== "salida" && idsTodasRelaciones.length) {
+        const salidasPrevias = await Asistencia.findAll({
+          where: {
+            usuarioAgenciaId: { [Op.in]: idsTodasRelaciones },
+            fecha: { [Op.in]: fechas },
+            estado: "salida",
+          },
+          attributes: ["usuarioAgenciaId", "fecha"],
+          transaction,
+        });
 
+        for (const salida of salidasPrevias) {
+          const usuarioId = usuarioIdPorRelacion.get(salida.usuarioAgenciaId);
+          if (!usuarioId) continue;
+
+          if (!salidasRemovidasPorUsuario.has(usuarioId)) {
+            salidasRemovidasPorUsuario.set(usuarioId, new Set());
+          }
+          salidasRemovidasPorUsuario.get(usuarioId).add(salida.fecha);
+        }
+      }
+
+      if (!estadoNormalizado && !observacionNormalizada) {
+        await Asistencia.destroy({
+          where: {
+            usuarioAgenciaId: { [Op.in]: idsTodasRelaciones },
+            fecha: { [Op.in]: fechas },
+          },
+          transaction,
+        });
+        asistenciasEliminadas = true;
+      } else {
+        for (const ua of usuarioAgencias) {
+          for (const fecha of fechas) {
+            const {
+              usuarioAgenciaIdParaGuardar,
+            } = await obtenerContextoAsistenciaUsuario({
+              usuarioId: ua.usuarioId,
+              usuarioAgenciaIdActivo: ua.id,
+              fecha,
+              transaction,
+            });
+
+            await Asistencia.upsert(
+              {
+                usuarioAgenciaId: usuarioAgenciaIdParaGuardar,
+                fecha,
+                estado: estadoNormalizado,
+                observacion: observacionNormalizada,
+              },
+              { transaction },
+            );
+          }
+        }
+      }
+
+      if (estadoNormalizado === "salida") {
+        for (const usuarioId of usuarioIds) {
+          cambiosRve.push(
+            await actualizarFechaSalidaUsuario({
+              usuarioId,
+              fechaSalida: fechaInicio,
+              transaction,
+              sincronizarAunqueNoCambie: true,
+            }),
+          );
+        }
+      } else {
+        for (const [usuarioId, fechasSalidaRemovidas] of salidasRemovidasPorUsuario) {
+          cambiosRve.push(
+            await recalcularFechaSalidaUsuario({
+              usuarioId,
+              fechasSalidaRemovidas,
+              transaction,
+            }),
+          );
+        }
+      }
+    });
+
+    await sincronizarCambiosConRve(cambiosRve);
+
+    if (asistenciasEliminadas) {
       return res.json({
         ok: true,
         message: "Asistencias eliminadas correctamente.",
@@ -330,25 +569,6 @@ router.post("/masivo", async (req, res) => {
       });
     }
 
-    await Promise.all(
-      usuarioAgencias.flatMap((ua) =>
-        fechas.map(async (fecha) => {
-          const usuarioAgenciaIdParaGuardar = await obtenerUsuarioAgenciaIdParaGuardar({
-            usuarioId: ua.usuarioId,
-            usuarioAgenciaIdActivo: ua.id,
-            fecha,
-          });
-
-          return Asistencia.upsert({
-            usuarioAgenciaId: usuarioAgenciaIdParaGuardar,
-            fecha,
-            estado: estadoNormalizado,
-            observacion: observacionNormalizada,
-          });
-        })
-      )
-    );
-
     return res.json({
       ok: true,
       message: "Asistencias masivas registradas correctamente.",
@@ -356,6 +576,7 @@ router.post("/masivo", async (req, res) => {
       totalFechas: fechas.length,
     });
   } catch (error) {
+    console.error("Error al guardar asistencias masivas en ABS:", error);
     return res
       .status(500)
       .json({ message: "Error al guardar asistencias masivas", error });

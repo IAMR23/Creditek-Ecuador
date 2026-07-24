@@ -6,6 +6,7 @@ const { sequelize } = require("../../config/db");
 const {
   DISPOSITIVOS,
   ESTADOS,
+  obtenerResumenInventario,
   resolverDispositivo,
   serializarInventario,
   validarInventario,
@@ -46,29 +47,6 @@ const construirWhere = (query = {}) => {
   if (dispositivo) where.nombre = dispositivo.label;
 
   return where;
-};
-
-const obtenerResumen = (registros) => {
-  const responsables = new Set();
-  const resumen = {
-    items: 0,
-    operativos: 0,
-    mantenimiento: 0,
-    fueraServicio: 0,
-    responsables: 0,
-  };
-
-  registros.forEach((registro) => {
-    const item = registro.get ? registro.get({ plain: true }) : registro;
-    resumen.items += 1;
-    if (item.estado === "OPERATIVO") resumen.operativos += 1;
-    if (item.estado === "EN_MANTENIMIENTO") resumen.mantenimiento += 1;
-    if (item.estado === "FUERA_DE_SERVICIO") resumen.fueraServicio += 1;
-    if (item.responsableId) responsables.add(Number(item.responsableId));
-  });
-
-  resumen.responsables = responsables.size;
-  return resumen;
 };
 
 const findInventario = (id, options = {}) =>
@@ -114,14 +92,14 @@ exports.listar = async (req, res) => {
       }),
       InventarioSistema.findAll({
         where,
-        attributes: ["estado", "responsableId"],
+        attributes: ["nombre", "estado", "responsableId"],
       }),
     ]);
 
     return res.json({
       ok: true,
       inventarios: rows.map(serializarInventario),
-      resumen: obtenerResumen(registrosResumen),
+      resumen: obtenerResumenInventario(registrosResumen),
       paginacion: {
         pagina,
         limite,

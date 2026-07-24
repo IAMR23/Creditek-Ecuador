@@ -113,6 +113,11 @@ const Usuario = sequelize.define(
       allowNull: true,
     },
 
+    fechaSalidaRegistradaAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
     numeroCuenta: {
       type: DataTypes.STRING,
       allowNull: true,

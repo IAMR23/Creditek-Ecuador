@@ -220,6 +220,7 @@ connectDB()
     app.use("/api/sistemas/inventarios", require("./routes/Sistemas/inventariosRoutes"));
     app.use("/api/alertas-personal", require("./routes/alertasPersonalRoutes"));
     app.use("/api/planes-batalla", require("./routes/planesBatallaRoutes"));
+    app.use("/api/integraciones/abs", require("./routes/integracionesAbsRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));

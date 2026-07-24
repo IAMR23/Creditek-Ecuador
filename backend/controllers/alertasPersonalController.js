@@ -3,6 +3,7 @@ const Usuario = require("../models/Usuario");
 const {
   construirAlertasPersonal,
   obtenerFechaActualEcuador,
+  obtenerRangoDiaEcuador,
   sumarDiasFecha,
 } = require("../services/alertasPersonalService");
 
@@ -10,12 +11,43 @@ const listarAlertasPersonal = async (_req, res) => {
   try {
     const fechaActual = obtenerFechaActualEcuador();
     const fechaIngresoObjetivo = sumarDiasFecha(fechaActual, -15);
+    const rangoActual = obtenerRangoDiaEcuador(fechaActual);
+    const rangoCreacionObjetivo = obtenerRangoDiaEcuador(
+      fechaIngresoObjetivo,
+    );
     const usuarios = await Usuario.findAll({
-      attributes: ["id", "nombre", "fechaIngreso", "fechaSalida", "activo"],
+      attributes: [
+        "id",
+        "nombre",
+        "fechaIngreso",
+        "fechaSalida",
+        "fechaSalidaRegistradaAt",
+        "activo",
+        "createdAt",
+      ],
       where: {
         [Op.or]: [
+          {
+            createdAt: {
+              [Op.gte]: rangoActual.inicio,
+              [Op.lt]: rangoActual.fin,
+            },
+          },
           { fechaIngreso: fechaIngresoObjetivo, activo: true },
-          { fechaSalida: fechaActual },
+          {
+            createdAt: {
+              [Op.gte]: rangoCreacionObjetivo.inicio,
+              [Op.lt]: rangoCreacionObjetivo.fin,
+            },
+            fechaIngreso: null,
+            activo: true,
+          },
+          {
+            fechaSalidaRegistradaAt: {
+              [Op.gte]: rangoActual.inicio,
+              [Op.lt]: rangoActual.fin,
+            },
+          },
         ],
       },
       order: [["nombre", "ASC"]],

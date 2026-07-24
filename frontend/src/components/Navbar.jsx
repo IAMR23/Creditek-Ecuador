@@ -69,10 +69,12 @@ function Navbar({ auth, setAuth }) {
 
     cargarAlertasPersonal();
     const intervalo = window.setInterval(cargarAlertasPersonal, 30 * 60 * 1000);
+    socket.on("novedades-personal:actualizar", cargarAlertasPersonal);
 
     return () => {
       activo = false;
       window.clearInterval(intervalo);
+      socket.off("novedades-personal:actualizar", cargarAlertasPersonal);
     };
   }, [puedeVerAlertasPersonal]);
 

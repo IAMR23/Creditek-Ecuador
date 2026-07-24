@@ -5,6 +5,8 @@ const DISPOSITIVOS = [
   { value: "CELULAR", label: "Celular" },
   { value: "CARGADOR_LAPTOP", label: "Cargador de laptop" },
   { value: "CARGADOR_CELULAR", label: "Cargador de celular" },
+  { value: "IMPRESORA", label: "Impresora" },
+  { value: "REGULADOR_VOLTAJE", label: "Regulador de voltaje" },
 ];
 
 const ESTADOS = [
@@ -55,6 +57,50 @@ const resolverDispositivo = (value) => {
         item.value === opcion || normalizarOpcion(item.label) === opcion,
     ) || null
   );
+};
+
+const obtenerResumenInventario = (registros = []) => {
+  const responsables = new Set();
+  const cantidades = new Map(
+    DISPOSITIVOS.map((dispositivo) => [dispositivo.value, 0]),
+  );
+  const resumen = {
+    items: 0,
+    operativos: 0,
+    mantenimiento: 0,
+    fueraServicio: 0,
+    responsables: 0,
+    porDispositivo: [],
+  };
+
+  registros.forEach((registro) => {
+    const item = registro?.get
+      ? registro.get({ plain: true })
+      : registro;
+    if (!item) return;
+
+    resumen.items += 1;
+    if (item.estado === "OPERATIVO") resumen.operativos += 1;
+    if (item.estado === "EN_MANTENIMIENTO") resumen.mantenimiento += 1;
+    if (item.estado === "FUERA_DE_SERVICIO") resumen.fueraServicio += 1;
+    if (item.responsableId) responsables.add(Number(item.responsableId));
+
+    const dispositivo = resolverDispositivo(item.nombre);
+    if (dispositivo) {
+      cantidades.set(
+        dispositivo.value,
+        (cantidades.get(dispositivo.value) || 0) + 1,
+      );
+    }
+  });
+
+  resumen.responsables = responsables.size;
+  resumen.porDispositivo = DISPOSITIVOS.map((dispositivo) => ({
+    ...dispositivo,
+    cantidad: cantidades.get(dispositivo.value) || 0,
+  }));
+
+  return resumen;
 };
 
 const validarInventario = (payload = {}) => {
@@ -121,6 +167,7 @@ const serializarInventario = (registro) => {
 module.exports = {
   DISPOSITIVOS,
   ESTADOS,
+  obtenerResumenInventario,
   resolverDispositivo,
   serializarInventario,
   validarInventario,
