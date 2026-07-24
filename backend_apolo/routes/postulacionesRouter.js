@@ -35,6 +35,102 @@ const tieneDatos = (obj = {}) => Object.values(obj).some((value) => !isEmptyValu
 
 const normalizeArray = (value) => (Array.isArray(value) ? value.map(clean).filter(tieneDatos) : []);
 
+const normalizeTextKey = (value = "") =>
+  String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const normalizeTxtLine = (value = "") => String(value).replace(/\r/g, "").trim();
+
+const parseTxtHeading = (heading = "") => {
+  const etiquetaOriginal = normalizeTxtLine(heading);
+  const parts = etiquetaOriginal
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const firstPart = parts[0] || etiquetaOriginal;
+  const familiarMatch = firstPart.match(/^FAMILIAR\s+(\d+)/i);
+
+  if (familiarMatch) {
+    return clean({
+      tipo: "FAMILIAR",
+      numero: familiarMatch[1],
+      relacion: parts[1] || "FAMILIAR",
+      detalle: parts.slice(2).join(" - "),
+      etiquetaOriginal,
+    });
+  }
+
+  return clean({
+    tipo: firstPart.toUpperCase(),
+    relacion: firstPart.toUpperCase(),
+    etiquetaOriginal,
+  });
+};
+
+const assignTxtField = (record, rawKey, rawValue) => {
+  const key = normalizeTextKey(rawKey);
+  const value = normalizeTxtLine(rawValue);
+
+  if (!value) return;
+
+  if (key === "nombre") record.nombre = value;
+  else if (key === "edad") record.edad = value;
+  else if (key === "cedula") record.cedula = value;
+  else if (key === "lugar de nacimiento") record.lugarNacimiento = value;
+  else if (key === "nivel de estudio") record.nivelEstudio = value;
+  else record[rawKey.trim()] = value;
+};
+
+const tieneDatosPersonaTxt = (record = {}) =>
+  ["nombre", "edad", "cedula", "lugarNacimiento", "nivelEstudio"].some((key) =>
+    !isEmptyValue(record[key])
+  );
+
+const parsePostulanteTxt = (content = "") => {
+  const lines = String(content)
+    .split("\n")
+    .map(normalizeTxtLine)
+    .filter(Boolean);
+  const records = [];
+  let current = null;
+
+  lines.forEach((line) => {
+    const separatorIndex = line.indexOf(":");
+
+    if (separatorIndex === -1) {
+      if (current && tieneDatosPersonaTxt(current)) records.push(clean(current));
+      current = parseTxtHeading(line);
+      return;
+    }
+
+    if (!current) current = parseTxtHeading("TITULAR");
+
+    assignTxtField(
+      current,
+      line.slice(0, separatorIndex),
+      line.slice(separatorIndex + 1),
+    );
+  });
+
+  if (current && tieneDatosPersonaTxt(current)) records.push(clean(current));
+
+  const titular = records.find((record) => record.tipo === "TITULAR") || null;
+  const familiares = records.filter((record) => record.tipo !== "TITULAR");
+
+  return { titular, familiares, registros: records };
+};
+
+const extractTxtContent = (body = {}) => {
+  if (typeof body === "string") return body;
+  if (typeof body?.contenido === "string") return body.contenido;
+  if (typeof body?.texto === "string") return body.texto;
+  if (typeof body?.txt === "string") return body.txt;
+  return "";
+};
+
 const parsePositiveInt = (value, fallback, max = Number.MAX_SAFE_INTEGER) => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -139,6 +235,11 @@ const buildListWhere = (query = {}) => {
   )
     ? String(query.tituloTercerNivel).toLowerCase()
     : "";
+  const estudiaActualmente = ["si", "no"].includes(
+    String(query.estudiaActualmente || "").toLowerCase(),
+  )
+    ? String(query.estudiaActualmente).toLowerCase()
+    : "";
   const edadDesde = parseOptionalAge(query.edadDesde);
   const edadHasta = parseOptionalAge(query.edadHasta);
   const noLeidas = String(query.noLeidas || "").toLowerCase() === "true";
@@ -193,6 +294,14 @@ const buildListWhere = (query = {}) => {
     andConditions.push(
       sequelizeWhere(json("formulario.datos_personales.tieneTituloTercerNivel"), {
         [Op.iLike]: tituloTercerNivel,
+      }),
+    );
+  }
+
+  if (estudiaActualmente) {
+    andConditions.push(
+      sequelizeWhere(json("formulario.datos_personales.estudiaActualmente"), {
+        [Op.iLike]: estudiaActualmente,
       }),
     );
   }
@@ -309,6 +418,49 @@ const normalizePayload = (data = {}) => {
   };
 
   return payload;
+};
+
+const mergeTxtImportIntoForm = (formulario = {}, parsed) => {
+  const titular = parsed.titular || {};
+  const titularImportado = parsed.titular
+    ? clean({
+        ...parsed.titular,
+        limpio: false,
+        observacion: "",
+      })
+    : null;
+  const familiares = parsed.familiares.map((familiar) =>
+    clean({
+      ...familiar,
+      limpio: false,
+      observacion: "",
+    })
+  );
+  const datosPersonales = clean({
+    ...(formulario.datos_personales || {}),
+    nombreCompleto: titular.nombre || formulario.datos_personales?.nombreCompleto,
+    cedula: titular.cedula || formulario.datos_personales?.cedula,
+    edadCumplida: titular.edad || formulario.datos_personales?.edadCumplida,
+    lugarNacimiento: titular.lugarNacimiento || formulario.datos_personales?.lugarNacimiento,
+    nivelEstudio: titular.nivelEstudio || formulario.datos_personales?.nivelEstudio,
+  });
+
+  return {
+    ...formulario,
+    datos_personales: datosPersonales,
+    titular_postulante: titularImportado,
+    familiares_postulante: familiares,
+    importacion_familiares_txt: clean({
+      titular: titularImportado,
+      totalFamiliares: familiares.length,
+      fechaImportacion: new Date().toISOString(),
+      origen: "txt",
+    }),
+    metadata: clean({
+      ...(formulario.metadata || {}),
+      ultima_importacion_familiares_txt: new Date().toISOString(),
+    }),
+  };
 };
 
 const buildResumen = async () => {
@@ -525,6 +677,217 @@ router.get("/", auth, async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al obtener postulaciones",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/familiares-txt", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const txtContent = extractTxtContent(req.body);
+
+    if (!txtContent.trim()) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe enviar el contenido del archivo TXT",
+      });
+    }
+
+    const parsed = parsePostulanteTxt(txtContent);
+
+    if (!parsed.titular && parsed.familiares.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "No se encontraron datos validos en el archivo TXT",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    const formularioActualizado = mergeTxtImportIntoForm(postulacion.formulario || {}, parsed);
+    const datos = formularioActualizado.datos_personales || {};
+
+    postulacion.formulario = formularioActualizado;
+    postulacion.nombre = datos.nombreCompleto || postulacion.nombre || null;
+    postulacion.cedula = datos.cedula || postulacion.cedula || null;
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: "Informacion familiar importada correctamente",
+      data: postulacion,
+      parsed: {
+        titular: parsed.titular,
+        familiares: parsed.familiares,
+      },
+    });
+  } catch (error) {
+    console.error("Error importando informacion familiar desde TXT:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al importar informacion familiar desde TXT",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/familiares/:familiarIndex", auth, async (req, res) => {
+  try {
+    const { id, familiarIndex } = req.params;
+    const index = Number.parseInt(familiarIndex, 10);
+
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Indice de familiar no valido",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    const formulario = postulacion.formulario || {};
+    const familiares = Array.isArray(formulario.familiares_postulante)
+      ? [...formulario.familiares_postulante]
+      : [];
+
+    if (!familiares[index]) {
+      return res.status(404).json({
+        ok: false,
+        message: "Familiar importado no encontrado",
+      });
+    }
+
+    const limpio =
+      typeof req.body?.limpio === "boolean" ? req.body.limpio : familiares[index].limpio;
+    const observacion =
+      typeof req.body?.observacion === "string"
+        ? req.body.observacion.trim()
+        : familiares[index].observacion || "";
+
+    if (observacion.length > 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "La observacion no puede superar 1000 caracteres",
+      });
+    }
+
+    familiares[index] = clean({
+      ...familiares[index],
+      limpio,
+      observacion,
+    });
+
+    postulacion.formulario = {
+      ...formulario,
+      familiares_postulante: familiares,
+      metadata: clean({
+        ...(formulario.metadata || {}),
+        ultima_revision_familiar_txt: new Date().toISOString(),
+      }),
+    };
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: "Revision del familiar guardada",
+      data: postulacion,
+      familiar: familiares[index],
+    });
+  } catch (error) {
+    console.error("Error guardando revision de familiar importado:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al guardar la revision del familiar",
+      error: error.message,
+    });
+  }
+});
+
+router.patch("/:id/titular-txt", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    const formulario = postulacion.formulario || {};
+    const titular =
+      formulario.titular_postulante || formulario.importacion_familiares_txt?.titular;
+
+    if (!titular) {
+      return res.status(404).json({
+        ok: false,
+        message: "Titular importado no encontrado",
+      });
+    }
+
+    const limpio = typeof req.body?.limpio === "boolean" ? req.body.limpio : titular.limpio;
+    const observacion =
+      typeof req.body?.observacion === "string"
+        ? req.body.observacion.trim()
+        : titular.observacion || "";
+
+    if (observacion.length > 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "La observacion no puede superar 1000 caracteres",
+      });
+    }
+
+    const titularActualizado = clean({
+      ...titular,
+      limpio,
+      observacion,
+    });
+
+    postulacion.formulario = {
+      ...formulario,
+      titular_postulante: titularActualizado,
+      importacion_familiares_txt: clean({
+        ...(formulario.importacion_familiares_txt || {}),
+        titular: titularActualizado,
+      }),
+      metadata: clean({
+        ...(formulario.metadata || {}),
+        ultima_revision_titular_txt: new Date().toISOString(),
+      }),
+    };
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: "Revision del titular guardada",
+      data: postulacion,
+      titular: titularActualizado,
+    });
+  } catch (error) {
+    console.error("Error guardando revision del titular importado:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al guardar la revision del titular",
       error: error.message,
     });
   }

@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
+  ChevronDown,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Eye,
   Pencil,
   RefreshCw,
   Save,
   Search,
   Undo2,
+  Upload,
   UserCheck,
+  Users,
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
@@ -29,6 +33,7 @@ const createEmptyFilters = () => ({
   edadHasta: "",
   ciudad: "",
   tituloTercerNivel: "",
+  estudiaActualmente: "",
 });
 
 const createInitialFilters = (modo) => ({
@@ -40,6 +45,11 @@ const createInitialFilters = (modo) => ({
 
 const getDatos = (postulacion) => postulacion?.formulario?.datos_personales || {};
 const getVivienda = (postulacion) => postulacion?.formulario?.vivienda_actual || {};
+const getTitularTxt = (postulacion) =>
+  postulacion?.formulario?.titular_postulante ||
+  postulacion?.formulario?.importacion_familiares_txt?.titular ||
+  null;
+const getFamiliaresTxt = (postulacion) => postulacion?.formulario?.familiares_postulante || [];
 
 const formatDate = (date) => {
   if (!date) return dash;
@@ -93,7 +103,12 @@ export default function Postulaciones({ modo = "postulacion" }) {
   const [updatingStageId, setUpdatingStageId] = useState(null);
   const [entrevistaDrafts, setEntrevistaDrafts] = useState({});
   const [savingInterviewDateId, setSavingInterviewDateId] = useState(null);
+  const [importingFamilyTxtId, setImportingFamilyTxtId] = useState(null);
+  const [expandedFamilyId, setExpandedFamilyId] = useState(null);
+  const [savingFamilyReviewKey, setSavingFamilyReviewKey] = useState("");
   const requestIdRef = useRef(0);
+  const familyTxtInputRef = useRef(null);
+  const familyTxtTargetRef = useRef(null);
 
   const total = useMemo(() => pagination.total || postulaciones.length, [pagination.total, postulaciones.length]);
 
@@ -147,6 +162,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
           edadHasta: filtersToUse.edadHasta || undefined,
           ciudad: filtersToUse.ciudad.trim() || undefined,
           tituloTercerNivel: filtersToUse.tituloTercerNivel || undefined,
+          estudiaActualmente: filtersToUse.estudiaActualmente || undefined,
           fase: modo,
         },
       });
@@ -426,6 +442,199 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }
   };
 
+  const seleccionarTxtFamiliares = (postulacion) => {
+    familyTxtTargetRef.current = postulacion;
+    if (familyTxtInputRef.current) {
+      familyTxtInputRef.current.value = "";
+      familyTxtInputRef.current.click();
+    }
+  };
+
+  const alternarFamiliares = (postulacion) => {
+    setExpandedFamilyId((prev) => (prev === postulacion.id ? null : postulacion.id));
+  };
+
+  const actualizarFamiliarLocal = (postulacionId, familiarIndex, changes) => {
+    const updateItem = (item) => {
+      if (item.id !== postulacionId) return item;
+
+      const formulario = item.formulario || {};
+      const familiares = Array.isArray(formulario.familiares_postulante)
+        ? formulario.familiares_postulante.map((familiar, index) =>
+            index === familiarIndex ? { ...familiar, ...changes } : familiar,
+          )
+        : [];
+
+      return {
+        ...item,
+        formulario: {
+          ...formulario,
+          familiares_postulante: familiares,
+        },
+      };
+    };
+
+    setPostulaciones((prev) => prev.map(updateItem));
+    setSelected((prev) => (prev ? updateItem(prev) : prev));
+  };
+
+  const actualizarTitularLocal = (postulacionId, changes) => {
+    const updateItem = (item) => {
+      if (item.id !== postulacionId) return item;
+
+      const formulario = item.formulario || {};
+      const titular =
+        formulario.titular_postulante || formulario.importacion_familiares_txt?.titular || {};
+      const titularActualizado = { ...titular, ...changes };
+
+      return {
+        ...item,
+        formulario: {
+          ...formulario,
+          titular_postulante: titularActualizado,
+          importacion_familiares_txt: {
+            ...(formulario.importacion_familiares_txt || {}),
+            titular: titularActualizado,
+          },
+        },
+      };
+    };
+
+    setPostulaciones((prev) => prev.map(updateItem));
+    setSelected((prev) => (prev ? updateItem(prev) : prev));
+  };
+
+  const guardarRevisionTitular = async (postulacion, changes) => {
+    const key = `${postulacion.id}-titular`;
+
+    try {
+      setSavingFamilyReviewKey(key);
+      setError("");
+      const res = await api.patch(`/api/postulaciones/${postulacion.id}/titular-txt`, changes);
+      const postulacionActualizada = res.data?.data;
+
+      if (postulacionActualizada) {
+        setPostulaciones((prev) =>
+          prev.map((item) =>
+            item.id === postulacion.id ? postulacionActualizada : item,
+          ),
+        );
+        setSelected((prev) =>
+          prev?.id === postulacion.id ? postulacionActualizada : prev,
+        );
+      }
+    } catch (err) {
+      const message =
+        err.response?.data?.message || "No se pudo guardar la revision del titular";
+      setError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setSavingFamilyReviewKey("");
+    }
+  };
+
+  const guardarRevisionFamiliar = async (postulacion, familiarIndex, changes) => {
+    const key = `${postulacion.id}-${familiarIndex}`;
+
+    try {
+      setSavingFamilyReviewKey(key);
+      setError("");
+      const res = await api.patch(
+        `/api/postulaciones/${postulacion.id}/familiares/${familiarIndex}`,
+        changes,
+      );
+      const postulacionActualizada = res.data?.data;
+
+      if (postulacionActualizada) {
+        setPostulaciones((prev) =>
+          prev.map((item) =>
+            item.id === postulacion.id ? postulacionActualizada : item,
+          ),
+        );
+        setSelected((prev) =>
+          prev?.id === postulacion.id ? postulacionActualizada : prev,
+        );
+      }
+    } catch (err) {
+      const message =
+        err.response?.data?.message || "No se pudo guardar la revision del familiar";
+      setError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setSavingFamilyReviewKey("");
+    }
+  };
+
+  const cambiarLimpioFamiliar = (postulacion, familiarIndex, limpio) => {
+    actualizarFamiliarLocal(postulacion.id, familiarIndex, { limpio });
+    guardarRevisionFamiliar(postulacion, familiarIndex, { limpio });
+  };
+
+  const cambiarObservacionFamiliar = (postulacion, familiarIndex, observacion) => {
+    actualizarFamiliarLocal(postulacion.id, familiarIndex, { observacion });
+  };
+
+  const cambiarLimpioTitular = (postulacion, limpio) => {
+    actualizarTitularLocal(postulacion.id, { limpio });
+    guardarRevisionTitular(postulacion, { limpio });
+  };
+
+  const cambiarObservacionTitular = (postulacion, observacion) => {
+    actualizarTitularLocal(postulacion.id, { observacion });
+  };
+
+  const importarTxtFamiliares = async (event) => {
+    const file = event.target.files?.[0];
+    const postulacion = familyTxtTargetRef.current;
+
+    if (!file || !postulacion) return;
+
+    if (!file.name.toLowerCase().endsWith(".txt")) {
+      Swal.fire("Archivo no valido", "Selecciona un archivo .txt.", "warning");
+      event.target.value = "";
+      return;
+    }
+
+    try {
+      setImportingFamilyTxtId(postulacion.id);
+      setError("");
+      const contenido = await file.text();
+      const res = await api.patch(`/api/postulaciones/${postulacion.id}/familiares-txt`, {
+        contenido,
+        nombreArchivo: file.name,
+      });
+      const postulacionActualizada = res.data?.data;
+      const totalFamiliares = res.data?.parsed?.familiares?.length || 0;
+
+      if (postulacionActualizada) {
+        setPostulaciones((prev) =>
+          prev.map((item) =>
+            item.id === postulacion.id ? postulacionActualizada : item,
+          ),
+        );
+        setSelected((prev) =>
+          prev?.id === postulacion.id ? postulacionActualizada : prev,
+        );
+        setExpandedFamilyId(postulacion.id);
+      }
+
+      Swal.fire(
+        "Importado",
+        `Se guardaron ${totalFamiliares} familiar${totalFamiliares === 1 ? "" : "es"} en el postulante.`,
+        "success",
+      );
+    } catch (err) {
+      const message =
+        err.response?.data?.message || "No se pudo importar el archivo TXT";
+      setError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setImportingFamilyTxtId(null);
+      familyTxtTargetRef.current = null;
+      event.target.value = "";
+    }
+  };
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchPostulaciones(1, filters);
@@ -436,6 +645,13 @@ export default function Postulaciones({ modo = "postulacion" }) {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
+      <input
+        ref={familyTxtInputRef}
+        type="file"
+        accept=".txt,text/plain"
+        className="hidden"
+        onChange={importarTxtFamiliares}
+      />
       <div className="mx-auto max-w-7xl">
         <div className="mb-6">
           <div>
@@ -530,6 +746,23 @@ export default function Postulaciones({ modo = "postulacion" }) {
               >
                 <option value="">Todos</option>
                 <option value="si">Sí</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Estudia actualmente
+              </label>
+              <select
+                value={filters.estudiaActualmente}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, estudiaActualmente: e.target.value }))
+                }
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              >
+                <option value="">Todos</option>
+                <option value="si">Si</option>
                 <option value="no">No</option>
               </select>
             </div>
@@ -633,12 +866,16 @@ export default function Postulaciones({ modo = "postulacion" }) {
                   {postulaciones.map((p) => {
                     const datos = getDatos(p);
                     const vivienda = getVivienda(p);
+                    const titularTxt = getTitularTxt(p);
+                    const familiaresTxt = getFamiliaresTxt(p);
+                    const totalRegistrosTxt = familiaresTxt.length + (titularTxt ? 1 : 0);
                     const trabajos = p.formulario?.historial_laboral?.length || 0;
 
                     const editingObservation = editingObservationId === p.id;
 
                     return (
-                      <tr key={p.id} className="transition hover:bg-slate-50">
+                      <Fragment key={p.id}>
+                      <tr className="transition hover:bg-slate-50">
                         <td className={tdClass}>
                           <div className="min-w-0 break-words font-semibold text-slate-900">
                             {datos.nombreCompleto || p.nombre || dash}
@@ -809,6 +1046,36 @@ export default function Postulaciones({ modo = "postulacion" }) {
                             >
                               <Eye size={14} />
                             </button>
+                            <button
+                              onClick={() => seleccionarTxtFamiliares(p)}
+                              disabled={importingFamilyTxtId === p.id}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              aria-label="Importar TXT familiar"
+                              title={
+                                importingFamilyTxtId === p.id
+                                  ? "Importando"
+                                  : "Importar TXT familiar"
+                              }
+                            >
+                              <Upload size={14} />
+                            </button>
+                            <button
+                              onClick={() => alternarFamiliares(p)}
+                              disabled={!totalRegistrosTxt}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label="Ver familiares importados"
+                              title={
+                                totalRegistrosTxt
+                                  ? "Ver datos importados"
+                                  : "Sin datos importados"
+                              }
+                            >
+                              {expandedFamilyId === p.id ? (
+                                <ChevronUp size={14} />
+                              ) : (
+                                <Users size={14} />
+                              )}
+                            </button>
                             {!esDescartados && (
                               <button
                                 onClick={() => actualizarDescarte(p, true)}
@@ -825,6 +1092,217 @@ export default function Postulaciones({ modo = "postulacion" }) {
                           </div>
                         </td>
                       </tr>
+                      {expandedFamilyId === p.id && totalRegistrosTxt > 0 && (
+                        <tr className="bg-slate-50">
+                          <td colSpan={14} className="px-3 py-3">
+                            <div className="rounded-lg border border-orange-200 bg-white p-4 shadow-sm">
+                              <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-wide text-orange-600">
+                                    Datos importados
+                                  </p>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {totalRegistrosTxt} registro
+                                    {totalRegistrosTxt === 1 ? "" : "s"} importado
+                                    {totalRegistrosTxt === 1 ? "" : "s"} desde el TXT
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => setExpandedFamilyId(null)}
+                                  className="inline-flex h-8 w-8 items-center justify-center self-start rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 sm:self-auto"
+                                  aria-label="Cerrar familiares"
+                                  title="Cerrar"
+                                >
+                                  <ChevronDown size={16} />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                {titularTxt && (
+                                  <div className="rounded-md border border-orange-200 bg-orange-50 p-3">
+                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700">
+                                          Titular
+                                        </p>
+                                        <p className="break-words text-sm font-bold text-slate-900">
+                                          {titularTxt.nombre || datos.nombreCompleto || p.nombre || dash}
+                                        </p>
+                                      </div>
+                                      <span className="shrink-0 rounded-full bg-orange-600 px-2 py-1 text-[10px] font-bold text-white">
+                                        Postulante
+                                      </span>
+                                    </div>
+                                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                                      <div>
+                                        <dt className="font-semibold uppercase text-slate-500">Cedula</dt>
+                                        <dd className="break-words text-slate-800">
+                                          {titularTxt.cedula || datos.cedula || p.cedula || dash}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt className="font-semibold uppercase text-slate-500">Edad</dt>
+                                        <dd className="break-words text-slate-800">
+                                          {titularTxt.edad || datos.edadCumplida || dash}
+                                        </dd>
+                                      </div>
+                                      <div className="col-span-2">
+                                        <dt className="font-semibold uppercase text-slate-500">
+                                          Lugar de nacimiento
+                                        </dt>
+                                        <dd className="break-words text-slate-800">
+                                          {titularTxt.lugarNacimiento || datos.lugarNacimiento || dash}
+                                        </dd>
+                                      </div>
+                                      <div className="col-span-2">
+                                        <dt className="font-semibold uppercase text-slate-500">
+                                          Nivel de estudio
+                                        </dt>
+                                        <dd className="break-words text-slate-800">
+                                          {titularTxt.nivelEstudio || datos.nivelEstudio || dash}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                    <div className="mt-3 border-t border-orange-200 pt-3">
+                                      <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={Boolean(titularTxt.limpio)}
+                                          onChange={(event) =>
+                                            cambiarLimpioTitular(p, event.target.checked)
+                                          }
+                                          disabled={savingFamilyReviewKey === `${p.id}-titular`}
+                                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        />
+                                        Limpio
+                                      </label>
+                                      <label className="mt-2 block text-[11px] font-semibold uppercase text-slate-500">
+                                        Observacion
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={titularTxt.observacion || ""}
+                                        onChange={(event) =>
+                                          cambiarObservacionTitular(p, event.target.value)
+                                        }
+                                        onBlur={(event) =>
+                                          guardarRevisionTitular(p, {
+                                            observacion: event.target.value,
+                                          })
+                                        }
+                                        maxLength={1000}
+                                        placeholder="Escribe una observacion"
+                                        disabled={savingFamilyReviewKey === `${p.id}-titular`}
+                                        className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                      />
+                                      {savingFamilyReviewKey === `${p.id}-titular` && (
+                                        <p className="mt-1 text-[10px] font-semibold text-orange-600">
+                                          Guardando...
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                                {familiaresTxt.map((familiar, index) => (
+                                  <div
+                                    key={`${p.id}-familiar-${index}`}
+                                    className="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                  >
+                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                                          {familiar.relacion || familiar.tipo || `Familiar ${index + 1}`}
+                                        </p>
+                                        <p className="break-words text-sm font-bold text-slate-900">
+                                          {familiar.nombre || dash}
+                                        </p>
+                                      </div>
+                                      <span className="shrink-0 rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">
+                                        #{index + 1}
+                                      </span>
+                                    </div>
+                                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                                      <div>
+                                        <dt className="font-semibold uppercase text-slate-500">Cedula</dt>
+                                        <dd className="break-words text-slate-800">{familiar.cedula || dash}</dd>
+                                      </div>
+                                      <div>
+                                        <dt className="font-semibold uppercase text-slate-500">Edad</dt>
+                                        <dd className="break-words text-slate-800">{familiar.edad || dash}</dd>
+                                      </div>
+                                      <div className="col-span-2">
+                                        <dt className="font-semibold uppercase text-slate-500">
+                                          Lugar de nacimiento
+                                        </dt>
+                                        <dd className="break-words text-slate-800">
+                                          {familiar.lugarNacimiento || dash}
+                                        </dd>
+                                      </div>
+                                      <div className="col-span-2">
+                                        <dt className="font-semibold uppercase text-slate-500">
+                                          Nivel de estudio
+                                        </dt>
+                                        <dd className="break-words text-slate-800">
+                                          {familiar.nivelEstudio || dash}
+                                        </dd>
+                                      </div>
+                                      {familiar.detalle && (
+                                        <div className="col-span-2">
+                                          <dt className="font-semibold uppercase text-slate-500">
+                                            Detalle
+                                          </dt>
+                                          <dd className="break-words text-slate-800">
+                                            {familiar.detalle}
+                                          </dd>
+                                        </div>
+                                      )}
+                                    </dl>
+                                    <div className="mt-3 border-t border-slate-200 pt-3">
+                                      <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={Boolean(familiar.limpio)}
+                                          onChange={(event) =>
+                                            cambiarLimpioFamiliar(p, index, event.target.checked)
+                                          }
+                                          disabled={savingFamilyReviewKey === `${p.id}-${index}`}
+                                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                        />
+                                        Limpio
+                                      </label>
+                                      <label className="mt-2 block text-[11px] font-semibold uppercase text-slate-500">
+                                        Observacion
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={familiar.observacion || ""}
+                                        onChange={(event) =>
+                                          cambiarObservacionFamiliar(p, index, event.target.value)
+                                        }
+                                        onBlur={(event) =>
+                                          guardarRevisionFamiliar(p, index, {
+                                            observacion: event.target.value,
+                                          })
+                                        }
+                                        maxLength={1000}
+                                        placeholder="Escribe una observacion"
+                                        disabled={savingFamilyReviewKey === `${p.id}-${index}`}
+                                        className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-800 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                      />
+                                      {savingFamilyReviewKey === `${p.id}-${index}` && (
+                                        <p className="mt-1 text-[10px] font-semibold text-orange-600">
+                                          Guardando...
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
