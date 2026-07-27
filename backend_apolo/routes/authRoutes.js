@@ -6,6 +6,10 @@ const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Agencia = require("../models/Agencia");
+const {
+  condicionIdentificadorLogin,
+  normalizarIdentificador,
+} = require("../utils/usuarioLogin");
 
 const router = express.Router();
 
@@ -86,6 +90,7 @@ const getUserSessionPayload = async (usuarioId) => {
     id: usuario.id,
     nombre: usuario.nombre,
     email: usuario.email,
+    usuario: usuario.usuario,
     rol: usuario.rol ? { id: usuario.rol.id, nombre: usuario.rol.nombre } : null,
     agencias,
     agenciaPrincipal: agencias[0],
@@ -120,10 +125,19 @@ const sendSession = (res, usuario, message = "Login exitoso") => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const identificador = normalizarIdentificador(
+      req.body.identificador || req.body.email || req.body.usuario,
+    );
+
+    if (!identificador || !password) {
+      return res.status(400).json({
+        message: "Usuario o contraseña incorrectos",
+      });
+    }
 
     const usuario = await Usuario.findOne({
-      where: { email },
+      where: condicionIdentificadorLogin(identificador),
       include: [{ model: Rol, as: "rol", attributes: ["id", "nombre", "descripcion"] }],
     });
 

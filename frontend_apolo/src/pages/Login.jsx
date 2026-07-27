@@ -9,7 +9,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState({
-    email: "",
+    identificador: "",
     password: "",
   });
 
@@ -63,14 +63,16 @@ export default function Login() {
 
         <form onSubmit={onSubmit} className="mt-6 grid gap-4">
           <input
-            type="email"
-            placeholder="Email"
+            type="text"
+            required
+            autoComplete="username"
+            placeholder="Correo o usuario"
             className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
-            value={form.email}
+            value={form.identificador}
             onChange={(e) =>
               setForm({
                 ...form,
-                email: e.target.value,
+                identificador: e.target.value,
               })
             }
           />
@@ -78,6 +80,8 @@ export default function Login() {
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
+              required
+              autoComplete="current-password"
               placeholder="Contraseña"
               className="w-full border border-slate-200 bg-white p-3 pr-12 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
               value={form.password}

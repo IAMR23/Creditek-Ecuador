@@ -68,6 +68,10 @@ app.use(parseCookies);
 app.get("/health", (_req, res) => res.json({ ok: true, app: "ABS" }));
 app.use("/bootstrap", bootstrapRoutes);
 app.use("/auth", authRoutes);
+app.use(
+  "/api/integraciones/rve",
+  require("./routes/integracionesRveRoutes"),
+);
 
 app.use("/usuarios",  auth, usuarioRoutes);
 app.use("/agencias",  auth , agenciaRoutes);

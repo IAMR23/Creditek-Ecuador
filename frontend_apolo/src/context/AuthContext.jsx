@@ -103,8 +103,11 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const login = async ({ email, password }) => {
-    const res = await api.post("/auth/login", { email, password });
+  const login = async ({ identificador, email, usuario, password }) => {
+    const res = await api.post("/auth/login", {
+      identificador: identificador || email || usuario,
+      password,
+    });
     const token = res.data?.accessToken || res.data?.token;
 
     if (!token) {

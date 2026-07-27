@@ -229,7 +229,11 @@ router.get("/agencias", async (req, res) => {
     const usuarioAgencias = await UsuarioAgencia.findAll({
       where: { activo: true, ...(agenciaId ? { agenciaId } : {}) },
       include: [
-        { model: Usuario, as: "usuario", attributes: ["id", "nombre"] },
+        {
+          model: Usuario,
+          as: "usuario",
+          attributes: ["id", "nombre", "fechaSalida"],
+        },
         { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
       ],
     });
@@ -272,6 +276,22 @@ router.get("/agencias", async (req, res) => {
         estado: a.estado || "libre",
         observacion: a.observacion || "",
         activoOrigen: relacion.activo,
+      };
+    }
+
+    for (const ua of usuarioAgencias) {
+      const fechaSalida = normalizarFechaSalida(ua.usuario?.fechaSalida);
+      if (!fechaSalida || fechaSalida < start || fechaSalida >= end) continue;
+
+      if (!asistenciasPorUsuario.has(ua.usuarioId)) {
+        asistenciasPorUsuario.set(ua.usuarioId, {});
+      }
+
+      const actuales = asistenciasPorUsuario.get(ua.usuarioId);
+      actuales[fechaSalida] = {
+        estado: "salida",
+        observacion: actuales[fechaSalida]?.observacion || "",
+        activoOrigen: true,
       };
     }
 
@@ -351,7 +371,13 @@ router.post("/", async (req, res) => {
         fecha,
         transaction,
       });
-      const eraSalida = existente?.estado === "salida";
+      const usuarioActual = await Usuario.findByPk(ua.usuarioId, {
+        attributes: ["id", "fechaSalida"],
+        transaction,
+      });
+      const eraSalida =
+        existente?.estado === "salida" ||
+        normalizarFechaSalida(usuarioActual?.fechaSalida) === fecha;
 
       if (!estadoNormalizado && !observacionNormalizada) {
         await Asistencia.destroy({
@@ -497,6 +523,24 @@ router.post("/masivo", async (req, res) => {
             salidasRemovidasPorUsuario.set(usuarioId, new Set());
           }
           salidasRemovidasPorUsuario.get(usuarioId).add(salida.fecha);
+        }
+
+        const usuariosConFechaSalida = await Usuario.findAll({
+          where: {
+            id: { [Op.in]: usuarioIds },
+            fechaSalida: { [Op.in]: fechas },
+          },
+          attributes: ["id", "fechaSalida"],
+          transaction,
+        });
+
+        for (const usuarioConSalida of usuariosConFechaSalida) {
+          if (!salidasRemovidasPorUsuario.has(usuarioConSalida.id)) {
+            salidasRemovidasPorUsuario.set(usuarioConSalida.id, new Set());
+          }
+          salidasRemovidasPorUsuario
+            .get(usuarioConSalida.id)
+            .add(usuarioConSalida.fechaSalida);
         }
       }
 

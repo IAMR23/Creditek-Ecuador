@@ -1,8 +1,12 @@
 const {
   isCargoPagoComisionable,
   calculateSalesPenalty,
+  calculateWeeklyPenalty,
   calculateMonthlyBonus,
   isActiveDuringWeek,
+  isActiveFullWeek,
+  getNewPersonnelPenaltyStartDate,
+  isNewPersonnelDuringWeek,
   isFutureCommercialWeek,
   isActiveDuringPeriod,
   buildWeeklyRulesByGroup,
@@ -164,6 +168,38 @@ describe("pagosComisionesService", () => {
     expect(calculateSalesPenalty({ config, unidadesVendidas: 12 })).toBe(0);
   });
 
+  test("omitir multa conserva las unidades faltantes y perdona solo el valor a descontar", () => {
+    const config = { minimoUnidades: 9, valorMultaUnidad: 8 };
+
+    expect(
+      calculateWeeklyPenalty({
+        config,
+        unidadesVendidas: 7,
+        aplicaDescuento: true,
+        multaOmitida: true,
+      }),
+    ).toEqual({
+      noCumpleMetas: 2,
+      valorMultaCalculado: 16,
+      valorDescontar: 0,
+      multaOmitida: true,
+    });
+
+    expect(
+      calculateWeeklyPenalty({
+        config,
+        unidadesVendidas: 7,
+        aplicaDescuento: true,
+        multaOmitida: false,
+      }),
+    ).toEqual({
+      noCumpleMetas: 2,
+      valorMultaCalculado: 16,
+      valorDescontar: 16,
+      multaOmitida: false,
+    });
+  });
+
   test("el bono mensual aplica equipo extra solo despues de la ultima meta", () => {
     const rules = {
       tiers: [
@@ -188,6 +224,65 @@ describe("pagosComisionesService", () => {
     expect(isActiveDuringWeek({ fechaIngreso: "2026-07-24", week: { startDate: "2026-07-02", endDate: "2026-07-08" } })).toBe(false);
     expect(isActiveDuringWeek({ fechaIngreso: "2026-07-24", week: { startDate: "2026-07-23", endDate: "2026-07-29" } })).toBe(true);
     expect(isActiveDuringWeek({ fechaSalida: "2026-07-10", week: { startDate: "2026-07-16", endDate: "2026-07-22" } })).toBe(false);
+  });
+
+  test("no aplica descuentos cuando el vendedor ingresa o sale a mitad de semana", () => {
+    const week = { startDate: "2026-07-09", endDate: "2026-07-15" };
+
+    expect(isActiveFullWeek({ fechaSalida: "2026-07-12", week })).toBe(false);
+    expect(isActiveFullWeek({ fechaIngreso: "2026-07-12", week })).toBe(false);
+    expect(
+      isActiveFullWeek({
+        fechaIngreso: "2026-07-09",
+        fechaSalida: "2026-07-15",
+        week,
+      }),
+    ).toBe(true);
+  });
+
+  test("considera personal nuevo durante 30 dias desde la creacion del usuario", () => {
+    const fechaCreacionUsuario = "2026-07-01";
+
+    expect(getNewPersonnelPenaltyStartDate(fechaCreacionUsuario)).toBe("2026-07-31");
+    expect(
+      isNewPersonnelDuringWeek({
+        fechaCreacionUsuario,
+        week: { startDate: "2026-07-23", endDate: "2026-07-29" },
+      }),
+    ).toBe(true);
+    expect(
+      isNewPersonnelDuringWeek({
+        fechaCreacionUsuario,
+        week: { startDate: "2026-07-30", endDate: "2026-08-05" },
+      }),
+    ).toBe(true);
+    expect(
+      isNewPersonnelDuringWeek({
+        fechaCreacionUsuario,
+        week: { startDate: "2026-08-06", endDate: "2026-08-12" },
+      }),
+    ).toBe(false);
+  });
+
+  test("personal nuevo no genera unidades incumplidas ni valor a descontar", () => {
+    const personalNuevo = isNewPersonnelDuringWeek({
+      fechaCreacionUsuario: "2026-07-01",
+      week: { startDate: "2026-07-23", endDate: "2026-07-29" },
+    });
+
+    expect(
+      calculateWeeklyPenalty({
+        config: { minimoUnidades: 9, valorMultaUnidad: 8 },
+        unidadesVendidas: 2,
+        aplicaDescuento: !personalNuevo,
+        multaOmitida: false,
+      }),
+    ).toEqual({
+      noCumpleMetas: 0,
+      valorMultaCalculado: 0,
+      valorDescontar: 0,
+      multaOmitida: false,
+    });
   });
 
   test("muestra el mes de salida y excluye al vendedor desde el siguiente mes", () => {

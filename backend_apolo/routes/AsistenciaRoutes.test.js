@@ -58,6 +58,7 @@ beforeEach(() => {
 
   sequelize.transaction = async (callback) => callback({ id: "transaction" });
   Usuario.findByPk = async () => usuario;
+  Usuario.findAll = async () => [];
   UsuarioAgencia.findByPk = async () => ({
     id: 10,
     usuarioId: 5,
@@ -197,6 +198,28 @@ test("al remover una salida recalcula desde otra salida restante", async () => {
   assert.equal(response.status, 201);
   assert.equal(usuario.fechaSalida, "2026-07-20");
   assert.equal(sincronizaciones[0].fechaSalida, "2026-07-20");
+});
+
+test("permite reemplazar una salida proveniente solo de Usuario.fechaSalida", async () => {
+  const sincronizaciones = [];
+  usuario.fechaSalida = "2026-07-24";
+  sincronizacionImpl = async (payload) => {
+    sincronizaciones.push(payload);
+    return { ok: true, sincronizado: true };
+  };
+  Asistencia.findOne = async () => null;
+
+  const response = await postJson("", {
+    agenciaId: 2,
+    usuarioAgenciaId: 10,
+    fecha: "2026-07-24",
+    estado: "asistencia",
+    observacion: "",
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(usuario.fechaSalida, null);
+  assert.equal(sincronizaciones[0].fechaSalida, null);
 });
 
 test("un fallo de RVE no revierte la asistencia ni la fecha en ABS", async (t) => {

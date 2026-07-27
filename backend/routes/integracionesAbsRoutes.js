@@ -7,6 +7,11 @@ const UsuarioAgencia = require("../models/UsuarioAgencia");
 
 const router = express.Router();
 
+const emitirActualizacionNovedadesPersonal = (req) => {
+  const io = req.app.get("io");
+  if (io) io.emit("novedades-personal:actualizar");
+};
+
 const tieneFechaISOValida = (fecha) => {
   if (typeof fecha !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
     return false;
@@ -130,12 +135,13 @@ router.patch("/usuarios/salida", async (req, res) => {
     const usuario = usuarios[0];
     const fechaAnterior = usuario.fechaSalida || null;
     const activoAnterior = usuario.activo;
+    const cambioFechaSalida = fechaAnterior !== fechaSalida;
 
     await sequelize.transaction(async (transaction) => {
       usuario.fechaSalida = fechaSalida;
 
       if (
-        fechaAnterior !== fechaSalida &&
+        cambioFechaSalida &&
         Object.prototype.hasOwnProperty.call(
           Usuario.rawAttributes || {},
           "fechaSalidaRegistradaAt",
@@ -161,6 +167,10 @@ router.patch("/usuarios/salida", async (req, res) => {
       }
     });
 
+    if (cambioFechaSalida) {
+      emitirActualizacionNovedadesPersonal(req);
+    }
+
     return res.json({
       ok: true,
       sincronizado: true,
@@ -171,6 +181,7 @@ router.patch("/usuarios/salida", async (req, res) => {
       actualizado:
         fechaAnterior !== usuario.fechaSalida ||
         (desactivar && activoAnterior !== false),
+      notificacionGenerada: cambioFechaSalida && Boolean(usuario.fechaSalida),
       origen,
     });
   } catch (error) {

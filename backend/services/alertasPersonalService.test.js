@@ -106,6 +106,8 @@ describe("alertasPersonalService", () => {
     expect(alertas).toEqual([
       expect.objectContaining({
         tipo: "FECHA_SALIDA",
+        titulo: "Salida de usuario registrada",
+        mensaje: "Se registró la salida de Luis Torres.",
         usuarioId: 20,
         fechaReferencia: "2026-08-01",
       }),

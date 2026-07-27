@@ -44,6 +44,7 @@ export default function Usuarios() {
   const [roles, setRoles] = useState([]);
   const [rolesPago, setRolesPago] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [buscandoUsuarioAbs, setBuscandoUsuarioAbs] = useState(false);
 
   const [filters, setFilters] = useState({
     q: "",
@@ -181,6 +182,67 @@ export default function Usuarios() {
     cargarRoles();
     cargarRolesPago();
   }, []);
+
+  const jalarUsuarioDesdeAbs = async () => {
+    const cedula = String(form.cedula || "").trim();
+
+    if (!cedula) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Cédula requerida",
+        text: "Ingresa la cédula del usuario que deseas buscar en ABS.",
+      });
+      return;
+    }
+
+    try {
+      setBuscandoUsuarioAbs(true);
+      const { data } = await api.get(
+        `/api/usuarios-abs/por-cedula/${encodeURIComponent(cedula)}`,
+      );
+
+      if (!data?.encontrado || !data?.usuario) {
+        await Swal.fire({
+          icon: "info",
+          title: "Usuario no encontrado",
+          text: "No existe un usuario en ABS con la cédula indicada.",
+        });
+        return;
+      }
+
+      const usuarioAbs = data.usuario;
+      setForm((actual) => ({
+        ...actual,
+        nombre: usuarioAbs.nombre || "",
+        cedula: usuarioAbs.cedula || cedula,
+        email: usuarioAbs.email || "",
+        usuario: usuarioAbs.usuario || "",
+        fechaIngreso: usuarioAbs.fechaIngreso || "",
+        fechaSalida: usuarioAbs.fechaSalida || "",
+        numeroCuenta: usuarioAbs.numeroCuenta || "",
+        direccion: usuarioAbs.direccion || "",
+        telefono: usuarioAbs.telefono || "",
+      }));
+
+      await Swal.fire({
+        icon: "success",
+        title: "Usuario encontrado en ABS",
+        text:
+          "Los datos fueron precargados. Completa la contraseña, los roles y la configuración propia de RVE antes de crear el usuario.",
+      });
+    } catch (error) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo consultar ABS",
+        text: obtenerMensajeError(
+          error,
+          "No se pudo consultar el usuario en ABS.",
+        ),
+      });
+    } finally {
+      setBuscandoUsuarioAbs(false);
+    }
+  };
 
   const crearUsuario = async (e) => {
     e.preventDefault();
@@ -399,16 +461,33 @@ export default function Usuarios() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700">
-                  Cédula
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: 1723456789"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  value={form.cedula}
-                  onChange={(e) => setForm({ ...form, cedula: e.target.value })}
-                />
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Cédula
+                  </label>
+                  <span className="text-xs font-medium text-emerald-700">
+                    Importación desde ABS
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    placeholder="Ej: 1723456789"
+                    className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    value={form.cedula}
+                    onChange={(e) =>
+                      setForm({ ...form, cedula: e.target.value })
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={jalarUsuarioDesdeAbs}
+                    disabled={buscandoUsuarioAbs || !form.cedula.trim()}
+                    className="shrink-0 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {buscandoUsuarioAbs ? "Buscando..." : "Jalar desde ABS"}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">

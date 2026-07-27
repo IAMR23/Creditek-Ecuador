@@ -11,5 +11,9 @@ router.use(authenticate, requirePagosComisiones);
 router.get("/", controller.obtenerReporte);
 router.put("/vendedores/:usuarioId/jefe-comercial", controller.actualizarJefeComercial);
 router.put("/vendedores/:usuarioId/supervisor-comercial", controller.actualizarSupervisorComercial);
+router.put(
+  "/vendedores/:usuarioId/multas/:semanaInicio",
+  controller.actualizarOmisionMulta,
+);
 
 module.exports = router;

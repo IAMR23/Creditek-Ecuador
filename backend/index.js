@@ -221,6 +221,7 @@ connectDB()
     app.use("/api/alertas-personal", require("./routes/alertasPersonalRoutes"));
     app.use("/api/planes-batalla", require("./routes/planesBatallaRoutes"));
     app.use("/api/integraciones/abs", require("./routes/integracionesAbsRoutes"));
+    app.use("/api/usuarios-abs", require("./routes/usuariosAbsRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));

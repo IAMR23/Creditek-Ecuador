@@ -8,6 +8,7 @@ const EMPTY_FORM = {
   nombre: "",
   cedula: "",
   email: "",
+  usuario: "",
   password: "",
   rolId: "",
   fechaIngreso: "",
@@ -21,18 +22,32 @@ const EMPTY_FORM = {
 const normalizeOptionalText = (value) =>
   value?.trim() ? value.trim() : null;
 
+const buildUsernameFromEmail = (email) => {
+  const localPart = String(email || "").split("@")[0].toLowerCase();
+  const normalized = localPart
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "")
+    .slice(0, 50);
+
+  return normalized.length >= 3 ? normalized : "";
+};
+
 const buildFormFromCandidate = (candidate) => {
   const datos = getPersonalData(candidate);
+  const email =
+    datos.email ||
+    datos.correo ||
+    datos.correoElectronico ||
+    "";
 
   return {
     ...EMPTY_FORM,
     nombre: datos.nombreCompleto || candidate?.nombre || "",
     cedula: datos.cedula || candidate?.cedula || "",
-    email:
-      datos.email ||
-      datos.correo ||
-      datos.correoElectronico ||
-      "",
+    email,
+    usuario: buildUsernameFromEmail(email),
     telefono: datos.telefono || candidate?.telefono || "",
     direccion: datos.direccion || "",
   };
@@ -107,6 +122,7 @@ export default function CreateUserModal({
         nombre: form.nombre,
         cedula: form.cedula,
         email: form.email,
+        usuario: form.usuario || undefined,
         password: form.password,
         rolId: form.rolId,
         fechaIngreso: form.fechaIngreso || null,
@@ -175,8 +191,8 @@ export default function CreateUserModal({
 
         <form onSubmit={submit} className="overflow-y-auto px-5 py-5">
           <div className="mb-5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
-            Revisa los datos precargados y completa email, contraseña, rol y
-            agencia antes de guardar.
+            Revisa los datos precargados y completa usuario, email, contraseña,
+            rol y agencia antes de guardar.
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -212,8 +228,38 @@ export default function CreateUserModal({
                 required
                 value={form.email}
                 onChange={updateField("email")}
+                onBlur={() =>
+                  setForm((current) => ({
+                    ...current,
+                    usuario:
+                      current.usuario ||
+                      buildUsernameFromEmail(current.email),
+                  }))
+                }
                 className={`${fieldClass} mt-1`}
                 placeholder="correo@ejemplo.com"
+              />
+            </label>
+
+            <label className="text-sm font-semibold text-slate-700">
+              Usuario
+              <input
+                type="text"
+                required
+                minLength={3}
+                maxLength={50}
+                pattern="[A-Za-z0-9._-]{3,50}"
+                title="Usa entre 3 y 50 letras, números, puntos, guiones o guiones bajos."
+                autoComplete="username"
+                value={form.usuario}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    usuario: event.target.value.toLowerCase(),
+                  }))
+                }
+                className={`${fieldClass} mt-1`}
+                placeholder="Ej. maria.perez"
               />
             </label>
 

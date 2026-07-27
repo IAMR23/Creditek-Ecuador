@@ -22,9 +22,11 @@ const { sequelize } = require("../config/db");
 const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const integracionesAbsRoutes = require("./integracionesAbsRoutes");
+const io = { emit: jest.fn() };
 
 const crearAplicacion = () => {
   const app = express();
+  app.set("io", io);
   app.use(express.json());
   app.use("/api/integraciones/abs", integracionesAbsRoutes);
   return app;
@@ -153,6 +155,10 @@ describe("PATCH /api/integraciones/abs/usuarios/salida", () => {
         transaction: { id: "transaction" },
       },
     );
+    expect(io.emit).toHaveBeenCalledWith(
+      "novedades-personal:actualizar",
+    );
+    expect(response.body.notificacionGenerada).toBe(true);
   });
 
   test("acepta null para sincronizar la limpieza de fechaSalida", async () => {
@@ -174,5 +180,34 @@ describe("PATCH /api/integraciones/abs/usuarios/salida", () => {
     expect(usuario.fechaSalida).toBeNull();
     expect(usuario.fechaSalidaRegistradaAt).toBeNull();
     expect(UsuarioAgencia.update).not.toHaveBeenCalled();
+    expect(io.emit).toHaveBeenCalledWith(
+      "novedades-personal:actualizar",
+    );
+    expect(response.body.notificacionGenerada).toBe(false);
+  });
+
+  test("un reintento con la misma fecha no duplica la notificacion", async () => {
+    const fechaRegistroAnterior = new Date("2026-07-27T14:00:00.000Z");
+    const usuario = {
+      id: 15,
+      cedula: "0102030405",
+      fechaSalida: "2026-07-24",
+      fechaSalidaRegistradaAt: fechaRegistroAnterior,
+      activo: true,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    Usuario.findAll.mockResolvedValue([usuario]);
+
+    const response = await enviarSalida({
+      cedula: "0102030405",
+      fechaSalida: "2026-07-24",
+      origen: "ABS_USUARIOS",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.actualizado).toBe(false);
+    expect(response.body.notificacionGenerada).toBe(false);
+    expect(usuario.fechaSalidaRegistradaAt).toBe(fechaRegistroAnterior);
+    expect(io.emit).not.toHaveBeenCalled();
   });
 });

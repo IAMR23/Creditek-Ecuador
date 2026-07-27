@@ -12,10 +12,22 @@ const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
 const Agencia = require("../models/Agencia");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
+const rveSyncService = require("../services/rveSyncService");
+const {
+  normalizarFechaSalida,
+  sincronizarFechaSalidaEnMovimientos,
+} = require("../services/fechaSalidaMovimientosService");
+const {
+  condicionCampoNormalizado,
+  crearBaseUsuarioDesdeEmail,
+  esUsuarioValido,
+  normalizarUsuario,
+} = require("../utils/usuarioLogin");
 
 const router = express.Router();
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+const fechaIsoRegex = /^\d{4}-\d{2}-\d{2}$/;
 const normalizeText = (value) => String(value ?? "").trim();
 const normalizeOptionalText = (value) => normalizeText(value) || null;
 const buildCedulaWhere = (cedula) =>
@@ -25,8 +37,50 @@ const buildEmailWhere = (email) =>
     fn("LOWER", fn("BTRIM", col("email"))),
     email.toLowerCase(),
   );
+const buildUsuarioWhere = (usuario) =>
+  condicionCampoNormalizado("usuario", usuario);
 const httpError = (statusCode, code, message) =>
   Object.assign(new Error(message), { statusCode, code });
+
+const findUsuarioByUsername = (usuario, transaction) =>
+  Usuario.findOne({
+    where: buildUsuarioWhere(usuario),
+    transaction,
+  });
+
+const generarUsuarioDisponible = async (email, transaction) => {
+  const base = crearBaseUsuarioDesdeEmail(email);
+  let candidate = base;
+  let suffix = 2;
+
+  while (await findUsuarioByUsername(candidate, transaction)) {
+    const suffixText = `_${suffix}`;
+    candidate = `${base.slice(0, 50 - suffixText.length)}${suffixText}`;
+    suffix += 1;
+  }
+
+  return candidate;
+};
+
+const sincronizarFechaSalidaConRveSinBloquear = async ({
+  usuario,
+  fechaSalida,
+  desactivar = false,
+}) => {
+  try {
+    await rveSyncService.sincronizarSalidaUsuarioRve({
+      cedula: usuario.cedula,
+      fechaSalida: normalizarFechaSalida(fechaSalida),
+      desactivar,
+      origen: "ABS_USUARIOS",
+    });
+  } catch (error) {
+    console.error(
+      `No se pudo sincronizar fechaSalida con RVE para el usuario ABS ${usuario.id}:`,
+      error.message,
+    );
+  }
+};
 
 router.post("/", async (req, res) => {
   try {
@@ -34,6 +88,7 @@ router.post("/", async (req, res) => {
       nombre,
       cedula,
       email,
+      usuario: nombreUsuario,
       password,
       rolId,
       fechaIngreso,
@@ -46,6 +101,8 @@ router.post("/", async (req, res) => {
     const nombreNormalizado = normalizeText(nombre);
     const cedulaNormalizada = normalizeText(cedula);
     const emailNormalizado = normalizeText(email).toLowerCase();
+    const usuarioSolicitado = normalizarUsuario(nombreUsuario);
+    const fechaSalidaNormalizada = normalizarFechaSalida(fechaSalida);
 
     if (!nombreNormalizado) {
       return res.status(400).json({
@@ -68,6 +125,14 @@ router.post("/", async (req, res) => {
       });
     }
 
+    if (usuarioSolicitado && !esUsuarioValido(usuarioSolicitado)) {
+      return res.status(400).json({
+        code: "USUARIO_INVALIDO",
+        message:
+          "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, números, punto, guion o guion bajo.",
+      });
+    }
+
     if (!passwordRegex.test(password || "")) {
       return res.status(400).json({
         message: "La contraseña debe tener mínimo 6 caracteres e incluir letras y números.",
@@ -85,24 +150,42 @@ router.post("/", async (req, res) => {
       });
     }
 
+    if (
+      fechaSalidaNormalizada &&
+      !fechaIsoRegex.test(String(fechaSalidaNormalizada))
+    ) {
+      return res.status(400).json({
+        code: "FECHA_SALIDA_INVALIDA",
+        message: "La fecha de salida debe tener formato YYYY-MM-DD.",
+      });
+    }
+
     const nuevoUsuario = await sequelize.transaction(
       {
         isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE,
       },
       async (transaction) => {
-        const [usuarioConCedula, usuarioConEmail, existeRol, existeAgencia] =
-          await Promise.all([
-            Usuario.findOne({
-              where: buildCedulaWhere(cedulaNormalizada),
-              transaction,
-            }),
-            Usuario.findOne({
-              where: buildEmailWhere(emailNormalizado),
-              transaction,
-            }),
-            Rol.findByPk(rolId, { transaction }),
-            Agencia.findByPk(agenciaId, { transaction }),
-          ]);
+        const [
+          usuarioConCedula,
+          usuarioConEmail,
+          usuarioConNombre,
+          existeRol,
+          existeAgencia,
+        ] = await Promise.all([
+          Usuario.findOne({
+            where: buildCedulaWhere(cedulaNormalizada),
+            transaction,
+          }),
+          Usuario.findOne({
+            where: buildEmailWhere(emailNormalizado),
+            transaction,
+          }),
+          usuarioSolicitado
+            ? findUsuarioByUsername(usuarioSolicitado, transaction)
+            : Promise.resolve(null),
+          Rol.findByPk(rolId, { transaction }),
+          Agencia.findByPk(agenciaId, { transaction }),
+        ]);
 
         if (usuarioConCedula) {
           throw httpError(
@@ -117,6 +200,14 @@ router.post("/", async (req, res) => {
             409,
             "EMAIL_DUPLICADO",
             "El email ya está registrado.",
+          );
+        }
+
+        if (usuarioConNombre) {
+          throw httpError(
+            409,
+            "USUARIO_DUPLICADO",
+            "El nombre de usuario ya está registrado.",
           );
         }
 
@@ -136,16 +227,20 @@ router.post("/", async (req, res) => {
           );
         }
 
+        const usuarioNormalizado =
+          usuarioSolicitado ||
+          (await generarUsuarioDisponible(emailNormalizado, transaction));
         const hashedPassword = await bcrypt.hash(password, 10);
         const usuarioCreado = await Usuario.create(
           {
             nombre: nombreNormalizado,
             cedula: cedulaNormalizada,
             email: emailNormalizado,
+            usuario: usuarioNormalizado,
             password: hashedPassword,
             rolId,
             fechaIngreso: fechaIngreso || null,
-            fechaSalida: fechaSalida || null,
+            fechaSalida: fechaSalidaNormalizada,
             numeroCuenta: normalizeOptionalText(numeroCuenta),
             direccion: normalizeOptionalText(direccion),
             telefono: normalizeOptionalText(telefono),
@@ -154,7 +249,7 @@ router.post("/", async (req, res) => {
           { transaction },
         );
 
-        await UsuarioAgencia.create(
+        const relacionCreada = await UsuarioAgencia.create(
           {
             usuarioId: usuarioCreado.id,
             agenciaId,
@@ -163,9 +258,26 @@ router.post("/", async (req, res) => {
           { transaction },
         );
 
+        if (fechaSalidaNormalizada) {
+          await sincronizarFechaSalidaEnMovimientos({
+            usuarioId: usuarioCreado.id,
+            fechaAnterior: null,
+            fechaNueva: fechaSalidaNormalizada,
+            usuarioAgenciaIdPreferido: relacionCreada.id,
+            transaction,
+          });
+        }
+
         return usuarioCreado;
       },
     );
+
+    if (fechaSalidaNormalizada) {
+      await sincronizarFechaSalidaConRveSinBloquear({
+        usuario: nuevoUsuario,
+        fechaSalida: fechaSalidaNormalizada,
+      });
+    }
 
     const { password: _pw, ...usuarioSinPassword } = nuevoUsuario.toJSON();
     return res.status(201).json(usuarioSinPassword);
@@ -180,7 +292,8 @@ router.post("/", async (req, res) => {
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({
         code: "USUARIO_DUPLICADO",
-        message: "Ya existe un usuario con la cédula o el email ingresado.",
+        message:
+          "Ya existe un usuario con la cédula, email o nombre de usuario ingresado.",
       });
     }
 
@@ -272,11 +385,13 @@ router.put("/:id", async (req, res) => {
   try {
     const usuario = await Usuario.findByPk(req.params.id);
     if (!usuario) return res.status(404).json({ message: "Usuario no encontrado" });
+    const fechaSalidaAnterior = normalizarFechaSalida(usuario.fechaSalida);
 
     const {
       nombre,
       cedula,
       email,
+      usuario: nombreUsuario,
       password,
       rolId,
       activo,
@@ -286,6 +401,21 @@ router.put("/:id", async (req, res) => {
       direccion,
       telefono,
     } = req.body;
+    const fechaSalidaNormalizada =
+      fechaSalida === undefined
+        ? fechaSalidaAnterior
+        : normalizarFechaSalida(fechaSalida);
+
+    if (
+      fechaSalida !== undefined &&
+      fechaSalidaNormalizada &&
+      !fechaIsoRegex.test(String(fechaSalidaNormalizada))
+    ) {
+      return res.status(400).json({
+        code: "FECHA_SALIDA_INVALIDA",
+        message: "La fecha de salida debe tener formato YYYY-MM-DD.",
+      });
+    }
 
     if (email !== undefined) {
       const emailNormalizado = normalizeText(email).toLowerCase();
@@ -308,6 +438,36 @@ router.put("/:id", async (req, res) => {
         });
       }
       usuario.email = emailNormalizado;
+    }
+
+    if (nombreUsuario !== undefined) {
+      const usuarioNormalizado = normalizarUsuario(nombreUsuario);
+
+      if (!esUsuarioValido(usuarioNormalizado)) {
+        return res.status(400).json({
+          code: "USUARIO_INVALIDO",
+          message:
+            "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, números, punto, guion o guion bajo.",
+        });
+      }
+
+      const existeUsuario = await Usuario.findOne({
+        where: {
+          [Op.and]: [
+            buildUsuarioWhere(usuarioNormalizado),
+            { id: { [Op.ne]: usuario.id } },
+          ],
+        },
+      });
+
+      if (existeUsuario) {
+        return res.status(409).json({
+          code: "USUARIO_DUPLICADO",
+          message: "El nombre de usuario ya está en uso.",
+        });
+      }
+
+      usuario.usuario = usuarioNormalizado;
     }
 
     if (password) {
@@ -351,12 +511,23 @@ router.put("/:id", async (req, res) => {
     }
     if (activo !== undefined) usuario.activo = activo;
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
-    if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalida;
+    if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalidaNormalizada;
     if (numeroCuenta !== undefined) usuario.numeroCuenta = numeroCuenta;
     if (direccion !== undefined) usuario.direccion = direccion;
     if (telefono !== undefined) usuario.telefono = telefono;
 
-    await usuario.save();
+    await sequelize.transaction({}, async (transaction) => {
+      await usuario.save({ transaction });
+
+      if (fechaSalida !== undefined) {
+        await sincronizarFechaSalidaEnMovimientos({
+          usuarioId: usuario.id,
+          fechaAnterior: fechaSalidaAnterior,
+          fechaNueva: fechaSalidaNormalizada,
+          transaction,
+        });
+      }
+    });
 
     if (activo === false) {
       await UsuarioAgencia.update(
@@ -365,9 +536,25 @@ router.put("/:id", async (req, res) => {
       );
     }
 
+    if (fechaSalida !== undefined) {
+      await sincronizarFechaSalidaConRveSinBloquear({
+        usuario,
+        fechaSalida: fechaSalidaNormalizada,
+        desactivar: activo === false,
+      });
+    }
+
     const { password: _pw, ...usuarioSinPassword } = usuario.toJSON();
     return res.json(usuarioSinPassword);
   } catch (error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        code: "USUARIO_DUPLICADO",
+        message:
+          "Ya existe un usuario con la cédula, email o nombre de usuario ingresado.",
+      });
+    }
+
     return res.status(500).json({ message: "Error al actualizar usuario", error });
   }
 });

@@ -71,6 +71,10 @@ const emptyMonthlyValues = {
 
 const getWeekValues = (row, week) => row?.semanas?.[week.startDate] || emptyWeekValues;
 const getMonthlyValues = (row) => row?.resumenMensual || emptyMonthlyValues;
+const isPersonalNuevoEnReporte = (row, weeks) =>
+  weeks.some((week) => getWeekValues(row, week).personalNuevo);
+const getFechaIngresoVisible = (row) =>
+  row?.fechaIngreso || row?.fechaCreacionUsuario || null;
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
@@ -106,6 +110,7 @@ export default function PagosComisiones() {
   const [juniorSupervisorId, setJuniorSupervisorId] = useState("");
   const [supervisorComercialId, setSupervisorComercialId] = useState("");
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
+  const [guardandoMulta, setGuardandoMulta] = useState("");
   const [seccionActiva, setSeccionActiva] = useState("VENDEDORES");
 
   const years = useMemo(() => {
@@ -269,6 +274,41 @@ export default function PagosComisiones() {
       );
     } finally {
       setGuardandoSupervisor(false);
+    }
+  };
+
+  const actualizarOmisionMulta = async ({ vendedor, week, omitida }) => {
+    const accion = omitida ? "Omitir multa" : "Restaurar multa";
+    const confirmacion = await Swal.fire({
+      title: accion,
+      text: omitida
+        ? `Se perdonara el valor a descontar de ${vendedor.nombre} en ${week.label}.`
+        : `Se volvera a aplicar el valor calculado a ${vendedor.nombre} en ${week.label}.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: accion,
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: omitida ? "#dc2626" : "#059669",
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    const key = `${vendedor.usuarioId}-${week.startDate}`;
+    setGuardandoMulta(key);
+    try {
+      const { data } = await api.put(
+        `${ENDPOINT}/vendedores/${vendedor.usuarioId}/multas/${week.startDate}`,
+        { omitida },
+      );
+      await fetchReport();
+      Swal.fire("Listo", data.message, "success");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo actualizar la multa",
+        "error",
+      );
+    } finally {
+      setGuardandoMulta("");
     }
   };
 
@@ -543,12 +583,15 @@ export default function PagosComisiones() {
                     </td>
                   </tr>
                 ) : vendedoresFiltrados.length ? (
-                  vendedoresFiltrados.map((vendedor, index) => (
-                    <tr
+                  vendedoresFiltrados.map((vendedor, index) => {
+                    const personalNuevo = isPersonalNuevoEnReporte(vendedor, weeks);
+                    const fechaIngreso = getFechaIngresoVisible(vendedor);
+                    return (
+                      <tr
                       key={vendedor.usuarioId}
                       className={
                         vendedor.fechaSalida
-                          ? "bg-rose-100"
+                          ? "bg-blue-50"
                           : index % 2 === 0
                             ? "bg-white"
                             : "bg-orange-100"
@@ -562,8 +605,16 @@ export default function PagosComisiones() {
                               {vendedor.cargo}
                             </span>
                           ) : null}
+                          {personalNuevo ? (
+                            <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                              Personal nuevo
+                              {fechaIngreso
+                                ? ` · Ingreso: ${String(fechaIngreso).slice(0, 10)}`
+                                : ""}
+                            </span>
+                          ) : null}
                           {vendedor.fechaSalida ? (
-                            <span className="mt-1 inline-block rounded bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                            <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
                               Salida: {String(vendedor.fechaSalida).slice(0, 10)}
                             </span>
                           ) : null}
@@ -581,11 +632,18 @@ export default function PagosComisiones() {
                         <WeekValues
                           key={`${vendedor.usuarioId}-${week.startDate}`}
                           values={getWeekValues(vendedor, week)}
+                          vendedor={vendedor}
+                          week={week}
+                          onToggleMulta={actualizarOmisionMulta}
+                          guardando={
+                            guardandoMulta === `${vendedor.usuarioId}-${week.startDate}`
+                          }
                         />
                       ))}
                       <MonthlyValues values={getMonthlyValues(vendedor)} />
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
                     <td
@@ -652,20 +710,36 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
     <div className="space-y-5">
       {rows.map((row) => {
         const mensual = getMonthlyValues(row);
+        const personalNuevo = isPersonalNuevoEnReporte(row, weeks);
+        const fechaIngreso = getFechaIngresoVisible(row);
         return (
           <section
             key={row.usuarioId}
             className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
-              row.fechaSalida ? "border-rose-500 ring-2 ring-rose-200" : "border-slate-200"
+              row.fechaSalida || personalNuevo
+                ? "border-blue-500 ring-2 ring-blue-100"
+                : "border-slate-200"
             }`}
           >
             <div className="border-b border-slate-200 px-4 py-3">
               <h2 className="text-center text-lg font-black uppercase text-slate-900">
                 Comisiones {row.nombre}
               </h2>
+              {personalNuevo ? (
+                <p className="mt-1 text-center">
+                  <span className="inline-block rounded bg-blue-600 px-2 py-1 text-xs font-bold text-white">
+                    Personal nuevo
+                    {fechaIngreso
+                      ? ` · Fecha de ingreso: ${String(fechaIngreso).slice(0, 10)}`
+                      : ""}
+                  </span>
+                </p>
+              ) : null}
               {row.fechaSalida ? (
-                <p className="mt-1 text-center text-sm font-bold text-rose-700">
-                  Fecha de salida: {String(row.fechaSalida).slice(0, 10)}
+                <p className="mt-1 text-center">
+                  <span className="inline-block rounded bg-blue-600 px-2 py-1 text-xs font-bold text-white">
+                    Fecha de salida: {String(row.fechaSalida).slice(0, 10)}
+                  </span>
                 </p>
               ) : null}
               {row.vendedoresJunior?.length ? (
@@ -757,10 +831,24 @@ function WeekHeader({ color }) {
   );
 }
 
-function WeekValues({ values, total = false }) {
+function WeekValues({
+  values,
+  total = false,
+  vendedor = null,
+  week = null,
+  onToggleMulta = null,
+  guardando = false,
+}) {
   const noCumpleClass = total
     ? "border border-slate-950 px-2 py-1.5"
     : "border border-slate-950 bg-indigo-100 px-2 py-1.5";
+  const puedeGestionarMulta =
+    !total &&
+    vendedor &&
+    week &&
+    onToggleMulta &&
+    !values.personalNuevo &&
+    Number(values.valorMultaCalculado || 0) > 0;
 
   return (
     <>
@@ -774,14 +862,65 @@ function WeekValues({ values, total = false }) {
         {values.semanaFutura ? "-" : values.totalComisiones ? formatCommission(values.totalComisiones) : 0}
       </td>
       <td className={noCumpleClass}>
-        {values.semanaFutura || (!total && values.semanaLaborada === false) ? "-" : values.noCumpleMetas || 0}
+        {values.semanaFutura ||
+        (!total &&
+          (values.semanaLaborada === false ||
+            values.semanaCompletaParaDescuento === false ||
+            values.personalNuevo))
+          ? "-"
+          : values.noCumpleMetas || 0}
       </td>
       <td className="border border-slate-950 bg-red-100 px-2 py-1.5 text-red-700">
         {values.semanaFutura
           ? "Pendiente"
           : !total && values.semanaLaborada === false
             ? "No laborada"
-          : formatMoney(values.valorDescontar || 0)}
+            : !total && values.personalNuevo
+              ? (
+                <span className="inline-block rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">
+                  Personal nuevo
+                </span>
+              )
+              : !total && values.semanaCompletaParaDescuento === false
+              ? "Semana parcial"
+              : puedeGestionarMulta
+                ? (
+                  <div className="flex min-w-[112px] flex-col items-center gap-1">
+                    <span className={values.multaOmitida ? "font-semibold text-emerald-700" : ""}>
+                      {values.multaOmitida
+                        ? "Multa omitida"
+                        : formatMoney(values.valorDescontar || 0)}
+                    </span>
+                    {values.multaOmitida ? (
+                      <span className="text-[10px] text-slate-500 line-through">
+                        {formatMoney(values.valorMultaCalculado)}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={guardando}
+                      onClick={() =>
+                        onToggleMulta({
+                          vendedor,
+                          week,
+                          omitida: !values.multaOmitida,
+                        })
+                      }
+                      className={`rounded px-2 py-1 text-[10px] font-bold text-white disabled:opacity-60 ${
+                        values.multaOmitida
+                          ? "bg-emerald-600 hover:bg-emerald-700"
+                          : "bg-red-700 hover:bg-red-800"
+                      }`}
+                    >
+                      {guardando
+                        ? "Guardando..."
+                        : values.multaOmitida
+                          ? "Restaurar multa"
+                          : "Omitir multa"}
+                    </button>
+                  </div>
+                )
+                : formatMoney(values.valorDescontar || 0)}
       </td>
     </>
   );

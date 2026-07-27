@@ -93,8 +93,23 @@ const actualizarSupervisorComercial = async (req, res) => {
   }
 };
 
+const actualizarOmisionMulta = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.actualizarOmisionMulta({
+      usuarioId: req.params.usuarioId,
+      semanaInicio: req.params.semanaInicio,
+      omitida: req.body.omitida,
+      actualizadoPorId: req.user.id,
+    });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
 module.exports = {
   obtenerReporte,
   actualizarJefeComercial,
   actualizarSupervisorComercial,
+  actualizarOmisionMulta,
 };

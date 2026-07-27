@@ -105,8 +105,8 @@ const construirAlertasPersonal = (usuarios = [], fechaActual) => {
       alertas.push({
         id: `FECHA_SALIDA-${datos.id}-${hoy}`,
         tipo: "FECHA_SALIDA",
-        titulo: "Fecha de salida registrada",
-        mensaje: `Se registró la fecha de salida de ${nombre}.`,
+        titulo: "Salida de usuario registrada",
+        mensaje: `Se registró la salida de ${nombre}.`,
         usuarioId: datos.id,
         nombre,
         fechaReferencia: fechaSalida,

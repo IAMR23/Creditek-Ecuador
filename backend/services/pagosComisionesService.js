@@ -9,9 +9,13 @@ const RolPago = require("../models/RolPago");
 const NominaEmpleado = require("../models/NominaEmpleado");
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
 const SancionConfiguracion = require("../models/SancionConfiguracion");
+const PagoComisionMultaAjuste = require("../models/PagoComisionMultaAjuste");
 const {
+  addDays,
   getCommercialWeekKey,
   getCommercialWeeksByMonth,
+  parseLocalDateOnly,
+  toDateOnly,
 } = require("../utils/commercialWeeks");
 
 const normalizeText = (value) =>
@@ -36,6 +40,25 @@ const getTodayEcuador = () => {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+};
+
+const getDateOnlyEcuador = (input) => {
+  if (!input) return null;
+  if (typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return input;
+  }
+
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${value.year}-${value.month}-${value.day}`;
 };
@@ -108,6 +131,7 @@ const getUsuarioPayload = (usuarioAgencia) => {
     agencias: agencia?.nombre ? [agencia.nombre] : [],
     fechaIngreso: usuario.fechaIngreso || null,
     fechaSalida: usuario.fechaSalida || null,
+    fechaCreacionUsuario: getDateOnlyEcuador(usuario.createdAt),
     jefeComercialId: usuario.jefeComercialId || null,
     supervisorComercialId: usuario.supervisorComercialId || null,
   };
@@ -121,6 +145,29 @@ const isActiveDuringWeek = ({ fechaIngreso, fechaSalida, week }) => {
   if (ingreso && ingreso > finSemana) return false;
   if (salida && salida < inicioSemana) return false;
   return true;
+};
+
+const isActiveFullWeek = ({ fechaIngreso, fechaSalida, week }) => {
+  const inicioSemana = String(week.startDate || "").slice(0, 10);
+  const finSemana = String(week.endDate || "").slice(0, 10);
+  const ingreso = fechaIngreso ? String(fechaIngreso).slice(0, 10) : null;
+  const salida = fechaSalida ? String(fechaSalida).slice(0, 10) : null;
+  if (ingreso && ingreso > inicioSemana) return false;
+  if (salida && salida < finSemana) return false;
+  return true;
+};
+
+const getNewPersonnelPenaltyStartDate = (fechaCreacionUsuario) => {
+  const fechaCreacion = getDateOnlyEcuador(fechaCreacionUsuario);
+  if (!fechaCreacion) return null;
+  return toDateOnly(addDays(parseLocalDateOnly(fechaCreacion), 30));
+};
+
+const isNewPersonnelDuringWeek = ({ fechaCreacionUsuario, week }) => {
+  const fechaInicioMultas = getNewPersonnelPenaltyStartDate(fechaCreacionUsuario);
+  if (!fechaInicioMultas) return false;
+  const inicioSemana = String(week.startDate || "").slice(0, 10);
+  return inicioSemana < fechaInicioMultas;
 };
 
 const isActiveDuringPeriod = ({ fechaIngreso, fechaSalida, fechaInicio, fechaFin }) => {
@@ -381,6 +428,33 @@ const calculateSalesPenalty = ({ config, unidadesVendidas }) => {
 const calculateMissingUnits = ({ config, unidadesVendidas }) =>
   config ? Math.max(0, toNumber(config.minimoUnidades) - toNumber(unidadesVendidas)) : 0;
 
+const calculateWeeklyPenalty = ({
+  config,
+  unidadesVendidas,
+  aplicaDescuento,
+  multaOmitida,
+}) => {
+  if (!aplicaDescuento) {
+    return {
+      noCumpleMetas: 0,
+      valorMultaCalculado: 0,
+      valorDescontar: 0,
+      multaOmitida: false,
+    };
+  }
+
+  const noCumpleMetas = calculateMissingUnits({ config, unidadesVendidas });
+  const valorMultaCalculado = calculateSalesPenalty({ config, unidadesVendidas });
+  const omisionAplicada = Boolean(multaOmitida && valorMultaCalculado > 0);
+
+  return {
+    noCumpleMetas,
+    valorMultaCalculado,
+    valorDescontar: omisionAplicada ? 0 : valorMultaCalculado,
+    multaOmitida: omisionAplicada,
+  };
+};
+
 const parseReportPeriod = ({ year, month }) => {
   const numericYear = Number(year);
   const numericMonth = Number(month);
@@ -436,7 +510,7 @@ const buildIncludeUsuarioAgencia = () => ({
     {
       model: Usuario,
       as: "usuario",
-      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "jefeComercialId", "supervisorComercialId"],
+      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
       include: [
         { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
         { model: Rol, as: "rol", attributes: ["id", "nombre"] },
@@ -461,7 +535,7 @@ const obtenerRelacionesVendedores = async () =>
       {
         model: Usuario,
         as: "usuario",
-        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "jefeComercialId", "supervisorComercialId"],
+        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
         include: [
           { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
           { model: Rol, as: "rol", attributes: ["id", "nombre"] },
@@ -499,7 +573,26 @@ const obtenerVentasRango = async ({ fechaInicio, fechaFin }) => {
   return ventas.map((venta) => ({ ...venta.toJSON(), origenReporte: "Venta" }));
 };
 
-const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup, sanctionsByRole) => {
+const getPenaltyAdjustmentKey = (usuarioId, semanaInicio) =>
+  `${Number(usuarioId)}:${String(semanaInicio).slice(0, 10)}`;
+
+const buildPenaltyAdjustmentsMap = (adjustments) =>
+  adjustments.reduce((map, adjustment) => {
+    map.set(
+      getPenaltyAdjustmentKey(adjustment.usuarioId, adjustment.semanaInicio),
+      Boolean(adjustment.omitida),
+    );
+    return map;
+  }, new Map());
+
+const finalizarVendedor = (
+  vendedor,
+  weeks,
+  weeklyRulesByGroup,
+  monthlyRulesByGroup,
+  sanctionsByRole,
+  penaltyAdjustments,
+) => {
   const rolKey = vendedor.rolPagoId ? `ROL:${vendedor.rolPagoId}` : null;
   const grupoKey = vendedor.grupoComision ? normalizeText(vendedor.grupoComision) : null;
   const subgrupo = vendedor.vendedoresJunior?.length
@@ -529,17 +622,39 @@ const finalizarVendedor = (vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGr
     values.valorVendido = round(values.valorVendido, 2);
     values.totalComisiones = semanaFutura ? 0 : commission.totalComisiones;
     const semanaLaborada = isActiveDuringWeek({
-      fechaIngreso: vendedor.fechaIngreso,
+      fechaIngreso: vendedor.fechaIngreso || vendedor.fechaCreacionUsuario,
       fechaSalida: vendedor.fechaSalida,
       week,
     });
-    values.noCumpleMetas = semanaLaborada && !semanaFutura
-      ? calculateMissingUnits({ config: sanctionConfig, unidadesVendidas: values.venden })
-      : 0;
-    values.valorDescontar = semanaLaborada && !semanaFutura
-      ? calculateSalesPenalty({ config: sanctionConfig, unidadesVendidas: values.venden })
-      : 0;
+    const semanaCompletaParaDescuento = isActiveFullWeek({
+      fechaIngreso: vendedor.fechaIngreso || vendedor.fechaCreacionUsuario,
+      fechaSalida: vendedor.fechaSalida,
+      week,
+    });
+    const personalNuevo =
+      semanaLaborada &&
+      !semanaFutura &&
+      isNewPersonnelDuringWeek({
+        fechaCreacionUsuario: vendedor.fechaCreacionUsuario,
+        week,
+      });
+    const multaOmitida = penaltyAdjustments.get(
+      getPenaltyAdjustmentKey(vendedor.usuarioId, week.startDate),
+    );
+    const penalty = calculateWeeklyPenalty({
+      config: sanctionConfig,
+      unidadesVendidas: values.venden,
+      aplicaDescuento:
+        semanaCompletaParaDescuento && !semanaFutura && !personalNuevo,
+      multaOmitida,
+    });
+    values.noCumpleMetas = penalty.noCumpleMetas;
+    values.valorMultaCalculado = penalty.valorMultaCalculado;
+    values.valorDescontar = penalty.valorDescontar;
+    values.multaOmitida = penalty.multaOmitida;
+    values.personalNuevo = personalNuevo;
     values.semanaLaborada = semanaLaborada;
+    values.semanaCompletaParaDescuento = semanaCompletaParaDescuento;
     values.semanaFutura = semanaFutura;
 
     vendedor.total.venden += values.venden;
@@ -591,7 +706,7 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   const fechaInicio = weeks[0].startDate;
   const fechaFin = weeks[weeks.length - 1].endDate;
 
-  const [relaciones, ventas, configs, sanciones] = await Promise.all([
+  const [relaciones, ventas, configs, sanciones, penaltyAdjustmentsRows] = await Promise.all([
     obtenerRelacionesVendedores(),
     obtenerVentasRango({ fechaInicio, fechaFin }),
     ComisionConfiguracion.findAll({
@@ -599,11 +714,18 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
       order: [["orden", "ASC"]],
     }),
     SancionConfiguracion.findAll({ where: { activo: true, periodo: "SEMANAL" } }),
+    PagoComisionMultaAjuste.findAll({
+      where: {
+        semanaInicio: { [Op.between]: [fechaInicio, fechaFin] },
+      },
+      attributes: ["usuarioId", "semanaInicio", "omitida"],
+    }),
   ]);
 
   const weeklyRulesByGroup = buildWeeklyRulesByGroup(configs);
   const monthlyRulesByGroup = buildMonthlyRulesByGroup(configs, weeks.length);
   const sanctionsByRole = buildSanctionsByRole(sanciones);
+  const penaltyAdjustments = buildPenaltyAdjustmentsMap(penaltyAdjustmentsRows);
   const vendedoresMap = new Map();
 
   relaciones.forEach((relacion) => {
@@ -611,7 +733,8 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
     if (
       isCargoPagoComisionable(usuarioPayload) &&
       isActiveDuringPeriod({
-        fechaIngreso: usuarioPayload.fechaIngreso,
+        fechaIngreso:
+          usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
         fechaSalida: usuarioPayload.fechaSalida,
         fechaInicio,
         fechaFin,
@@ -629,7 +752,8 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
     if (!isCargoPagoComisionable(usuarioPayload)) return;
     if (
       !isActiveDuringPeriod({
-        fechaIngreso: usuarioPayload.fechaIngreso,
+        fechaIngreso:
+          usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
         fechaSalida: usuarioPayload.fechaSalida,
         fechaInicio,
         fechaFin,
@@ -674,7 +798,14 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   const vendedores = [...vendedoresMap.values()]
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
     .map((vendedor) => {
-      finalizarVendedor(vendedor, weeks, weeklyRulesByGroup, monthlyRulesByGroup, sanctionsByRole);
+      finalizarVendedor(
+        vendedor,
+        weeks,
+        weeklyRulesByGroup,
+        monthlyRulesByGroup,
+        sanctionsByRole,
+        penaltyAdjustments,
+      );
       return vendedor;
     });
 
@@ -751,16 +882,113 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   };
 };
 
+const createHttpError = (message, statusCode) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const parseCommercialWeek = (semanaInicio) => {
+  const value = String(semanaInicio || "");
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match || getCommercialWeekKey(value) !== value) {
+    throw createHttpError(
+      "La semana debe corresponder a un jueves en formato YYYY-MM-DD",
+      400,
+    );
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const week = getCommercialWeeksByMonth(year, month).find(
+    (item) => item.startDate === value,
+  );
+  if (!week) {
+    throw createHttpError("La semana comercial no es valida", 400);
+  }
+
+  return { year, month, week };
+};
+
+const actualizarOmisionMulta = async ({
+  usuarioId,
+  semanaInicio,
+  omitida,
+  actualizadoPorId,
+}) => {
+  const numericUsuarioId = Number(usuarioId);
+  if (!Number.isInteger(numericUsuarioId) || numericUsuarioId <= 0) {
+    throw createHttpError("El vendedor no es valido", 400);
+  }
+  if (typeof omitida !== "boolean") {
+    throw createHttpError("Debe indicar si la multa sera omitida", 400);
+  }
+
+  const { year, month, week } = parseCommercialWeek(semanaInicio);
+  const reporte = await obtenerReportePagosComisiones({ year, month });
+  const vendedor = reporte.vendedores.find(
+    (item) => Number(item.usuarioId) === numericUsuarioId,
+  );
+  if (!vendedor) {
+    throw createHttpError("Vendedor no encontrado en el reporte seleccionado", 404);
+  }
+
+  const values = vendedor.semanas[week.startDate];
+  if (!values || values.semanaFutura) {
+    throw createHttpError("No se puede modificar una multa de una semana futura", 400);
+  }
+  if (values.personalNuevo) {
+    throw createHttpError(
+      "El personal nuevo no genera multa durante sus primeros 30 dias",
+      400,
+    );
+  }
+  if (!values.semanaCompletaParaDescuento) {
+    throw createHttpError("La semana parcial o no laborada no genera multa", 400);
+  }
+  if (toNumber(values.valorMultaCalculado) <= 0) {
+    throw createHttpError("El vendedor no tiene una multa calculada en esta semana", 400);
+  }
+
+  const [ajuste] = await PagoComisionMultaAjuste.findOrCreate({
+    where: {
+      usuarioId: numericUsuarioId,
+      semanaInicio: week.startDate,
+    },
+    defaults: {
+      omitida,
+      actualizadoPorId: actualizadoPorId || null,
+    },
+  });
+
+  await ajuste.update({
+    omitida,
+    actualizadoPorId: actualizadoPorId || null,
+  });
+
+  return {
+    message: omitida ? "Multa omitida correctamente" : "Multa restaurada correctamente",
+    usuarioId: numericUsuarioId,
+    semanaInicio: week.startDate,
+    omitida,
+  };
+};
+
 module.exports = {
   isCargoPagoComisionable,
   buildWeeklyRulesByGroup,
   buildMonthlyRulesByGroup,
   calculateCommission,
   calculateSalesPenalty,
+  calculateWeeklyPenalty,
   calculateMonthlyBonus,
   calculateLeaderAverage,
   isActiveDuringWeek,
+  isActiveFullWeek,
+  getNewPersonnelPenaltyStartDate,
+  isNewPersonnelDuringWeek,
   isActiveDuringPeriod,
   isFutureCommercialWeek,
   obtenerReportePagosComisiones,
+  actualizarOmisionMulta,
 };

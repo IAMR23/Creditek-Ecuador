@@ -49,6 +49,7 @@ const MapaComercialZona = require('./MapaComercialZona');
 const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
+const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
 const InventarioSistema = require('./InventarioSistema');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
@@ -480,6 +481,22 @@ RolPago.hasMany(SancionConfiguracion, { foreignKey: "rolPagoId", as: "sancionesC
 SancionConfiguracion.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
 RolPago.hasMany(ComisionConfiguracion, { foreignKey: "rolPagoId", as: "comisionesConfiguracion" });
 ComisionConfiguracion.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
+Usuario.hasMany(PagoComisionMultaAjuste, {
+  foreignKey: "usuarioId",
+  as: "ajustesMultasComisiones",
+});
+PagoComisionMultaAjuste.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "vendedor",
+});
+Usuario.hasMany(PagoComisionMultaAjuste, {
+  foreignKey: "actualizadoPorId",
+  as: "ajustesMultasComisionesRealizados",
+});
+PagoComisionMultaAjuste.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
 
 /* GESTIONES COMERCIALES */
 

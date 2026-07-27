@@ -5,6 +5,11 @@ const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
 const Agencia = require("../models/Agencia");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
+const {
+  crearBaseUsuarioDesdeEmail,
+  esUsuarioValido,
+  normalizarUsuario,
+} = require("../utils/usuarioLogin");
 
 const router = express.Router();
 
@@ -15,9 +20,22 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Bootstrap ya fue ejecutado." });
     }
 
-    const { nombre, cedula, email, password } = req.body;
+    const { nombre, cedula, email, usuario: nombreUsuario, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ message: "Email y password son obligatorios." });
+    }
+
+    const emailNormalizado = String(email).trim().toLowerCase();
+    const usuarioNormalizado =
+      normalizarUsuario(nombreUsuario) ||
+      crearBaseUsuarioDesdeEmail(emailNormalizado);
+
+    if (!esUsuarioValido(usuarioNormalizado)) {
+      return res.status(400).json({
+        code: "USUARIO_INVALIDO",
+        message:
+          "El usuario debe tener entre 3 y 50 caracteres y usar solo letras, números, punto, guion o guion bajo.",
+      });
     }
 
     const rolAdmin = await Rol.findOne({ where: { nombre: "ADMIN" } });
@@ -30,7 +48,8 @@ router.post("/", async (req, res) => {
     const usuario = await Usuario.create({
       nombre: nombre || "Admin",
       cedula: cedula || null,
-      email,
+      email: emailNormalizado,
+      usuario: usuarioNormalizado,
       password: hashedPassword,
       rolId: rolAdmin.id,
       activo: true,
@@ -49,4 +68,3 @@ router.post("/", async (req, res) => {
 });
 
 module.exports = router;
-
