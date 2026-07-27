@@ -140,7 +140,7 @@ export default function Usuarios() {
 
     try {
       setLoading(true);
-      const res = await api.post("/usuarios", {
+      await api.post("/usuarios", {
         nombre: form.nombre,
         cedula: form.cedula,
         email: form.email,
@@ -151,18 +151,8 @@ export default function Usuarios() {
         numeroCuenta: normalizeText(form.numeroCuenta),
         direccion: normalizeText(form.direccion),
         telefono: normalizeText(form.telefono),
+        agenciaId: form.agenciasIds[0],
       });
-
-      const userId = res.data?.id;
-      await Promise.all(
-        form.agenciasIds.map((agenciaId) =>
-          api.post("/usuario-agencia", {
-            usuarioId: userId,
-            agenciaId,
-            activo: true,
-          }),
-        ),
-      );
 
       setForm({
         nombre: "",

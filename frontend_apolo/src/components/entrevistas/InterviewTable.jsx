@@ -1,4 +1,10 @@
-import { ChevronLeft, ChevronRight, EllipsisVertical } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  EllipsisVertical,
+  FileDown,
+  UserPlus,
+} from "lucide-react";
 import {
   formatInterviewDate,
   formatInterviewTime,
@@ -60,20 +66,43 @@ function InterviewPhaseDateCell({ interview }) {
   );
 }
 
-function InterviewerCell({ interview }) {
-  const interviewer = interview.entrevistador;
-  if (!interviewer) return <span className="text-sm font-semibold text-slate-400">Sin asignar</span>;
+function InterviewLocationCell({ interview }) {
+  const isVirtual = interview.entrevistaModalidad === "VIRTUAL";
+  const location = isVirtual
+    ? interview.entrevistaEnlace?.trim()
+    : interview.entrevistaLugar?.trim();
+
+  if (!location) {
+    return <span className="text-sm font-semibold text-slate-400">Sin definir</span>;
+  }
 
   return (
-    <div>
-      <p className="font-semibold text-slate-800">{interviewer.nombre || interviewer.email}</p>
-      <p className="mt-1 text-xs text-slate-500">{interviewer.rol?.nombre || "Entrevistador"}</p>
+    <div className="max-w-52">
+      <p className="break-words font-semibold text-slate-800">{location}</p>
+      <p className="mt-1 text-xs text-slate-500">
+        {isVirtual ? "Virtual" : "Presencial"}
+      </p>
     </div>
   );
 }
 
-function InterviewActions({ interview, onSchedule, onView, onStatusChange, onReturn, onDiscard }) {
+function InterviewActions({
+  interview,
+  onSchedule,
+  onView,
+  onDownloadContract,
+  downloadingContractId,
+  onCreateUser,
+  checkingUserCandidateId,
+  userExistsCandidateIds,
+  onStatusChange,
+  onReturn,
+  onDiscard,
+}) {
   const scheduled = Boolean(interview.fechaEntrevista);
+  const downloadingContract = downloadingContractId === interview.id;
+  const checkingUser = checkingUserCandidateId === interview.id;
+  const userExists = userExistsCandidateIds?.has(interview.id);
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -83,6 +112,32 @@ function InterviewActions({ interview, onSchedule, onView, onStatusChange, onRet
         className="rounded-lg px-2 py-1.5 text-xs font-extrabold text-orange-600 transition hover:bg-orange-50"
       >
         {scheduled ? "Reprogramar" : "Agendar"}
+      </button>
+      <button
+        type="button"
+        onClick={() => onDownloadContract(interview)}
+        disabled={downloadingContract}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-extrabold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+        aria-label={`Descargar contrato de capacitación de ${getCandidateName(interview)}`}
+        title="Descargar contrato de capacitación"
+      >
+        <FileDown size={14} />
+        {downloadingContract ? "Generando..." : "Contrato PDF"}
+      </button>
+      <button
+        type="button"
+        onClick={() => onCreateUser(interview)}
+        disabled={checkingUser || userExists}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs font-extrabold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+        aria-label={`Crear usuario para ${getCandidateName(interview)}`}
+        title="Crear usuario desde la postulación"
+      >
+        <UserPlus size={14} />
+        {checkingUser
+          ? "Verificando..."
+          : userExists
+            ? "Usuario existente"
+            : "Crear usuario"}
       </button>
       <button
         type="button"
@@ -157,7 +212,7 @@ function MobileCard(props) {
       <InterviewStatusBadge status={getInterviewStatus(interview)} />
       <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">
         <InterviewDateCell interview={interview} />
-        <InterviewerCell interview={interview} />
+        <InterviewLocationCell interview={interview} />
       </div>
       <InterviewActions {...props} />
     </article>
@@ -209,7 +264,7 @@ export default function InterviewTable({
               <th className="px-4 py-3 font-bold">Ciudad</th>
               <th className="px-4 py-3 font-bold">Estado</th>
               <th className="px-4 py-3 font-bold">Entrevista</th>
-              <th className="px-4 py-3 font-bold">Entrevistador</th>
+              <th className="px-4 py-3 font-bold">Lugar de la entrevista</th>
               <th className="px-5 py-3 text-right font-bold">Acciones</th>
             </tr>
           </thead>
@@ -227,7 +282,7 @@ export default function InterviewTable({
                   <td className="px-4 py-4 text-sm font-semibold text-slate-700">{getCandidateCity(interview)}</td>
                   <td className="px-4 py-4"><InterviewStatusBadge status={getInterviewStatus(interview)} /></td>
                   <td className="px-4 py-4 text-sm"><InterviewDateCell interview={interview} /></td>
-                  <td className="px-4 py-4 text-sm"><InterviewerCell interview={interview} /></td>
+                  <td className="px-4 py-4 text-sm"><InterviewLocationCell interview={interview} /></td>
                   <td className="px-5 py-4"><InterviewActions interview={interview} {...actions} /></td>
                 </tr>
               );

@@ -24,6 +24,9 @@ import ModalDetalle from "../../components/PostulacionDetalle";
 const dash = "-";
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 const PAGE_SIZE = 10;
+const MAX_BULK_TXT_FILES = 200;
+const MAX_TXT_FILE_BYTES = 75 * 1024;
+const BULK_TXT_CONCURRENCY = 4;
 const createEmptyFilters = () => ({
   q: "",
   fechaDesde: "",
@@ -50,6 +53,41 @@ const getTitularTxt = (postulacion) =>
   postulacion?.formulario?.importacion_familiares_txt?.titular ||
   null;
 const getFamiliaresTxt = (postulacion) => postulacion?.formulario?.familiares_postulante || [];
+
+const extractCedulaFromTxtFilename = (filename = "") =>
+  filename.match(/^consulta_(\d{10})_.+\.txt$/i)?.[1] || "";
+
+const readTxtFile = async (file) => {
+  const bytes = await file.arrayBuffer();
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+};
+
+const processWithConcurrency = async (items, concurrency, worker) => {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await worker(
+          items[currentIndex],
+          currentIndex,
+        );
+      }
+    },
+  );
+
+  await Promise.all(runners);
+  return results;
+};
 
 const formatDate = (date) => {
   if (!date) return dash;
@@ -106,9 +144,16 @@ export default function Postulaciones({ modo = "postulacion" }) {
   const [importingFamilyTxtId, setImportingFamilyTxtId] = useState(null);
   const [expandedFamilyId, setExpandedFamilyId] = useState(null);
   const [savingFamilyReviewKey, setSavingFamilyReviewKey] = useState("");
+  const [bulkImportingTxt, setBulkImportingTxt] = useState(false);
+  const [bulkImportProgress, setBulkImportProgress] = useState({
+    processed: 0,
+    total: 0,
+  });
+  const [bulkImportResult, setBulkImportResult] = useState(null);
   const requestIdRef = useRef(0);
   const familyTxtInputRef = useRef(null);
   const familyTxtTargetRef = useRef(null);
+  const bulkFamilyTxtInputRef = useRef(null);
 
   const total = useMemo(() => pagination.total || postulaciones.length, [pagination.total, postulaciones.length]);
 
@@ -450,6 +495,13 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }
   };
 
+  const seleccionarTxtFamiliaresMasivo = () => {
+    if (bulkFamilyTxtInputRef.current) {
+      bulkFamilyTxtInputRef.current.value = "";
+      bulkFamilyTxtInputRef.current.click();
+    }
+  };
+
   const alternarFamiliares = (postulacion) => {
     setExpandedFamilyId((prev) => (prev === postulacion.id ? null : postulacion.id));
   };
@@ -591,6 +643,18 @@ export default function Postulaciones({ modo = "postulacion" }) {
 
     if (!file.name.toLowerCase().endsWith(".txt")) {
       Swal.fire("Archivo no valido", "Selecciona un archivo .txt.", "warning");
+      familyTxtTargetRef.current = null;
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_TXT_FILE_BYTES) {
+      Swal.fire(
+        "Archivo demasiado grande",
+        "El TXT no puede superar 75 KB.",
+        "warning",
+      );
+      familyTxtTargetRef.current = null;
       event.target.value = "";
       return;
     }
@@ -598,7 +662,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
     try {
       setImportingFamilyTxtId(postulacion.id);
       setError("");
-      const contenido = await file.text();
+      const contenido = await readTxtFile(file);
       const res = await api.patch(`/api/postulaciones/${postulacion.id}/familiares-txt`, {
         contenido,
         nombreArchivo: file.name,
@@ -635,6 +699,157 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }
   };
 
+  const importarTxtFamiliaresMasivo = async (event) => {
+    const input = event.target;
+    const files = Array.from(input.files || []);
+
+    if (!files.length) return;
+
+    if (files.length > MAX_BULK_TXT_FILES) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Demasiados archivos",
+        text: `Selecciona máximo ${MAX_BULK_TXT_FILES} archivos por carga.`,
+        confirmButtonColor: "#f97316",
+      });
+      input.value = "";
+      return;
+    }
+
+    const confirmation = await Swal.fire({
+      icon: "question",
+      title: "Carga masiva TXT",
+      text: `Se procesarán ${files.length} archivo${
+        files.length === 1 ? "" : "s"
+      } y cada uno se asociará por la cédula de su nombre.`,
+      showCancelButton: true,
+      confirmButtonText: "Procesar archivos",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#f97316",
+    });
+
+    if (!confirmation.isConfirmed) {
+      input.value = "";
+      return;
+    }
+
+    const cedulaCounts = files.reduce((counts, file) => {
+      const cedula = extractCedulaFromTxtFilename(file.name);
+      if (cedula) counts.set(cedula, (counts.get(cedula) || 0) + 1);
+      return counts;
+    }, new Map());
+
+    try {
+      setBulkImportingTxt(true);
+      setBulkImportResult(null);
+      setBulkImportProgress({ processed: 0, total: files.length });
+      let processed = 0;
+
+      const results = await processWithConcurrency(
+        files,
+        BULK_TXT_CONCURRENCY,
+        async (file) => {
+          const cedula = extractCedulaFromTxtFilename(file.name);
+          let result;
+
+          if (!file.name.toLowerCase().endsWith(".txt")) {
+            result = {
+              ok: false,
+              filename: file.name,
+              message: "No es un archivo .txt.",
+            };
+          } else if (!cedula) {
+            result = {
+              ok: false,
+              filename: file.name,
+              message:
+                "El nombre no cumple consulta_<cedula>_<fecha>_<hora>.txt.",
+            };
+          } else if ((cedulaCounts.get(cedula) || 0) > 1) {
+            result = {
+              ok: false,
+              filename: file.name,
+              cedula,
+              message:
+                "La misma cédula aparece en varios archivos del lote.",
+            };
+          } else if (file.size > MAX_TXT_FILE_BYTES) {
+            result = {
+              ok: false,
+              filename: file.name,
+              cedula,
+              message: "El archivo supera el máximo de 75 KB.",
+            };
+          } else {
+            try {
+              const contenido = await readTxtFile(file);
+              const response = await api.patch(
+                "/api/postulaciones/familiares-txt/por-cedula",
+                {
+                  nombreArchivo: file.name,
+                  contenido,
+                },
+              );
+
+              result = {
+                ok: true,
+                filename: file.name,
+                cedula,
+                ...response.data?.data,
+              };
+            } catch (error) {
+              result = {
+                ok: false,
+                filename: file.name,
+                cedula,
+                code: error.response?.data?.code,
+                message:
+                  error.response?.data?.message ||
+                  "No se pudo importar el archivo.",
+              };
+            }
+          }
+
+          processed += 1;
+          setBulkImportProgress({
+            processed,
+            total: files.length,
+          });
+          return result;
+        },
+      );
+
+      const imported = results.filter((result) => result.ok).length;
+      const failed = results.length - imported;
+      setBulkImportResult({
+        total: results.length,
+        imported,
+        failed,
+        results,
+      });
+      await fetchPostulaciones(page, filters);
+
+      await Swal.fire({
+        icon: failed ? "warning" : "success",
+        title: "Carga masiva finalizada",
+        text: `${imported} archivo${
+          imported === 1 ? "" : "s"
+        } importado${imported === 1 ? "" : "s"} y ${failed} con observaciones.`,
+        confirmButtonColor: "#f97316",
+      });
+    } catch (error) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo completar la carga",
+        text: error.message || "Ocurrió un error procesando los archivos.",
+        confirmButtonColor: "#f97316",
+      });
+    } finally {
+      setBulkImportingTxt(false);
+      input.value = "";
+    }
+  };
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchPostulaciones(1, filters);
@@ -652,22 +867,46 @@ export default function Postulaciones({ modo = "postulacion" }) {
         className="hidden"
         onChange={importarTxtFamiliares}
       />
+      <input
+        ref={bulkFamilyTxtInputRef}
+        type="file"
+        accept=".txt,text/plain"
+        multiple
+        className="hidden"
+        onChange={importarTxtFamiliaresMasivo}
+      />
       <div className="mx-auto max-w-7xl">
         <div className="mb-6">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-orange-600">
-              Desarrollo Organizacional
-            </p>
-            <h2 className="mt-1 text-2xl font-bold text-slate-900">
-              {esDescartados ? "Descartados" : esEntrevistas ? "Entrevistas" : "Postulaciones"}
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {total} postulante{total === 1 ? "" : "s"} en esta sección.
-            </p>
-            {!esEntrevistas && !esDescartados && (
-              <p className="mt-1 text-sm font-medium text-red-600">
-                {resumen.noLeidas} no leida{resumen.noLeidas === 1 ? "" : "s"}.
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-orange-600">
+                Desarrollo Organizacional
               </p>
+              <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                {esDescartados ? "Descartados" : esEntrevistas ? "Entrevistas" : "Postulaciones"}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {total} postulante{total === 1 ? "" : "s"} en esta sección.
+              </p>
+              {!esEntrevistas && !esDescartados && (
+                <p className="mt-1 text-sm font-medium text-red-600">
+                  {resumen.noLeidas} no leida{resumen.noLeidas === 1 ? "" : "s"}.
+                </p>
+              )}
+            </div>
+
+            {!esEntrevistas && !esDescartados && (
+              <button
+                type="button"
+                onClick={seleccionarTxtFamiliaresMasivo}
+                disabled={bulkImportingTxt}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Upload size={18} />
+                {bulkImportingTxt
+                  ? `Procesando ${bulkImportProgress.processed}/${bulkImportProgress.total}`
+                  : "Carga masiva TXT"}
+              </button>
             )}
           </div>
 
@@ -793,6 +1032,49 @@ export default function Postulaciones({ modo = "postulacion" }) {
               </button>
             </div>
           </div>
+
+          {bulkImportResult && !esEntrevistas && !esDescartados && (
+            <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-orange-600">
+                    Resultado de carga masiva
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {bulkImportResult.imported} importado
+                    {bulkImportResult.imported === 1 ? "" : "s"} ·{" "}
+                    {bulkImportResult.failed} con observaciones
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkImportResult(null)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                  aria-label="Cerrar resultado de carga masiva"
+                >
+                  <X size={17} />
+                </button>
+              </div>
+
+              {bulkImportResult.failed > 0 && (
+                <ul className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+                  {bulkImportResult.results.map((result, index) =>
+                    result.ok ? null : (
+                      <li
+                        key={`${result.filename}-${index}`}
+                        className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                      >
+                        <span className="font-bold">{result.filename}</span>
+                        <span className="mt-0.5 block">
+                          {result.message}
+                        </span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              )}
+            </section>
+          )}
         </div>
 
         {error && (

@@ -1,9 +1,19 @@
 const express = require("express");
-const { Op, json, literal, where: sequelizeWhere } = require("sequelize");
+const {
+  Op,
+  col,
+  fn,
+  json,
+  literal,
+  where: sequelizeWhere,
+} = require("sequelize");
 
 const Postulacion = require("../models/Postulacion");
 const Usuario = require("../models/Usuario");
 const auth = require("../middleware/auth");
+const {
+  generarContratoCapacitacionPdf,
+} = require("../services/contratoCapacitacionPdfService");
 
 const router = express.Router();
 const INTERVIEW_STATUSES = [
@@ -18,6 +28,7 @@ const INTERVIEW_STATUSES = [
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
 const GUAYAQUIL_OFFSET_MS = 5 * 60 * 60 * 1000;
+const MAX_TXT_CONTENT_BYTES = 75 * 1024;
 
 const isEmptyValue = (value) => value === "" || value === null || value === undefined;
 
@@ -130,6 +141,24 @@ const extractTxtContent = (body = {}) => {
   if (typeof body?.txt === "string") return body.txt;
   return "";
 };
+
+const createHttpError = (statusCode, code, message) =>
+  Object.assign(new Error(message), { statusCode, code });
+
+const cleanTxtFilename = (value) =>
+  String(value || "")
+    .split(/[\\/]/)
+    .pop()
+    .trim()
+    .slice(0, 255);
+
+const extractCedulaFromTxtFilename = (value) => {
+  const filename = cleanTxtFilename(value);
+  const match = filename.match(/^consulta_(\d{10})_.+\.txt$/i);
+  return match?.[1] || null;
+};
+
+const normalizeCedula = (value) => String(value || "").trim();
 
 const parsePositiveInt = (value, fallback, max = Number.MAX_SAFE_INTEGER) => {
   const parsed = Number.parseInt(value, 10);
@@ -420,7 +449,12 @@ const normalizePayload = (data = {}) => {
   return payload;
 };
 
-const mergeTxtImportIntoForm = (formulario = {}, parsed) => {
+const mergeTxtImportIntoForm = (
+  formulario = {},
+  parsed,
+  importInfo = {},
+) => {
+  const fechaImportacion = new Date().toISOString();
   const titular = parsed.titular || {};
   const titularImportado = parsed.titular
     ? clean({
@@ -453,15 +487,97 @@ const mergeTxtImportIntoForm = (formulario = {}, parsed) => {
     importacion_familiares_txt: clean({
       titular: titularImportado,
       totalFamiliares: familiares.length,
-      fechaImportacion: new Date().toISOString(),
+      fechaImportacion,
       origen: "txt",
+      nombreArchivo: importInfo.nombreArchivo,
+      cedulaArchivo: importInfo.cedulaArchivo,
     }),
     metadata: clean({
       ...(formulario.metadata || {}),
-      ultima_importacion_familiares_txt: new Date().toISOString(),
+      ultima_importacion_familiares_txt: fechaImportacion,
+      ultimo_archivo_familiares_txt: importInfo.nombreArchivo,
     }),
   };
 };
+
+const parseAndSaveTxtImport = async ({
+  postulacion,
+  txtContent,
+  nombreArchivo,
+  cedulaEsperada,
+}) => {
+  if (!txtContent.trim()) {
+    throw createHttpError(
+      400,
+      "TXT_VACIO",
+      "Debe enviar el contenido del archivo TXT",
+    );
+  }
+
+  if (Buffer.byteLength(txtContent, "utf8") > MAX_TXT_CONTENT_BYTES) {
+    throw createHttpError(
+      413,
+      "TXT_DEMASIADO_GRANDE",
+      "El archivo TXT no puede superar 75 KB.",
+    );
+  }
+
+  const parsed = parsePostulanteTxt(txtContent);
+
+  if (!parsed.titular && parsed.familiares.length === 0) {
+    throw createHttpError(
+      422,
+      "TXT_SIN_REGISTROS",
+      "No se encontraron datos válidos en el archivo TXT",
+    );
+  }
+
+  const cedulaTitular = normalizeCedula(parsed.titular?.cedula);
+  if (
+    cedulaEsperada &&
+    cedulaTitular &&
+    cedulaTitular !== cedulaEsperada
+  ) {
+    throw createHttpError(
+      409,
+      "CEDULA_TXT_NO_COINCIDE",
+      `La cédula ${cedulaTitular} dentro del TXT no coincide con la cédula ${cedulaEsperada} del nombre del archivo.`,
+    );
+  }
+
+  const formularioActualizado = mergeTxtImportIntoForm(
+    postulacion.formulario || {},
+    parsed,
+    {
+      nombreArchivo: cleanTxtFilename(nombreArchivo),
+      cedulaArchivo: cedulaEsperada,
+    },
+  );
+  const datos = formularioActualizado.datos_personales || {};
+
+  postulacion.formulario = formularioActualizado;
+  postulacion.nombre =
+    datos.nombreCompleto || postulacion.nombre || null;
+  postulacion.cedula = datos.cedula || postulacion.cedula || null;
+  await postulacion.save();
+
+  return parsed;
+};
+
+const findPostulacionesByCedula = (cedula) =>
+  Postulacion.findAll({
+    where: {
+      [Op.or]: [
+        sequelizeWhere(fn("BTRIM", col("cedula")), cedula),
+        sequelizeWhere(
+          json("formulario.datos_personales.cedula"),
+          { [Op.eq]: cedula },
+        ),
+      ],
+    },
+    order: [["id", "ASC"]],
+    limit: 2,
+  });
 
 const buildResumen = async () => {
   const today = getGuayaquilDate();
@@ -682,24 +798,14 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-router.patch("/:id/familiares-txt", auth, async (req, res) => {
+router.get("/:id/contrato-capacitacion.pdf", auth, async (req, res) => {
   try {
-    const { id } = req.params;
-    const txtContent = extractTxtContent(req.body);
+    const id = parsePositiveInt(req.params.id, null);
 
-    if (!txtContent.trim()) {
+    if (!id) {
       return res.status(400).json({
         ok: false,
-        message: "Debe enviar el contenido del archivo TXT",
-      });
-    }
-
-    const parsed = parsePostulanteTxt(txtContent);
-
-    if (!parsed.titular && parsed.familiares.length === 0) {
-      return res.status(400).json({
-        ok: false,
-        message: "No se encontraron datos validos en el archivo TXT",
+        message: "El id de la postulación no es válido.",
       });
     }
 
@@ -708,21 +814,150 @@ router.patch("/:id/familiares-txt", auth, async (req, res) => {
     if (!postulacion) {
       return res.status(404).json({
         ok: false,
-        message: "Postulacion no encontrada",
+        message: "Postulación no encontrada.",
       });
     }
 
-    const formularioActualizado = mergeTxtImportIntoForm(postulacion.formulario || {}, parsed);
-    const datos = formularioActualizado.datos_personales || {};
+    if (!postulacion.pasaEntrevista || postulacion.descartada) {
+      return res.status(409).json({
+        ok: false,
+        message:
+          "El contrato solo puede generarse para postulantes activos en Entrevistas.",
+      });
+    }
 
-    postulacion.formulario = formularioActualizado;
-    postulacion.nombre = datos.nombreCompleto || postulacion.nombre || null;
-    postulacion.cedula = datos.cedula || postulacion.cedula || null;
-    await postulacion.save();
+    const datosPersonales =
+      postulacion.formulario?.datos_personales || {};
+    const nombreCompleto =
+      datosPersonales.nombreCompleto || postulacion.nombre;
+    const cedula = datosPersonales.cedula || postulacion.cedula;
+    const pdf = await generarContratoCapacitacionPdf({
+      nombreCompleto,
+      cedula,
+    });
+    const cedulaArchivo = String(cedula || "")
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .slice(0, 30);
+    const filename = `acuerdo-capacitacion-${cedulaArchivo || postulacion.id}.pdf`;
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(pdf.length),
+      "Cache-Control": "private, no-store",
+    });
+
+    return res.send(pdf);
+  } catch (error) {
+    const status = error.statusCode || 500;
+
+    if (status >= 500) {
+      console.error("Error generando contrato de capacitación:", error);
+    }
+
+    return res.status(status).json({
+      ok: false,
+      message:
+        status === 500
+          ? "No se pudo generar el contrato de capacitación."
+          : error.message,
+    });
+  }
+});
+
+router.patch("/familiares-txt/por-cedula", auth, async (req, res) => {
+  try {
+    const nombreArchivo = cleanTxtFilename(req.body?.nombreArchivo);
+    const cedulaArchivo = extractCedulaFromTxtFilename(nombreArchivo);
+    const txtContent = extractTxtContent(req.body);
+
+    if (!cedulaArchivo) {
+      return res.status(400).json({
+        ok: false,
+        code: "NOMBRE_ARCHIVO_INVALIDO",
+        message:
+          "El archivo debe llamarse consulta_<cedula>_<fecha>_<hora>.txt e incluir una cédula de 10 dígitos.",
+      });
+    }
+
+    const postulaciones = await findPostulacionesByCedula(cedulaArchivo);
+
+    if (postulaciones.length === 0) {
+      return res.status(404).json({
+        ok: false,
+        code: "POSTULACION_NO_ENCONTRADA",
+        message: `No se encontró una postulación con la cédula ${cedulaArchivo}.`,
+      });
+    }
+
+    if (postulaciones.length > 1) {
+      return res.status(409).json({
+        ok: false,
+        code: "POSTULACION_CEDULA_DUPLICADA",
+        message: `Existe más de una postulación con la cédula ${cedulaArchivo}. No se importó el archivo.`,
+      });
+    }
+
+    const postulacion = postulaciones[0];
+    const parsed = await parseAndSaveTxtImport({
+      postulacion,
+      txtContent,
+      nombreArchivo,
+      cedulaEsperada: cedulaArchivo,
+    });
 
     return res.json({
       ok: true,
-      message: "Informacion familiar importada correctamente",
+      message: "Información familiar importada correctamente",
+      data: {
+        postulacionId: postulacion.id,
+        nombre: postulacion.nombre,
+        cedula: cedulaArchivo,
+        nombreArchivo,
+        titularImportado: Boolean(parsed.titular),
+        totalFamiliares: parsed.familiares.length,
+      },
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+
+    if (status >= 500) {
+      console.error("Error importando TXT masivo por cédula:", error);
+    }
+
+    return res.status(status).json({
+      ok: false,
+      code: error.code,
+      message:
+        status >= 500
+          ? "Error al importar la información familiar desde TXT"
+          : error.message,
+    });
+  }
+});
+
+router.patch("/:id/familiares-txt", auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const txtContent = extractTxtContent(req.body);
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulación no encontrada",
+      });
+    }
+
+    const parsed = await parseAndSaveTxtImport({
+      postulacion,
+      txtContent,
+      nombreArchivo: req.body?.nombreArchivo,
+    });
+
+    return res.json({
+      ok: true,
+      message: "Información familiar importada correctamente",
       data: postulacion,
       parsed: {
         titular: parsed.titular,
@@ -730,12 +965,19 @@ router.patch("/:id/familiares-txt", auth, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error importando informacion familiar desde TXT:", error);
+    const status = error.statusCode || 500;
 
-    return res.status(500).json({
+    if (status >= 500) {
+      console.error("Error importando información familiar desde TXT:", error);
+    }
+
+    return res.status(status).json({
       ok: false,
-      message: "Error al importar informacion familiar desde TXT",
-      error: error.message,
+      code: error.code,
+      message:
+        status >= 500
+          ? "Error al importar información familiar desde TXT"
+          : error.message,
     });
   }
 });

@@ -8,7 +8,13 @@ import InterviewSchedulerDrawer from "../../components/entrevistas/InterviewSche
 import InterviewSummaryCards from "../../components/entrevistas/InterviewSummaryCards";
 import InterviewTable from "../../components/entrevistas/InterviewTable";
 import ModalDetalle from "../../components/PostulacionDetalle";
-import { getCandidateName, getInterviewDateRange, INTERVIEW_STATUS } from "../../utils/interviews";
+import CreateUserModal from "../../components/usuarios/CreateUserModal";
+import {
+  getCandidateIdentification,
+  getCandidateName,
+  getInterviewDateRange,
+  INTERVIEW_STATUS,
+} from "../../utils/interviews";
 
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 const EMPTY_FILTERS = {
@@ -32,6 +38,21 @@ const EMPTY_SUMMARY = {
   reprogramaciones: 0,
 };
 
+const getDownloadErrorMessage = async (error) => {
+  const responseData = error.response?.data;
+
+  if (responseData instanceof Blob) {
+    try {
+      const payload = JSON.parse(await responseData.text());
+      if (payload?.message) return payload.message;
+    } catch {
+      // El backend puede responder texto o un cuerpo vacio.
+    }
+  }
+
+  return responseData?.message || "No se pudo generar el contrato de capacitación.";
+};
+
 export default function Entrevistas() {
   const [interviews, setInterviews] = useState([]);
   const [agencies, setAgencies] = useState([]);
@@ -49,6 +70,13 @@ export default function Entrevistas() {
   const [drawerCandidate, setDrawerCandidate] = useState(null);
   const [drawerCandidates, setDrawerCandidates] = useState([]);
   const [loadingCandidatePicker, setLoadingCandidatePicker] = useState(false);
+  const [downloadingContractId, setDownloadingContractId] = useState(null);
+  const [createUserCandidate, setCreateUserCandidate] = useState(null);
+  const [roles, setRoles] = useState([]);
+  const [checkingUserCandidateId, setCheckingUserCandidateId] = useState(null);
+  const [userExistsCandidateIds, setUserExistsCandidateIds] = useState(
+    () => new Set(),
+  );
   const openerRef = useRef(null);
 
   useEffect(() => {
@@ -203,6 +231,119 @@ export default function Entrevistas() {
     }
   };
 
+  const downloadTrainingAgreement = async (interview) => {
+    const identification = getCandidateIdentification(interview);
+
+    if (!identification || identification === "-") {
+      await Swal.fire({
+        icon: "warning",
+        title: "Cédula pendiente",
+        text: "Registra la cédula del postulante antes de generar el contrato.",
+        confirmButtonColor: "#f97316",
+      });
+      return;
+    }
+
+    try {
+      setDownloadingContractId(interview.id);
+      const response = await api.get(
+        `/api/postulaciones/${interview.id}/contrato-capacitacion.pdf`,
+        { responseType: "blob" },
+      );
+      const pdfBlob =
+        response.data instanceof Blob
+          ? response.data
+          : new Blob([response.data], { type: "application/pdf" });
+      const objectUrl = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      const safeIdentification = String(identification)
+        .replace(/[^a-zA-Z0-9_-]/g, "")
+        .slice(0, 30);
+
+      link.href = objectUrl;
+      link.download = `acuerdo-capacitacion-${safeIdentification || interview.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+    } catch (requestError) {
+      Swal.fire(
+        "Error",
+        await getDownloadErrorMessage(requestError),
+        "error",
+      );
+    } finally {
+      setDownloadingContractId(null);
+    }
+  };
+
+  const openCreateUserModal = async (interview) => {
+    const identification = getCandidateIdentification(interview);
+
+    if (!identification || identification === "-") {
+      await Swal.fire({
+        icon: "warning",
+        title: "Cédula pendiente",
+        text: "Registra la cédula del postulante antes de crear el usuario.",
+        confirmButtonColor: "#f97316",
+      });
+      return;
+    }
+
+    try {
+      setCheckingUserCandidateId(interview.id);
+      const [rolesResponse, userResponse] = await Promise.all([
+        roles.length ? Promise.resolve({ data: roles }) : api.get("/rol"),
+        api.get(
+          `/usuarios/por-cedula/${encodeURIComponent(identification)}`,
+        ),
+      ]);
+
+      if (userResponse.data?.existe) {
+        const existingUser = userResponse.data.usuario;
+        setUserExistsCandidateIds((current) => {
+          const next = new Set(current);
+          next.add(interview.id);
+          return next;
+        });
+        await Swal.fire({
+          icon: "info",
+          title: "Usuario ya registrado",
+          text: `${existingUser.nombre || "El postulante"} ya existe en Usuarios y está ${
+            existingUser.activo ? "activo" : "inactivo"
+          }.`,
+          confirmButtonColor: "#f97316",
+        });
+        return;
+      }
+
+      setRoles(rolesResponse.data || []);
+      setCreateUserCandidate(interview);
+    } catch (error) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo verificar el usuario",
+        text:
+          error.response?.data?.message ||
+          "No se pudo consultar si la cédula ya está registrada.",
+        confirmButtonColor: "#f97316",
+      });
+    } finally {
+      setCheckingUserCandidateId(null);
+    }
+  };
+
+  const handleUserCreated = () => {
+    if (createUserCandidate?.id) {
+      setUserExistsCandidateIds((current) => {
+        const next = new Set(current);
+        next.add(createUserCandidate.id);
+        return next;
+      });
+    }
+    setCreateUserCandidate(null);
+  };
+
   const changeStatus = async (interview, status) => {
     const meta = INTERVIEW_STATUS[status];
     const destructive = ["NO_ASISTIO", "CANCELADA"].includes(status);
@@ -345,6 +486,11 @@ export default function Entrevistas() {
             onPageChange={setPage}
             onSchedule={openDrawerForCandidate}
             onView={viewInterview}
+            onDownloadContract={downloadTrainingAgreement}
+            downloadingContractId={downloadingContractId}
+            onCreateUser={openCreateUserModal}
+            checkingUserCandidateId={checkingUserCandidateId}
+            userExistsCandidateIds={userExistsCandidateIds}
             onStatusChange={changeStatus}
             onReturn={returnToApplications}
             onDiscard={discardCandidate}
@@ -365,6 +511,15 @@ export default function Entrevistas() {
       />
 
       {selected && <ModalDetalle postulacion={selected} onClose={() => setSelected(null)} />}
+
+      <CreateUserModal
+        open={Boolean(createUserCandidate)}
+        candidate={createUserCandidate}
+        roles={roles}
+        agencies={agencies}
+        onClose={() => setCreateUserCandidate(null)}
+        onCreated={handleUserCreated}
+      />
     </div>
   );
 }

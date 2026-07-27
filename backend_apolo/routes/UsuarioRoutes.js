@@ -1,12 +1,32 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const {
+  Op,
+  Transaction,
+  col,
+  fn,
+  where: sequelizeWhere,
+} = require("sequelize");
+const { sequelize } = require("../config/db");
 const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
+const Agencia = require("../models/Agencia");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 
 const router = express.Router();
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+const normalizeText = (value) => String(value ?? "").trim();
+const normalizeOptionalText = (value) => normalizeText(value) || null;
+const buildCedulaWhere = (cedula) =>
+  sequelizeWhere(fn("BTRIM", col("cedula")), cedula);
+const buildEmailWhere = (email) =>
+  sequelizeWhere(
+    fn("LOWER", fn("BTRIM", col("email"))),
+    email.toLowerCase(),
+  );
+const httpError = (statusCode, code, message) =>
+  Object.assign(new Error(message), { statusCode, code });
 
 router.post("/", async (req, res) => {
   try {
@@ -21,7 +41,32 @@ router.post("/", async (req, res) => {
       numeroCuenta,
       direccion,
       telefono,
+      agenciaId,
     } = req.body;
+    const nombreNormalizado = normalizeText(nombre);
+    const cedulaNormalizada = normalizeText(cedula);
+    const emailNormalizado = normalizeText(email).toLowerCase();
+
+    if (!nombreNormalizado) {
+      return res.status(400).json({
+        code: "NOMBRE_REQUERIDO",
+        message: "El nombre es obligatorio.",
+      });
+    }
+
+    if (!cedulaNormalizada) {
+      return res.status(400).json({
+        code: "CEDULA_REQUERIDA",
+        message: "La cédula es obligatoria.",
+      });
+    }
+
+    if (!emailNormalizado) {
+      return res.status(400).json({
+        code: "EMAIL_REQUERIDO",
+        message: "El email es obligatorio.",
+      });
+    }
 
     if (!passwordRegex.test(password || "")) {
       return res.status(400).json({
@@ -29,37 +74,127 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const existing = await Usuario.findOne({ where: { email } });
-    if (existing) return res.status(400).json({ message: "El email ya está registrado." });
-
     if (!rolId) {
       return res.status(400).json({ message: "El campo rolId es obligatorio." });
     }
-    const existeRol = await Rol.findByPk(rolId);
-    if (!existeRol) {
-      return res.status(400).json({ message: "El rol especificado no existe." });
+
+    if (!agenciaId) {
+      return res.status(400).json({
+        code: "AGENCIA_REQUERIDA",
+        message: "La agencia es obligatoria.",
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const nuevoUsuario = await sequelize.transaction(
+      {
+        isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE,
+      },
+      async (transaction) => {
+        const [usuarioConCedula, usuarioConEmail, existeRol, existeAgencia] =
+          await Promise.all([
+            Usuario.findOne({
+              where: buildCedulaWhere(cedulaNormalizada),
+              transaction,
+            }),
+            Usuario.findOne({
+              where: buildEmailWhere(emailNormalizado),
+              transaction,
+            }),
+            Rol.findByPk(rolId, { transaction }),
+            Agencia.findByPk(agenciaId, { transaction }),
+          ]);
 
-    const nuevoUsuario = await Usuario.create({
-      nombre,
-      cedula,
-      email,
-      password: hashedPassword,
-      rolId,
-      fechaIngreso,
-      fechaSalida,
-      numeroCuenta,
-      direccion,
-      telefono,
-      activo: true,
-    });
+        if (usuarioConCedula) {
+          throw httpError(
+            409,
+            "CEDULA_DUPLICADA",
+            "Ya existe un usuario registrado con esta cédula.",
+          );
+        }
+
+        if (usuarioConEmail) {
+          throw httpError(
+            409,
+            "EMAIL_DUPLICADO",
+            "El email ya está registrado.",
+          );
+        }
+
+        if (!existeRol) {
+          throw httpError(
+            400,
+            "ROL_INVALIDO",
+            "El rol especificado no existe.",
+          );
+        }
+
+        if (!existeAgencia) {
+          throw httpError(
+            400,
+            "AGENCIA_INVALIDA",
+            "La agencia especificada no existe.",
+          );
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const usuarioCreado = await Usuario.create(
+          {
+            nombre: nombreNormalizado,
+            cedula: cedulaNormalizada,
+            email: emailNormalizado,
+            password: hashedPassword,
+            rolId,
+            fechaIngreso: fechaIngreso || null,
+            fechaSalida: fechaSalida || null,
+            numeroCuenta: normalizeOptionalText(numeroCuenta),
+            direccion: normalizeOptionalText(direccion),
+            telefono: normalizeOptionalText(telefono),
+            activo: true,
+          },
+          { transaction },
+        );
+
+        await UsuarioAgencia.create(
+          {
+            usuarioId: usuarioCreado.id,
+            agenciaId,
+            activo: true,
+          },
+          { transaction },
+        );
+
+        return usuarioCreado;
+      },
+    );
 
     const { password: _pw, ...usuarioSinPassword } = nuevoUsuario.toJSON();
     return res.status(201).json(usuarioSinPassword);
   } catch (error) {
-    return res.status(500).json({ message: "Error al crear el usuario", error });
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        code: error.code,
+        message: error.message,
+      });
+    }
+
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        code: "USUARIO_DUPLICADO",
+        message: "Ya existe un usuario con la cédula o el email ingresado.",
+      });
+    }
+
+    const databaseCode = error.original?.code || error.parent?.code;
+    if (databaseCode === "40001") {
+      return res.status(409).json({
+        code: "CREACION_CONCURRENTE",
+        message:
+          "Otro proceso modificó los usuarios al mismo tiempo. Verifica la cédula e intenta nuevamente.",
+      });
+    }
+
+    console.error("Error al crear el usuario:", error);
+    return res.status(500).json({ message: "Error al crear el usuario" });
   }
 });
 
@@ -77,6 +212,46 @@ router.get("/", async (req, res) => {
     return res.json(usuarios);
   } catch (error) {
     return res.status(500).json({ message: "Error al obtener usuarios", error });
+  }
+});
+
+router.get("/por-cedula/:cedula", async (req, res) => {
+  try {
+    const cedula = normalizeText(req.params.cedula);
+
+    if (!cedula) {
+      return res.status(400).json({
+        code: "CEDULA_REQUERIDA",
+        message: "La cédula es obligatoria.",
+      });
+    }
+
+    const usuarios = await Usuario.findAll({
+      where: buildCedulaWhere(cedula),
+      attributes: { exclude: ["password"] },
+      include: [{ model: Rol, as: "rol", attributes: ["id", "nombre"] }],
+      order: [["id", "ASC"]],
+      limit: 2,
+    });
+
+    if (usuarios.length > 1) {
+      return res.status(409).json({
+        code: "CEDULA_DUPLICADA_MULTIPLE",
+        message:
+          "Existe más de un usuario con esta cédula. Corrige la duplicidad antes de continuar.",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      existe: usuarios.length === 1,
+      usuario: usuarios[0] || null,
+    });
+  } catch (error) {
+    console.error("Error consultando usuario por cédula:", error);
+    return res.status(500).json({
+      message: "Error al consultar el usuario por cédula",
+    });
   }
 });
 
@@ -112,10 +287,27 @@ router.put("/:id", async (req, res) => {
       telefono,
     } = req.body;
 
-    if (email && email !== usuario.email) {
-      const existeEmail = await Usuario.findOne({ where: { email } });
-      if (existeEmail) return res.status(400).json({ message: "El email ya está en uso." });
-      usuario.email = email;
+    if (email !== undefined) {
+      const emailNormalizado = normalizeText(email).toLowerCase();
+      if (!emailNormalizado) {
+        return res.status(400).json({ message: "El email es obligatorio." });
+      }
+
+      const existeEmail = await Usuario.findOne({
+        where: {
+          [Op.and]: [
+            buildEmailWhere(emailNormalizado),
+            { id: { [Op.ne]: usuario.id } },
+          ],
+        },
+      });
+      if (existeEmail) {
+        return res.status(409).json({
+          code: "EMAIL_DUPLICADO",
+          message: "El email ya está en uso.",
+        });
+      }
+      usuario.email = emailNormalizado;
     }
 
     if (password) {
@@ -134,8 +326,29 @@ router.put("/:id", async (req, res) => {
       }
       usuario.rolId = rolId;
     }
-    if (nombre !== undefined) usuario.nombre = nombre;
-    if (cedula !== undefined) usuario.cedula = cedula;
+    if (nombre !== undefined) usuario.nombre = normalizeText(nombre);
+    if (cedula !== undefined) {
+      const cedulaNormalizada = normalizeText(cedula);
+      if (!cedulaNormalizada) {
+        return res.status(400).json({ message: "La cédula es obligatoria." });
+      }
+
+      const existeCedula = await Usuario.findOne({
+        where: {
+          [Op.and]: [
+            buildCedulaWhere(cedulaNormalizada),
+            { id: { [Op.ne]: usuario.id } },
+          ],
+        },
+      });
+      if (existeCedula) {
+        return res.status(409).json({
+          code: "CEDULA_DUPLICADA",
+          message: "Ya existe otro usuario con esta cédula.",
+        });
+      }
+      usuario.cedula = cedulaNormalizada;
+    }
     if (activo !== undefined) usuario.activo = activo;
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
     if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalida;
