@@ -30,6 +30,71 @@ const toNumber = (value) => {
   return Number.isFinite(number) ? number : 0;
 };
 
+const getPositionLevelRank = ({ nivel, cargo } = {}) => {
+  const position = normalizeText(`${nivel || ""} ${cargo || ""}`);
+
+  if (position.includes("GERENTE")) return 6;
+  if (position.includes("JEFE")) return 5;
+  if (position.includes("SUPERVISOR")) return 4;
+  if (position.includes("ESPECIALISTA")) return 3;
+  if (position.includes("ENCARGADO") || position.includes("TECNICO")) return 2;
+  if (position.includes("ASISTENTE") || position.includes("VENDEDOR")) return 1;
+  return 0;
+};
+
+const buildPaidPosition = ({
+  rolPago,
+  rolPagoId,
+  cargo,
+  nivel,
+  sueldo,
+} = {}) => {
+  const position = {
+    rolPagoId: rolPago?.id || rolPagoId || null,
+    cargo: rolPago?.cargo || cargo || "",
+    nivel: rolPago?.nivel || nivel || "",
+  };
+  if (!position.rolPagoId || !position.cargo) return null;
+
+  const sueldoRol =
+    toNumber(rolPago?.sueldoBase) + toNumber(rolPago?.sueldoExtra);
+
+  return {
+    ...position,
+    remuneracionReferencia: Math.max(
+      toNumber(rolPago?.ingresoMax),
+      sueldoRol,
+      toNumber(sueldo),
+    ),
+    nivelJerarquia: getPositionLevelRank(position),
+  };
+};
+
+const selectHighestPaidPosition = (positions = []) =>
+  positions
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        toNumber(right.remuneracionReferencia) -
+          toNumber(left.remuneracionReferencia) ||
+        toNumber(right.nivelJerarquia) - toNumber(left.nivelJerarquia),
+    )[0] || null;
+
+const getDistinctPaidPositions = (positions = []) => {
+  const positionsByRole = new Map();
+
+  positions.filter(Boolean).forEach((position) => {
+    const key = position.rolPagoId
+      ? `ROL:${Number(position.rolPagoId)}`
+      : `CARGO:${normalizeText(position.cargo)}`;
+    const current = positionsByRole.get(key);
+    const preferred = selectHighestPaidPosition([current, position]);
+    if (preferred) positionsByRole.set(key, preferred);
+  });
+
+  return [...positionsByRole.values()];
+};
+
 const round = (value, decimals = 3) =>
   Number((Number(value || 0)).toFixed(decimals));
 
@@ -117,16 +182,32 @@ const getSaleTotals = (row) => {
 const getUsuarioPayload = (usuarioAgencia) => {
   const usuario = usuarioAgencia?.usuario || {};
   const nominaEmpleado = usuarioAgencia?.nominaEmpleado || null;
-  const rolPago = nominaEmpleado?.rolPago || usuario.rolPago || null;
+  const posicionesPago = getDistinctPaidPositions([
+    buildPaidPosition({
+      rolPago: nominaEmpleado?.rolPago,
+      rolPagoId: nominaEmpleado?.rolPagoId,
+      cargo: nominaEmpleado?.cargo,
+      sueldo: nominaEmpleado?.sueldo,
+    }),
+    buildPaidPosition({ rolPago: usuario.rolPago }),
+    ...(usuario.rolesPago || []).map((rolPago) =>
+      buildPaidPosition({ rolPago }),
+    ),
+  ]);
+  const cargoPrincipal = selectHighestPaidPosition(posicionesPago);
   const rol = usuario.rol || null;
   const agencia = usuarioAgencia?.agencia || null;
 
   return {
     usuarioId: usuario.id,
     nombre: usuario.nombre || "Sin vendedor",
-    rolPagoId: nominaEmpleado?.rolPagoId || usuario.rolPagoId || rolPago?.id || null,
-    cargo: rolPago?.cargo || nominaEmpleado?.cargo || "",
-    nivel: rolPago?.nivel || "",
+    rolPagoId: cargoPrincipal?.rolPagoId || null,
+    cargo: cargoPrincipal?.cargo || "",
+    nivel: cargoPrincipal?.nivel || "",
+    prioridadCargo: cargoPrincipal?.remuneracionReferencia || 0,
+    nivelJerarquiaCargo: cargoPrincipal?.nivelJerarquia || 0,
+    posicionesPago,
+    tieneMultiplesCargos: posicionesPago.length > 1,
     rol: rol?.nombre || "",
     agencias: agencia?.nombre ? [agencia.nombre] : [],
     fechaIngreso: usuario.fechaIngreso || null,
@@ -155,6 +236,67 @@ const isActiveFullWeek = ({ fechaIngreso, fechaSalida, week }) => {
   if (ingreso && ingreso > inicioSemana) return false;
   if (salida && salida < finSemana) return false;
   return true;
+};
+
+const getActiveTeamMembersForWeek = (members, week) =>
+  members.filter((member) => {
+    const inicioSemana = String(week.startDate || "").slice(0, 10);
+    const finSemana = String(week.endDate || "").slice(0, 10);
+    const ingreso = member.fechaIngreso || member.fechaCreacionUsuario;
+    const fechaIngreso = ingreso ? String(ingreso).slice(0, 10) : null;
+    const fechaSalida = member.fechaSalida
+      ? String(member.fechaSalida).slice(0, 10)
+      : null;
+
+    if (fechaIngreso && fechaIngreso > inicioSemana) return false;
+    if (fechaSalida && fechaSalida <= finSemana) return false;
+    return true;
+  });
+
+const getCommissionTeamMembersForWeek = ({ members, week, esSupervisor }) =>
+  esSupervisor
+    ? getActiveTeamMembersForWeek(members, week)
+    : members.filter((member) =>
+        isActiveDuringWeek({
+          fechaIngreso: member.fechaIngreso || member.fechaCreacionUsuario,
+          fechaSalida: member.fechaSalida,
+          week,
+        }),
+      );
+
+const getCommissionTeamProductionForWeek = ({
+  members,
+  week,
+  esSupervisor,
+}) => {
+  const integrantes = getCommissionTeamMembersForWeek({
+    members,
+    week,
+    esSupervisor,
+  });
+
+  return integrantes.reduce(
+    (production, member) => {
+      const values = member.semanas?.[week.startDate] || emptyWeekValues();
+      production.venden += toNumber(values.venden);
+      production.valorVendido += toNumber(values.valorVendido);
+      production.dispositivosPorVendedor.push({
+        usuarioId: member.usuarioId,
+        nombre: member.nombre,
+        venden: toNumber(values.venden),
+        valorVendido: round(values.valorVendido, 2),
+        esLiderVendedor: Boolean(member.esLiderVendedor),
+        tieneMultiplesCargos: Boolean(member.tieneMultiplesCargos),
+      });
+      return production;
+    },
+    {
+      integrantes,
+      dispositivosPorVendedor: [],
+      venden: 0,
+      valorVendido: 0,
+    },
+  );
 };
 
 const getNewPersonnelPenaltyStartDate = (fechaCreacionUsuario) => {
@@ -203,6 +345,97 @@ const isCargoPagoComisionable = (usuarioPayload) => {
 
   return isAsistenteVendedor || isVendedorPiso || isVendedorCallCenter ||
     isJefeComercial || isSupervisorComercial;
+};
+
+const getCommissionablePaidPosition = (usuarioPayload) =>
+  selectHighestPaidPosition(
+    (usuarioPayload.posicionesPago?.length
+      ? usuarioPayload.posicionesPago
+      : [usuarioPayload]
+    ).filter((position) => isCargoPagoComisionable(position)),
+  );
+
+const hasCommissionablePaidPosition = (usuarioPayload) =>
+  Boolean(getCommissionablePaidPosition(usuarioPayload));
+
+const isIndividualSellerPosition = (position) => {
+  const cargo = normalizeText(position?.cargo);
+  return (
+    cargo.includes("VENDEDOR") &&
+    !cargo.includes("JEFE") &&
+    !cargo.includes("SUPERVISOR")
+  );
+};
+
+const getLeaderCommissionMembers = ({ leader, juniors }) => {
+  const membersByUser = new Map(
+    juniors
+      .filter(
+        (member) => Number(member.usuarioId) !== Number(leader.usuarioId),
+      )
+      .map((member) => [Number(member.usuarioId), member]),
+  );
+  const liderTambienEsVendedor =
+    leader.tieneMultiplesCargos &&
+    (leader.posicionesPago || []).some(isIndividualSellerPosition);
+
+  if (liderTambienEsVendedor) {
+    membersByUser.set(Number(leader.usuarioId), {
+      ...leader,
+      esLiderVendedor: true,
+    });
+  }
+
+  return [...membersByUser.values()];
+};
+
+const getLeaderBonusExclusionReasons = ({ member, weeks }) => {
+  const reasons = [];
+  if (member.tieneMultiplesCargos) reasons.push("Doble cargo");
+  if (member.fechaSalida) reasons.push("Fecha de salida");
+  if (
+    weeks.some((week) =>
+      isNewPersonnelDuringWeek({
+        fechaCreacionUsuario: member.fechaCreacionUsuario,
+        week,
+      }),
+    )
+  ) {
+    reasons.push("Personal nuevo");
+  }
+  return reasons;
+};
+
+const getLeaderBonusTeam = ({ members, weeks }) =>
+  members.reduce(
+    (team, member) => {
+      const reasons = getLeaderBonusExclusionReasons({ member, weeks });
+      if (reasons.length) {
+        team.excluded.push({
+          usuarioId: member.usuarioId,
+          nombre: member.nombre,
+          razones: reasons,
+        });
+      } else {
+        team.included.push(member);
+      }
+      return team;
+    },
+    { included: [], excluded: [] },
+  );
+
+const applyCommissionPosition = (vendedor) => {
+  const position = getCommissionablePaidPosition(vendedor);
+  vendedor.rolPagoComisionId = position?.rolPagoId || null;
+  vendedor.cargoComision = position?.cargo || "";
+  vendedor.nivelComision = position?.nivel || "";
+  vendedor.grupoComision = position
+    ? resolveGrupoComision({
+        ...vendedor,
+        cargo: position.cargo,
+        nivel: position.nivel,
+      })
+    : null;
 };
 
 const resolveGrupoComision = (usuarioPayload) => {
@@ -377,12 +610,19 @@ const calculateMonthlyBonus = ({ rules, venden }) => {
   return round(toNumber(tier.bono) + extra, 2);
 };
 
-const calculateLeaderAverage = ({ totalDispositivos, cantidadSemanas, cantidadJuniors }) => {
-  if (!cantidadSemanas || !cantidadJuniors) return 0;
-  return round(
-    toNumber(totalDispositivos) / toNumber(cantidadSemanas) / toNumber(cantidadJuniors),
-    3,
-  );
+const calculateLeaderAverage = ({
+  totalDispositivos,
+  cantidadSemanas,
+  cantidadJuniors,
+  totalVendedoresSemanas,
+}) => {
+  const usaConteoSemanal =
+    totalVendedoresSemanas !== null && totalVendedoresSemanas !== undefined;
+  const divisor = usaConteoSemanal
+    ? toNumber(totalVendedoresSemanas)
+    : toNumber(cantidadSemanas) * toNumber(cantidadJuniors);
+  if (!divisor) return 0;
+  return round(toNumber(totalDispositivos) / divisor, 3);
 };
 
 const calculateCommission = ({ rules, venden, valorVendido }) => {
@@ -417,6 +657,21 @@ const buildSanctionsByRole = (configs) => {
     byCargo[normalizeText(config.cargoReferencia)] = config;
   });
   return { byRole, byCargo };
+};
+
+const resolveSalesSanctionConfig = (vendedor, sanctionsByRole) => {
+  if (vendedor.tieneMultiplesCargos) return null;
+
+  const cargo = normalizeText(vendedor.cargo);
+  const esLiderComercial =
+    cargo.includes("JEFE COMERCIAL") || cargo.includes("SUPERVISOR");
+  if (esLiderComercial) return null;
+
+  return (
+    sanctionsByRole.byRole[Number(vendedor.rolPagoId)] ||
+    sanctionsByRole.byCargo[cargo] ||
+    null
+  );
 };
 
 const calculateSalesPenalty = ({ config, unidadesVendidas }) => {
@@ -479,24 +734,34 @@ const mergeAgencias = (current = [], incoming = []) =>
 
 const ensureVendedor = (map, usuarioPayload, weeks) => {
   if (!usuarioPayload.usuarioId) return null;
-  if (!isCargoPagoComisionable(usuarioPayload)) return null;
+  if (!hasCommissionablePaidPosition(usuarioPayload)) return null;
 
   if (!map.has(usuarioPayload.usuarioId)) {
-    map.set(usuarioPayload.usuarioId, {
+    const vendedor = {
       ...usuarioPayload,
-      grupoComision: resolveGrupoComision(usuarioPayload),
       semanas: buildEmptyWeeks(weeks),
       total: emptyWeekValues(),
-    });
+    };
+    applyCommissionPosition(vendedor);
+    map.set(usuarioPayload.usuarioId, vendedor);
   } else {
     const vendedor = map.get(usuarioPayload.usuarioId);
     vendedor.agencias = mergeAgencias(vendedor.agencias, usuarioPayload.agencias);
-    if (!vendedor.cargo && usuarioPayload.cargo) vendedor.cargo = usuarioPayload.cargo;
-    if (!vendedor.nivel && usuarioPayload.nivel) vendedor.nivel = usuarioPayload.nivel;
-    if (!vendedor.rol && usuarioPayload.rol) vendedor.rol = usuarioPayload.rol;
-    if (!vendedor.grupoComision) {
-      vendedor.grupoComision = resolveGrupoComision(vendedor);
+    vendedor.posicionesPago = getDistinctPaidPositions([
+      ...(vendedor.posicionesPago || []),
+      ...(usuarioPayload.posicionesPago || []),
+    ]);
+    const cargoPrincipal = selectHighestPaidPosition(vendedor.posicionesPago);
+    if (cargoPrincipal) {
+      vendedor.rolPagoId = cargoPrincipal.rolPagoId;
+      vendedor.cargo = cargoPrincipal.cargo;
+      vendedor.nivel = cargoPrincipal.nivel;
+      vendedor.prioridadCargo = cargoPrincipal.remuneracionReferencia;
+      vendedor.nivelJerarquiaCargo = cargoPrincipal.nivelJerarquia;
     }
+    vendedor.tieneMultiplesCargos = vendedor.posicionesPago.length > 1;
+    if (!vendedor.rol && usuarioPayload.rol) vendedor.rol = usuarioPayload.rol;
+    applyCommissionPosition(vendedor);
   }
 
   return map.get(usuarioPayload.usuarioId);
@@ -512,7 +777,31 @@ const buildIncludeUsuarioAgencia = () => ({
       as: "usuario",
       attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
       include: [
-        { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
+        {
+          model: RolPago,
+          as: "rolPago",
+          attributes: [
+            "id",
+            "cargo",
+            "nivel",
+            "sueldoBase",
+            "sueldoExtra",
+            "ingresoMax",
+          ],
+        },
+        {
+          model: RolPago,
+          as: "rolesPago",
+          attributes: [
+            "id",
+            "cargo",
+            "nivel",
+            "sueldoBase",
+            "sueldoExtra",
+            "ingresoMax",
+          ],
+          through: { attributes: [] },
+        },
         { model: Rol, as: "rol", attributes: ["id", "nombre"] },
       ],
     },
@@ -523,7 +812,18 @@ const buildIncludeUsuarioAgencia = () => ({
       attributes: ["id", "rolPagoId", "cargo", "sueldo", "estado"],
       required: false,
       include: [
-        { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
+        {
+          model: RolPago,
+          as: "rolPago",
+          attributes: [
+            "id",
+            "cargo",
+            "nivel",
+            "sueldoBase",
+            "sueldoExtra",
+            "ingresoMax",
+          ],
+        },
       ],
     },
   ],
@@ -537,7 +837,31 @@ const obtenerRelacionesVendedores = async () =>
         as: "usuario",
         attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
         include: [
-          { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
+          {
+            model: RolPago,
+            as: "rolPago",
+            attributes: [
+              "id",
+              "cargo",
+              "nivel",
+              "sueldoBase",
+              "sueldoExtra",
+              "ingresoMax",
+            ],
+          },
+          {
+            model: RolPago,
+            as: "rolesPago",
+            attributes: [
+              "id",
+              "cargo",
+              "nivel",
+              "sueldoBase",
+              "sueldoExtra",
+              "ingresoMax",
+            ],
+            through: { attributes: [] },
+          },
           { model: Rol, as: "rol", attributes: ["id", "nombre"] },
         ],
       },
@@ -548,7 +872,18 @@ const obtenerRelacionesVendedores = async () =>
         attributes: ["id", "rolPagoId", "cargo", "sueldo", "estado"],
         required: false,
         include: [
-          { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
+          {
+            model: RolPago,
+            as: "rolPago",
+            attributes: [
+              "id",
+              "cargo",
+              "nivel",
+              "sueldoBase",
+              "sueldoExtra",
+              "ingresoMax",
+            ],
+          },
         ],
       },
     ],
@@ -593,28 +928,57 @@ const finalizarVendedor = (
   sanctionsByRole,
   penaltyAdjustments,
 ) => {
-  const rolKey = vendedor.rolPagoId ? `ROL:${vendedor.rolPagoId}` : null;
+  const rolComisionId = vendedor.rolPagoComisionId || vendedor.rolPagoId;
+  const rolKey = rolComisionId ? `ROL:${rolComisionId}` : null;
   const grupoKey = vendedor.grupoComision ? normalizeText(vendedor.grupoComision) : null;
-  const subgrupo = vendedor.vendedoresJunior?.length
-    ? `${vendedor.vendedoresJunior.length} VENDEDORES`
+  const cantidadVendedoresMensual = vendedor.esJefeComercial
+    ? vendedor.vendedoresBono?.length || 0
+    : vendedor.vendedoresJunior?.length || 0;
+  const subgrupoMensual = cantidadVendedoresMensual
+    ? `${cantidadVendedoresMensual} VENDEDORES`
     : null;
-  const rolSubgrupoKey = rolKey && subgrupo ? `${rolKey}|SUB:${subgrupo}` : null;
-  const grupoSubgrupoKey = grupoKey && subgrupo ? `${grupoKey}|SUB:${subgrupo}` : null;
-  const rules = (rolSubgrupoKey && weeklyRulesByGroup[rolSubgrupoKey]) ||
-    (grupoSubgrupoKey && weeklyRulesByGroup[grupoSubgrupoKey]) ||
-    (rolKey && weeklyRulesByGroup[rolKey]) || (grupoKey && weeklyRulesByGroup[grupoKey]) || [];
-  const monthlyRules = (rolSubgrupoKey && monthlyRulesByGroup[rolSubgrupoKey]) ||
-    (grupoSubgrupoKey && monthlyRulesByGroup[grupoSubgrupoKey]) ||
+  const rolSubgrupoMensualKey = rolKey && subgrupoMensual
+    ? `${rolKey}|SUB:${subgrupoMensual}`
+    : null;
+  const grupoSubgrupoMensualKey = grupoKey && subgrupoMensual
+    ? `${grupoKey}|SUB:${subgrupoMensual}`
+    : null;
+  const monthlyRules =
+    (rolSubgrupoMensualKey && monthlyRulesByGroup[rolSubgrupoMensualKey]) ||
+    (grupoSubgrupoMensualKey && monthlyRulesByGroup[grupoSubgrupoMensualKey]) ||
     (rolKey && monthlyRulesByGroup[rolKey]) || (grupoKey && monthlyRulesByGroup[grupoKey]) || null;
-  const sanctionConfig = sanctionsByRole.byRole[Number(vendedor.rolPagoId)] || sanctionsByRole.byCargo[normalizeText(vendedor.cargo)] || null;
+  const sanctionConfig = resolveSalesSanctionConfig(
+    vendedor,
+    sanctionsByRole,
+  );
 
   vendedor.resumenMensual = emptyMonthlyValues();
 
   weeks.forEach((week) => {
     const values = vendedor.semanas[week.startDate];
     const semanaFutura = isFutureCommercialWeek(week);
+    const cantidadVendedoresSemana = Number.isFinite(
+      Number(values.cantidadVendedores),
+    )
+      ? Number(values.cantidadVendedores)
+      : vendedor.vendedoresJunior?.length || 0;
+    const subgrupoSemanal = cantidadVendedoresSemana
+      ? `${cantidadVendedoresSemana} VENDEDORES`
+      : null;
+    const rolSubgrupoSemanalKey = rolKey && subgrupoSemanal
+      ? `${rolKey}|SUB:${subgrupoSemanal}`
+      : null;
+    const grupoSubgrupoSemanalKey = grupoKey && subgrupoSemanal
+      ? `${grupoKey}|SUB:${subgrupoSemanal}`
+      : null;
+    const weeklyRules =
+      (rolSubgrupoSemanalKey && weeklyRulesByGroup[rolSubgrupoSemanalKey]) ||
+      (grupoSubgrupoSemanalKey && weeklyRulesByGroup[grupoSubgrupoSemanalKey]) ||
+      (rolKey && weeklyRulesByGroup[rolKey]) ||
+      (grupoKey && weeklyRulesByGroup[grupoKey]) ||
+      [];
     const commission = calculateCommission({
-      rules,
+      rules: weeklyRules,
       venden: values.venden,
       valorVendido: values.valorVendido,
     });
@@ -670,17 +1034,52 @@ const finalizarVendedor = (
   vendedor.resumenMensual.ventasTvCelulaMensual = vendedor.total.venden;
   vendedor.resumenMensual.valorComisionSemanal = vendedor.total.totalComisiones;
   const esLiderComercial = vendedor.esJefeComercial || vendedor.esSupervisorComercial;
+  const usaBaseEspecialBono =
+    vendedor.esJefeComercial &&
+    weeks.some((week) =>
+      Number.isFinite(
+        Number(vendedor.semanas[week.startDate].cantidadVendedoresBono),
+      ),
+    );
+  const totalDispositivosParaBono = usaBaseEspecialBono
+    ? weeks.reduce(
+        (total, week) =>
+          total + toNumber(vendedor.semanas[week.startDate].vendenParaBono),
+        0,
+      )
+    : vendedor.total.venden;
+  const totalVendedoresSemanas =
+    vendedor.esSupervisorComercial || usaBaseEspecialBono
+    ? weeks.reduce(
+        (total, week) =>
+          total +
+          toNumber(
+            usaBaseEspecialBono
+              ? vendedor.semanas[week.startDate].cantidadVendedoresBono
+              : vendedor.semanas[week.startDate].cantidadVendedores,
+          ),
+        0,
+      )
+    : null;
   const promedioVentasPorJunior = esLiderComercial
     ? calculateLeaderAverage({
-        totalDispositivos: vendedor.total.venden,
+        totalDispositivos: totalDispositivosParaBono,
         cantidadSemanas: weeks.length,
-        cantidadJuniors: vendedor.vendedoresJunior?.length || 0,
+        cantidadJuniors: cantidadVendedoresMensual,
+        totalVendedoresSemanas,
       })
     : null;
   const unidadesParaBono = esLiderComercial
     ? promedioVentasPorJunior
     : vendedor.total.venden;
   vendedor.resumenMensual.promedioVentasPorJunior = promedioVentasPorJunior;
+  vendedor.resumenMensual.totalVendedoresSemanas = totalVendedoresSemanas;
+  vendedor.resumenMensual.ventasConsideradasBono =
+    totalDispositivosParaBono;
+  vendedor.resumenMensual.vendedoresConsideradosBono =
+    vendedor.esJefeComercial ? vendedor.vendedoresBono || [] : null;
+  vendedor.resumenMensual.vendedoresExcluidosBono =
+    vendedor.esJefeComercial ? vendedor.vendedoresExcluidosBono || [] : null;
   vendedor.resumenMensual.valorComisionMensual = calculateMonthlyBonus({
     rules: monthlyRules,
     venden: unidadesParaBono,
@@ -731,7 +1130,7 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   relaciones.forEach((relacion) => {
     const usuarioPayload = getUsuarioPayload(relacion);
     if (
-      isCargoPagoComisionable(usuarioPayload) &&
+      hasCommissionablePaidPosition(usuarioPayload) &&
       isActiveDuringPeriod({
         fechaIngreso:
           usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
@@ -749,7 +1148,7 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
     if (!weekKeys.has(weekKey)) return;
 
     const usuarioPayload = getUsuarioPayload(venta.usuarioAgencia);
-    if (!isCargoPagoComisionable(usuarioPayload)) return;
+    if (!hasCommissionablePaidPosition(usuarioPayload)) return;
     if (
       !isActiveDuringPeriod({
         fechaIngreso:
@@ -769,29 +1168,74 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   });
 
   const vendedoresBase = [...vendedoresMap.values()];
+  const vendedoresProduccion = vendedoresBase.map((vendedor) => ({
+    ...vendedor,
+    semanas: Object.fromEntries(
+      weeks.map((week) => [
+        week.startDate,
+        { ...(vendedor.semanas[week.startDate] || emptyWeekValues()) },
+      ]),
+    ),
+  }));
   vendedoresBase.forEach((jefe) => {
-    const cargo = normalizeText(jefe.cargo);
+    const cargo = normalizeText(jefe.cargoComision || jefe.cargo);
     const esJefe = cargo.includes("JEFE COMERCIAL");
     const esSupervisor = cargo.includes("SUPERVISOR");
     if (!esJefe && !esSupervisor) return;
 
-    const juniors = vendedoresBase.filter(
+    const jefeProduccion = vendedoresProduccion.find(
+      (vendedor) => Number(vendedor.usuarioId) === Number(jefe.usuarioId),
+    );
+    const juniors = vendedoresProduccion.filter(
       (vendedor) => Number(
         esJefe ? vendedor.jefeComercialId : vendedor.supervisorComercialId,
       ) === Number(jefe.usuarioId),
     );
+    const integrantesEquipo = getLeaderCommissionMembers({
+      leader: jefeProduccion,
+      juniors,
+    });
+    const equipoBono = esJefe
+      ? getLeaderBonusTeam({ members: integrantesEquipo, weeks })
+      : { included: integrantesEquipo, excluded: [] };
     jefe.esJefeComercial = esJefe;
     jefe.esSupervisorComercial = esSupervisor;
-    jefe.vendedoresJunior = juniors.map(({ usuarioId, nombre }) => ({ usuarioId, nombre }));
+    jefe.vendedoresJunior = integrantesEquipo.map(
+      ({ usuarioId, nombre, esLiderVendedor }) => ({
+        usuarioId,
+        nombre,
+        esLiderVendedor: Boolean(esLiderVendedor),
+      }),
+    );
+    jefe.vendedoresBono = equipoBono.included.map(
+      ({ usuarioId, nombre }) => ({ usuarioId, nombre }),
+    );
+    jefe.vendedoresExcluidosBono = equipoBono.excluded;
     jefe.semanas = buildEmptyWeeks(weeks);
     jefe.total = emptyWeekValues();
 
-    juniors.forEach((junior) => {
-      weeks.forEach((week) => {
-        const origen = junior.semanas[week.startDate];
-        jefe.semanas[week.startDate].venden += origen.venden;
-        jefe.semanas[week.startDate].valorVendido += origen.valorVendido;
+    weeks.forEach((week) => {
+      const produccion = getCommissionTeamProductionForWeek({
+        members: integrantesEquipo,
+        week,
+        esSupervisor,
       });
+      const produccionBono = getCommissionTeamProductionForWeek({
+        members: equipoBono.included,
+        week,
+        esSupervisor,
+      });
+      const integrantesProduccion = produccion.integrantes;
+      jefe.semanas[week.startDate].cantidadVendedores =
+        integrantesProduccion.length;
+      jefe.semanas[week.startDate].vendedoresActivos =
+        produccion.dispositivosPorVendedor;
+      jefe.semanas[week.startDate].venden = produccion.venden;
+      jefe.semanas[week.startDate].valorVendido = produccion.valorVendido;
+      jefe.semanas[week.startDate].cantidadVendedoresBono =
+        produccionBono.integrantes.length;
+      jefe.semanas[week.startDate].vendenParaBono =
+        produccionBono.venden;
     });
   });
 
@@ -806,6 +1250,12 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
         sanctionsByRole,
         penaltyAdjustments,
       );
+      vendedor.cargosPago = (vendedor.posicionesPago || []).map(
+        ({ rolPagoId, cargo, nivel }) => ({ rolPagoId, cargo, nivel }),
+      );
+      delete vendedor.prioridadCargo;
+      delete vendedor.nivelJerarquiaCargo;
+      delete vendedor.posicionesPago;
       return vendedor;
     });
 
@@ -976,6 +1426,13 @@ const actualizarOmisionMulta = async ({
 
 module.exports = {
   isCargoPagoComisionable,
+  getCommissionablePaidPosition,
+  hasCommissionablePaidPosition,
+  isIndividualSellerPosition,
+  getLeaderCommissionMembers,
+  getLeaderBonusExclusionReasons,
+  getLeaderBonusTeam,
+  getUsuarioPayload,
   buildWeeklyRulesByGroup,
   buildMonthlyRulesByGroup,
   calculateCommission,
@@ -983,6 +1440,12 @@ module.exports = {
   calculateWeeklyPenalty,
   calculateMonthlyBonus,
   calculateLeaderAverage,
+  getActiveTeamMembersForWeek,
+  getCommissionTeamMembersForWeek,
+  getCommissionTeamProductionForWeek,
+  selectHighestPaidPosition,
+  getDistinctPaidPositions,
+  resolveSalesSanctionConfig,
   isActiveDuringWeek,
   isActiveFullWeek,
   getNewPersonnelPenaltyStartDate,

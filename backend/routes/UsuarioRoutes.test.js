@@ -25,7 +25,13 @@ jest.mock("../models/UsuarioRol", () => ({
   destroy: jest.fn(),
 }));
 
+jest.mock("../models/UsuarioRolPago", () => ({
+  bulkCreate: jest.fn(),
+  destroy: jest.fn(),
+}));
+
 jest.mock("../models/RolPago", () => ({
+  findAll: jest.fn(),
   findOne: jest.fn(),
 }));
 
@@ -33,8 +39,16 @@ jest.mock("../models/NominaEmpleado", () => ({
   update: jest.fn(),
 }));
 
+jest.mock("../services/notificacionesPersonalService", () => ({
+  registrarNotificacionSalida: jest.fn().mockResolvedValue({ id: 2 }),
+  registrarNotificacionSegura: jest.fn(async (promesa) => promesa),
+  registrarNotificacionUsuarioCreado: jest.fn().mockResolvedValue({ id: 1 }),
+}));
+
 const Usuario = require("../models/Usuario");
 const Rol = require("../models/Rol");
+const RolPago = require("../models/RolPago");
+const UsuarioRolPago = require("../models/UsuarioRolPago");
 const usuarioRoutes = require("./UsuarioRoutes");
 
 const crearAplicacion = () => {
@@ -144,6 +158,48 @@ describe("POST /usuarios", () => {
       "novedades-personal:actualizar",
     );
   });
+
+  test("guarda varios cargos y conserva como principal el mejor pagado", async () => {
+    RolPago.findAll.mockResolvedValue([
+      {
+        id: 2,
+        nivel: "ASISTENTE",
+        cargo: "VENDEDOR DE PISO",
+        sueldoBase: 500,
+        sueldoExtra: 100,
+        ingresoMax: 900,
+      },
+      {
+        id: 15,
+        nivel: "JEFE",
+        cargo: "JEFE COMERCIAL DE PISO",
+        sueldoBase: 1200,
+        sueldoExtra: 200,
+        ingresoMax: 1900,
+      },
+    ]);
+    Usuario.create.mockImplementation(async (data) => ({
+      id: 30,
+      ...data,
+      toJSON: () => ({ id: 30, ...data }),
+    }));
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send({
+        ...payloadValido,
+        rolesPagoIds: [2, 15],
+      });
+
+    expect(response.status).toBe(201);
+    expect(Usuario.create).toHaveBeenCalledWith(
+      expect.objectContaining({ rolPagoId: 15 }),
+    );
+    expect(UsuarioRolPago.bulkCreate).toHaveBeenCalledWith([
+      { usuarioId: 30, rolPagoId: 2 },
+      { usuarioId: 30, rolPagoId: 15 },
+    ]);
+  });
 });
 
 describe("PUT /usuarios/:id", () => {
@@ -183,5 +239,49 @@ describe("PUT /usuarios/:id", () => {
     expect(io.emit).toHaveBeenCalledWith(
       "novedades-personal:actualizar",
     );
+  });
+
+  test("actualiza todos los cargos salariales seleccionados", async () => {
+    const usuario = {
+      id: 21,
+      rolPagoId: 2,
+      save: jest.fn().mockResolvedValue(undefined),
+      toJSON() {
+        return { id: this.id, rolPagoId: this.rolPagoId };
+      },
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+    RolPago.findAll.mockResolvedValue([
+      {
+        id: 2,
+        nivel: "ASISTENTE",
+        cargo: "VENDEDOR DE PISO",
+        sueldoBase: 600,
+        sueldoExtra: 0,
+        ingresoMax: 900,
+      },
+      {
+        id: 16,
+        nivel: "SUPERVISOR",
+        cargo: "SUPERVISOR PISO",
+        sueldoBase: 1000,
+        sueldoExtra: 100,
+        ingresoMax: 1500,
+      },
+    ]);
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/21")
+      .send({ rolesPagoIds: [2, 16] });
+
+    expect(response.status).toBe(200);
+    expect(usuario.rolPagoId).toBe(16);
+    expect(UsuarioRolPago.destroy).toHaveBeenCalledWith({
+      where: { usuarioId: 21 },
+    });
+    expect(UsuarioRolPago.bulkCreate).toHaveBeenCalledWith([
+      { usuarioId: 21, rolPagoId: 2 },
+      { usuarioId: 21, rolPagoId: 16 },
+    ]);
   });
 });

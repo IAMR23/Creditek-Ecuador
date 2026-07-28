@@ -5,7 +5,7 @@ import NotificacionesModal from "./NotificacionesModal";
 import AlertasPersonalModal from "./AlertasPersonalModal";
 import { socket } from "../socket/socket";
 import { useTaskNotifications } from "../context/TaskNotificationContext";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
 import api, { logoutSession } from "../api/client";
 import { hasRouteAccess } from "../config/routePermissions";
@@ -21,8 +21,12 @@ function Navbar({ auth, setAuth }) {
   const [openNotificaciones, setOpenNotificaciones] = useState(false);
   const [openAlertasPersonal, setOpenAlertasPersonal] = useState(false);
   const [alertasPersonal, setAlertasPersonal] = useState([]);
-  const [fechaAlertasPersonal, setFechaAlertasPersonal] = useState(null);
+  const [totalAlertasPersonal, setTotalAlertasPersonal] = useState(0);
+  const [noLeidasAlertasPersonal, setNoLeidasAlertasPersonal] = useState(0);
+  const [hayMasAlertasPersonal, setHayMasAlertasPersonal] = useState(false);
   const [cargandoAlertasPersonal, setCargandoAlertasPersonal] = useState(false);
+  const [cargandoMasAlertasPersonal, setCargandoMasAlertasPersonal] =
+    useState(false);
   const [errorAlertasPersonal, setErrorAlertasPersonal] = useState("");
 
   const { pendingCount, pendingTasks, clearNotifications } =
@@ -36,47 +40,123 @@ function Navbar({ auth, setAuth }) {
       permission: PERMISOS_ALERTAS_PERSONAL,
     });
 
-  useEffect(() => {
-    let activo = true;
+  const cargarAlertasPersonal = useCallback(
+    async ({ offset = 0, agregar = false, silencioso = false } = {}) => {
+      if (!puedeVerAlertasPersonal) return;
 
+      if (agregar) {
+        setCargandoMasAlertasPersonal(true);
+      } else if (!silencioso) {
+        setCargandoAlertasPersonal(true);
+      }
+
+      try {
+        const { data } = await api.get("/api/alertas-personal", {
+          params: { limit: 50, offset },
+        });
+        const nuevasAlertas = Array.isArray(data?.alertas) ? data.alertas : [];
+
+        setAlertasPersonal((actuales) => {
+          if (!agregar) return nuevasAlertas;
+
+          const idsExistentes = new Set(
+            actuales.map((alerta) => Number(alerta.id)),
+          );
+          return [
+            ...actuales,
+            ...nuevasAlertas.filter(
+              (alerta) => !idsExistentes.has(Number(alerta.id)),
+            ),
+          ];
+        });
+        setTotalAlertasPersonal(Number(data?.total) || 0);
+        setNoLeidasAlertasPersonal(Number(data?.noLeidas) || 0);
+        setHayMasAlertasPersonal(Boolean(data?.hayMas));
+        setErrorAlertasPersonal("");
+      } catch (error) {
+        console.error("No se pudieron cargar las alertas de personal:", error);
+        setErrorAlertasPersonal(
+          "No se pudieron consultar las notificaciones de personal.",
+        );
+      } finally {
+        setCargandoAlertasPersonal(false);
+        setCargandoMasAlertasPersonal(false);
+      }
+    },
+    [puedeVerAlertasPersonal],
+  );
+
+  useEffect(() => {
     if (!puedeVerAlertasPersonal) {
       setAlertasPersonal([]);
-      setFechaAlertasPersonal(null);
+      setTotalAlertasPersonal(0);
+      setNoLeidasAlertasPersonal(0);
+      setHayMasAlertasPersonal(false);
       setErrorAlertasPersonal("");
       setOpenAlertasPersonal(false);
       return undefined;
     }
 
-    const cargarAlertasPersonal = async () => {
-      setCargandoAlertasPersonal(true);
-
-      try {
-        const { data } = await api.get("/api/alertas-personal");
-        if (!activo) return;
-
-        setAlertasPersonal(Array.isArray(data?.alertas) ? data.alertas : []);
-        setFechaAlertasPersonal(data?.fecha || null);
-        setErrorAlertasPersonal("");
-      } catch (error) {
-        if (!activo) return;
-
-        console.error("No se pudieron cargar las alertas de personal:", error);
-        setErrorAlertasPersonal("No se pudieron consultar las novedades de personal.");
-      } finally {
-        if (activo) setCargandoAlertasPersonal(false);
-      }
-    };
+    const actualizarSilenciosamente = () =>
+      cargarAlertasPersonal({ silencioso: true });
 
     cargarAlertasPersonal();
-    const intervalo = window.setInterval(cargarAlertasPersonal, 30 * 60 * 1000);
-    socket.on("novedades-personal:actualizar", cargarAlertasPersonal);
+    const intervalo = window.setInterval(
+      actualizarSilenciosamente,
+      30 * 60 * 1000,
+    );
+    socket.on("novedades-personal:actualizar", actualizarSilenciosamente);
 
     return () => {
-      activo = false;
       window.clearInterval(intervalo);
-      socket.off("novedades-personal:actualizar", cargarAlertasPersonal);
+      socket.off("novedades-personal:actualizar", actualizarSilenciosamente);
     };
-  }, [puedeVerAlertasPersonal]);
+  }, [cargarAlertasPersonal, puedeVerAlertasPersonal]);
+
+  const cambiarLecturaAlertaPersonal = async (notificacionId, leida) => {
+    try {
+      const { data } = await api.patch(
+        `/api/alertas-personal/${notificacionId}/lectura`,
+        { leida },
+      );
+
+      setAlertasPersonal((actuales) =>
+        actuales.map((alerta) =>
+          Number(alerta.id) === Number(notificacionId)
+            ? {
+                ...alerta,
+                leida: data?.leida ?? leida,
+                leidaAt: data?.leidaAt || null,
+              }
+            : alerta,
+        ),
+      );
+      setNoLeidasAlertasPersonal((actual) =>
+        Math.max(actual + (leida ? -1 : 1), 0),
+      );
+    } catch (error) {
+      console.error("No se pudo cambiar la lectura de la notificación:", error);
+      setErrorAlertasPersonal(
+        "No se pudo actualizar el estado de la notificación.",
+      );
+    }
+  };
+
+  const marcarTodasAlertasPersonalLeidas = async () => {
+    try {
+      await api.patch("/api/alertas-personal/leidas/todas");
+      const leidaAt = new Date().toISOString();
+      setAlertasPersonal((actuales) =>
+        actuales.map((alerta) => ({ ...alerta, leida: true, leidaAt })),
+      );
+      setNoLeidasAlertasPersonal(0);
+    } catch (error) {
+      console.error("No se pudieron marcar las notificaciones:", error);
+      setErrorAlertasPersonal(
+        "No se pudieron marcar todas las notificaciones como leídas.",
+      );
+    }
+  };
 
   const handleLogoClick = () => {
     if (!auth.isAuthenticated) {
@@ -166,9 +246,11 @@ function Navbar({ auth, setAuth }) {
               >
                 <div className="relative">
                   <FaUserClock size={21} />
-                  {alertasPersonal.length > 0 && (
+                  {noLeidasAlertasPersonal > 0 && (
                     <span className="absolute -right-2 -top-2 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] text-white">
-                      {alertasPersonal.length > 99 ? "99+" : alertasPersonal.length}
+                      {noLeidasAlertasPersonal > 99
+                        ? "99+"
+                        : noLeidasAlertasPersonal}
                     </span>
                   )}
                 </div>
@@ -207,8 +289,20 @@ function Navbar({ auth, setAuth }) {
         <AlertasPersonalModal
           alertas={alertasPersonal}
           cargando={cargandoAlertasPersonal}
+          cargandoMas={cargandoMasAlertasPersonal}
           error={errorAlertasPersonal}
-          fecha={fechaAlertasPersonal}
+          total={totalAlertasPersonal}
+          noLeidas={noLeidasAlertasPersonal}
+          hayMas={hayMasAlertasPersonal}
+          onCargarMas={() =>
+            cargarAlertasPersonal({
+              offset: alertasPersonal.length,
+              agregar: true,
+              silencioso: true,
+            })
+          }
+          onCambiarLectura={cambiarLecturaAlertaPersonal}
+          onMarcarTodasLeidas={marcarTodasAlertasPersonalLeidas}
           onClose={() => setOpenAlertasPersonal(false)}
         />
       )}

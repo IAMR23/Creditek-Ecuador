@@ -267,6 +267,32 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
       `);
     }
   }
+
+  if (tables.includes("pautas_marketing")) {
+    await addColumnIfMissing(
+      queryInterface,
+      "pautas_marketing",
+      "contenidos",
+      {
+        type: Sequelize.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
+    );
+
+    await sequelize.query(`
+      UPDATE pautas_marketing
+      SET contenidos = jsonb_build_array(
+        jsonb_build_object(
+          'producto', producto,
+          'tipoContenido', "tipoContenido"
+        )
+      )
+      WHERE COALESCE(contenidos, '[]'::jsonb) = '[]'::jsonb
+        AND producto IS NOT NULL
+        AND "tipoContenido" IS NOT NULL;
+    `);
+  }
 };
 
 const ensureSistemasTareasSchema = async (queryInterface, tables) => {
@@ -873,6 +899,21 @@ const connectDB = async () => {
         FROM usuarios
         WHERE "rolId" IS NOT NULL
         ON CONFLICT (usuario_id, rol_id) DO NOTHING;
+      `);
+    }
+
+    if (tables.includes("usuarios") && tables.includes("usuarios_roles_pago")) {
+      await sequelize.query(`
+        INSERT INTO usuarios_roles_pago (
+          usuario_id,
+          rol_pago_id
+        )
+        SELECT
+          id,
+          "rolPagoId"
+        FROM usuarios
+        WHERE "rolPagoId" IS NOT NULL
+        ON CONFLICT (usuario_id, rol_pago_id) DO NOTHING;
       `);
     }
 

@@ -37,10 +37,12 @@ const SecretarioEjecutivoPlan = require('./SecretarioEjecutivoPlan');
 const NominaEmpleado = require('./NominaEmpleado');
 const { NominaBeneficio } = require('./NominaBeneficio');
 const RolPago = require('./RolPago');
+require('./UsuarioRolPago');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
 const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
 const GastoMarketing = require('./Marketing/GastoMarketing');
+require('./Marketing/PautaMarketing');
 const ConciliacionLote = require('./ConciliacionLote');
 const ConciliacionPdfImportacion = require('./ConciliacionPdfImportacion');
 const ConciliacionModeloTv = require('./ConciliacionModeloTv');
@@ -53,6 +55,8 @@ const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
 const InventarioSistema = require('./InventarioSistema');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
+const NotificacionPersonal = require('./NotificacionPersonal');
+const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -80,6 +84,24 @@ Agencia.belongsToMany(Usuario, {
 // Relaciones directas para include desde UsuarioAgencia
 UsuarioAgencia.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
 UsuarioAgencia.belongsTo(Agencia, { foreignKey: "agenciaId", as: "agencia" });
+
+// El evento permanece aunque el usuario de referencia deje de estar activo.
+NotificacionPersonal.hasMany(NotificacionPersonalLectura, {
+  foreignKey: "notificacionId",
+  as: "lecturas",
+});
+NotificacionPersonalLectura.belongsTo(NotificacionPersonal, {
+  foreignKey: "notificacionId",
+  as: "notificacion",
+});
+Usuario.hasMany(NotificacionPersonalLectura, {
+  foreignKey: "usuarioId",
+  as: "lecturasNotificacionesPersonal",
+});
+NotificacionPersonalLectura.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "lector",
+});
 
 // -------------------- Dispositivos, Marcas, Modelos --------------------
 

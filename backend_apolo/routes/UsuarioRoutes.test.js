@@ -129,6 +129,35 @@ test("crea usuario y agencia en una sola transaccion", async () => {
   );
 });
 
+test("serializa las consultas que comparten la transaccion", async () => {
+  let consultasActivas = 0;
+  let maximoConsultasActivas = 0;
+  const ejecutarConsulta = async (resultado) => {
+    consultasActivas += 1;
+    maximoConsultasActivas = Math.max(
+      maximoConsultasActivas,
+      consultasActivas,
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    consultasActivas -= 1;
+    return resultado;
+  };
+
+  Usuario.findOne = async () => ejecutarConsulta(null);
+  Rol.findByPk = async () =>
+    ejecutarConsulta({ id: 2, nombre: "USUARIO" });
+  Agencia.findByPk = async () =>
+    ejecutarConsulta({ id: 4, nombre: "Matriz" });
+
+  const response = await requestJson("", {
+    method: "POST",
+    body: { ...validPayload, usuario: "maria.perez" },
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(maximoConsultasActivas, 1);
+});
+
 test("no crea un segundo usuario con la misma cedula", async () => {
   let findOneCalls = 0;
   let createCalls = 0;

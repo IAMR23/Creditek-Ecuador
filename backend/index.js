@@ -213,6 +213,7 @@ connectDB()
     app.use("/api/contabilidad/pagos-comisiones", require("./routes/Contabilidad/pagosComisionesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
+    app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
     app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));
     app.use("/api/tareas", require("./routes/Sistemas/tareasRoutes"));

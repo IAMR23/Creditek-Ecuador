@@ -24,6 +24,7 @@ import {
   FileCheck2,
   MapPinned,
   FileSpreadsheet,
+  Megaphone,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
@@ -41,6 +42,7 @@ export default function Sidebar({ auth }) {
   // Acordeones
   const [open, setOpen] = useState({
     comercial: true,
+    ghl: false,
     Marketing: false,
     logistica: false,
     contabilidad: false,
@@ -112,10 +114,27 @@ export default function Sidebar({ auth }) {
         ],
       },
 
+      ghl: {
+        title: "GHL",
+        permission: ["Gerencia", "Administracion", "Sistemas"],
+        items: [
+          {
+            label: "Rendimiento de pautas",
+            icon: <BarChart3 size={20} />,
+            path: "/ghl/rendimiento-pautas",
+          },
+        ],
+      },
+
       Marketing: {
         title: "Marketing",
         permission: "Marketing",
         items: [
+          {
+            label: "Pautas y Contenido",
+            icon: <Megaphone size={20} />,
+            path: "/marketing/pautas",
+          },
                    {
             label: "Costo por Venta Marketing",
             icon: <DollarSign size={20} />,

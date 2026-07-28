@@ -75,22 +75,48 @@ const isPersonalNuevoEnReporte = (row, weeks) =>
   weeks.some((week) => getWeekValues(row, week).personalNuevo);
 const getFechaIngresoVisible = (row) =>
   row?.fechaIngreso || row?.fechaCreacionUsuario || null;
+const getCargosPagoLabel = (row) =>
+  (row?.cargosPago || [])
+    .map((position) => position.cargo)
+    .filter(Boolean)
+    .join(" / ");
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
+const getCargosComerciales = (vendedor) => {
+  const cargos = (vendedor.cargosPago || [])
+    .map((position) => position.cargo)
+    .filter(Boolean);
+  if (vendedor.cargoComision) cargos.push(vendedor.cargoComision);
+  if (vendedor.cargo) cargos.push(vendedor.cargo);
+  return [...new Set(cargos.map((cargo) => String(cargo).toUpperCase()))];
+};
 const cumpleFiltroCargo = (vendedor, cargoFiltro) => {
-  const cargo = String(vendedor.cargo || "").toUpperCase();
-  if (cargoFiltro === "CALL_CENTER") return cargo.includes("CALL CENTER");
-  if (cargoFiltro === "PISO") return cargo.includes("PISO");
+  const cargos = getCargosComerciales(vendedor);
+  if (cargoFiltro === "CALL_CENTER") {
+    return cargos.some((cargo) => cargo.includes("CALL CENTER"));
+  }
+  if (cargoFiltro === "PISO") {
+    return cargos.some((cargo) => cargo.includes("PISO"));
+  }
   return true;
 };
 
-const getSeccionCargo = (vendedor) => {
-  const cargo = String(vendedor.cargo || "").toUpperCase();
+const getSeccionPorCargo = (cargoValue) => {
+  const cargo = String(cargoValue || "").toUpperCase();
   if (cargo.includes("JEFE COMERCIAL")) return "JEFES";
   if (cargo.includes("SUPERVISOR")) return "SUPERVISORES";
-  return "VENDEDORES";
+  if (cargo.includes("VENDEDOR")) return "VENDEDORES";
+  return null;
 };
+
+const getSeccionCargo = (vendedor) =>
+  getSeccionPorCargo(vendedor.cargoComision || vendedor.cargo);
+
+const perteneceASeccion = (vendedor, seccion) =>
+  getCargosComerciales(vendedor).some(
+    (cargo) => getSeccionPorCargo(cargo) === seccion,
+  );
 
 const SECCIONES = [
   { id: "VENDEDORES", label: "Vendedores" },
@@ -121,7 +147,10 @@ export default function PagosComisiones() {
   const weeks = useMemo(() => report?.weeks || [], [report]);
   const vendedores = useMemo(() => report?.vendedores || [], [report]);
   const vendedoresSeccion = useMemo(
-    () => vendedores.filter((vendedor) => getSeccionCargo(vendedor) === seccionActiva),
+    () =>
+      vendedores.filter((vendedor) =>
+        perteneceASeccion(vendedor, seccionActiva),
+      ),
     [seccionActiva, vendedores],
   );
 
@@ -586,6 +615,7 @@ export default function PagosComisiones() {
                   vendedoresFiltrados.map((vendedor, index) => {
                     const personalNuevo = isPersonalNuevoEnReporte(vendedor, weeks);
                     const fechaIngreso = getFechaIngresoVisible(vendedor);
+                    const cargosPagoLabel = getCargosPagoLabel(vendedor);
                     return (
                       <tr
                       key={vendedor.usuarioId}
@@ -604,6 +634,22 @@ export default function PagosComisiones() {
                             <span className="block text-[11px] font-normal text-slate-500">
                               {vendedor.cargo}
                             </span>
+                          ) : null}
+                          {vendedor.tieneMultiplesCargos ? (
+                            <>
+                              <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+                                Doble cargo - Sin multa
+                              </span>
+                              {cargosPagoLabel ? (
+                                <span className="block text-[10px] font-normal text-blue-700">
+                                  {cargosPagoLabel}
+                                </span>
+                              ) : null}
+                              <span className="block text-[10px] font-semibold text-emerald-700">
+                                Comisión calculada como:{" "}
+                                {vendedor.cargoComision || vendedor.cargo}
+                              </span>
+                            </>
                           ) : null}
                           {personalNuevo ? (
                             <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
@@ -712,11 +758,12 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
         const mensual = getMonthlyValues(row);
         const personalNuevo = isPersonalNuevoEnReporte(row, weeks);
         const fechaIngreso = getFechaIngresoVisible(row);
+        const cargosPagoLabel = getCargosPagoLabel(row);
         return (
           <section
             key={row.usuarioId}
             className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
-              row.fechaSalida || personalNuevo
+              row.fechaSalida || personalNuevo || row.tieneMultiplesCargos
                 ? "border-blue-500 ring-2 ring-blue-100"
                 : "border-slate-200"
             }`}
@@ -725,6 +772,18 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
               <h2 className="text-center text-lg font-black uppercase text-slate-900">
                 Comisiones {row.nombre}
               </h2>
+              {row.tieneMultiplesCargos ? (
+                <div className="mt-1 text-center">
+                  <span className="inline-block rounded bg-blue-600 px-2 py-1 text-xs font-bold text-white">
+                    Doble cargo - Sin multa ni sanción
+                  </span>
+                  {cargosPagoLabel ? (
+                    <p className="mt-1 text-xs font-semibold text-blue-700">
+                      {cargosPagoLabel}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {personalNuevo ? (
                 <p className="mt-1 text-center">
                   <span className="inline-block rounded bg-blue-600 px-2 py-1 text-xs font-bold text-white">
@@ -744,11 +803,43 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
               ) : null}
               {row.vendedoresJunior?.length ? (
                 <p className="mt-1 text-center text-xs text-slate-500">
-                  Juniors: {row.vendedoresJunior.map((junior) => junior.nombre).join(", ")}
+                  Vendedores considerados:{" "}
+                  {row.vendedoresJunior
+                    .map((vendedor) =>
+                      vendedor.esLiderVendedor
+                        ? `${vendedor.nombre} (doble cargo)`
+                        : vendedor.nombre,
+                    )
+                    .join(", ")}
                   {mensual.promedioVentasPorJunior !== null
-                    ? ` · Promedio por junior: ${formatCommission(mensual.promedioVentasPorJunior)}`
+                    ? ` · Promedio por vendedor: ${formatCommission(mensual.promedioVentasPorJunior)}`
                     : ""}
                 </p>
+              ) : null}
+              {row.esJefeComercial ? (
+                <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs">
+                  <p className="font-semibold text-emerald-800">
+                    Bono:{" "}
+                    {mensual.vendedoresConsideradosBono?.length
+                      ? mensual.vendedoresConsideradosBono
+                          .map((vendedor) => vendedor.nombre)
+                          .join(", ")
+                      : "Sin vendedores elegibles"}
+                    {" · "}
+                    {mensual.ventasConsideradasBono || 0} dispositivos considerados
+                  </p>
+                  {mensual.vendedoresExcluidosBono?.length ? (
+                    <p className="mt-1 text-amber-800">
+                      No considerados para el bono:{" "}
+                      {mensual.vendedoresExcluidosBono
+                        .map(
+                          (vendedor) =>
+                            `${vendedor.nombre} (${vendedor.razones.join(", ")})`,
+                        )
+                        .join("; ")}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className="overflow-x-auto p-4">
@@ -777,6 +868,89 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
                     <td className="border border-slate-950 px-3 py-2" />
                     <td className="border border-slate-950 bg-red-600 px-3 py-2 text-white" />
                   </tr>
+                  {row.esJefeComercial ? (
+                    <tr className="font-bold">
+                      <td className="border border-slate-950 bg-emerald-700 px-3 py-2 text-white">
+                        DISPOSITIVOS POR VENDEDOR
+                      </td>
+                      {weeks.map((week) => {
+                        const values = getWeekValues(row, week);
+                        const vendedores = values.vendedoresActivos || [];
+                        return (
+                          <td
+                            key={`ventas-vendedor-${week.startDate}`}
+                            className="border border-slate-950 bg-emerald-50 px-2 py-2 text-emerald-900"
+                          >
+                            {values.semanaFutura
+                              ? "-"
+                              : vendedores.length
+                                ? (
+                                  <div className="flex flex-col gap-1">
+                                    {vendedores.map((vendedor) => (
+                                      <span
+                                        key={vendedor.usuarioId}
+                                        className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold"
+                                      >
+                                        {vendedor.nombre}: {vendedor.venden || 0}
+                                        {vendedor.esLiderVendedor
+                                          ? " (doble cargo)"
+                                          : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )
+                                : "Sin vendedores"}
+                          </td>
+                        );
+                      })}
+                      <td
+                        colSpan={3}
+                        className="border border-slate-950 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
+                      >
+                        Ventas individuales incluidas en el total del jefe
+                      </td>
+                    </tr>
+                  ) : null}
+                  {row.esSupervisorComercial ? (
+                    <tr className="font-bold">
+                      <td className="border border-slate-950 bg-blue-600 px-3 py-2 text-white">
+                        VENDEDORES ACTIVOS
+                      </td>
+                      {weeks.map((week) => {
+                        const values = getWeekValues(row, week);
+                        const vendedoresActivos = values.vendedoresActivos || [];
+                        return (
+                          <td
+                            key={`equipo-${week.startDate}`}
+                            className="border border-slate-950 bg-blue-50 px-2 py-2 text-blue-800"
+                          >
+                            {values.semanaFutura
+                              ? "-"
+                              : vendedoresActivos.length
+                                ? (
+                                  <div className="flex flex-col gap-1">
+                                    {vendedoresActivos.map((vendedor) => (
+                                      <span
+                                        key={vendedor.usuarioId}
+                                        className="rounded bg-blue-100 px-2 py-1 text-xs font-semibold"
+                                      >
+                                        {vendedor.nombre}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )
+                                : "Sin vendedores"}
+                          </td>
+                        );
+                      })}
+                      <td
+                        colSpan={3}
+                        className="border border-slate-950 bg-blue-50 px-3 py-2 text-xs text-blue-800"
+                      >
+                        Equipo por semana completa
+                      </td>
+                    </tr>
+                  ) : null}
                   <tr className="font-black">
                     <td className="border border-slate-950 bg-pink-400 px-3 py-2">TOTAL COMISIONES</td>
                     {weeks.map((week) => {
@@ -848,6 +1022,7 @@ function WeekValues({
     week &&
     onToggleMulta &&
     !values.personalNuevo &&
+    !vendedor.tieneMultiplesCargos &&
     Number(values.valorMultaCalculado || 0) > 0;
 
   return (
@@ -866,7 +1041,8 @@ function WeekValues({
         (!total &&
           (values.semanaLaborada === false ||
             values.semanaCompletaParaDescuento === false ||
-            values.personalNuevo))
+            values.personalNuevo ||
+            vendedor?.tieneMultiplesCargos))
           ? "-"
           : values.noCumpleMetas || 0}
       </td>
@@ -875,6 +1051,12 @@ function WeekValues({
           ? "Pendiente"
           : !total && values.semanaLaborada === false
             ? "No laborada"
+            : !total && vendedor?.tieneMultiplesCargos
+              ? (
+                <span className="inline-block rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">
+                  Doble cargo - Sin sanción
+                </span>
+              )
             : !total && values.personalNuevo
               ? (
                 <span className="inline-block rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">

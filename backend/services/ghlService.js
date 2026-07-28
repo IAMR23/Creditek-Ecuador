@@ -6,6 +6,23 @@ const DEFAULT_LIMIT = 100;
 const MAX_OPPORTUNITY_PAGES = 500;
 const SIN_PROPIETARIO_ID = "sin-propietario";
 const SIN_ETAPA_ID = "sin-etapa";
+const SIN_SOURCE_ID = "Sin Source ID";
+const PAUTAS_OPPORTUNITY_STATUSES = Object.freeze([
+  "open",
+  "won",
+  "lost",
+  "abandoned",
+]);
+const pautasDataCache = new Map();
+const pautasInFlight = new Map();
+const contactSourceIdCache = new Map();
+
+const getNonNegativeEnvNumber = (name, fallback) => {
+  const parsedValue = Number(process.env[name] ?? fallback);
+  return Number.isFinite(parsedValue) && parsedValue >= 0
+    ? parsedValue
+    : fallback;
+};
 
 const getGhlConfig = ({ requirePipelineId = true } = {}) => {
   const config = {
@@ -86,6 +103,11 @@ const normalizeGhlError = (error) => {
   const serviceError = new Error("Error consultando HighLevel");
   serviceError.upstreamStatus = status;
   serviceError.upstreamData = error.response.data;
+  const retryAfterHeader = error.response.headers?.["retry-after"];
+  const retryAfterSeconds = Number(retryAfterHeader);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    serviceError.retryAfterMs = retryAfterSeconds * 1000;
+  }
 
   if (status === 401) {
     serviceError.message = "Token de HighLevel invalido o vencido";
@@ -98,6 +120,14 @@ const normalizeGhlError = (error) => {
     serviceError.message = "El token de HighLevel no tiene permisos para esta informacion";
     serviceError.statusCode = 403;
     serviceError.code = "GHL_FORBIDDEN";
+    return serviceError;
+  }
+
+  if (status === 429) {
+    serviceError.message =
+      "HighLevel alcanzo temporalmente su limite de consultas. Se reintentara con datos en cache.";
+    serviceError.statusCode = 503;
+    serviceError.code = "GHL_RATE_LIMITED";
     return serviceError;
   }
 
@@ -187,6 +217,32 @@ const normalizeKey = (value) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
+const normalizeComparableText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const normalizeSourceIdValue = (value) => {
+  if (value === null || value === undefined) return "";
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeSourceIdValue).find(Boolean) || "";
+  }
+
+  if (typeof value === "object") {
+    return normalizeSourceIdValue(
+      value.field_value ?? value.fieldValue ?? value.value,
+    );
+  }
+
+  return String(value).trim();
+};
 
 const extractOpportunities = (payload) =>
   pickArray(payload, ["opportunities", "opportunity", "data", "items"]);
@@ -419,6 +475,208 @@ const getStageColumns = (pipelines = [], pipelineId) => {
   };
 };
 
+const getOpportunityContactId = (opportunity = {}) => {
+  const directContactId = toId(
+    opportunity.contactId ||
+      opportunity.contact_id ||
+      opportunity.contact?.id ||
+      opportunity.contact?._id ||
+      opportunity.contact?.contactId ||
+      opportunity.contact?.contact_id,
+  );
+
+  if (directContactId) return directContactId;
+
+  const relations = Array.isArray(opportunity.relations) ? opportunity.relations : [];
+  const contactRelation = relations.find((relation) => {
+    const relationType = normalizeComparableText(
+      relation?.type ||
+        relation?.relationType ||
+        relation?.model ||
+        relation?.objectType,
+    );
+    return relationType.includes("contact");
+  });
+
+  return toId(
+    contactRelation?.id ||
+      contactRelation?._id ||
+      contactRelation?.contactId ||
+      contactRelation?.objectId,
+  );
+};
+
+const getSourceFieldPriority = (identifier) => {
+  const withoutContactPrefix = String(identifier || "")
+    .trim()
+    .replace(/^contact[._]/i, "");
+  const lowerIdentifier = withoutContactPrefix.toLowerCase();
+
+  if (lowerIdentifier === "meta_source_id") return 0;
+  if (lowerIdentifier === "sourceid") return 1;
+  if (lowerIdentifier === "source_id") return 2;
+  if (normalizeComparableText(withoutContactPrefix) === "source id") return 3;
+
+  return Number.POSITIVE_INFINITY;
+};
+
+const buildCustomFieldDefinitionMap = (definitions = []) => {
+  const definitionMap = new Map();
+
+  definitions.forEach((definition) => {
+    const definitionId = toId(
+      definition?.id || definition?._id || definition?.customFieldId,
+    );
+    if (definitionId) definitionMap.set(definitionId, definition);
+  });
+
+  return definitionMap;
+};
+
+const getCustomFieldValue = (field = {}) => {
+  const candidates = [field.field_value, field.fieldValue, field.value];
+  return candidates.map(normalizeSourceIdValue).find(Boolean) || "";
+};
+
+const collectSourceIdCandidates = (
+  entity,
+  customFieldDefinitionMap,
+  candidates,
+  orderRef,
+) => {
+  if (!entity || typeof entity !== "object") return;
+
+  [
+    ["meta_source_id", entity.meta_source_id],
+    ["sourceId", entity.sourceId],
+    ["source_id", entity.source_id],
+  ].forEach(([identifier, value]) => {
+    const normalizedValue = normalizeSourceIdValue(value);
+    if (!normalizedValue) return;
+
+    candidates.push({
+      priority: getSourceFieldPriority(identifier),
+      order: orderRef.value,
+      value: normalizedValue,
+    });
+    orderRef.value += 1;
+  });
+
+  const customFields = Array.isArray(entity.customFields)
+    ? entity.customFields
+    : Array.isArray(entity.custom_fields)
+      ? entity.custom_fields
+      : [];
+
+  customFields.forEach((field) => {
+    const definition = customFieldDefinitionMap.get(
+      toId(field?.id || field?._id || field?.customFieldId),
+    );
+    const identifiers = [
+      field?.key,
+      field?.fieldKey,
+      field?.name,
+      field?.label,
+      definition?.key,
+      definition?.fieldKey,
+      definition?.name,
+      definition?.label,
+    ];
+    const priority = Math.min(...identifiers.map(getSourceFieldPriority));
+    const value = getCustomFieldValue(field);
+
+    if (!Number.isFinite(priority) || !value) return;
+
+    candidates.push({
+      priority,
+      order: orderRef.value,
+      value,
+    });
+    orderRef.value += 1;
+  });
+};
+
+const extractSourceIdFromEntities = (
+  entities = [],
+  customFieldDefinitions = [],
+) => {
+  const customFieldDefinitionMap =
+    customFieldDefinitions instanceof Map
+      ? customFieldDefinitions
+      : buildCustomFieldDefinitionMap(customFieldDefinitions);
+  const candidates = [];
+  const orderRef = { value: 0 };
+
+  entities.forEach((entity) => {
+    collectSourceIdCandidates(
+      entity,
+      customFieldDefinitionMap,
+      candidates,
+      orderRef,
+    );
+  });
+
+  candidates.sort(
+    (first, second) =>
+      first.priority - second.priority || first.order - second.order,
+  );
+
+  return candidates[0]?.value || "";
+};
+
+const extractSourceIdFromContact = (contact, customFieldDefinitions = []) =>
+  extractSourceIdFromEntities([contact], customFieldDefinitions);
+
+const extractSourceIdFromOpportunity = (
+  opportunity,
+  customFieldDefinitions = [],
+) =>
+  extractSourceIdFromEntities(
+    [opportunity?.contact, opportunity],
+    customFieldDefinitions,
+  );
+
+const dedupeOpportunitiesById = (opportunities = []) => {
+  const seenOpportunityIds = new Set();
+
+  return opportunities.filter((opportunity) => {
+    const opportunityId = toId(opportunity?.id || opportunity?._id);
+    if (!opportunityId) return true;
+    if (seenOpportunityIds.has(opportunityId)) return false;
+    seenOpportunityIds.add(opportunityId);
+    return true;
+  });
+};
+
+const getStageMetricGroup = (stageName) => {
+  const normalizedStageName = normalizeComparableText(stageName);
+
+  if (
+    new Set(["aplica", "costa aplica", "oriente aplica"]).has(
+      normalizedStageName,
+    )
+  ) {
+    return "aplican";
+  }
+
+  if (
+    new Set(["no aplica", "costa no aplica", "oriente no aplica"]).has(
+      normalizedStageName,
+    )
+  ) {
+    return "noAplican";
+  }
+
+  if (normalizedStageName === "no contesta") return "noContesta";
+
+  return "otros";
+};
+
+const roundPercentage = (value, total) => {
+  if (!total) return 0;
+  return Math.round((value / total) * 10000) / 100;
+};
+
 const buildUserMap = (users = []) => {
   const userMap = new Map();
 
@@ -545,6 +803,188 @@ const buildOpportunitiesMatrix = ({
   };
 };
 
+const buildPautasPerformance = ({
+  opportunities = [],
+  pipelines = [],
+  pipelineId = "",
+  customFieldDefinitions = [],
+  sourceIdsByContact = new Map(),
+  etapa = "",
+  sourceId = "",
+} = {}) => {
+  const customFieldDefinitionMap =
+    customFieldDefinitions instanceof Map
+      ? customFieldDefinitions
+      : buildCustomFieldDefinitionMap(customFieldDefinitions);
+  const { selectedPipeline, columns } = getStageColumns(pipelines, pipelineId);
+  const columnsById = new Map(columns.map((column) => [column.id, column]));
+
+  const ensureColumn = (opportunity) => {
+    const stageId = getOpportunityStageId(opportunity) || SIN_ETAPA_ID;
+
+    if (!columnsById.has(stageId)) {
+      const stageEntity = opportunity?.pipelineStage || opportunity?.stage;
+      const stageName =
+        getFullName(stageEntity) ||
+        stageEntity?.title ||
+        stageEntity?.label ||
+        (stageId === SIN_ETAPA_ID ? "Sin etapa" : "Etapa no encontrada");
+      const column = {
+        id: stageId,
+        name: String(stageName).trim(),
+        pipelineStageId: stageId === SIN_ETAPA_ID ? null : stageId,
+      };
+
+      columnsById.set(stageId, column);
+      columns.push(column);
+    }
+
+    return columnsById.get(stageId);
+  };
+
+  const pipelineOpportunities = dedupeOpportunitiesById(opportunities).filter(
+    (opportunity) => {
+      const opportunityPipelineId = getOpportunityPipelineId(opportunity);
+      return !pipelineId || !opportunityPipelineId || opportunityPipelineId === pipelineId;
+    },
+  );
+
+  pipelineOpportunities.forEach(ensureColumn);
+
+  const requestedStage = String(etapa || "").trim();
+  const normalizedRequestedStage = normalizeComparableText(requestedStage);
+  const requestedSourceId = normalizeComparableText(sourceId);
+  const rowsBySourceId = new Map();
+
+  pipelineOpportunities.forEach((opportunity) => {
+    const column = ensureColumn(opportunity);
+    const matchesStage =
+      !requestedStage ||
+      column.id === requestedStage ||
+      normalizeComparableText(column.name) === normalizedRequestedStage;
+
+    if (!matchesStage) return;
+
+    const contactId = getOpportunityContactId(opportunity);
+    const directSourceId = extractSourceIdFromOpportunity(
+      opportunity,
+      customFieldDefinitionMap,
+    );
+    const contactSourceId =
+      sourceIdsByContact instanceof Map
+        ? sourceIdsByContact.get(contactId)
+        : sourceIdsByContact?.[contactId];
+    const resolvedSourceId =
+      directSourceId || normalizeSourceIdValue(contactSourceId) || SIN_SOURCE_ID;
+
+    if (
+      requestedSourceId &&
+      !normalizeComparableText(resolvedSourceId).includes(requestedSourceId)
+    ) {
+      return;
+    }
+
+    if (!rowsBySourceId.has(resolvedSourceId)) {
+      rowsBySourceId.set(resolvedSourceId, {
+        sourceId: resolvedSourceId,
+        label: resolvedSourceId,
+        values: {},
+        total: 0,
+        aplicanTotal: 0,
+        noAplicanTotal: 0,
+        noContestaTotal: 0,
+      });
+    }
+
+    const row = rowsBySourceId.get(resolvedSourceId);
+    const metricGroup = getStageMetricGroup(column.name);
+
+    row.values[column.id] = (row.values[column.id] || 0) + 1;
+    row.total += 1;
+
+    if (metricGroup === "aplican") row.aplicanTotal += 1;
+    if (metricGroup === "noAplican") row.noAplicanTotal += 1;
+    if (metricGroup === "noContesta") row.noContestaTotal += 1;
+  });
+
+  const rows = Array.from(rowsBySourceId.values())
+    .map((row) => {
+      columns.forEach((column) => {
+        row.values[column.id] = row.values[column.id] || 0;
+      });
+
+      return {
+        ...row,
+        tasaAplicacion: roundPercentage(row.aplicanTotal, row.total),
+        tasaNoContesta: roundPercentage(row.noContestaTotal, row.total),
+        tasaNoAplicacion: roundPercentage(row.noAplicanTotal, row.total),
+      };
+    })
+    .sort(
+      (first, second) =>
+        second.total - first.total ||
+        second.aplicanTotal - first.aplicanTotal ||
+        first.sourceId.localeCompare(second.sourceId, "es"),
+    );
+
+  const totals = rows.reduce(
+    (accumulator, row) => {
+      columns.forEach((column) => {
+        accumulator.values[column.id] =
+          (accumulator.values[column.id] || 0) +
+          Number(row.values[column.id] || 0);
+      });
+      accumulator.total += row.total;
+      accumulator.aplicanTotal += row.aplicanTotal;
+      accumulator.noAplicanTotal += row.noAplicanTotal;
+      accumulator.noContestaTotal += row.noContestaTotal;
+      return accumulator;
+    },
+    {
+      values: {},
+      total: 0,
+      aplicanTotal: 0,
+      noAplicanTotal: 0,
+      noContestaTotal: 0,
+    },
+  );
+
+  columns.forEach((column) => {
+    totals.values[column.id] = totals.values[column.id] || 0;
+  });
+
+  const sourceIdCount = rows.filter(
+    (row) => row.sourceId !== SIN_SOURCE_ID,
+  ).length;
+  totals.totalOportunidades = totals.total;
+  totals.totalSourceIds = sourceIdCount;
+  totals.tasaAplicacion = roundPercentage(totals.aplicanTotal, totals.total);
+  totals.tasaNoContesta = roundPercentage(totals.noContestaTotal, totals.total);
+  totals.tasaNoAplicacion = roundPercentage(
+    totals.noAplicanTotal,
+    totals.total,
+  );
+  totals.tasaAplicacionGeneral = totals.tasaAplicacion;
+  totals.tasaNoContestaGeneral = totals.tasaNoContesta;
+  totals.tasaNoAplicacionGeneral = totals.tasaNoAplicacion;
+
+  return {
+    columns,
+    rows,
+    totals,
+    meta: {
+      pipelineId:
+        pipelineId || toId(selectedPipeline?.id || selectedPipeline?._id) || null,
+      pipelineName:
+        getFullName(selectedPipeline) || selectedPipeline?.name || null,
+      sourceIdCount,
+      rowCount: rows.length,
+      opportunityCount: totals.total,
+      generatedAt: new Date().toISOString(),
+    },
+  };
+};
+
 const fetchAllOpenOpportunities = async (client, config, dateFilters = {}) => {
   const opportunities = [];
   const seenOpportunityIds = new Set();
@@ -631,6 +1071,114 @@ const fetchAllOpenOpportunities = async (client, config, dateFilters = {}) => {
   return opportunities;
 };
 
+const fetchOpportunitiesByStatus = async (
+  client,
+  config,
+  status,
+  dateFilters = {},
+) => {
+  const opportunities = [];
+  const seenOpportunityIds = new Set();
+  const seenCursors = new Set();
+  const limit = DEFAULT_LIMIT;
+  let cursor = null;
+
+  for (let page = 0; page < MAX_OPPORTUNITY_PAGES; page += 1) {
+    const camelCaseParams = {
+      locationId: config.locationId,
+      pipelineId: config.pipelineId,
+      status,
+      limit,
+    };
+    const snakeCaseParams = {
+      location_id: config.locationId,
+      pipeline_id: config.pipelineId,
+      status,
+      limit,
+    };
+
+    if (cursor?.startAfterId) {
+      camelCaseParams.startAfterId = cursor.startAfterId;
+      snakeCaseParams.startAfterId = cursor.startAfterId;
+    }
+
+    if (cursor?.startAfter) {
+      camelCaseParams.startAfter = cursor.startAfter;
+      snakeCaseParams.startAfter = cursor.startAfter;
+    }
+
+    const payload = await requestGhlWithFallback(
+      client,
+      {
+        method: "GET",
+        url: "/opportunities/search",
+        params: camelCaseParams,
+      },
+      {
+        method: "GET",
+        url: "/opportunities/search",
+        params: snakeCaseParams,
+      },
+      (error) =>
+        errorHasAnyMessage(error, [
+          "property locationId should not exist",
+          "property pipelineId should not exist",
+          "location_id must be a string",
+          "location_id should not be empty",
+        ]),
+    );
+
+    const pageItems = extractOpportunities(payload).filter(Boolean);
+    const pageItemsInRange = filterOpportunitiesByDateRange(
+      pageItems,
+      dateFilters,
+    );
+
+    pageItemsInRange.forEach((opportunity) => {
+      const opportunityId = toId(opportunity?.id || opportunity?._id);
+      if (opportunityId && seenOpportunityIds.has(opportunityId)) return;
+      if (opportunityId) seenOpportunityIds.add(opportunityId);
+      opportunities.push(opportunity);
+    });
+
+    const nextCursor = getNextPaginationCursor(payload, pageItems, limit);
+    const nextCursorKey = nextCursor
+      ? `${nextCursor.startAfterId}::${nextCursor.startAfter || ""}`
+      : "";
+
+    if (!nextCursor || seenCursors.has(nextCursorKey) || pageItems.length === 0) {
+      break;
+    }
+
+    if (pageItems.length < limit && !hasExplicitNextPage(payload)) break;
+
+    seenCursors.add(nextCursorKey);
+    cursor = nextCursor;
+  }
+
+  return opportunities;
+};
+
+const fetchAllOpportunityStatuses = async (
+  client,
+  config,
+  dateFilters = {},
+) => {
+  const opportunities = [];
+
+  for (const status of PAUTAS_OPPORTUNITY_STATUSES) {
+    const statusOpportunities = await fetchOpportunitiesByStatus(
+      client,
+      config,
+      status,
+      dateFilters,
+    );
+    opportunities.push(...statusOpportunities);
+  }
+
+  return dedupeOpportunitiesById(opportunities);
+};
+
 const fetchPipelines = async (client, config) => {
   const payload = await requestGhlWithFallback(
     client,
@@ -657,6 +1205,282 @@ const fetchPipelines = async (client, config) => {
   );
 
   return extractPipelines(payload).filter(Boolean);
+};
+
+const extractCustomFieldDefinitions = (payload) =>
+  pickArray(payload, ["customFields", "custom_fields", "fields", "data"]);
+
+const fetchContactCustomFieldDefinitions = async (client, config) => {
+  const payload = await requestGhl(client, {
+    method: "GET",
+    url: `/locations/${config.locationId}/customFields`,
+    params: {
+      model: "contact",
+    },
+  });
+
+  return extractCustomFieldDefinitions(payload).filter(Boolean);
+};
+
+const extractContact = (payload = {}) =>
+  payload?.contact || payload?.data?.contact || payload?.data || payload;
+
+const mapWithConcurrency = async (items, concurrency, mapper) => {
+  if (!items.length) return [];
+
+  const safeConcurrency = Math.max(
+    1,
+    Math.min(Number(concurrency) || 1, items.length),
+  );
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: safeConcurrency }, () => worker()),
+  );
+  return results;
+};
+
+const createRequestThrottle = (minimumIntervalMs = 0) => {
+  let queue = Promise.resolve();
+  let nextRequestAt = 0;
+  let pauseUntil = 0;
+
+  const waitForTurn = () => {
+    const turn = queue.then(async () => {
+      const waitMs =
+        Math.max(nextRequestAt, pauseUntil) - Date.now();
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+      nextRequestAt = Date.now() + Math.max(0, minimumIntervalMs);
+    });
+
+    queue = turn.catch(() => {});
+    return turn;
+  };
+
+  waitForTurn.pause = (milliseconds) => {
+    pauseUntil = Math.max(
+      pauseUntil,
+      Date.now() + Math.max(0, Number(milliseconds) || 0),
+    );
+  };
+
+  return waitForTurn;
+};
+
+const pruneContactSourceIdCache = () => {
+  const now = Date.now();
+  for (const [contactId, entry] of contactSourceIdCache.entries()) {
+    if (entry.expiresAt <= now) contactSourceIdCache.delete(contactId);
+  }
+};
+
+const getCachedContactSourceId = (contactId) => {
+  const entry = contactSourceIdCache.get(contactId);
+  if (!entry) return { found: false, value: null };
+
+  if (entry.expiresAt <= Date.now()) {
+    contactSourceIdCache.delete(contactId);
+    return { found: false, value: null };
+  }
+
+  return {
+    found: true,
+    value: entry.value,
+  };
+};
+
+const setCachedContactSourceId = (contactId, sourceId) => {
+  if (!contactId) return;
+
+  const ttlMs = getNonNegativeEnvNumber(
+    "GHL_CONTACT_SOURCE_CACHE_TTL_MS",
+    30 * 60 * 1000,
+  );
+  const maximumEntries = Math.max(
+    100,
+    getNonNegativeEnvNumber("GHL_CONTACT_SOURCE_CACHE_MAX_ENTRIES", 10000),
+  );
+
+  if (contactSourceIdCache.has(contactId)) {
+    contactSourceIdCache.delete(contactId);
+  }
+
+  while (contactSourceIdCache.size >= maximumEntries) {
+    const oldestContactId = contactSourceIdCache.keys().next().value;
+    if (!oldestContactId) break;
+    contactSourceIdCache.delete(oldestContactId);
+  }
+
+  contactSourceIdCache.set(contactId, {
+    value: normalizeSourceIdValue(sourceId) || null,
+    expiresAt: Date.now() + ttlMs,
+  });
+};
+
+const resolveSourceIdsForOpportunities = async ({
+  client,
+  opportunities = [],
+  customFieldDefinitions = [],
+}) => {
+  const customFieldDefinitionMap =
+    customFieldDefinitions instanceof Map
+      ? customFieldDefinitions
+      : buildCustomFieldDefinitionMap(customFieldDefinitions);
+  const sourceIdsByContact = new Map();
+  const contactIdsToFetch = new Set();
+  pruneContactSourceIdCache();
+
+  dedupeOpportunitiesById(opportunities).forEach((opportunity) => {
+    const contactId = getOpportunityContactId(opportunity);
+    if (!contactId) return;
+
+    const directSourceId = extractSourceIdFromOpportunity(
+      opportunity,
+      customFieldDefinitionMap,
+    );
+
+    if (directSourceId) {
+      sourceIdsByContact.set(contactId, directSourceId);
+      setCachedContactSourceId(contactId, directSourceId);
+      return;
+    }
+
+    const cachedSourceId = getCachedContactSourceId(contactId);
+    if (cachedSourceId.found) {
+      sourceIdsByContact.set(contactId, cachedSourceId.value);
+      return;
+    }
+
+    contactIdsToFetch.add(contactId);
+  });
+
+  const uniqueContactIds = Array.from(contactIdsToFetch).filter(
+    (contactId) => !sourceIdsByContact.has(contactId),
+  );
+  const contactCache = new Map();
+  const requestedConcurrency = Number(
+    process.env.GHL_CONTACT_CONCURRENCY ?? 3,
+  );
+  const requestedMinimumInterval = Number(
+    process.env.GHL_CONTACT_MIN_INTERVAL_MS ?? 150,
+  );
+  const requestedMaximumRetries = Number(
+    process.env.GHL_CONTACT_MAX_RETRIES ?? 2,
+  );
+  const requestedRetryDelay = Number(
+    process.env.GHL_CONTACT_RETRY_DELAY_MS ?? 1000,
+  );
+  const configuredConcurrency = Number.isFinite(requestedConcurrency)
+    ? Math.min(10, Math.max(1, requestedConcurrency))
+    : 3;
+  const minimumIntervalMs = Number.isFinite(requestedMinimumInterval)
+    ? Math.max(0, requestedMinimumInterval)
+    : 150;
+  const maximumRetries = Number.isFinite(requestedMaximumRetries)
+    ? Math.min(4, Math.max(0, requestedMaximumRetries))
+    : 2;
+  const retryBaseDelayMs = Number.isFinite(requestedRetryDelay)
+    ? Math.max(100, requestedRetryDelay)
+    : 1000;
+  const waitForRequestTurn = createRequestThrottle(minimumIntervalMs);
+  const contactFailures = [];
+  const failedContactIds = new Set();
+
+  await mapWithConcurrency(
+    uniqueContactIds,
+    configuredConcurrency,
+    async (contactId) => {
+      if (contactCache.has(contactId)) return contactCache.get(contactId);
+
+      for (let attempt = 0; attempt <= maximumRetries; attempt += 1) {
+        await waitForRequestTurn();
+
+        try {
+          const payload = await requestGhl(client, {
+            method: "GET",
+            url: `/contacts/${encodeURIComponent(contactId)}`,
+          });
+          const contact = extractContact(payload);
+          contactCache.set(contactId, contact);
+          return contact;
+        } catch (error) {
+          const shouldRetry =
+            error.upstreamStatus === 429 && attempt < maximumRetries;
+
+          if (shouldRetry) {
+            const retryDelayMs =
+              error.retryAfterMs ??
+              retryBaseDelayMs * 2 ** attempt;
+            waitForRequestTurn.pause(retryDelayMs);
+            continue;
+          }
+
+          contactCache.set(contactId, null);
+          failedContactIds.add(contactId);
+          contactFailures.push({
+            code: error.code,
+            statusCode: error.statusCode,
+            upstreamStatus: error.upstreamStatus,
+          });
+          return null;
+        }
+      }
+
+      return null;
+    },
+  );
+
+  if (contactFailures.length) {
+    console.warn("No se pudieron consultar algunos contactos para el reporte GHL.", {
+      count: contactFailures.length,
+      codes: Array.from(
+        new Set(contactFailures.map((failure) => failure.code).filter(Boolean)),
+      ),
+      upstreamStatuses: Array.from(
+        new Set(
+          contactFailures
+            .map((failure) => failure.upstreamStatus)
+            .filter(Boolean),
+        ),
+      ),
+    });
+
+    if (
+      contactFailures.some((failure) => failure.upstreamStatus === 429)
+    ) {
+      const rateLimitError = new Error(
+        "HighLevel alcanzo temporalmente su limite de consultas.",
+      );
+      rateLimitError.code = "GHL_RATE_LIMITED";
+      rateLimitError.statusCode = 503;
+      rateLimitError.upstreamStatus = 429;
+      throw rateLimitError;
+    }
+  }
+
+  uniqueContactIds.forEach((contactId) => {
+    const sourceId = extractSourceIdFromContact(
+      contactCache.get(contactId),
+      customFieldDefinitionMap,
+    );
+    sourceIdsByContact.set(contactId, sourceId || null);
+    if (!failedContactIds.has(contactId)) {
+      setCachedContactSourceId(contactId, sourceId || null);
+    }
+  });
+
+  return sourceIdsByContact;
 };
 
 const extractCompanyIdFromLocation = (payload = {}) => {
@@ -715,6 +1539,171 @@ const fetchUsers = async (client, config) => {
   return extractUsers(payload).filter(Boolean);
 };
 
+const resolvePautasDateFilters = ({ fechaInicio, fechaFin } = {}) => {
+  const dateFilters = resolveDateFilters({ fechaInicio, fechaFin });
+  const isValidDateInput = (value) => {
+    if (!value) return true;
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return false;
+
+    const [, year, month, day] = match;
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    return (
+      date.getUTCFullYear() === Number(year) &&
+      date.getUTCMonth() === Number(month) - 1 &&
+      date.getUTCDate() === Number(day)
+    );
+  };
+  const startDate = parseDateBoundary(dateFilters.fechaInicio, false);
+  const endDate = parseDateBoundary(dateFilters.fechaFin, true);
+
+  if (
+    !isValidDateInput(dateFilters.fechaInicio) ||
+    !isValidDateInput(dateFilters.fechaFin) ||
+    (dateFilters.fechaInicio && !startDate) ||
+    (dateFilters.fechaFin && !endDate) ||
+    (startDate && endDate && startDate > endDate)
+  ) {
+    const error = new Error("El rango de fechas no es valido");
+    error.statusCode = 400;
+    error.code = "GHL_INVALID_DATE_RANGE";
+    throw error;
+  }
+
+  return dateFilters;
+};
+
+const isTemporaryGhlError = (error) =>
+  ["GHL_RATE_LIMITED", "GHL_CONNECTION_ERROR", "GHL_UPSTREAM_ERROR"].includes(
+    error?.code,
+  );
+
+const prunePautasDataCache = () => {
+  const now = Date.now();
+  for (const [cacheKey, entry] of pautasDataCache.entries()) {
+    if (entry.staleUntil <= now) pautasDataCache.delete(cacheKey);
+  }
+};
+
+const getOrLoadPautasData = async ({ cacheKey, loader }) => {
+  prunePautasDataCache();
+
+  const now = Date.now();
+  const existingEntry = pautasDataCache.get(cacheKey);
+  if (existingEntry && existingEntry.expiresAt > now) {
+    return {
+      data: existingEntry.data,
+      cache: {
+        hit: true,
+        stale: false,
+        coalesced: false,
+        fetchedAt: existingEntry.fetchedAt,
+        expiresAt: new Date(existingEntry.expiresAt).toISOString(),
+      },
+    };
+  }
+
+  let loaderPromise = pautasInFlight.get(cacheKey);
+  const coalesced = Boolean(loaderPromise);
+
+  if (!loaderPromise) {
+    const ttlMs = getNonNegativeEnvNumber(
+      "GHL_PAUTAS_CACHE_TTL_MS",
+      5 * 60 * 1000,
+    );
+    const staleTtlMs = Math.max(
+      ttlMs,
+      getNonNegativeEnvNumber(
+        "GHL_PAUTAS_STALE_TTL_MS",
+        30 * 60 * 1000,
+      ),
+    );
+
+    loaderPromise = (async () => {
+      await Promise.resolve();
+      try {
+        const data = await loader();
+        const fetchedAt = new Date().toISOString();
+        pautasDataCache.set(cacheKey, {
+          data,
+          fetchedAt,
+          expiresAt: Date.now() + ttlMs,
+          staleUntil: Date.now() + staleTtlMs,
+        });
+        return data;
+      } finally {
+        if (pautasInFlight.get(cacheKey) === loaderPromise) {
+          pautasInFlight.delete(cacheKey);
+        }
+      }
+    })();
+    pautasInFlight.set(cacheKey, loaderPromise);
+  }
+
+  try {
+    const data = await loaderPromise;
+    const loadedEntry = pautasDataCache.get(cacheKey);
+    return {
+      data,
+      cache: {
+        hit: coalesced,
+        stale: false,
+        coalesced,
+        fetchedAt: loadedEntry?.fetchedAt || new Date().toISOString(),
+        expiresAt: loadedEntry
+          ? new Date(loadedEntry.expiresAt).toISOString()
+          : null,
+      },
+    };
+  } catch (error) {
+    if (
+      existingEntry &&
+      existingEntry.staleUntil > Date.now() &&
+      isTemporaryGhlError(error)
+    ) {
+      return {
+        data: existingEntry.data,
+        cache: {
+          hit: true,
+          stale: true,
+          coalesced,
+          fallbackReason: error.code,
+          fetchedAt: existingEntry.fetchedAt,
+          expiresAt: new Date(existingEntry.expiresAt).toISOString(),
+        },
+      };
+    }
+
+    throw error;
+  }
+};
+
+const loadPautasBaseData = async ({ client, config, dateFilters }) => {
+  const [opportunities, pipelines, customFieldDefinitions] = await Promise.all([
+    fetchAllOpportunityStatuses(client, config, dateFilters),
+    fetchPipelines(client, config),
+    fetchContactCustomFieldDefinitions(client, config),
+  ]);
+  const sourceIdsByContact = await resolveSourceIdsForOpportunities({
+    client,
+    opportunities,
+    customFieldDefinitions,
+  });
+
+  return {
+    opportunities,
+    pipelines,
+    customFieldDefinitions,
+    sourceIdsByContact,
+  };
+};
+
+const clearPautasCaches = () => {
+  pautasDataCache.clear();
+  pautasInFlight.clear();
+  contactSourceIdCache.clear();
+};
+
 async function obtenerMatrizOportunidadesDashboard({ fechaInicio, fechaFin } = {}) {
   const config = getGhlConfig();
   const client = createGhlClient(config);
@@ -732,6 +1721,46 @@ async function obtenerMatrizOportunidadesDashboard({ fechaInicio, fechaFin } = {
     users,
     pipelineId: config.pipelineId,
   });
+}
+
+async function obtenerRendimientoPautasPorSourceId({
+  fechaInicio,
+  fechaFin,
+  etapa,
+  sourceId,
+} = {}) {
+  const config = getGhlConfig();
+  const client = createGhlClient(config);
+  const dateFilters = resolvePautasDateFilters({ fechaInicio, fechaFin });
+  const cacheKey = [
+    config.locationId,
+    config.pipelineId,
+    dateFilters.fechaInicio || "",
+    dateFilters.fechaFin || "",
+  ].join("::");
+  const { data, cache } = await getOrLoadPautasData({
+    cacheKey,
+    loader: () =>
+      loadPautasBaseData({
+        client,
+        config,
+        dateFilters,
+      }),
+  });
+
+  const report = buildPautasPerformance({
+    opportunities: data.opportunities,
+    pipelines: data.pipelines,
+    pipelineId: config.pipelineId,
+    customFieldDefinitions: data.customFieldDefinitions,
+    sourceIdsByContact: data.sourceIdsByContact,
+    etapa,
+    sourceId,
+  });
+  report.meta.cache = cache;
+  report.meta.generatedAt = cache.fetchedAt || report.meta.generatedAt;
+
+  return report;
 }
 
 async function enviarAGHL({
@@ -863,7 +1892,20 @@ async function enviarAGHL({
 module.exports = {
   enviarAGHL,
   obtenerMatrizOportunidadesDashboard,
+  obtenerRendimientoPautasPorSourceId,
   buildOpportunitiesMatrix,
+  buildPautasPerformance,
+  buildCustomFieldDefinitionMap,
+  dedupeOpportunitiesById,
+  extractSourceIdFromContact,
+  extractSourceIdFromOpportunity,
+  getOpportunityContactId,
+  fetchAllOpportunityStatuses,
+  mapWithConcurrency,
+  resolveSourceIdsForOpportunities,
+  resolvePautasDateFilters,
+  getOrLoadPautasData,
+  clearPautasCaches,
   extractOpportunities,
   extractPipelines,
   extractUsers,

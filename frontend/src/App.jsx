@@ -53,6 +53,7 @@ import MarketingVentasAgencia from "./pages/Marketing/MarketingVentasAgencia";
 import Goleadores from "./pages/Marketing/Goleadores";
 import CostoVentaMarketing from "./pages/Marketing/CostoVentaMarketing";
 import CostoEntregaMarketing from "./pages/Marketing/CostoEntregaMarketing";
+import PautasMarketing from "./pages/Marketing/PautasMarketing";
 import CrearVentaCompleta from "./pages/Vendedores/CrearVentaCompleta";
 import EditarVentaCompletaAuditoria from "./pages/Vendedores/EditarVentaCompletaAuditoria";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones";
@@ -112,6 +113,7 @@ import {
 } from "./api/client";
 
 const GhlOportunidadesMatriz = lazy(() => import("./pages/GHL/OportunidadesMatriz"));
+const GhlRendimientoPautas = lazy(() => import("./pages/GHL/RendimientoPautas"));
 
 const emptyAuth = {
   isAuthenticated: false,
@@ -316,6 +318,15 @@ function App() {
                     "/ghl/oportunidades-matriz",
                   )}
                 />
+                <Route
+                  path="ghl/rendimiento-pautas"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}>
+                      <GhlRendimientoPautas />
+                    </Suspense>,
+                    "/ghl/rendimiento-pautas",
+                  )}
+                />
                 <Route path="usuarios" element={protect(<Usuarios />, "/usuarios")} />
                 <Route path="agencias" element={protect(<Agencias />, "/agencias")} />
                 <Route
@@ -371,6 +382,10 @@ function App() {
                 <Route
                   path="costo-venta-marketing"
                   element={protect(<CostoVentaMarketing />, "/costo-venta-marketing")}
+                />
+                <Route
+                  path="marketing/pautas"
+                  element={protect(<PautasMarketing />, "/marketing/pautas")}
                 />
                 <Route
                   path="costo-entrega-marketing"

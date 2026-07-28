@@ -47,6 +47,10 @@ export default function App() {
                       element={<Entrevistas />}
                     />
                     <Route
+                      path="/seleccionados"
+                      element={<Entrevistas key="seleccionados" modo="seleccionado" />}
+                    />
+                    <Route
                       path="/descartados"
                       element={<Postulaciones key="descartados" modo="descartado" />}
                     />

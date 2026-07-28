@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Archive,
+  BadgeCheck,
   Building2,
   ClipboardList,
   FileText,
@@ -22,6 +23,7 @@ export default function Sidebar() {
     total: 0,
     noLeidas: 0,
     entrevistas: 0,
+    seleccionados: 0,
     descartados: 0,
   });
 
@@ -46,6 +48,7 @@ export default function Sidebar() {
             total: 0,
             noLeidas: 0,
             entrevistas: 0,
+            seleccionados: 0,
             descartados: 0,
           }
         );
@@ -127,6 +130,14 @@ export default function Sidebar() {
           <span className="flex-1">Entrevistas</span>
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
             {resumenPostulaciones.entrevistas}
+          </span>
+        </NavLink>
+
+        <NavLink to="/seleccionados" className={linkClass}>
+          <BadgeCheck size={18} />
+          <span className="flex-1">Seleccionados</span>
+          <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-bold text-teal-700">
+            {resumenPostulaciones.seleccionados || 0}
           </span>
         </NavLink>
 

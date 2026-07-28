@@ -34,6 +34,11 @@ export const INTERVIEW_STATUS = {
     className: "border-slate-200 bg-slate-100 text-slate-600",
     dotClassName: "bg-slate-500",
   },
+  SELECCIONADO: {
+    label: "Seleccionado",
+    className: "border-teal-200 bg-teal-50 text-teal-800",
+    dotClassName: "bg-teal-600",
+  },
 };
 
 export const getPersonalData = (postulacion) =>
@@ -132,6 +137,19 @@ export const formatInterviewTime = (value) => {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+  });
+};
+
+export const formatDateOnly = (value) => {
+  if (!value) return "";
+
+  const [year, month, day] = String(value).split("-").map(Number);
+  if (!year || !month || !day) return "";
+
+  return new Date(year, month - 1, day).toLocaleDateString("es-EC", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
 };
 

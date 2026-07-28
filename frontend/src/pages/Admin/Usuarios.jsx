@@ -5,6 +5,12 @@ import { API_URL } from "../../../config";
 import { api } from "../../api/client";
 
 const normalizeText = (value) => (value?.trim() ? value.trim() : null);
+const getRolesPagoUsuario = (usuario) =>
+  usuario?.rolesPago?.length
+    ? usuario.rolesPago
+    : usuario?.rolPago
+      ? [usuario.rolPago]
+      : [];
 
 const obtenerCamposObligatoriosFaltantes = (
   datos,
@@ -60,7 +66,7 @@ export default function Usuarios() {
     password: "",
     rolId: "",
     rolIds: [],
-    rolPagoId: "",
+    rolesPagoIds: [],
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
@@ -79,7 +85,7 @@ export default function Usuarios() {
     password: "",
     rolId: "",
     rolIds: [],
-    rolPagoId: "",
+    rolesPagoIds: [],
     fechaIngreso: "",
     fechaSalida: "",
     numeroCuenta: "",
@@ -95,6 +101,9 @@ export default function Usuarios() {
       : usuario.rol?.id
         ? [String(usuario.rol.id)]
         : [];
+    const rolesPagoIds = getRolesPagoUsuario(usuario).map((rolPago) =>
+      String(rolPago.id),
+    );
 
     setEditForm({
       id: usuario.id,
@@ -105,7 +114,7 @@ export default function Usuarios() {
       password: "",
       rolId: rolIds[0] || "",
       rolIds,
-      rolPagoId: usuario.rolPagoId ? String(usuario.rolPagoId) : "",
+      rolesPagoIds,
       fechaIngreso: usuario.fechaIngreso || "",
       fechaSalida: usuario.fechaSalida || "",
       numeroCuenta: usuario.numeroCuenta || "",
@@ -128,7 +137,7 @@ export default function Usuarios() {
       password: "",
       rolId: "",
       rolIds: [],
-      rolPagoId: "",
+      rolesPagoIds: [],
       fechaIngreso: "",
       fechaSalida: "",
       numeroCuenta: "",
@@ -210,7 +219,38 @@ export default function Usuarios() {
         return;
       }
 
-      const usuarioAbs = data.usuario;
+      if (data?.existeEnRve && data?.vinculadoPorCedula) {
+        const confirmacion = await Swal.fire({
+          icon: "question",
+          title: "Usuario encontrado en ambos sistemas",
+          html:
+            "La cédula ya vincula las dos cuentas.<br/><br/>" +
+            "¿Deseas actualizar en RVE los datos personales y fechas desde ABS?<br/>" +
+            "<strong>Se conservarán contraseña, correo/usuario de acceso, roles, agencias y cargo salarial de RVE.</strong>",
+          showCancelButton: true,
+          confirmButtonText: "Actualizar desde ABS",
+          cancelButtonText: "Cancelar",
+          confirmButtonColor: "#059669",
+        });
+
+        if (!confirmacion.isConfirmed) return;
+
+        const { data: actualizacion } = await api.patch(
+          `/api/usuarios-abs/por-cedula/${encodeURIComponent(cedula)}`,
+        );
+        await cargarUsuarios();
+
+        await Swal.fire({
+          icon: "success",
+          title: "Usuarios vinculados por cédula",
+          text: actualizacion?.actualizado
+            ? "Los datos personales de RVE fueron actualizados desde ABS."
+            : "Los usuarios ya estaban unificados y no fue necesario cambiar datos.",
+        });
+        return;
+      }
+
+      const usuarioAbs = data.usuarioAbs || data.usuario;
       setForm((actual) => ({
         ...actual,
         nombre: usuarioAbs.nombre || "",
@@ -244,6 +284,21 @@ export default function Usuarios() {
     }
   };
 
+  const toggleRolPago = (setEstado, rolPagoId) => {
+    setEstado((prev) => {
+      const rolesPagoIds = prev.rolesPagoIds || [];
+      const id = String(rolPagoId);
+      const nuevosRolesPagoIds = rolesPagoIds.includes(id)
+        ? rolesPagoIds.filter((currentId) => currentId !== id)
+        : [...rolesPagoIds, id];
+
+      return {
+        ...prev,
+        rolesPagoIds: nuevosRolesPagoIds,
+      };
+    });
+  };
+
   const crearUsuario = async (e) => {
     e.preventDefault();
     const camposFaltantes = obtenerCamposObligatoriosFaltantes(form, {
@@ -269,7 +324,7 @@ export default function Usuarios() {
         password: form.password,
         rolId: form.rolIds[0] || form.rolId,
         rolIds: form.rolIds,
-        rolPagoId: form.rolPagoId || null,
+        rolesPagoIds: form.rolesPagoIds,
         fechaIngreso: form.fechaIngreso || null,
         fechaSalida: form.fechaSalida || null,
         numeroCuenta: normalizeText(form.numeroCuenta),
@@ -286,7 +341,7 @@ export default function Usuarios() {
         password: "",
         rolId: "",
         rolIds: [],
-        rolPagoId: "",
+        rolesPagoIds: [],
         fechaIngreso: "",
         fechaSalida: "",
         numeroCuenta: "",
@@ -336,7 +391,7 @@ export default function Usuarios() {
         password: editForm.password || undefined,
         rolId: editForm.rolIds[0] || editForm.rolId,
         rolIds: editForm.rolIds,
-        rolPagoId: editForm.rolPagoId || null,
+        rolesPagoIds: editForm.rolesPagoIds,
         fechaIngreso: editForm.fechaIngreso || null,
         fechaSalida: editForm.fechaSalida || null,
         numeroCuenta: normalizeText(editForm.numeroCuenta),
@@ -570,20 +625,43 @@ export default function Usuarios() {
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
-                  Cargo salarial
+                  Cargos salariales
                 </label>
-                <select
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                  value={form.rolPagoId}
-                  onChange={(e) => setForm({ ...form, rolPagoId: e.target.value })}
+                <div
+                  className="max-h-44 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3"
+                  role="group"
                 >
-                  <option value="">Sin cargo salarial</option>
                   {rolesPago.map((rolPago) => (
-                    <option key={rolPago.id} value={rolPago.id}>
-                      {rolPago.nivel} - {rolPago.cargo}
-                    </option>
+                    <label
+                      key={rolPago.id}
+                      className="mb-2 flex items-start gap-2 text-sm text-slate-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={(form.rolesPagoIds || []).includes(
+                          String(rolPago.id),
+                        )}
+                        onChange={() => toggleRolPago(setForm, rolPago.id)}
+                        className="mt-0.5 accent-emerald-600"
+                      />
+                      <span>
+                        <span className="font-semibold">{rolPago.cargo}</span>
+                        <span className="block text-xs text-slate-400">
+                          {rolPago.nivel}
+                        </span>
+                      </span>
+                    </label>
                   ))}
-                </select>
+                  {!rolesPago.length ? (
+                    <p className="text-sm text-slate-400">
+                      No hay cargos salariales activos.
+                    </p>
+                  ) : null}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Puedes seleccionar más de uno. El mejor pagado quedará como
+                  principal y el doble cargo no tendrá sanción por meta.
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -801,15 +879,6 @@ export default function Usuarios() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <p className="text-sm font-semibold text-slate-800">
-                        {u.rolPago?.cargo || "-"}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {u.rolPago?.nivel || ""}
-                      </p>
-                    </td>
-
-                    <td className="px-6 py-4">
                       <p className="text-sm text-slate-700">
                         {u.telefono || "-"}
                       </p>
@@ -833,6 +902,29 @@ export default function Usuarios() {
                             Sin rol
                           </span>
                         )}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <div className="flex max-w-64 flex-wrap gap-1">
+                        {getRolesPagoUsuario(u).length
+                          ? getRolesPagoUsuario(u).map((rolPago) => (
+                              <span
+                                key={rolPago.id}
+                                className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                                  Number(rolPago.id) === Number(u.rolPagoId)
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-blue-100 text-blue-800"
+                                }`}
+                                title={rolPago.nivel || ""}
+                              >
+                                {rolPago.cargo}
+                                {Number(rolPago.id) === Number(u.rolPagoId)
+                                  ? " · Principal"
+                                  : ""}
+                              </span>
+                            ))
+                          : "-"}
                       </div>
                     </td>
 
@@ -933,7 +1025,9 @@ export default function Usuarios() {
                       Cargo salarial
                     </p>
                     <p className="font-medium text-slate-700">
-                      {u.rolPago?.cargo || "-"}
+                      {getRolesPagoUsuario(u)
+                        .map((rolPago) => rolPago.cargo)
+                        .join(", ") || "-"}
                     </p>
                   </div>
 
@@ -1148,22 +1242,41 @@ export default function Usuarios() {
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-slate-700">
-                      Cargo salarial
+                      Cargos salariales
                     </label>
-                    <select
-                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
-                      value={editForm.rolPagoId}
-                      onChange={(e) =>
-                        setEditForm({ ...editForm, rolPagoId: e.target.value })
-                      }
+                    <div
+                      className="max-h-44 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3"
+                      role="group"
                     >
-                      <option value="">Sin cargo salarial</option>
                       {rolesPago.map((rolPago) => (
-                        <option key={rolPago.id} value={rolPago.id}>
-                          {rolPago.nivel} - {rolPago.cargo}
-                        </option>
+                        <label
+                          key={rolPago.id}
+                          className="mb-2 flex items-start gap-2 text-sm text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={(editForm.rolesPagoIds || []).includes(
+                              String(rolPago.id),
+                            )}
+                            onChange={() =>
+                              toggleRolPago(setEditForm, rolPago.id)
+                            }
+                            className="mt-0.5 accent-emerald-600"
+                          />
+                          <span>
+                            <span className="font-semibold">
+                              {rolPago.cargo}
+                            </span>
+                            <span className="block text-xs text-slate-400">
+                              {rolPago.nivel}
+                            </span>
+                          </span>
+                        </label>
                       ))}
-                    </select>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      El cargo mejor pagado se usará como principal.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">

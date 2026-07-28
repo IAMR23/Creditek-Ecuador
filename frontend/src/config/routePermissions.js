@@ -43,6 +43,7 @@ export const ROUTE_PERMISSIONS = {
   "/dashboard": "Gerencia",
   "/powerbi": "Gerencia",
   "/ghl/oportunidades-matriz": "Gerencia",
+  "/ghl/rendimiento-pautas": ["Gerencia", "Administracion", "Sistemas"],
   "/metas-comerciales": "Gerencia",
   "/costo-venta-marketing": "Gerencia",
   "/costo-entrega-marketing": "Gerencia",
@@ -59,6 +60,7 @@ export const ROUTE_PERMISSIONS = {
 
   "/copa-creditek": "Marketing",
   "/goleadores": "Marketing",
+  "/marketing/pautas": "Marketing",
 
   "/logistica-panel": "Logistica",
   "/entregas": "Logistica",
@@ -136,6 +138,7 @@ export const ROUTE_REDIRECT_ORDER = [
   "/vendedor-panel",
   "/logistica-panel",
   "/metas-comerciales",
+  "/marketing/pautas",
   "/entregas-pendientes",
   "/ventas-auditoria",
   "/revisar-cajas",

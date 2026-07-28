@@ -4,6 +4,10 @@ const express = require("express");
 const { sequelize } = require("../config/db");
 const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
+const {
+  registrarNotificacionSalida,
+  registrarNotificacionSegura,
+} = require("../services/notificacionesPersonalService");
 
 const router = express.Router();
 
@@ -168,6 +172,14 @@ router.patch("/usuarios/salida", async (req, res) => {
     });
 
     if (cambioFechaSalida) {
+      if (usuario.fechaSalida) {
+        await registrarNotificacionSegura(
+          registrarNotificacionSalida(usuario, {
+            origen: origen || "ABS",
+          }),
+          `salida ABS del usuario ${usuario.id}`,
+        );
+      }
       emitirActualizacionNovedadesPersonal(req);
     }
 

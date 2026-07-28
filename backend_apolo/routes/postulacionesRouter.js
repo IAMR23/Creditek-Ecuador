@@ -10,6 +10,7 @@ const {
 
 const Postulacion = require("../models/Postulacion");
 const Usuario = require("../models/Usuario");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
 const auth = require("../middleware/auth");
 const {
   generarContratoCapacitacionPdf,
@@ -24,6 +25,7 @@ const INTERVIEW_STATUSES = [
   "REALIZADA",
   "NO_ASISTIO",
   "CANCELADA",
+  "SELECCIONADO",
 ];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
@@ -297,9 +299,22 @@ const buildListWhere = (query = {}) => {
   if (fase === "entrevista") {
     where.pasaEntrevista = true;
     where.descartada = false;
+    where.estadoEntrevista =
+      INTERVIEW_STATUSES.includes(estadoEntrevista) &&
+      estadoEntrevista !== "SELECCIONADO"
+        ? estadoEntrevista
+        : { [Op.ne]: "SELECCIONADO" };
+  }
+  if (fase === "seleccionado" || fase === "seleccionados") {
+    where.pasaEntrevista = true;
+    where.descartada = false;
+    where.estadoEntrevista = "SELECCIONADO";
   }
   if (fase === "descartado") where.descartada = true;
-  if (INTERVIEW_STATUSES.includes(estadoEntrevista)) {
+  if (
+    !["entrevista", "seleccionado", "seleccionados"].includes(fase) &&
+    INTERVIEW_STATUSES.includes(estadoEntrevista)
+  ) {
     where.estadoEntrevista = estadoEntrevista;
   }
   if (entrevistadorId) where.entrevistadorId = entrevistadorId;
@@ -553,6 +568,7 @@ const parseAndSaveTxtImport = async ({
       cedulaArchivo: cedulaEsperada,
     },
   );
+
   const datos = formularioActualizado.datos_personales || {};
 
   postulacion.formulario = formularioActualizado;
@@ -562,6 +578,94 @@ const parseAndSaveTxtImport = async ({
   await postulacion.save();
 
   return parsed;
+};
+
+const obtenerCedulaPostulacion = (postulacion) =>
+  normalizeCedula(
+    postulacion.cedula ||
+      postulacion.formulario?.datos_personales?.cedula,
+  );
+
+const agregarDatosIncorporacion = async (postulaciones) => {
+  const filas = postulaciones.map((postulacion) =>
+    typeof postulacion.toJSON === "function"
+      ? postulacion.toJSON()
+      : postulacion,
+  );
+  const cedulas = [
+    ...new Set(filas.map(obtenerCedulaPostulacion).filter(Boolean)),
+  ];
+
+  if (!cedulas.length) {
+    return filas.map((postulacion) => ({
+      ...postulacion,
+      incorporacion: null,
+    }));
+  }
+
+  const usuarios = await Usuario.findAll({
+    where: { cedula: { [Op.in]: cedulas } },
+    attributes: ["id", "cedula", "fechaIngreso"],
+  });
+  const usuariosPorCedula = new Map(
+    usuarios.map((usuario) => [
+      normalizeCedula(usuario.cedula),
+      usuario,
+    ]),
+  );
+  const usuarioIds = usuarios.map((usuario) => usuario.id);
+  const relaciones = usuarioIds.length
+    ? await UsuarioAgencia.findAll({
+        where: {
+          usuarioId: { [Op.in]: usuarioIds },
+          activo: true,
+        },
+        attributes: ["id", "usuarioId", "agenciaId"],
+        include: [
+          {
+            association: "agencia",
+            attributes: ["id", "nombre"],
+            required: true,
+          },
+        ],
+        order: [
+          ["updatedAt", "DESC"],
+          ["id", "DESC"],
+        ],
+      })
+    : [];
+  const relacionPorUsuario = new Map();
+
+  for (const relacion of relaciones) {
+    if (!relacionPorUsuario.has(relacion.usuarioId)) {
+      relacionPorUsuario.set(relacion.usuarioId, relacion);
+    }
+  }
+
+  return filas.map((postulacion) => {
+    const usuario = usuariosPorCedula.get(
+      obtenerCedulaPostulacion(postulacion),
+    );
+
+    if (!usuario) {
+      return { ...postulacion, incorporacion: null };
+    }
+
+    const relacion = relacionPorUsuario.get(usuario.id);
+    return {
+      ...postulacion,
+      incorporacion: {
+        usuarioId: usuario.id,
+        fechaIngreso: usuario.fechaIngreso || null,
+        agencia: relacion?.agencia
+          ? {
+              id: relacion.agencia.id,
+              nombre: relacion.agencia.nombre,
+            }
+          : null,
+      },
+    };
+  });
 };
 
 const findPostulacionesByCedula = (cedula) =>
@@ -584,13 +688,18 @@ const buildResumen = async () => {
   const todayStart = guayaquilDayStartUtc(today);
   const todayEnd = guayaquilDayEndUtc(today);
   const nextSevenDaysEnd = new Date(todayEnd.getTime() + 6 * 24 * 60 * 60 * 1000);
-  const activeInterviewWhere = { pasaEntrevista: true, descartada: false };
+  const activeInterviewWhere = {
+    pasaEntrevista: true,
+    descartada: false,
+    estadoEntrevista: { [Op.ne]: "SELECCIONADO" },
+  };
 
   const [
     totalGeneral,
     total,
     noLeidas,
     entrevistas,
+    seleccionados,
     descartados,
     pendientesAgendar,
     agendadasHoy,
@@ -600,7 +709,14 @@ const buildResumen = async () => {
     Postulacion.count(),
     Postulacion.count({ where: { pasaEntrevista: false, descartada: false } }),
     Postulacion.count({ where: { leida: false, pasaEntrevista: false, descartada: false } }),
-    Postulacion.count({ where: { pasaEntrevista: true, descartada: false } }),
+    Postulacion.count({ where: activeInterviewWhere }),
+    Postulacion.count({
+      where: {
+        pasaEntrevista: true,
+        descartada: false,
+        estadoEntrevista: "SELECCIONADO",
+      },
+    }),
     Postulacion.count({ where: { descartada: true } }),
     Postulacion.count({
       where: { ...activeInterviewWhere, fechaEntrevista: null },
@@ -632,6 +748,7 @@ const buildResumen = async () => {
     total,
     noLeidas,
     entrevistas,
+    seleccionados,
     descartados,
     pendientesAgendar,
     agendadasHoy,
@@ -774,10 +891,13 @@ router.get("/", auth, async (req, res) => {
       offset,
     });
     const totalPages = Math.max(Math.ceil(count / limit), 1);
+    const data = ["seleccionado", "seleccionados"].includes(fase)
+      ? await agregarDatosIncorporacion(rows)
+      : rows;
 
     return res.json({
       ok: true,
-      data: rows,
+      data,
       pagination: {
         total: count,
         page,
@@ -1134,6 +1254,172 @@ router.patch("/:id/titular-txt", auth, async (req, res) => {
     });
   }
 });
+
+router.patch(
+  "/:id/referencias/observacion",
+  auth,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (typeof req.body?.observacion !== "string") {
+        return res.status(400).json({
+          ok: false,
+          message: "Debe enviar una observacion",
+        });
+      }
+
+      const observacion = req.body.observacion.trim();
+
+      if (observacion.length > 1000) {
+        return res.status(400).json({
+          ok: false,
+          message: "La observacion no puede superar 1000 caracteres",
+        });
+      }
+
+      const postulacion = await Postulacion.findByPk(id);
+
+      if (!postulacion) {
+        return res.status(404).json({
+          ok: false,
+          message: "Postulacion no encontrada",
+        });
+      }
+
+      const formulario = postulacion.formulario || {};
+      postulacion.formulario = {
+        ...formulario,
+        metadata: {
+          ...(formulario.metadata || {}),
+          observacion_referencias: observacion,
+          ultima_revision_referencias: new Date().toISOString(),
+        },
+      };
+      await postulacion.save();
+
+      return res.json({
+        ok: true,
+        message: "Observacion general de referencias guardada",
+        data: postulacion,
+        observacion,
+      });
+    } catch (error) {
+      console.error(
+        "Error guardando observacion general de referencias:",
+        error,
+      );
+
+      return res.status(500).json({
+        ok: false,
+        message: "Error al guardar la observacion de referencias",
+        error: error.message,
+      });
+    }
+  },
+);
+
+router.patch(
+  "/:id/referencias/:tipo/:referenciaIndex/llamado",
+  auth,
+  async (req, res) => {
+    try {
+      const { id, tipo, referenciaIndex } = req.params;
+      const index = Number.parseInt(referenciaIndex, 10);
+      const colecciones = {
+        familiar: "personas_con_quien_vive",
+        laboral: "historial_laboral",
+      };
+      const collectionKey = colecciones[tipo];
+
+      if (!collectionKey) {
+        return res.status(400).json({
+          ok: false,
+          message: "El tipo de referencia debe ser familiar o laboral",
+        });
+      }
+
+      if (!Number.isInteger(index) || index < 0) {
+        return res.status(400).json({
+          ok: false,
+          message: "Indice de referencia no valido",
+        });
+      }
+
+      const llamadoEnviado = typeof req.body?.llamado === "boolean";
+      const observacionEnviada = typeof req.body?.observacion === "string";
+
+      if (!llamadoEnviado && !observacionEnviada) {
+        return res.status(400).json({
+          ok: false,
+          message: "Debe enviar el estado llamado o una observacion",
+        });
+      }
+
+      const observacion = observacionEnviada
+        ? req.body.observacion.trim()
+        : null;
+
+      if (observacionEnviada && observacion.length > 1000) {
+        return res.status(400).json({
+          ok: false,
+          message: "La observacion no puede superar 1000 caracteres",
+        });
+      }
+
+      const postulacion = await Postulacion.findByPk(id);
+
+      if (!postulacion) {
+        return res.status(404).json({
+          ok: false,
+          message: "Postulacion no encontrada",
+        });
+      }
+
+      const formulario = postulacion.formulario || {};
+      const referencias = Array.isArray(formulario[collectionKey])
+        ? formulario[collectionKey].map((referencia) => ({ ...referencia }))
+        : [];
+
+      if (!referencias[index]) {
+        return res.status(404).json({
+          ok: false,
+          message: "Referencia no encontrada",
+        });
+      }
+
+      referencias[index] = {
+        ...referencias[index],
+        ...(llamadoEnviado ? { llamado: req.body.llamado } : {}),
+        ...(observacionEnviada ? { observacion } : {}),
+      };
+      postulacion.formulario = {
+        ...formulario,
+        [collectionKey]: referencias,
+        metadata: {
+          ...(formulario.metadata || {}),
+          ultima_revision_referencias: new Date().toISOString(),
+        },
+      };
+      await postulacion.save();
+
+      return res.json({
+        ok: true,
+        message: "Revision de referencia guardada",
+        data: postulacion,
+        referencia: referencias[index],
+      });
+    } catch (error) {
+      console.error("Error guardando estado de llamada de referencia:", error);
+
+      return res.status(500).json({
+        ok: false,
+        message: "Error al guardar el estado de llamada",
+        error: error.message,
+      });
+    }
+  },
+);
 
 router.patch("/:id/observacion", auth, async (req, res) => {
   try {

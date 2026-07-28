@@ -4,12 +4,17 @@ import { INTERVIEW_STATUS } from "../../utils/interviews";
 const inputClass =
   "h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-100";
 
-export default function InterviewFilters({ filters, onChange, onClear }) {
+export default function InterviewFilters({
+  filters,
+  onChange,
+  onClear,
+  showStatus = true,
+}) {
   const update = (key) => (event) => onChange({ ...filters, [key]: event.target.value });
 
   return (
     <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-12">
-      <label className="xl:col-span-4">
+      <label className={showStatus ? "xl:col-span-4" : "xl:col-span-6"}>
         <span className="sr-only">Buscar aspirante</span>
         <div className="relative">
           <Search
@@ -25,15 +30,19 @@ export default function InterviewFilters({ filters, onChange, onClear }) {
         </div>
       </label>
 
-      <label className="xl:col-span-2">
-        <span className="sr-only">Estado de entrevista</span>
-        <select value={filters.estadoEntrevista} onChange={update("estadoEntrevista")} className={inputClass}>
-          <option value="">Todos los estados</option>
-          {Object.entries(INTERVIEW_STATUS).map(([value, meta]) => (
-            <option key={value} value={value}>{meta.label}</option>
-          ))}
-        </select>
-      </label>
+      {showStatus && (
+        <label className="xl:col-span-2">
+          <span className="sr-only">Estado de entrevista</span>
+          <select value={filters.estadoEntrevista} onChange={update("estadoEntrevista")} className={inputClass}>
+            <option value="">Todos los estados</option>
+            {Object.entries(INTERVIEW_STATUS)
+              .filter(([value]) => value !== "SELECCIONADO")
+              .map(([value, meta]) => (
+                <option key={value} value={value}>{meta.label}</option>
+              ))}
+          </select>
+        </label>
+      )}
 
       <label className="relative xl:col-span-2">
         <span className="sr-only">Fecha de entrevista</span>

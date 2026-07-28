@@ -49,6 +49,7 @@ test("muestra Usuario.fechaSalida aunque aún no exista una asistencia", async (
           usuario: {
             id: 5,
             nombre: "María Pérez",
+            fechaIngreso: "2026-07-20",
             fechaSalida: "2026-07-27",
           },
           agencia: { id: 2, nombre: "Matriz" },
@@ -70,6 +71,10 @@ test("muestra Usuario.fechaSalida aunque aún no exista una asistencia", async (
   const response = await getJson("/agencias?mes=2026-07&agenciaId=2");
 
   assert.equal(response.status, 200);
+  assert.equal(
+    response.body[0].usuarios[0].fechaIngreso,
+    "2026-07-20",
+  );
   assert.equal(
     response.body[0].usuarios[0].asistencias["2026-07-27"].estado,
     "salida",

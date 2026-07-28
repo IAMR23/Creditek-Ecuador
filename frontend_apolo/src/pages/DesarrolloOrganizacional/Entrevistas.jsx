@@ -53,7 +53,8 @@ const getDownloadErrorMessage = async (error) => {
   return responseData?.message || "No se pudo generar el contrato de capacitación.";
 };
 
-export default function Entrevistas() {
+export default function Entrevistas({ modo = "entrevista" }) {
+  const isSelectedMode = modo === "seleccionado";
   const [interviews, setInterviews] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
@@ -77,6 +78,8 @@ export default function Entrevistas() {
   const [userExistsCandidateIds, setUserExistsCandidateIds] = useState(
     () => new Set(),
   );
+  const [expandedReferencesId, setExpandedReferencesId] = useState(null);
+  const [savingReferenceKey, setSavingReferenceKey] = useState("");
   const openerRef = useRef(null);
 
   useEffect(() => {
@@ -110,11 +113,14 @@ export default function Entrevistas() {
         const [listResponse, summaryResponse] = await Promise.all([
           api.get("/api/postulaciones", {
             params: {
-              fase: "entrevista",
+              fase: isSelectedMode ? "seleccionado" : "entrevista",
               page: activeView === "calendario" ? 1 : page,
               limit,
               q: filters.q.trim() || undefined,
-              estadoEntrevista: filters.estadoEntrevista || undefined,
+              estadoEntrevista:
+                !isSelectedMode && filters.estadoEntrevista
+                  ? filters.estadoEntrevista
+                  : undefined,
               entrevistaPeriodo: filters.periodo || undefined,
               entrevistaFechaDesde: dateRange.desde || undefined,
               entrevistaFechaHasta: dateRange.hasta || undefined,
@@ -131,7 +137,12 @@ export default function Entrevistas() {
       } catch (requestError) {
         if (!active) return;
         setInterviews([]);
-        setError(requestError.response?.data?.message || "No se pudieron cargar las entrevistas.");
+        setError(
+          requestError.response?.data?.message ||
+            (isSelectedMode
+              ? "No se pudieron cargar los postulantes seleccionados."
+              : "No se pudieron cargar las entrevistas."),
+        );
       } finally {
         if (active) {
           setLoading(false);
@@ -144,7 +155,7 @@ export default function Entrevistas() {
       active = false;
       window.clearTimeout(timeoutId);
     };
-  }, [activeView, filters, page, refreshToken]);
+  }, [activeView, filters, isSelectedMode, page, refreshToken]);
 
   const refresh = () => {
     setRefreshToken((current) => current + 1);
@@ -342,6 +353,7 @@ export default function Entrevistas() {
       });
     }
     setCreateUserCandidate(null);
+    refresh();
   };
 
   const changeStatus = async (interview, status) => {
@@ -363,7 +375,12 @@ export default function Entrevistas() {
         estadoEntrevista: status,
       });
       refresh();
-      Swal.fire({ icon: "success", title: "Estado actualizado", timer: 1300, showConfirmButton: false });
+      Swal.fire({
+        icon: "success",
+        title: status === "SELECCIONADO" ? "Postulante seleccionado" : "Estado actualizado",
+        timer: 1300,
+        showConfirmButton: false,
+      });
     } catch (requestError) {
       Swal.fire("Error", requestError.response?.data?.message || "No se pudo actualizar el estado.", "error");
     }
@@ -411,6 +428,184 @@ export default function Entrevistas() {
     }
   };
 
+  const toggleReferences = (interview) => {
+    setExpandedReferencesId((current) =>
+      current === interview.id ? null : interview.id,
+    );
+  };
+
+  const updateReferenceLocal = (
+    interviewId,
+    type,
+    referenceIndex,
+    changes,
+  ) => {
+    const collectionKey =
+      type === "familiar"
+        ? "personas_con_quien_vive"
+        : "historial_laboral";
+
+    setInterviews((current) =>
+      current.map((interview) => {
+        if (interview.id !== interviewId) return interview;
+
+        const formulario = interview.formulario || {};
+        const references = Array.isArray(formulario[collectionKey])
+          ? formulario[collectionKey].map((reference, index) =>
+              index === referenceIndex
+                ? { ...reference, ...changes }
+                : reference,
+            )
+          : [];
+
+        return {
+          ...interview,
+          formulario: {
+            ...formulario,
+            [collectionKey]: references,
+          },
+        };
+      }),
+    );
+  };
+
+  const changeReferenceCalled = async (
+    interview,
+    type,
+    referenceIndex,
+    called,
+  ) => {
+    const collectionKey =
+      type === "familiar"
+        ? "personas_con_quien_vive"
+        : "historial_laboral";
+    const previousCalled = Boolean(
+      interview.formulario?.[collectionKey]?.[referenceIndex]?.llamado,
+    );
+    const key = `${interview.id}-${type}-${referenceIndex}`;
+
+    updateReferenceLocal(
+      interview.id,
+      type,
+      referenceIndex,
+      { llamado: called },
+    );
+
+    try {
+      setSavingReferenceKey(key);
+      await api.patch(
+        `/api/postulaciones/${interview.id}/referencias/${type}/${referenceIndex}/llamado`,
+        { llamado: called },
+      );
+    } catch (requestError) {
+      updateReferenceLocal(
+        interview.id,
+        type,
+        referenceIndex,
+        { llamado: previousCalled },
+      );
+      Swal.fire(
+        "Error",
+        requestError.response?.data?.message ||
+          "No se pudo guardar el estado de la llamada.",
+        "error",
+      );
+    } finally {
+      setSavingReferenceKey("");
+    }
+  };
+
+  const changeReferenceObservation = (
+    interviewId,
+    type,
+    referenceIndex,
+    observation,
+  ) => {
+    updateReferenceLocal(interviewId, type, referenceIndex, {
+      observacion: observation,
+    });
+  };
+
+  const saveReferenceObservation = async (
+    interview,
+    type,
+    referenceIndex,
+    observation,
+  ) => {
+    const key = `${interview.id}-${type}-${referenceIndex}`;
+    const normalizedObservation = observation.trim();
+
+    updateReferenceLocal(interview.id, type, referenceIndex, {
+      observacion: normalizedObservation,
+    });
+
+    try {
+      setSavingReferenceKey(key);
+      await api.patch(
+        `/api/postulaciones/${interview.id}/referencias/${type}/${referenceIndex}/llamado`,
+        { observacion: normalizedObservation },
+      );
+    } catch (requestError) {
+      refresh();
+      Swal.fire(
+        "Error",
+        requestError.response?.data?.message ||
+          "No se pudo guardar la observación de la referencia.",
+        "error",
+      );
+    } finally {
+      setSavingReferenceKey("");
+    }
+  };
+
+  const changeGeneralReferenceObservation = (interviewId, observation) => {
+    setInterviews((current) =>
+      current.map((interview) => {
+        if (interview.id !== interviewId) return interview;
+
+        const formulario = interview.formulario || {};
+        return {
+          ...interview,
+          formulario: {
+            ...formulario,
+            metadata: {
+              ...(formulario.metadata || {}),
+              observacion_referencias: observation,
+            },
+          },
+        };
+      }),
+    );
+  };
+
+  const saveGeneralReferenceObservation = async (
+    interview,
+    observation,
+  ) => {
+    const key = `${interview.id}-general`;
+    const normalizedObservation = observation.trim();
+
+    changeGeneralReferenceObservation(interview.id, normalizedObservation);
+
+    try {
+      setSavingReferenceKey(key);
+      await api.patch(
+        `/api/postulaciones/${interview.id}/referencias/observacion`,
+        { observacion: normalizedObservation },
+      );
+    } catch (requestError) {
+      refresh();
+      Swal.fire(
+        "Error",
+        requestError.response?.data?.message ||
+          "No se pudo guardar la observación general.",
+        "error",
+      );
+    } finally {
+      setSavingReferenceKey("");
+    }
+  };
+
   const changeFilters = (nextFilters) => {
     setFilters(nextFilters);
     setPage(1);
@@ -423,52 +618,63 @@ export default function Entrevistas() {
           <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-orange-600">
             Desarrollo Organizacional
           </p>
-          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">Entrevistas</h1>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">
+            {isSelectedMode ? "Seleccionados" : "Entrevistas"}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Administra y agenda las entrevistas de los postulantes.
+            {isSelectedMode
+              ? "Consulta los postulantes seleccionados después de su entrevista."
+              : "Administra y agenda las entrevistas de los postulantes."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCandidatePicker}
-          disabled={loadingCandidatePicker}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loadingCandidatePicker ? <RefreshCw className="animate-spin" size={17} /> : <Plus size={18} />}
-          Agendar entrevista
-        </button>
+        {!isSelectedMode && (
+          <button
+            type="button"
+            onClick={openCandidatePicker}
+            disabled={loadingCandidatePicker}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingCandidatePicker ? <RefreshCw className="animate-spin" size={17} /> : <Plus size={18} />}
+            Agendar entrevista
+          </button>
+        )}
       </header>
 
-      <InterviewSummaryCards summary={summary} loading={summaryLoading} />
+      {!isSelectedMode && (
+        <InterviewSummaryCards summary={summary} loading={summaryLoading} />
+      )}
 
       <section className="mt-6 overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex border-b border-slate-200 px-4 pt-2">
-          {[
-            { key: "lista", label: "Lista", icon: List },
-            { key: "calendario", label: "Calendario", icon: CalendarDays },
-          ].map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => {
-                setActiveView(key);
-                setPage(1);
-              }}
-              className={`inline-flex h-11 items-center gap-2 border-b-2 px-4 text-sm font-bold transition ${
-                activeView === key
-                  ? "border-orange-500 text-orange-600"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <Icon size={17} /> {label}
-            </button>
-          ))}
-        </div>
+        {!isSelectedMode && (
+          <div className="flex border-b border-slate-200 px-4 pt-2">
+            {[
+              { key: "lista", label: "Lista", icon: List },
+              { key: "calendario", label: "Calendario", icon: CalendarDays },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setActiveView(key);
+                  setPage(1);
+                }}
+                className={`inline-flex h-11 items-center gap-2 border-b-2 px-4 text-sm font-bold transition ${
+                  activeView === key
+                    ? "border-orange-500 text-orange-600"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Icon size={17} /> {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <InterviewFilters
           filters={filters}
           onChange={changeFilters}
           onClear={() => changeFilters(EMPTY_FILTERS)}
+          showStatus={!isSelectedMode}
         />
 
         {error && (
@@ -478,7 +684,7 @@ export default function Entrevistas() {
           </div>
         )}
 
-        {activeView === "lista" ? (
+        {activeView === "lista" || isSelectedMode ? (
           <InterviewTable
             interviews={interviews}
             loading={loading}
@@ -494,6 +700,15 @@ export default function Entrevistas() {
             onStatusChange={changeStatus}
             onReturn={returnToApplications}
             onDiscard={discardCandidate}
+            onToggleReferences={toggleReferences}
+            expandedReferencesId={expandedReferencesId}
+            savingReferenceKey={savingReferenceKey}
+            onCalledChange={changeReferenceCalled}
+            onObservationChange={changeReferenceObservation}
+            onObservationBlur={saveReferenceObservation}
+            onGeneralObservationChange={changeGeneralReferenceObservation}
+            onGeneralObservationBlur={saveGeneralReferenceObservation}
+            selectedMode={isSelectedMode}
           />
         ) : (
           <InterviewCalendar interviews={interviews} loading={loading} onView={viewInterview} />

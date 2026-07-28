@@ -31,7 +31,27 @@ const obtenerReporteSancionesVentas = async ({ fechaInicio, fechaFin, agenciaId,
     UsuarioAgencia.findAll({
       where: whereRelacion,
       include: [
-        { model: Usuario, as: "usuario", attributes: ["id", "nombre", "activo", "rolPagoId"], where: { activo: true }, include: [{ model: RolPago, as: "rolPago", attributes: ["id", "cargo"], required: false }] },
+        {
+          model: Usuario,
+          as: "usuario",
+          attributes: ["id", "nombre", "activo", "rolPagoId"],
+          where: { activo: true },
+          include: [
+            {
+              model: RolPago,
+              as: "rolPago",
+              attributes: ["id", "cargo"],
+              required: false,
+            },
+            {
+              model: RolPago,
+              as: "rolesPago",
+              attributes: ["id", "cargo"],
+              through: { attributes: [] },
+              required: false,
+            },
+          ],
+        },
         { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
         { model: NominaEmpleado, as: "nominaEmpleado", attributes: ["id", "rolPagoId", "cargo", "estado"], required: false, include: [{ model: RolPago, as: "rolPago", attributes: ["id", "cargo"], required: false }] },
       ],
@@ -56,7 +76,13 @@ const obtenerReporteSancionesVentas = async ({ fechaInicio, fechaFin, agenciaId,
     const rolPago = nomina?.rolPago || relacion.usuario?.rolPago || null;
     const rolPagoId = nomina?.rolPagoId || relacion.usuario?.rolPagoId || rolPago?.id || null;
     const cargo = rolPago?.cargo || "SIN ROL DE PAGO";
-    const config = rolPagoId ? (porRol.get(Number(rolPagoId)) || porCargo.get(normalizar(cargo))) : null;
+    const cargosPago = relacion.usuario?.rolesPago || [];
+    const tieneMultiplesCargos =
+      new Set(cargosPago.map((position) => Number(position.id))).size > 1;
+    const config =
+      rolPagoId && !tieneMultiplesCargos
+        ? porRol.get(Number(rolPagoId)) || porCargo.get(normalizar(cargo))
+        : null;
     const unidadesVendidas = unidadesPorRelacion.get(Number(relacion.id)) || 0;
     const minimoUnidades = config ? Number(config.minimoUnidades) : 0;
     const unidadesFaltantes = config ? Math.max(0, minimoUnidades - unidadesVendidas) : 0;
@@ -68,6 +94,11 @@ const obtenerReporteSancionesVentas = async ({ fechaInicio, fechaFin, agenciaId,
       agencia: relacion.agencia?.nombre || "Sin agencia",
       rolPagoId: rolPagoId || null,
       cargo,
+      cargosPago: cargosPago.map(({ id, cargo: cargoPago }) => ({
+        rolPagoId: id,
+        cargo: cargoPago,
+      })),
+      tieneMultiplesCargos,
       periodo: config?.periodo || null,
       minimoUnidades,
       unidadesVendidas,
@@ -75,7 +106,13 @@ const obtenerReporteSancionesVentas = async ({ fechaInicio, fechaFin, agenciaId,
       valorMultaUnidad,
       multaTotal,
       aplicaSancion: multaTotal > 0,
-      observacion: !rolPagoId ? "No tiene rol de pago asignado" : !config ? "No existe una sancion activa configurada para este cargo" : "",
+      observacion: tieneMultiplesCargos
+        ? "Doble cargo: no aplica multa ni sanción por meta"
+        : !rolPagoId
+          ? "No tiene rol de pago asignado"
+          : !config
+            ? "No existe una sancion activa configurada para este cargo"
+            : "",
     };
   }).sort((a, b) => a.vendedor.localeCompare(b.vendedor, "es"));
 };

@@ -15,3 +15,49 @@ test("calcula la multa solo por unidades faltantes", async () => {
   const [row] = await obtenerReporteSancionesVentas({ fechaInicio: "2026-07-01", fechaFin: "2026-07-07" });
   expect(row).toMatchObject({ unidadesVendidas: 7, unidadesFaltantes: 2, multaTotal: 14, aplicaSancion: true });
 });
+
+test("no sanciona a una persona que tiene dos cargos salariales", async () => {
+  UsuarioAgencia.findAll.mockResolvedValue([
+    {
+      id: 11,
+      usuario: {
+        id: 3,
+        nombre: "Luis",
+        rolPagoId: 5,
+        rolPago: { id: 5, cargo: "VENDEDOR CALL CENTER" },
+        rolesPago: [
+          { id: 5, cargo: "VENDEDOR CALL CENTER" },
+          { id: 16, cargo: "SUPERVISOR CALL CENTER" },
+        ],
+      },
+      agencia: { nombre: "Matriz" },
+      nominaEmpleado: null,
+    },
+  ]);
+  SancionConfiguracion.findAll.mockResolvedValue([
+    {
+      rolPagoId: 5,
+      cargoReferencia: "VENDEDOR CALL CENTER",
+      periodo: "SEMANAL",
+      minimoUnidades: 9,
+      valorMultaUnidad: 7,
+    },
+  ]);
+  auditoria.obtenerReporteGerencia.mockResolvedValue([
+    { usuarioAgencia: { id: 11 }, detalleVenta: [{}, {}] },
+  ]);
+  auditoria.formatearReporte.mockReturnValue(new Array(2).fill({}));
+
+  const [row] = await obtenerReporteSancionesVentas({
+    fechaInicio: "2026-07-01",
+    fechaFin: "2026-07-07",
+  });
+
+  expect(row).toMatchObject({
+    tieneMultiplesCargos: true,
+    unidadesFaltantes: 0,
+    multaTotal: 0,
+    aplicaSancion: false,
+    observacion: "Doble cargo: no aplica multa ni sanción por meta",
+  });
+});

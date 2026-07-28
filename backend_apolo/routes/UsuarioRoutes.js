@@ -165,27 +165,24 @@ router.post("/", async (req, res) => {
         isolationLevel: Transaction.ISOLATION_LEVELS.SERIALIZABLE,
       },
       async (transaction) => {
-        const [
-          usuarioConCedula,
-          usuarioConEmail,
-          usuarioConNombre,
-          existeRol,
-          existeAgencia,
-        ] = await Promise.all([
-          Usuario.findOne({
-            where: buildCedulaWhere(cedulaNormalizada),
-            transaction,
-          }),
-          Usuario.findOne({
-            where: buildEmailWhere(emailNormalizado),
-            transaction,
-          }),
-          usuarioSolicitado
-            ? findUsuarioByUsername(usuarioSolicitado, transaction)
-            : Promise.resolve(null),
-          Rol.findByPk(rolId, { transaction }),
-          Agencia.findByPk(agenciaId, { transaction }),
-        ]);
+        // Una transacción de Sequelize usa una sola conexión de PostgreSQL.
+        // Estas consultas deben ejecutarse en secuencia para no encolarlas
+        // simultáneamente sobre el mismo cliente de pg.
+        const usuarioConCedula = await Usuario.findOne({
+          where: buildCedulaWhere(cedulaNormalizada),
+          transaction,
+        });
+        const usuarioConEmail = await Usuario.findOne({
+          where: buildEmailWhere(emailNormalizado),
+          transaction,
+        });
+        const usuarioConNombre = usuarioSolicitado
+          ? await findUsuarioByUsername(usuarioSolicitado, transaction)
+          : null;
+        const existeRol = await Rol.findByPk(rolId, { transaction });
+        const existeAgencia = await Agencia.findByPk(agenciaId, {
+          transaction,
+        });
 
         if (usuarioConCedula) {
           throw httpError(

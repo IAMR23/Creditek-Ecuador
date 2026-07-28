@@ -10,6 +10,7 @@ const interviewStatusLabels = {
   REALIZADA: "Realizada",
   NO_ASISTIO: "No asistió",
   CANCELADA: "Cancelada",
+  SELECCIONADO: "Seleccionado",
 };
 
 const labels = {

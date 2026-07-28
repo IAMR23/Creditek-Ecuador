@@ -49,6 +49,21 @@ const normalizarObservacion = (observacion) => {
 
 const validarFechaISO = (fecha) => /^\d{4}-\d{2}-\d{2}$/.test(String(fecha));
 
+const obtenerConflictoFechaIngreso = (usuarios, fecha) =>
+  usuarios.find(
+    (usuario) => usuario?.fechaIngreso && fecha < String(usuario.fechaIngreso),
+  );
+
+const respuestaFechaAnteriorIngreso = (res, usuario) =>
+  res.status(400).json({
+    code: "FECHA_ANTERIOR_INGRESO",
+    message: `No se pueden registrar movimientos anteriores a la fecha de ingreso de ${
+      usuario.nombre || "este usuario"
+    } (${usuario.fechaIngreso}).`,
+    fechaIngreso: usuario.fechaIngreso,
+    usuarioId: usuario.id,
+  });
+
 const obtenerUsuarioAgenciaIds = async (usuarioId, transaction = null) => {
   const relaciones = await UsuarioAgencia.findAll({
     where: { usuarioId },
@@ -232,7 +247,7 @@ router.get("/agencias", async (req, res) => {
         {
           model: Usuario,
           as: "usuario",
-          attributes: ["id", "nombre", "fechaSalida"],
+          attributes: ["id", "nombre", "fechaIngreso", "fechaSalida"],
         },
         { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
       ],
@@ -306,6 +321,7 @@ router.get("/agencias", async (req, res) => {
         nombre: ua.usuario?.nombre || "",
         apellido: "",
         cargo: "",
+        fechaIngreso: ua.usuario?.fechaIngreso || null,
         asistencias: asistenciasPorUsuario.get(ua.usuarioId) || {},
       });
     }
@@ -355,6 +371,20 @@ router.post("/", async (req, res) => {
       return res
         .status(400)
         .json({ message: "El usuarioAgenciaId no pertenece a la agenciaId enviada." });
+    }
+
+    if (estadoNormalizado || observacionNormalizada) {
+      const usuario = await Usuario.findByPk(ua.usuarioId, {
+        attributes: ["id", "nombre", "fechaIngreso"],
+      });
+      const conflictoFechaIngreso = obtenerConflictoFechaIngreso(
+        usuario ? [usuario] : [],
+        fecha,
+      );
+
+      if (conflictoFechaIngreso) {
+        return respuestaFechaAnteriorIngreso(res, conflictoFechaIngreso);
+      }
     }
 
     let record = null;
@@ -486,9 +516,25 @@ router.post("/masivo", async (req, res) => {
       });
     }
 
+    const usuarioIds = [...new Set(usuarioAgencias.map((ua) => ua.usuarioId))];
+
+    if (estadoNormalizado || observacionNormalizada) {
+      const usuarios = await Usuario.findAll({
+        where: { id: { [Op.in]: usuarioIds } },
+        attributes: ["id", "nombre", "fechaIngreso"],
+      });
+      const conflictoFechaIngreso = obtenerConflictoFechaIngreso(
+        usuarios,
+        fechaInicio,
+      );
+
+      if (conflictoFechaIngreso) {
+        return respuestaFechaAnteriorIngreso(res, conflictoFechaIngreso);
+      }
+    }
+
     const fechas = obtenerFechasEnRango(fechaInicio, fechaFin);
     const idsValidos = usuarioAgencias.map((ua) => ua.id);
-    const usuarioIds = [...new Set(usuarioAgencias.map((ua) => ua.usuarioId))];
     const cambiosRve = [];
     let asistenciasEliminadas = false;
 

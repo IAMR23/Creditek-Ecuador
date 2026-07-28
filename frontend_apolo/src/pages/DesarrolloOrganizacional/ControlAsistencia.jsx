@@ -110,6 +110,9 @@ const formatearFecha = (fecha) => {
   })
 }
 
+const esFechaAnteriorIngreso = (fecha, fechaIngreso) =>
+  Boolean(fechaIngreso && fecha < fechaIngreso)
+
 const escapeHtml = (value = "") =>
   value
     .replaceAll("&", "&amp;")
@@ -227,6 +230,28 @@ export default function ControlAsistencia() {
 
     if (!fechaMin || !fechaMax || !usuarios.length) return
 
+    const fechaIngresoMaxima = usuarios.reduce(
+      (maxima, usuario) =>
+        usuario.fechaIngreso && usuario.fechaIngreso > maxima
+          ? usuario.fechaIngreso
+          : maxima,
+      ""
+    )
+    const fechaMinPermitida =
+      fechaIngresoMaxima && fechaIngresoMaxima > fechaMin
+        ? fechaIngresoMaxima
+        : fechaMin
+
+    if (fechaMinPermitida > fechaMax) {
+      await Swal.fire({
+        icon: "info",
+        title: "Sin fechas disponibles",
+        text: "Los usuarios visibles todavía no habían ingresado durante el mes seleccionado.",
+        confirmButtonColor: "#16a34a",
+      })
+      return
+    }
+
     const modalId = `observacion-masiva-${agenciaActual.id}`
 
     const { isConfirmed, value } = await Swal.fire({
@@ -250,13 +275,13 @@ export default function ControlAsistencia() {
               <label for="swal-fecha-inicio" class="mb-1 block text-sm font-medium text-slate-700">
                 Desde
               </label>
-              <input id="swal-fecha-inicio" type="date" class="swal2-input !grid !w-full !m-0" min="${fechaMin}" max="${fechaMax}" value="${fechaMin}" />
+              <input id="swal-fecha-inicio" type="date" class="swal2-input !grid !w-full !m-0" min="${fechaMinPermitida}" max="${fechaMax}" value="${fechaMinPermitida}" />
             </div>
             <div>
               <label for="swal-fecha-fin" class="mb-1 block text-sm font-medium text-slate-700">
                 Hasta
               </label>
-              <input id="swal-fecha-fin" type="date" class="swal2-input !grid !w-full !m-0" min="${fechaMin}" max="${fechaMax}" value="${fechaMax}" />
+              <input id="swal-fecha-fin" type="date" class="swal2-input !grid !w-full !m-0" min="${fechaMinPermitida}" max="${fechaMax}" value="${fechaMax}" />
             </div>
           </div>
           <div>
@@ -291,6 +316,13 @@ export default function ControlAsistencia() {
 
         if (fechaInicio > fechaFin) {
           Swal.showValidationMessage("La fecha inicial no puede ser mayor que la final.")
+          return false
+        }
+
+        if (fechaInicio < fechaMinPermitida) {
+          Swal.showValidationMessage(
+            "El rango no puede comenzar antes de la fecha de ingreso de los usuarios visibles."
+          )
           return false
         }
 
@@ -348,8 +380,24 @@ export default function ControlAsistencia() {
     estadoActual,
     observacionActual,
     usuarioNombre,
+    fechaIngreso,
   }) => {
     const modalId = `observacion-${usuarioAgenciaId}-${fecha}`
+    const fechaAnteriorIngreso = esFechaAnteriorIngreso(fecha, fechaIngreso)
+    const tieneRegistroActual =
+      estadoActual !== "libre" || Boolean(observacionActual?.trim())
+
+    if (fechaAnteriorIngreso && !tieneRegistroActual) {
+      await Swal.fire({
+        icon: "info",
+        title: "Fecha no disponible",
+        text: `${usuarioNombre} ingresó el ${formatearFecha(
+          fechaIngreso
+        )}. No se pueden llenar días anteriores.`,
+        confirmButtonColor: "#16a34a",
+      })
+      return
+    }
 
     const { isConfirmed, value } = await Swal.fire({
       title: "Registrar asistencia",
@@ -396,11 +444,20 @@ export default function ControlAsistencia() {
       preConfirm: () => {
         const estadoInput = document.getElementById("swal-estado")
         const observacionInput = document.getElementById(modalId)
+        const estado = estadoInput?.value || "libre"
+        const observacion = observacionInput?.value || ""
 
-        return {
-          estado: estadoInput?.value || "libre",
-          observacion: observacionInput?.value || "",
+        if (
+          fechaAnteriorIngreso &&
+          (estado !== "libre" || observacion.trim())
+        ) {
+          Swal.showValidationMessage(
+            `Solo puedes limpiar este registro; la fecha de ingreso es ${fechaIngreso}.`
+          )
+          return false
         }
+
+        return { estado, observacion }
       },
       showCancelButton: true,
       confirmButtonText: "Guardar",
@@ -574,36 +631,58 @@ export default function ControlAsistencia() {
                             const tieneObservacion = Boolean(
                               registro.observacion?.trim()
                             )
+                            const tieneRegistro =
+                              estado !== "libre" || tieneObservacion
+                            const fechaAnteriorIngreso =
+                              esFechaAnteriorIngreso(
+                                item.fecha,
+                                usuario.fechaIngreso
+                              )
+                            const bloqueadoPorFechaIngreso =
+                              fechaAnteriorIngreso && !tieneRegistro
                             const esInicioSemana = esInicioSemanaOperativa(
                               item.fecha
                             )
                             const esCierreSemana = esCierreSemanaOperativa(
                               item.fecha
                             )
-                            const titulo = tieneObservacion
-                              ? `${ESTADOS[estado]?.nombre || "Libre"}\nObservacion: ${
-                                  registro.observacion
-                                }`
-                              : ESTADOS[estado]?.nombre
+                            const titulo = bloqueadoPorFechaIngreso
+                              ? `No disponible. Fecha de ingreso: ${usuario.fechaIngreso}`
+                              : tieneObservacion
+                                ? `${ESTADOS[estado]?.nombre || "Libre"}\nObservacion: ${
+                                    registro.observacion
+                                  }`
+                                : ESTADOS[estado]?.nombre
 
                             return (
                               <td
                                 key={`${usuario.usuarioAgenciaId}-${item.fecha}`}
-                                onClick={() =>
-                                  handleCambiarEstado({
-                                    agenciaId: agencia.id,
-                                    usuarioAgenciaId:
-                                      usuario.usuarioAgenciaId,
-                                    fecha: item.fecha,
-                                    estadoActual: estado,
-                                    observacionActual: registro.observacion,
-                                    usuarioNombre: nombreCompleto,
-                                  })
+                                onClick={
+                                  bloqueadoPorFechaIngreso
+                                    ? undefined
+                                    : () =>
+                                        handleCambiarEstado({
+                                          agenciaId: agencia.id,
+                                          usuarioAgenciaId:
+                                            usuario.usuarioAgenciaId,
+                                          fecha: item.fecha,
+                                          estadoActual: estado,
+                                          observacionActual:
+                                            registro.observacion,
+                                          usuarioNombre: nombreCompleto,
+                                          fechaIngreso:
+                                            usuario.fechaIngreso,
+                                        })
                                 }
+                                aria-disabled={bloqueadoPorFechaIngreso}
                                 title={titulo}
-                                className={`relative h-6 min-w-[34px] cursor-pointer border border-black text-center font-bold ${
-                                  ESTADOS[estado]?.className ||
-                                  "bg-green-400 text-black"
+                                className={`relative h-6 min-w-[34px] border border-black text-center font-bold ${
+                                  bloqueadoPorFechaIngreso
+                                    ? "cursor-not-allowed bg-slate-200 text-slate-400"
+                                    : `cursor-pointer ${
+                                        ESTADOS[estado]?.className ||
+                                        "bg-green-400 text-black"
+                                      }`
                                 } ${
                                   item.fecha === todayDate
                                     ? "ring-2 ring-inset ring-orange-500"
@@ -653,6 +732,13 @@ export default function ControlAsistencia() {
               <span className="absolute right-0 top-0 h-0 w-0 border-l-[10px] border-l-transparent border-t-[10px] border-t-red-600" />
             </span>
             <span>Observacion registrada</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-5 w-7 items-center justify-center border bg-slate-200 text-slate-400">
+              -
+            </span>
+            <span>Anterior a la fecha de ingreso</span>
           </div>
         </div>
       </div>

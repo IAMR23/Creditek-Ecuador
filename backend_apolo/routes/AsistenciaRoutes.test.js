@@ -16,6 +16,8 @@ const asistenciaRoutes = require("./AsistenciaRoutes");
 const usuario = {
   id: 5,
   cedula: "0102030405",
+  nombre: "Postulante de prueba",
+  fechaIngreso: "2026-07-20",
   fechaSalida: null,
   save: async () => {},
 };
@@ -53,12 +55,13 @@ const postJson = async (ruta, body) => {
 
 beforeEach(() => {
   usuario.fechaSalida = null;
+  usuario.fechaIngreso = "2026-07-20";
   usuario.save = async () => {};
   sincronizacionImpl = async () => ({ ok: true, sincronizado: true });
 
   sequelize.transaction = async (callback) => callback({ id: "transaction" });
   Usuario.findByPk = async () => usuario;
-  Usuario.findAll = async () => [];
+  Usuario.findAll = async () => [usuario];
   UsuarioAgencia.findByPk = async () => ({
     id: 10,
     usuarioId: 5,
@@ -104,6 +107,27 @@ test("la salida individual actualiza ABS y sincroniza por cedula", async () => {
   ]);
 });
 
+test("rechaza un movimiento individual anterior a la fecha de ingreso", async () => {
+  let guardados = 0;
+  Asistencia.upsert = async (values) => {
+    guardados += 1;
+    return [values, true];
+  };
+
+  const response = await postJson("", {
+    agenciaId: 2,
+    usuarioAgenciaId: 10,
+    fecha: "2026-07-19",
+    estado: "asistencia",
+    observacion: "",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, "FECHA_ANTERIOR_INGRESO");
+  assert.equal(response.body.fechaIngreso, "2026-07-20");
+  assert.equal(guardados, 0);
+});
+
 test("la salida masiva usa fechaInicio como fechaSalida", async () => {
   const sincronizaciones = [];
   const asistenciasGuardadas = [];
@@ -129,6 +153,28 @@ test("la salida masiva usa fechaInicio como fechaSalida", async () => {
   assert.equal(asistenciasGuardadas.length, 2);
   assert.equal(usuario.fechaSalida, "2026-07-24");
   assert.equal(sincronizaciones[0].fechaSalida, "2026-07-24");
+});
+
+test("rechaza una carga masiva que inicia antes de la fecha de ingreso", async () => {
+  let guardados = 0;
+  Asistencia.upsert = async (values) => {
+    guardados += 1;
+    return [values, true];
+  };
+
+  const response = await postJson("/masivo", {
+    agenciaId: 2,
+    usuarioAgenciaIds: [10],
+    fechaInicio: "2026-07-19",
+    fechaFin: "2026-07-21",
+    estado: "asistencia",
+    observacion: "",
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, "FECHA_ANTERIOR_INGRESO");
+  assert.equal(response.body.usuarioId, 5);
+  assert.equal(guardados, 0);
 });
 
 test("al remover la unica salida limpia y sincroniza fechaSalida", async () => {
