@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import L from "leaflet";
 import {
   CircleMarker,
@@ -21,7 +20,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { API_URL } from "../../../config";
+import { api } from "../../api/client";
 
 const getHoyLocal = () => new Date().toLocaleDateString("en-CA");
 
@@ -42,6 +41,7 @@ const DEFAULT_FILTROS = {
 };
 
 const numberFormatter = new Intl.NumberFormat("es-EC");
+const NORMALIZACION_POLL_MS = 2500;
 
 const normalizarTexto = (value) =>
   String(value || "")
@@ -115,10 +115,12 @@ function HeatLayer({ points }) {
 }
 
 export default function MapaComercial() {
-  const [filtros, setFiltros] = useState(DEFAULT_FILTROS);
+  const [filtrosDraft, setFiltrosDraft] = useState(() => ({ ...DEFAULT_FILTROS }));
+  const [filtrosAplicados, setFiltrosAplicados] = useState(() => ({ ...DEFAULT_FILTROS }));
   const [data, setData] = useState(null);
   const [puntosVenta, setPuntosVenta] = useState([]);
   const [pendientesUbicacion, setPendientesUbicacion] = useState([]);
+  const [totalPendientesUbicacion, setTotalPendientesUbicacion] = useState(0);
   const [ubicacionManual, setUbicacionManual] = useState(null);
   const [zonaMapaSeleccionada, setZonaMapaSeleccionada] = useState(null);
   const [vistaMapa, setVistaMapa] = useState("puntos");
@@ -131,14 +133,21 @@ export default function MapaComercial() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [normalizando, setNormalizando] = useState(false);
+  const [seguimientoNormalizacion, setSeguimientoNormalizacion] = useState(false);
+  const [estadoNormalizacion, setEstadoNormalizacion] = useState({
+    pendientes: 0,
+    procesando: 0,
+    activo: false,
+  });
+  const [mensajeNormalizacion, setMensajeNormalizacion] = useState("");
 
   const params = useMemo(() => {
     const search = new URLSearchParams();
-    Object.entries(filtros).forEach(([key, value]) => {
+    Object.entries(filtrosAplicados).forEach(([key, value]) => {
       if (value) search.append(key, value);
     });
     return search;
-  }, [filtros]);
+  }, [filtrosAplicados]);
 
   const puntosMapa = useMemo(() => {
     if (!zonaMapaSeleccionada) return puntosVenta;
@@ -172,19 +181,32 @@ export default function MapaComercial() {
     ? [Number(puntosMapa[0].latitud), Number(puntosMapa[0].longitud)]
     : [-1.8312, -78.1834];
 
-  const cargarCatalogos = async () => {
+  const cargarCatalogos = useCallback(async () => {
     try {
-      const { data: response } = await axios.get(
-        `${API_URL}/api/sistemas/mapa-comercial/filtros`,
-      );
+      const { data: response } = await api.get("/api/sistemas/mapa-comercial/filtros");
       if (response.ok) setCatalogos(response.filtros);
     } catch (error) {
       console.error("Error cargando filtros mapa comercial:", error);
     }
-  };
+  }, []);
 
-  const cargarMapa = async () => {
-    if (filtros.fechaInicio && filtros.fechaFin && filtros.fechaInicio > filtros.fechaFin) {
+  const consultarEstadoNormalizacion = useCallback(async () => {
+    const { data: response } = await api.get(
+      "/api/sistemas/mapa-comercial/normalizacion-estado",
+    );
+    return response.normalizacion || {
+      pendientes: 0,
+      procesando: 0,
+      activo: false,
+    };
+  }, []);
+
+  const cargarMapa = useCallback(async () => {
+    if (
+      filtrosAplicados.fechaInicio &&
+      filtrosAplicados.fechaFin &&
+      filtrosAplicados.fechaInicio > filtrosAplicados.fechaFin
+    ) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       return;
     }
@@ -193,29 +215,41 @@ export default function MapaComercial() {
     setError("");
 
     try {
-      const [dashboardResponse, puntosResponse] = await Promise.all([
-        axios.get(`${API_URL}/api/sistemas/mapa-comercial?${params.toString()}`),
-        axios.get(`${API_URL}/api/sistemas/mapa-comercial/puntos?${params.toString()}`),
+      await Promise.all([
+        api
+          .get(`/api/sistemas/mapa-comercial?${params.toString()}`)
+          .then(({ data: response }) => {
+            if (!response.ok) {
+              throw new Error("No se pudo cargar el mapa comercial");
+            }
+            setData(response);
+          }),
+        api
+          .get(`/api/sistemas/mapa-comercial/puntos?${params.toString()}`)
+          .then(({ data: response }) => {
+            setPuntosVenta(
+              Array.isArray(response)
+                ? response
+                : response?.puntos || [],
+            );
+          }),
+        api
+          .get(
+            `/api/sistemas/mapa-comercial/ubicaciones-pendientes?${params.toString()}`,
+          )
+          .then(({ data: response }) => {
+            setPendientesUbicacion(
+              (response?.pendientes || []).filter((item) => item.entidadId),
+            );
+            setTotalPendientesUbicacion(
+              Number(
+                response?.totalPendientes ??
+                response?.pendientes?.length ??
+                0,
+              ),
+            );
+          }),
       ]);
-      const pendientesResponse = await axios.get(
-        `${API_URL}/api/sistemas/mapa-comercial/ubicaciones-pendientes?${params.toString()}`,
-      );
-      const response = dashboardResponse.data;
-
-      if (!response.ok) {
-        setError("No se pudo cargar el mapa comercial");
-        return;
-      }
-
-      setData(response);
-      setPuntosVenta(
-        Array.isArray(puntosResponse.data)
-          ? puntosResponse.data
-          : puntosResponse.data?.puntos || [],
-      );
-      setPendientesUbicacion(
-        (pendientesResponse.data?.pendientes || []).filter((item) => item.id && item.entidadId),
-      );
       setUbicacionManual(null);
     } catch (error) {
       console.error("Error cargando mapa comercial:", error);
@@ -223,19 +257,89 @@ export default function MapaComercial() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtrosAplicados, params]);
 
   useEffect(() => {
     cargarCatalogos();
-  }, []);
+  }, [cargarCatalogos]);
 
   useEffect(() => {
     cargarMapa();
-  }, [params]);
+  }, [cargarMapa]);
 
-  const actualizarFiltro = (key, value) => {
+  useEffect(() => {
+    let cancelado = false;
+
+    consultarEstadoNormalizacion()
+      .then((estado) => {
+        if (cancelado) return;
+        setEstadoNormalizacion(estado);
+        if (estado.activo) setSeguimientoNormalizacion(true);
+      })
+      .catch((error) => {
+        console.error("Error consultando estado de normalizacion:", error);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [consultarEstadoNormalizacion]);
+
+  useEffect(() => {
+    if (!seguimientoNormalizacion) return undefined;
+
+    let cancelado = false;
+    let consultaEnCurso = false;
+
+    const revisarEstado = async () => {
+      if (consultaEnCurso) return;
+      consultaEnCurso = true;
+
+      try {
+        const estado = await consultarEstadoNormalizacion();
+        if (cancelado) return;
+
+        setEstadoNormalizacion(estado);
+        if (!estado.activo) {
+          setSeguimientoNormalizacion(false);
+          setMensajeNormalizacion("Normalizacion finalizada. El mapa ya fue actualizado.");
+          await cargarMapa();
+        }
+      } catch (error) {
+        console.error("Error siguiendo normalizacion del mapa:", error);
+      } finally {
+        consultaEnCurso = false;
+      }
+    };
+
+    void revisarEstado();
+    const intervalId = setInterval(revisarEstado, NORMALIZACION_POLL_MS);
+
+    return () => {
+      cancelado = true;
+      clearInterval(intervalId);
+    };
+  }, [cargarMapa, consultarEstadoNormalizacion, seguimientoNormalizacion]);
+
+  const actualizarFiltroDraft = (key, value) => {
+    setFiltrosDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const aplicarFiltros = (event) => {
+    event.preventDefault();
+
+    if (
+      filtrosDraft.fechaInicio &&
+      filtrosDraft.fechaFin &&
+      filtrosDraft.fechaInicio > filtrosDraft.fechaFin
+    ) {
+      setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+      return;
+    }
+
+    setError("");
     setZonaMapaSeleccionada(null);
-    setFiltros((prev) => ({ ...prev, [key]: value }));
+    setFiltrosAplicados({ ...filtrosDraft });
   };
 
   const seleccionarZonaMapa = (row) => {
@@ -250,10 +354,11 @@ export default function MapaComercial() {
   const normalizarPendientes = async () => {
     setNormalizando(true);
     setError("");
+    setMensajeNormalizacion("");
 
     try {
-      const { data: response } = await axios.post(
-        `${API_URL}/api/sistemas/mapa-comercial/normalizar`,
+      const { data: response } = await api.post(
+        "/api/sistemas/mapa-comercial/normalizar",
         { limit: 100 },
       );
 
@@ -262,7 +367,18 @@ export default function MapaComercial() {
         return;
       }
 
-      await cargarMapa();
+      const encolados = Number(response.resumen?.encolados || 0);
+      const yaEnCola = Number(response.resumen?.yaEnCola || 0);
+
+      if (encolados || yaEnCola) {
+        setMensajeNormalizacion(
+          `${numberFormatter.format(encolados)} ubicaciones encoladas. El mapa permanece disponible mientras se procesan.`,
+        );
+        setSeguimientoNormalizacion(true);
+      } else {
+        setMensajeNormalizacion(response.message || "No hay ubicaciones nuevas para normalizar.");
+        await cargarMapa();
+      }
     } catch (error) {
       console.error("Error normalizando ubicaciones:", error);
       setError(error.response?.data?.message || "No se pudieron normalizar las ubicaciones");
@@ -275,8 +391,8 @@ export default function MapaComercial() {
     if (!ubicacionManual) return;
 
     try {
-      await axios.patch(
-        `${API_URL}/api/sistemas/mapa-comercial/ubicaciones/${ubicacionManual.id}`,
+      await api.patch(
+        `/api/sistemas/mapa-comercial/ubicaciones/${ubicacionManual.id}`,
         {
           latitud: lat,
           longitud: lng,
@@ -306,11 +422,18 @@ export default function MapaComercial() {
           <button
             type="button"
             onClick={normalizarPendientes}
-            disabled={normalizando}
+            disabled={normalizando || seguimientoNormalizacion}
             className="inline-flex items-center justify-center gap-2 rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
           >
             <MapPin size={16} />
-            {normalizando ? "Normalizando..." : "Normalizar pendientes"}
+            {normalizando
+              ? "Encolando..."
+              : seguimientoNormalizacion
+                ? `Normalizando en segundo plano (${numberFormatter.format(
+                    Number(estadoNormalizacion.pendientes || 0) +
+                    Number(estadoNormalizacion.procesando || 0),
+                  )})`
+                : "Normalizar pendientes"}
           </button>
           <button
             type="button"
@@ -323,21 +446,24 @@ export default function MapaComercial() {
         </div>
       </header>
 
-      <section className="mb-5 grid grid-cols-1 gap-3 rounded border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3 xl:grid-cols-7">
-        <FilterDate label="Fecha Inicio" value={filtros.fechaInicio} onChange={(value) => actualizarFiltro("fechaInicio", value)} />
-        <FilterDate label="Fecha Fin" value={filtros.fechaFin} onChange={(value) => actualizarFiltro("fechaFin", value)} />
-        <FilterSelect label="Agencia" value={filtros.agenciaId} onChange={(value) => actualizarFiltro("agenciaId", value)} options={catalogos.agencias} emptyLabel="Todas" />
-        <FilterSelect label="Marca" value={filtros.marcaId} onChange={(value) => actualizarFiltro("marcaId", value)} options={catalogos.marcas} emptyLabel="Todas" />
+      <form
+        onSubmit={aplicarFiltros}
+        className="mb-5 grid grid-cols-1 gap-3 rounded border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3 xl:grid-cols-8"
+      >
+        <FilterDate label="Fecha Inicio" value={filtrosDraft.fechaInicio} onChange={(value) => actualizarFiltroDraft("fechaInicio", value)} />
+        <FilterDate label="Fecha Fin" value={filtrosDraft.fechaFin} onChange={(value) => actualizarFiltroDraft("fechaFin", value)} />
+        <FilterSelect label="Agencia" value={filtrosDraft.agenciaId} onChange={(value) => actualizarFiltroDraft("agenciaId", value)} options={catalogos.agencias} emptyLabel="Todas" />
+        <FilterSelect label="Marca" value={filtrosDraft.marcaId} onChange={(value) => actualizarFiltroDraft("marcaId", value)} options={catalogos.marcas} emptyLabel="Todas" />
         <FilterSelect
           label="Modelo"
-          value={filtros.modeloId}
-          onChange={(value) => actualizarFiltro("modeloId", value)}
+          value={filtrosDraft.modeloId}
+          onChange={(value) => actualizarFiltroDraft("modeloId", value)}
           options={catalogos.modelos.filter(
-            (modelo) => !filtros.marcaId || String(modelo.marcaId) === String(filtros.marcaId),
+            (modelo) => !filtrosDraft.marcaId || String(modelo.marcaId) === String(filtrosDraft.marcaId),
           )}
           emptyLabel="Todos"
         />
-        <FilterSelect label="Zona" value={filtros.zona} onChange={(value) => actualizarFiltro("zona", value)} options={catalogos.zonas.map((zona) => ({ id: zona.nombre, nombre: zona.nombre }))} emptyLabel="Todas" />
+        <FilterSelect label="Zona" value={filtrosDraft.zona} onChange={(value) => actualizarFiltroDraft("zona", value)} options={catalogos.zonas.map((zona) => ({ id: zona.nombre, nombre: zona.nombre }))} emptyLabel="Todas" />
         <label className="block">
           <span className="mb-1 block text-xs font-bold uppercase text-slate-500">
             Busqueda zona
@@ -345,19 +471,38 @@ export default function MapaComercial() {
           <div className="relative">
             <Search size={15} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              value={filtros.zona}
-              onChange={(event) => actualizarFiltro("zona", event.target.value)}
+              value={filtrosDraft.zona}
+              onChange={(event) => actualizarFiltroDraft("zona", event.target.value)}
               className="h-10 w-full rounded border border-slate-300 bg-white pl-8 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               placeholder="Sector"
             />
           </div>
         </label>
-      </section>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            <Search size={16} />
+            Aplicar
+          </button>
+        </div>
+      </form>
 
       {error && (
         <div className="mb-5 flex items-center gap-2 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
           <AlertTriangle size={17} />
           {error}
+        </div>
+      )}
+
+      {mensajeNormalizacion && (
+        <div className="mb-5 flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+          <RefreshCw
+            size={17}
+            className={seguimientoNormalizacion ? "animate-spin" : ""}
+          />
+          {mensajeNormalizacion}
         </div>
       )}
 
@@ -479,36 +624,54 @@ export default function MapaComercial() {
           )}
         </div>
         <p className="text-sm text-slate-600">
-          {numberFormatter.format(pendientesUbicacion.length)} registros requieren normalizacion de detalle_entregas.ubicacion.
+          {numberFormatter.format(totalPendientesUbicacion)} registros requieren normalizacion de detalle_entregas.ubicacion.
         </p>
         <div className="mt-3 max-h-72 overflow-auto rounded border border-slate-200">
           {pendientesUbicacion.length ? (
-            pendientesUbicacion.slice(0, 50).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setUbicacionManual(item);
-                  setVistaMapa("puntos");
-                }}
-                className={`flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-amber-50 ${
-                  ubicacionManual?.id === item.id ? "bg-amber-50 text-amber-800" : ""
-                }`}
-              >
-                <span className="min-w-0">
-                  <strong className="block truncate">
-                    {item.ubicacionOriginal || `Venta ${item.entidadId}`}
-                  </strong>
-                  <span className="text-xs text-slate-500">
-                    {item.tipoUbicacion || "-"} · {item.estadoGeocodificacion || "-"}
+            pendientesUbicacion.slice(0, 50).map((item) => {
+              const enProceso = ["pendiente", "procesando"].includes(
+                normalizarTexto(item.estadoGeocodificacion),
+              );
+              const puedeCorregir = Boolean(item.id) && !enProceso;
+
+              return (
+                <button
+                  key={item.id || `pendiente-${item.entidadId}`}
+                  type="button"
+                  disabled={!puedeCorregir}
+                  onClick={() => {
+                    if (!puedeCorregir) return;
+                    setUbicacionManual(item);
+                    setVistaMapa("puntos");
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm enabled:hover:bg-amber-50 disabled:cursor-default disabled:bg-slate-50 ${
+                    ubicacionManual?.id === item.id ? "bg-amber-50 text-amber-800" : ""
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <strong className="block truncate">
+                      {item.ubicacionOriginal || `Venta ${item.entidadId}`}
+                    </strong>
+                    <span className="text-xs text-slate-500">
+                      {item.sinRegistroNormalizado
+                        ? "sin registro normalizado"
+                        : item.tipoUbicacion || "-"}{" "}
+                      · {item.estadoGeocodificacion || "-"}
+                    </span>
                   </span>
-                </span>
-                <span className="shrink-0 text-xs font-bold uppercase">Corregir</span>
-              </button>
-            ))
+                  <span className="shrink-0 text-xs font-bold uppercase">
+                    {puedeCorregir
+                      ? "Corregir"
+                      : enProceso
+                        ? "En proceso"
+                        : "Sin normalizar"}
+                  </span>
+                </button>
+              );
+            })
           ) : (
             <p className="px-3 py-3 text-sm text-slate-500">
-              No hay ubicaciones ambiguas o con error para corregir manualmente.
+              No hay ubicaciones pendientes para normalizar o corregir.
             </p>
           )}
         </div>

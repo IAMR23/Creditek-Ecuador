@@ -1,5 +1,4 @@
 const { Op, col, fn, where: sequelizeWhere } = require("sequelize");
-const axios = require("axios");
 const Agencia = require("../../models/Agencia");
 const DetalleVenta = require("../../models/DetalleVenta");
 const Dispositivo = require("../../models/Dispositivo");
@@ -14,14 +13,18 @@ const Venta = require("../../models/Venta");
 const MapaComercialZona = require("../../models/MapaComercialZona");
 const MapaUbicacionNormalizada = require("../../models/MapaUbicacionNormalizada");
 const {
+  calcularUbicacionesPendientesSinProcesar,
   construirMapaComercial,
   clasificarUbicacionPermitida,
-  extraerCoordenadasGooglePermitidas,
-  extraerCoordenadasGoogleRedireccion,
   getRankingDispositivos,
   getRankingZonas,
   normalizarTexto,
 } = require("../../services/mapaComercialService");
+const {
+  encolarVentasParaNormalizar,
+  obtenerEstadoNormalizacion,
+  procesarColaNormalizaciones,
+} = require("../../services/mapaComercialNormalizacionService");
 
 const parseIds = (value) => {
   if (!value || value === "todos") return null;
@@ -33,8 +36,6 @@ const parseIds = (value) => {
 };
 
 const validarFecha = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
-
-const ESTADOS_PENDIENTES_UBICACION = ["pendiente", "AMBIGUO", "ambigua", "error", "omitido"];
 
 const getFechaVenta = (fecha) => {
   if (!fecha) return "";
@@ -336,189 +337,6 @@ const agruparPorVenta = (ventas = []) => {
   }));
 };
 
-const resolverEnlaceCorto = async (url) => {
-  const extraerContinueCaptcha = (html) => {
-    const match = String(html || "").match(/name=['"]continue['"]\s+value=['"]([^'"]+)['"]/i);
-    if (!match) return null;
-
-    return match[1]
-      .replace(/&amp;/g, "&")
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"');
-  };
-
-  const response = await axios.get(url, {
-    maxRedirects: 8,
-    timeout: 12000,
-    validateStatus: (status) => (status >= 200 && status < 400) || status === 429,
-  });
-
-  if (response.status === 429) {
-    const continueUrl = extraerContinueCaptcha(response.data);
-    if (continueUrl) return continueUrl;
-
-    throw new Error("Google bloqueo la resolucion del enlace corto con CAPTCHA");
-  }
-
-  return (
-    response.request?.res?.responseUrl ||
-    response.request?._redirectable?._currentUrl ||
-    response.config?.url ||
-    url
-  );
-};
-
-const normalizarVenta = async (venta) => {
-  const ubicacionOriginal = String(venta.ubicacionOriginal || "").trim();
-  const tipoUbicacion = clasificarUbicacionPermitida(ubicacionOriginal);
-  const now = new Date();
-
-  if (tipoUbicacion === "formato_no_permitido") {
-    return {
-      entidadTipo: "entrega",
-      entidadId: venta.ventaId,
-      ubicacionOriginal,
-      tipoUbicacion,
-      estadoGeocodificacion: "omitido",
-      procesadoEn: now,
-      // Se omite por regla de negocio: el mapa solo acepta URLs validas de Google Maps.
-      errorDetalle: "Formato no permitido. Solo maps.app.goo.gl, google.com/maps/place o google.com/maps?q=lat,lng",
-    };
-  }
-
-  let coordenadas = extraerCoordenadasGooglePermitidas(ubicacionOriginal);
-  let ubicacionFinal = ubicacionOriginal;
-  let precision = "extraida_url";
-
-  if (!coordenadas && tipoUbicacion === "enlace_corto_google") {
-    ubicacionFinal = await resolverEnlaceCorto(ubicacionOriginal);
-    coordenadas =
-      extraerCoordenadasGooglePermitidas(ubicacionFinal) ||
-      extraerCoordenadasGoogleRedireccion(ubicacionFinal);
-    precision = "extraida_redireccion";
-  }
-
-  if (coordenadas) {
-    return {
-      entidadTipo: "entrega",
-      entidadId: venta.ventaId,
-      ubicacionOriginal,
-      tipoUbicacion,
-      latitud: coordenadas.latitud,
-      longitud: coordenadas.longitud,
-      estadoGeocodificacion: "procesado",
-      precision,
-      procesadoEn: now,
-      errorDetalle: ubicacionFinal !== ubicacionOriginal ? `URL final: ${ubicacionFinal}` : null,
-    };
-  }
-
-  // No se geocodifica texto libre ni coordenadas sueltas. Si Google Maps no trae coordenadas,
-  // queda omitido para revision/correccion de la ubicacion original.
-  return {
-    entidadTipo: "entrega",
-    entidadId: venta.ventaId,
-    ubicacionOriginal,
-    tipoUbicacion: "google_sin_coordenadas",
-    estadoGeocodificacion: "omitido",
-    procesadoEn: now,
-    errorDetalle: "URL de Google Maps permitida, pero sin coordenadas extraibles",
-  };
-};
-
-const guardarNormalizacion = async (resultado) => {
-  const [registro, created] = await MapaUbicacionNormalizada.findOrCreate({
-    where: {
-      entidadTipo: resultado.entidadTipo,
-      entidadId: resultado.entidadId,
-    },
-    defaults: resultado,
-  });
-
-  if (!created) {
-    await registro.update(resultado);
-  }
-
-  return registro;
-};
-
-const crearResumenNormalizacion = () => ({
-  procesados: 0,
-  ambiguos: 0,
-  conError: 0,
-  sinUbicacion: 0,
-  omitidosFormato: 0,
-  omitidos: 0,
-});
-
-const sumarEstadoNormalizacion = (resumen, estado) => {
-  if (estado === "procesado" || estado === "manual") resumen.procesados += 1;
-  else if (estado === "AMBIGUO" || estado === "ambigua") resumen.ambiguos += 1;
-  else if (estado === "omitido") resumen.omitidosFormato += 1;
-  else if (estado === "sin_ubicacion") resumen.sinUbicacion += 1;
-  else resumen.conError += 1;
-};
-
-const normalizarVentasPendientes = async (req) => {
-  const limit = Math.min(Math.max(Number(req.body?.limit || req.query.limit || 50), 1), 500);
-  const force = req.body?.force === true || req.query.force === "true";
-  const ventas = agruparPorVenta(await consultarVentas(req, false));
-  const resumen = crearResumenNormalizacion();
-  const resultados = [];
-  let procesadasEnLote = 0;
-
-  for (const venta of ventas) {
-    if (procesadasEnLote >= limit) break;
-
-    const existente = await MapaUbicacionNormalizada.findOne({
-      where: { entidadTipo: "entrega", entidadId: venta.ventaId },
-    });
-
-    if (
-      existente &&
-      !force &&
-      ["procesado", "manual"].includes(existente.estadoGeocodificacion)
-    ) {
-      resumen.omitidos += 1;
-      continue;
-    }
-
-    try {
-      procesadasEnLote += 1;
-      const resultado = await normalizarVenta(venta);
-      const registro = await guardarNormalizacion(resultado);
-      sumarEstadoNormalizacion(resumen, registro.estadoGeocodificacion);
-      resultados.push({
-        id: registro.id,
-        ventaId: venta.ventaId,
-        estadoGeocodificacion: registro.estadoGeocodificacion,
-        tipoUbicacion: registro.tipoUbicacion,
-        latitud: registro.latitud,
-        longitud: registro.longitud,
-      });
-    } catch (error) {
-      const registro = await guardarNormalizacion({
-        entidadTipo: "entrega",
-        entidadId: venta.ventaId,
-        ubicacionOriginal: venta.ubicacionOriginal || "",
-        tipoUbicacion: clasificarUbicacionPermitida(venta.ubicacionOriginal),
-        estadoGeocodificacion: "error",
-        procesadoEn: new Date(),
-        errorDetalle: error.message,
-      });
-      resumen.conError += 1;
-      resultados.push({
-        id: registro.id,
-        ventaId: venta.ventaId,
-        estadoGeocodificacion: "error",
-        errorDetalle: error.message,
-      });
-    }
-  }
-
-  return { resumen, resultados };
-};
-
 const agruparPuntos = (ventas = [], ubicaciones = []) => {
   const ubicacionesPorVenta = new Map(
     ubicaciones
@@ -584,32 +402,6 @@ const agruparPuntos = (ventas = [], ubicaciones = []) => {
     cantidadTotal: punto.cantidadTotal,
     ventas: punto.ventas,
   }));
-};
-
-const resolverUbicacionesDesdeDetalle = async (ventas = [], ubicaciones = []) => {
-  const ubicacionesCompletas = [...ubicaciones];
-  const ventasConUbicacion = new Set(
-    ubicaciones
-      .filter(hasCoordenadas)
-      .map((ubicacion) => Number(ubicacion.entidadId)),
-  );
-
-  for (const venta of agruparPorVenta(ventas)) {
-    if (ventasConUbicacion.has(Number(venta.ventaId))) continue;
-
-    const resultado = await normalizarVenta(venta);
-    if (resultado.estadoGeocodificacion !== "procesado" || !hasCoordenadas(resultado)) {
-      // Se guarda el omitido/error para diagnostico, pero no se pinta en el mapa.
-      await guardarNormalizacion(resultado);
-      continue;
-    }
-
-    await guardarNormalizacion(resultado);
-    ubicacionesCompletas.push(resultado);
-    ventasConUbicacion.add(Number(venta.ventaId));
-  }
-
-  return ubicacionesCompletas;
 };
 
 const getData = async (req) => {
@@ -729,20 +521,19 @@ exports.filtros = responder(async (req) => {
 });
 
 exports.ubicacionesPendientes = responder(async (req) => {
-  const ventas = await consultarVentas(req, true);
-  const entregaIds = [...new Set(ventas.map((row) => Number(row.ventaId)).filter(Boolean))];
+  const ventas = agruparPorVenta(await consultarVentas(req, true));
+  const entregaIds = ventas
+    .map((venta) => Number(venta.ventaId))
+    .filter(Boolean);
 
   if (!entregaIds.length) {
-    return { pendientes: [] };
+    return { pendientes: [], totalPendientes: 0 };
   }
 
-  const normalizadasPendientes = await MapaUbicacionNormalizada.findAll({
+  const ubicacionesNormalizadas = await MapaUbicacionNormalizada.findAll({
     where: {
       entidadTipo: "entrega",
       entidadId: { [Op.in]: entregaIds },
-      estadoGeocodificacion: {
-        [Op.in]: ESTADOS_PENDIENTES_UBICACION,
-      },
     },
     attributes: [
       "id",
@@ -754,14 +545,17 @@ exports.ubicacionesPendientes = responder(async (req) => {
       "precision",
       "procesadoEn",
       "errorDetalle",
+      "updatedAt",
     ],
-    limit: 100,
     order: [["updatedAt", "DESC"]],
+    raw: true,
   });
 
-  return {
-    pendientes: normalizadasPendientes,
-  };
+  return calcularUbicacionesPendientesSinProcesar({
+    ventas,
+    ubicacionesNormalizadas,
+    limit: req.query.limit,
+  });
 });
 
 exports.diagnosticoUbicaciones = responder(async (req) => {
@@ -791,10 +585,40 @@ exports.diagnosticoUbicaciones = responder(async (req) => {
   return { diagnostico: { resumen, muestras } };
 });
 
-exports.normalizarUbicaciones = responder(async (req) => {
-  const resultado = await normalizarVentasPendientes(req);
-  return resultado;
+exports.estadoNormalizacion = responder(async () => {
+  const normalizacion = await obtenerEstadoNormalizacion();
+  return { normalizacion };
 });
+
+exports.normalizarUbicaciones = async (req, res) => {
+  try {
+    if (!validarFiltros(req, res)) return;
+
+    const ventas = agruparPorVenta(await consultarVentas(req, false));
+    const resultado = await encolarVentasParaNormalizar({
+      ventas,
+      limit: req.body?.limit || req.query.limit,
+      force: req.body?.force === true || req.query.force === "true",
+    });
+
+    res.status(202).json({
+      ok: true,
+      ...resultado,
+      message: resultado.resumen.encolados
+        ? "Ubicaciones encoladas para normalizacion en segundo plano"
+        : "No hay ubicaciones nuevas para normalizar",
+    });
+
+    setImmediate(() => {
+      void procesarColaNormalizaciones().catch((error) => {
+        console.error("Error procesando normalizaciones del mapa:", error);
+      });
+    });
+  } catch (error) {
+    console.error("Error encolando ubicaciones del mapa:", error);
+    res.status(500).json({ ok: false, message: error.message });
+  }
+};
 
 exports.puntosVentas = async (req, res) => {
   try {
@@ -810,7 +634,9 @@ exports.puntosVentas = async (req, res) => {
       where: {
         entidadTipo: "entrega",
         entidadId: { [Op.in]: ventaIds },
-        estadoGeocodificacion: { [Op.in]: ["procesado", "manual"] },
+        estadoGeocodificacion: {
+          [Op.in]: ["procesado", "manual", "pendiente", "procesando"],
+        },
         latitud: { [Op.not]: null },
         longitud: { [Op.not]: null },
       },
@@ -822,10 +648,10 @@ exports.puntosVentas = async (req, res) => {
         "longitud",
         "estadoGeocodificacion",
       ],
+      raw: true,
     });
 
-    const ubicacionesCompletas = await resolverUbicacionesDesdeDetalle(ventas, ubicaciones);
-    res.json(agruparPuntos(ventas, ubicacionesCompletas));
+    res.json(agruparPuntos(ventas, ubicaciones));
   } catch (error) {
     console.error("Error puntos mapa comercial:", error);
     res.status(500).json({ ok: false, message: error.message });

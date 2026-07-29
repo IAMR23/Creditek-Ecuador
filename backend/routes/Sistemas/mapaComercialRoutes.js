@@ -15,6 +15,7 @@ router.get("/zonas-sin-ventas", controller.zonasSinVentas);
 router.get("/filtros", controller.filtros);
 router.get("/puntos", controller.puntosVentas);
 router.get("/ubicaciones-pendientes", controller.ubicacionesPendientes);
+router.get("/normalizacion-estado", controller.estadoNormalizacion);
 router.post("/normalizar", controller.normalizarUbicaciones);
 router.patch("/ubicaciones/:id", controller.corregirUbicacion);
 router.post("/zonas", controller.crearZona);

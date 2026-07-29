@@ -27,6 +27,9 @@ const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
 const postulacionesRouter = require("./routes/DesarrolloOrganizacional/postulacionesRouter");
 const { startTaskCron } = require("./services/taskCron");
+const {
+  iniciarProcesadorNormalizaciones,
+} = require("./services/mapaComercialNormalizacionService");
 const path = require("path");
 const startTaskReminderJob = require("./jobs/taskReminder");
 
@@ -45,7 +48,7 @@ const parseCookies = (req, _res, next) => {
   }, {});
   next();
 };
-
+ 
 /* startTaskCron();
 startTaskReminderJob();
  */
@@ -163,6 +166,7 @@ io.on("connection", (socket) => {
 connectDB()
   .then(() => {
     console.log("Base de datos conectada");
+    iniciarProcesadorNormalizaciones();
 
     app.use("/agencias", agencia);
     app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));

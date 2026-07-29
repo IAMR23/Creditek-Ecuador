@@ -71,6 +71,10 @@ services:
       META_DATASET_ID: ${META_DATASET_ID}
       META_ACCESS_TOKEN: ${META_ACCESS_TOKEN}
       META_PAGE_ID: ${META_PAGE_ID}
+      # RVE recibe las salidas enviadas por ABS y consulta usuarios en ABS.
+      RVE_SYNC_TOKEN: ${RVE_SYNC_TOKEN:?Configure RVE_SYNC_TOKEN en el archivo .env}
+      ABS_SYNC_URL: ${ABS_SYNC_URL:-http://backend_apolo:5030}
+      ABS_SYNC_TOKEN: ${ABS_SYNC_TOKEN:?Configure ABS_SYNC_TOKEN en el archivo .env}
       DATABASE_URL: postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}
     volumes:
       - ./backend/uploads:/app/uploads
@@ -111,6 +115,10 @@ services:
       DB_PORT: ${APOLO_DB_PORT}
       WEB_CORS: ${APOLO_WEB_CORS}
       JWT_SECRET: ${APOLO_JWT_SECRET}
+      # ABS envía salidas a RVE y expone la consulta interna de usuarios.
+      RVE_SYNC_URL: ${RVE_SYNC_URL:-http://backend:5020}
+      RVE_SYNC_TOKEN: ${RVE_SYNC_TOKEN:?Configure RVE_SYNC_TOKEN en el archivo .env}
+      ABS_SYNC_TOKEN: ${ABS_SYNC_TOKEN:?Configure ABS_SYNC_TOKEN en el archivo .env}
     networks:
       - internal
       - public-internet

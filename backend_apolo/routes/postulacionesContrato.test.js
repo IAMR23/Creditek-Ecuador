@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const { PDFDocument } = require("pdf-lib");
 
 const Postulacion = require("../models/Postulacion");
+const Usuario = require("../models/Usuario");
 const postulacionesRouter = require("./postulacionesRouter");
 
 const crearPostulacion = (overrides = {}) => ({
@@ -50,6 +51,10 @@ const getContrato = async ({ id = "12", token = true } = {}) => {
 
 beforeEach(() => {
   Postulacion.findByPk = async () => crearPostulacion();
+  Usuario.findOne = async () => ({
+    id: 44,
+    fechaIngreso: "2026-07-29",
+  });
 });
 
 test("descarga el contrato PDF autenticado para una entrevista activa", async () => {
@@ -83,6 +88,29 @@ test("rechaza postulaciones fuera de Entrevistas", async () => {
 
   assert.equal(response.status, 409);
   assert.match(body.message, /Entrevistas/);
+});
+
+test("exige crear el usuario antes de generar el contrato", async () => {
+  Usuario.findOne = async () => null;
+
+  const response = await getContrato();
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.match(body.message, /crear el usuario/i);
+});
+
+test("exige la fecha de ingreso del usuario", async () => {
+  Usuario.findOne = async () => ({
+    id: 44,
+    fechaIngreso: null,
+  });
+
+  const response = await getContrato();
+  const body = await response.json();
+
+  assert.equal(response.status, 422);
+  assert.match(body.message, /fecha de ingreso/i);
 });
 
 test("informa cuando falta la cedula", async () => {

@@ -951,9 +951,30 @@ router.get("/:id/contrato-capacitacion.pdf", auth, async (req, res) => {
     const nombreCompleto =
       datosPersonales.nombreCompleto || postulacion.nombre;
     const cedula = datosPersonales.cedula || postulacion.cedula;
+    const cedulaNormalizada = normalizeCedula(cedula);
+    const usuario = cedulaNormalizada
+      ? await Usuario.findOne({
+          where: sequelizeWhere(
+            fn("BTRIM", col("cedula")),
+            cedulaNormalizada,
+          ),
+          attributes: ["id", "fechaIngreso"],
+          order: [["id", "DESC"]],
+        })
+      : null;
+
+    if (cedulaNormalizada && !usuario) {
+      return res.status(422).json({
+        ok: false,
+        message:
+          "Primero debe crear el usuario del postulante para generar el contrato.",
+      });
+    }
+
     const pdf = await generarContratoCapacitacionPdf({
       nombreCompleto,
       cedula,
+      fechaIngreso: usuario?.fechaIngreso,
     });
     const cedulaArchivo = String(cedula || "")
       .replace(/[^a-zA-Z0-9_-]/g, "")

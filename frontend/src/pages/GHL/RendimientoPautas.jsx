@@ -26,11 +26,27 @@ const getInitialFilters = () => {
     fechaFin: today,
     sourceId: "",
     etapa: "",
+    status: "",
   };
 };
 
 const inputClass =
   "h-9 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100";
+
+const commercialLegend = [
+  { key: "aplican", label: "Aplican", colorClass: "bg-emerald-500" },
+  { key: "noAplican", label: "No aplican", colorClass: "bg-red-500" },
+  { key: "noContesta", label: "No contestan", colorClass: "bg-orange-400" },
+  { key: "otros", label: "Otros", colorClass: "bg-slate-500" },
+];
+
+const opportunityStatusLegend = [
+  { key: "open", label: "OPEN", colorClass: "bg-blue-500" },
+  { key: "won", label: "WON", colorClass: "bg-emerald-500" },
+  { key: "lost", label: "LOST", colorClass: "bg-red-500" },
+  { key: "abandoned", label: "ABANDONED", colorClass: "bg-orange-400" },
+  { key: "otros", label: "OTROS ESTADOS", colorClass: "bg-slate-500" },
+];
 
 const stageColorClasses = [
   "bg-blue-500",
@@ -50,9 +66,6 @@ const stageColorClasses = [
   "bg-slate-500",
 ];
 
-const getStageColorClass = (index) =>
-  stageColorClasses[index % stageColorClasses.length];
-
 const normalizeColumns = (columns = []) =>
   columns
     .map((column) => ({
@@ -61,8 +74,93 @@ const normalizeColumns = (columns = []) =>
     }))
     .filter((column) => column.id);
 
+const normalizeStatusColumns = (columns = []) => {
+  const normalizedColumns = columns
+    .map((column) => ({
+      id: String(column.id || column.name || "").trim().toLowerCase(),
+      name: String(column.name || column.id || "").trim().toUpperCase(),
+    }))
+    .filter((column) => column.id);
+  const columnsById = new Map(
+    normalizedColumns.map((column) => [column.id, column]),
+  );
+
+  ["open", "won", "lost", "abandoned"].forEach((statusId) => {
+    if (!columnsById.has(statusId)) {
+      columnsById.set(statusId, {
+        id: statusId,
+        name: statusId.toUpperCase(),
+      });
+    }
+  });
+
+  return [
+    ...["open", "won", "lost", "abandoned"].map((statusId) =>
+      columnsById.get(statusId),
+    ),
+    ...Array.from(columnsById.values()).filter(
+      (column) =>
+        !["open", "won", "lost", "abandoned"].includes(column.id),
+    ),
+  ];
+};
+
 const getCellValue = (row, columnId) =>
   Number(row?.values?.[columnId] || 0);
+
+const getStatusCellValue = (row, statusId) =>
+  Number(row?.statusValues?.[statusId] || 0);
+
+const buildStageLegend = (columns) =>
+  columns.map((column, index) => ({
+    key: column.id,
+    label: column.name,
+    colorClass: stageColorClasses[index % stageColorClasses.length],
+  }));
+
+const getStageParts = (row, stageLegend) =>
+  stageLegend.map((item) => ({
+    ...item,
+    value: getCellValue(row, item.key),
+  }));
+
+const getCommercialParts = (row) => {
+  const total = Number(row?.total || 0);
+  const knownTotal =
+    Number(row?.aplicanTotal || 0) +
+    Number(row?.noAplicanTotal || 0) +
+    Number(row?.noContestaTotal || 0);
+  const values = {
+    aplican: Number(row?.aplicanTotal || 0),
+    noAplican: Number(row?.noAplicanTotal || 0),
+    noContesta: Number(row?.noContestaTotal || 0),
+    otros: Math.max(0, total - knownTotal),
+  };
+
+  return commercialLegend.map((item) => ({
+    ...item,
+    value: values[item.key],
+  }));
+};
+
+const getOpportunityStatusParts = (row) => {
+  const total = Number(row?.total || 0);
+  const values = {
+    open: getStatusCellValue(row, "open"),
+    won: getStatusCellValue(row, "won"),
+    lost: getStatusCellValue(row, "lost"),
+    abandoned: getStatusCellValue(row, "abandoned"),
+  };
+  values.otros = Math.max(
+    0,
+    total - values.open - values.won - values.lost - values.abandoned,
+  );
+
+  return opportunityStatusLegend.map((item) => ({
+    ...item,
+    value: values[item.key],
+  }));
+};
 
 const formatPercentage = (value) => `${Number(value || 0).toFixed(2)}%`;
 
@@ -149,14 +247,26 @@ export default function RendimientoPautas() {
     () => normalizeColumns(report?.columns),
     [report?.columns],
   );
+  const statusColumns = useMemo(
+    () => normalizeStatusColumns(report?.statusColumns),
+    [report?.statusColumns],
+  );
+  const stageLegend = useMemo(() => buildStageLegend(columns), [columns]);
   const rows = useMemo(() => report?.rows || [], [report?.rows]);
   const totals = report?.totals || {
     values: {},
+    statusValues: {},
     total: 0,
     aplicanTotal: 0,
     noAplicanTotal: 0,
     noContestaTotal: 0,
+    openTotal: 0,
+    wonTotal: 0,
+    lostTotal: 0,
+    abandonedTotal: 0,
     tasaAplicacion: 0,
+    tasaWon: 0,
+    tasaLost: 0,
   };
 
   const leaders = useMemo(
@@ -165,13 +275,21 @@ export default function RendimientoPautas() {
       applicationRate: getLeaders(rows, "tasaAplicacion"),
       noAnswer: getLeaders(rows, "noContestaTotal"),
       volume: getLeaders(rows, "total"),
+      won: getLeaders(rows, "wonTotal"),
+      wonRate: getLeaders(rows, "tasaWon"),
+      lost: getLeaders(rows, "lostTotal"),
+      lostRate: getLeaders(rows, "tasaLost"),
     }),
     [rows],
   );
 
   const bestRate = leaders.applicationRate.value;
   const maxNoAnswer = leaders.noAnswer.value;
-  const tableMinWidth = Math.max(1180, columns.length * 120 + 760);
+  const tableMinWidth = Math.max(
+    1500,
+    columns.length * 120 + statusColumns.length * 105 + 900,
+  );
+  const tableColumnCount = 6 + statusColumns.length + 2 + columns.length;
   const hasChangedFilters = Object.keys(initialFilters).some(
     (key) =>
       filters[key] !== initialFilters[key] ||
@@ -206,7 +324,7 @@ export default function RendimientoPautas() {
             Rendimiento de pautas
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Análisis de oportunidades por Source ID y etapa del pipeline
+            Análisis de oportunidades por Source ID, etapa y estado
           </p>
           <p className="mt-1 text-xs font-semibold text-gray-400">
             {report?.meta?.pipelineName || "Pipeline configurado"} |{" "}
@@ -262,6 +380,36 @@ export default function RendimientoPautas() {
           icon={<Sparkles size={18} />}
           accentClass="text-green-600"
         />
+        <Metric
+          label="Oportunidades abiertas"
+          value={totals.openTotal || 0}
+          icon={<BarChart3 size={18} />}
+          accentClass="text-blue-600"
+        />
+        <Metric
+          label="Oportunidades ganadas"
+          value={totals.wonTotal || 0}
+          icon={<CheckCircle2 size={18} />}
+          accentClass="text-emerald-600"
+        />
+        <Metric
+          label="Oportunidades perdidas"
+          value={totals.lostTotal || 0}
+          icon={<XCircle size={18} />}
+          accentClass="text-red-600"
+        />
+        <Metric
+          label="Tasa de ganadas"
+          value={formatPercentage(totals.tasaWon)}
+          icon={<Sparkles size={18} />}
+          accentClass="text-emerald-600"
+        />
+        <Metric
+          label="Tasa de pérdidas"
+          value={formatPercentage(totals.tasaLost)}
+          icon={<AlertTriangle size={18} />}
+          accentClass="text-red-600"
+        />
       </section>
 
       {error && (
@@ -287,7 +435,7 @@ export default function RendimientoPautas() {
           Filtros
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
           <Field label="Fecha inicio">
             <input
               type="date"
@@ -339,7 +487,22 @@ export default function RendimientoPautas() {
             </select>
           </Field>
 
-          <div className="flex items-end gap-2">
+          <Field label="Estado">
+            <select
+              className={inputClass}
+              value={filters.status}
+              onChange={(event) => updateFilter("status", event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="open">OPEN</option>
+              <option value="won">WON</option>
+              <option value="lost">LOST</option>
+              <option value="abandoned">ABANDONED</option>
+              <option value="otros">OTROS</option>
+            </select>
+          </Field>
+
+          <div className="flex items-end gap-2 xl:col-span-2">
             <button
               type="button"
               className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded bg-green-600 px-3 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -372,7 +535,39 @@ export default function RendimientoPautas() {
               Todas las etapas reales del pipeline en una barra apilada
             </p>
           </div>
-          <ChartLegend columns={columns} />
+          <ChartLegend items={stageLegend} />
+        </div>
+
+        {loading && !report ? (
+          <EmptyState message="Cargando etapas..." />
+        ) : rows.length === 0 ? (
+          <EmptyState message="No hay oportunidades con los filtros seleccionados" />
+        ) : (
+          <div className="max-h-[560px] space-y-4 overflow-y-auto pr-1">
+            {rows.map((row) => (
+              <StackedBarRow
+                key={getRowKey(row)}
+                row={row}
+                getParts={(currentRow) =>
+                  getStageParts(currentRow, stageLegend)
+                }
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-4 rounded border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">
+              Resultado comercial por Source ID
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              Aplican, no aplican, no contestan y otras etapas
+            </p>
+          </div>
+          <ChartLegend items={commercialLegend} />
         </div>
 
         {loading && !report ? (
@@ -385,7 +580,37 @@ export default function RendimientoPautas() {
               <StackedBarRow
                 key={getRowKey(row)}
                 row={row}
-                columns={columns}
+                getParts={getCommercialParts}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-4 rounded border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">
+              Estado de oportunidades por Source ID
+            </h2>
+            <p className="mt-1 text-xs text-gray-500">
+              Open, won, lost, abandoned y otros estados reportados por GHL
+            </p>
+          </div>
+          <ChartLegend items={opportunityStatusLegend} />
+        </div>
+
+        {loading && !report ? (
+          <EmptyState message="Cargando estados..." />
+        ) : rows.length === 0 ? (
+          <EmptyState message="No hay oportunidades con los filtros seleccionados" />
+        ) : (
+          <div className="max-h-[560px] space-y-4 overflow-y-auto pr-1">
+            {rows.map((row) => (
+              <StackedBarRow
+                key={getRowKey(row)}
+                row={row}
+                getParts={getOpportunityStatusParts}
               />
             ))}
           </div>
@@ -430,6 +655,30 @@ export default function RendimientoPautas() {
                 leaders.volume.labels.length > 1 ? "n" : ""
               } ${leaders.volume.value} oportunidades.`}
             />
+            <SummaryItem
+              label="Mayor cantidad de Won"
+              text={`${formatLeaderNames(leaders.won.labels)} registra${
+                leaders.won.labels.length > 1 ? "n" : ""
+              } ${leaders.won.value} oportunidades ganadas.`}
+            />
+            <SummaryItem
+              label="Mejor tasa Won"
+              text={`${formatLeaderNames(leaders.wonRate.labels)} alcanza${
+                leaders.wonRate.labels.length > 1 ? "n" : ""
+              } ${formatPercentage(leaders.wonRate.value)}.`}
+            />
+            <SummaryItem
+              label="Mayor cantidad de Lost"
+              text={`${formatLeaderNames(leaders.lost.labels)} registra${
+                leaders.lost.labels.length > 1 ? "n" : ""
+              } ${leaders.lost.value} oportunidades perdidas.`}
+            />
+            <SummaryItem
+              label="Mayor tasa Lost"
+              text={`${formatLeaderNames(leaders.lostRate.labels)} alcanza${
+                leaders.lostRate.labels.length > 1 ? "n" : ""
+              } ${formatPercentage(leaders.lostRate.value)}.`}
+            />
           </div>
         )}
       </section>
@@ -458,6 +707,26 @@ export default function RendimientoPautas() {
             style={{ minWidth: `${tableMinWidth}px` }}
           >
             <thead className="sticky top-0 z-10 bg-gray-100 text-left text-xs uppercase text-gray-600 shadow-sm">
+              <tr className="bg-gray-200 text-center font-bold text-gray-700">
+                <th
+                  colSpan={6}
+                  className="border-b border-r border-gray-300 px-3 py-2"
+                >
+                  General
+                </th>
+                <th
+                  colSpan={statusColumns.length + 2}
+                  className="border-b border-r border-gray-300 px-3 py-2"
+                >
+                  Estado
+                </th>
+                <th
+                  colSpan={columns.length}
+                  className="border-b border-gray-300 px-3 py-2"
+                >
+                  Etapas
+                </th>
+              </tr>
               <tr>
                 <th className="border-b border-gray-200 px-3 py-3">
                   Source ID
@@ -467,7 +736,14 @@ export default function RendimientoPautas() {
                 <NumericHeader label="No aplican" />
                 <NumericHeader label="No contesta" />
                 <NumericHeader label="% aplica" />
-                <NumericHeader label="% no contesta" />
+                {statusColumns.map((statusColumn) => (
+                  <NumericHeader
+                    key={statusColumn.id}
+                    label={statusColumn.name}
+                  />
+                ))}
+                <NumericHeader label="% Won" />
+                <NumericHeader label="% Lost" />
                 {columns.map((column) => (
                   <NumericHeader key={column.id} label={column.name} />
                 ))}
@@ -478,7 +754,7 @@ export default function RendimientoPautas() {
               {loading && !report ? (
                 <tr>
                   <td
-                    colSpan={columns.length + 7}
+                    colSpan={tableColumnCount}
                     className="px-3 py-10 text-center text-gray-500"
                   >
                     Cargando oportunidades...
@@ -487,7 +763,7 @@ export default function RendimientoPautas() {
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.length + 7}
+                    colSpan={tableColumnCount}
                     className="px-3 py-10 text-center text-gray-500"
                   >
                     No hay datos para mostrar
@@ -540,7 +816,14 @@ export default function RendimientoPautas() {
                       <NumericCell value={row.noAplicanTotal} />
                       <NumericCell value={row.noContestaTotal} />
                       <NumericCell value={formatPercentage(row.tasaAplicacion)} />
-                      <NumericCell value={formatPercentage(row.tasaNoContesta)} />
+                      {statusColumns.map((statusColumn) => (
+                        <NumericCell
+                          key={statusColumn.id}
+                          value={getStatusCellValue(row, statusColumn.id)}
+                        />
+                      ))}
+                      <NumericCell value={formatPercentage(row.tasaWon)} />
+                      <NumericCell value={formatPercentage(row.tasaLost)} />
                       {columns.map((column) => (
                         <NumericCell
                           key={column.id}
@@ -564,10 +847,15 @@ export default function RendimientoPautas() {
                   value={formatPercentage(totals.tasaAplicacion)}
                   bold
                 />
-                <NumericCell
-                  value={formatPercentage(totals.tasaNoContesta)}
-                  bold
-                />
+                {statusColumns.map((statusColumn) => (
+                  <NumericCell
+                    key={statusColumn.id}
+                    value={getStatusCellValue(totals, statusColumn.id)}
+                    bold
+                  />
+                ))}
+                <NumericCell value={formatPercentage(totals.tasaWon)} bold />
+                <NumericCell value={formatPercentage(totals.tasaLost)} bold />
                 {columns.map((column) => (
                   <NumericCell
                     key={column.id}
@@ -609,29 +897,22 @@ function Metric({ label, value, icon, accentClass }) {
   );
 }
 
-function ChartLegend({ columns }) {
+function ChartLegend({ items }) {
   return (
     <div className="flex max-w-4xl flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-gray-600">
-      {columns.map((column, index) => (
-        <span key={column.id} className="inline-flex items-center gap-1.5">
-          <span
-            className={`h-2.5 w-2.5 rounded-sm ${getStageColorClass(index)}`}
-          />
-          {column.name}
+      {items.map((item) => (
+        <span key={item.key} className="inline-flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-sm ${item.colorClass}`} />
+          {item.label}
         </span>
       ))}
     </div>
   );
 }
 
-function StackedBarRow({ row, columns }) {
+function StackedBarRow({ row, getParts }) {
   const total = Number(row.total || 0);
-  const parts = columns.map((column, index) => ({
-    key: column.id,
-    label: column.name,
-    value: getCellValue(row, column.id),
-    colorClass: getStageColorClass(index),
-  }));
+  const parts = getParts(row);
 
   return (
     <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(180px,240px)_1fr] md:items-center">

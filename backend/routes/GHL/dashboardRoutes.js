@@ -46,6 +46,7 @@ router.get("/pautas/source-id", accesoDashboardGhl, async (req, res) => {
       fechaInicio: req.query.fechaInicio,
       fechaFin: req.query.fechaFin,
       etapa: req.query.etapa,
+      status: req.query.status,
       sourceId: req.query.sourceId,
     });
 

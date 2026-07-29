@@ -13,6 +13,7 @@ const PAUTAS_OPPORTUNITY_STATUSES = Object.freeze([
   "lost",
   "abandoned",
 ]);
+const UNKNOWN_OPPORTUNITY_STATUS = "unknown";
 const pautasDataCache = new Map();
 const pautasInFlight = new Map();
 const contactSourceIdCache = new Map();
@@ -251,6 +252,9 @@ const extractPipelines = (payload) =>
   pickArray(payload, ["pipelines", "pipeline", "data", "items"]);
 
 const extractUsers = (payload) => pickArray(payload, ["users", "user", "data", "items"]);
+
+const extractContacts = (payload) =>
+  pickArray(payload, ["contacts", "contact", "data", "items"]);
 
 const getPaginationMeta = (payload) =>
   payload?.meta || payload?._meta || payload?.pagination || payload?.data?.meta || {};
@@ -672,6 +676,22 @@ const getStageMetricGroup = (stageName) => {
   return "otros";
 };
 
+const getOpportunityStatus = (opportunity) => {
+  const statusCandidates = [
+    opportunity?.status,
+    opportunity?.opportunityStatus,
+    opportunity?.state,
+    opportunity?.statusName,
+  ];
+
+  for (const candidate of statusCandidates) {
+    const normalizedStatus = String(candidate ?? "").trim().toLowerCase();
+    if (normalizedStatus) return normalizedStatus;
+  }
+
+  return UNKNOWN_OPPORTUNITY_STATUS;
+};
+
 const roundPercentage = (value, total) => {
   if (!total) return 0;
   return Math.round((value / total) * 10000) / 100;
@@ -810,6 +830,7 @@ const buildPautasPerformance = ({
   customFieldDefinitions = [],
   sourceIdsByContact = new Map(),
   etapa = "",
+  status = "",
   sourceId = "",
 } = {}) => {
   const customFieldDefinitionMap =
@@ -851,19 +872,42 @@ const buildPautasPerformance = ({
 
   pipelineOpportunities.forEach(ensureColumn);
 
+  const discoveredStatuses = new Set(
+    pipelineOpportunities.map(getOpportunityStatus),
+  );
+  const statusIds = [
+    ...PAUTAS_OPPORTUNITY_STATUSES,
+    ...Array.from(discoveredStatuses)
+      .filter(
+        (opportunityStatus) =>
+          !PAUTAS_OPPORTUNITY_STATUSES.includes(opportunityStatus),
+      )
+      .sort((first, second) => first.localeCompare(second, "es")),
+  ];
+  const statusColumns = statusIds.map((statusId) => ({
+    id: statusId,
+    name: statusId.toUpperCase(),
+  }));
   const requestedStage = String(etapa || "").trim();
   const normalizedRequestedStage = normalizeComparableText(requestedStage);
+  const requestedStatus = String(status || "").trim().toLowerCase();
   const requestedSourceId = normalizeComparableText(sourceId);
   const rowsBySourceId = new Map();
 
   pipelineOpportunities.forEach((opportunity) => {
     const column = ensureColumn(opportunity);
+    const opportunityStatus = getOpportunityStatus(opportunity);
     const matchesStage =
       !requestedStage ||
       column.id === requestedStage ||
       normalizeComparableText(column.name) === normalizedRequestedStage;
+    const matchesStatus =
+      !requestedStatus ||
+      (requestedStatus === "otros"
+        ? !PAUTAS_OPPORTUNITY_STATUSES.includes(opportunityStatus)
+        : opportunityStatus === requestedStatus);
 
-    if (!matchesStage) return;
+    if (!matchesStage || !matchesStatus) return;
 
     const contactId = getOpportunityContactId(opportunity);
     const directSourceId = extractSourceIdFromOpportunity(
@@ -889,10 +933,15 @@ const buildPautasPerformance = ({
         sourceId: resolvedSourceId,
         label: resolvedSourceId,
         values: {},
+        statusValues: {},
         total: 0,
         aplicanTotal: 0,
         noAplicanTotal: 0,
         noContestaTotal: 0,
+        openTotal: 0,
+        wonTotal: 0,
+        lostTotal: 0,
+        abandonedTotal: 0,
       });
     }
 
@@ -900,11 +949,17 @@ const buildPautasPerformance = ({
     const metricGroup = getStageMetricGroup(column.name);
 
     row.values[column.id] = (row.values[column.id] || 0) + 1;
+    row.statusValues[opportunityStatus] =
+      (row.statusValues[opportunityStatus] || 0) + 1;
     row.total += 1;
 
     if (metricGroup === "aplican") row.aplicanTotal += 1;
     if (metricGroup === "noAplican") row.noAplicanTotal += 1;
     if (metricGroup === "noContesta") row.noContestaTotal += 1;
+    if (opportunityStatus === "open") row.openTotal += 1;
+    if (opportunityStatus === "won") row.wonTotal += 1;
+    if (opportunityStatus === "lost") row.lostTotal += 1;
+    if (opportunityStatus === "abandoned") row.abandonedTotal += 1;
   });
 
   const rows = Array.from(rowsBySourceId.values())
@@ -912,12 +967,19 @@ const buildPautasPerformance = ({
       columns.forEach((column) => {
         row.values[column.id] = row.values[column.id] || 0;
       });
+      statusColumns.forEach((statusColumn) => {
+        row.statusValues[statusColumn.id] =
+          row.statusValues[statusColumn.id] || 0;
+      });
 
       return {
         ...row,
         tasaAplicacion: roundPercentage(row.aplicanTotal, row.total),
         tasaNoContesta: roundPercentage(row.noContestaTotal, row.total),
         tasaNoAplicacion: roundPercentage(row.noAplicanTotal, row.total),
+        tasaWon: roundPercentage(row.wonTotal, row.total),
+        tasaLost: roundPercentage(row.lostTotal, row.total),
+        tasaAbandoned: roundPercentage(row.abandonedTotal, row.total),
       };
     })
     .sort(
@@ -934,23 +996,41 @@ const buildPautasPerformance = ({
           (accumulator.values[column.id] || 0) +
           Number(row.values[column.id] || 0);
       });
+      statusColumns.forEach((statusColumn) => {
+        accumulator.statusValues[statusColumn.id] =
+          (accumulator.statusValues[statusColumn.id] || 0) +
+          Number(row.statusValues[statusColumn.id] || 0);
+      });
       accumulator.total += row.total;
       accumulator.aplicanTotal += row.aplicanTotal;
       accumulator.noAplicanTotal += row.noAplicanTotal;
       accumulator.noContestaTotal += row.noContestaTotal;
+      accumulator.openTotal += row.openTotal;
+      accumulator.wonTotal += row.wonTotal;
+      accumulator.lostTotal += row.lostTotal;
+      accumulator.abandonedTotal += row.abandonedTotal;
       return accumulator;
     },
     {
       values: {},
+      statusValues: {},
       total: 0,
       aplicanTotal: 0,
       noAplicanTotal: 0,
       noContestaTotal: 0,
+      openTotal: 0,
+      wonTotal: 0,
+      lostTotal: 0,
+      abandonedTotal: 0,
     },
   );
 
   columns.forEach((column) => {
     totals.values[column.id] = totals.values[column.id] || 0;
+  });
+  statusColumns.forEach((statusColumn) => {
+    totals.statusValues[statusColumn.id] =
+      totals.statusValues[statusColumn.id] || 0;
   });
 
   const sourceIdCount = rows.filter(
@@ -964,12 +1044,19 @@ const buildPautasPerformance = ({
     totals.noAplicanTotal,
     totals.total,
   );
+  totals.tasaWon = roundPercentage(totals.wonTotal, totals.total);
+  totals.tasaLost = roundPercentage(totals.lostTotal, totals.total);
+  totals.tasaAbandoned = roundPercentage(
+    totals.abandonedTotal,
+    totals.total,
+  );
   totals.tasaAplicacionGeneral = totals.tasaAplicacion;
   totals.tasaNoContestaGeneral = totals.tasaNoContesta;
   totals.tasaNoAplicacionGeneral = totals.tasaNoAplicacion;
 
   return {
     columns,
+    statusColumns,
     rows,
     totals,
     meta: {
@@ -1087,15 +1174,17 @@ const fetchOpportunitiesByStatus = async (
     const camelCaseParams = {
       locationId: config.locationId,
       pipelineId: config.pipelineId,
-      status,
       limit,
     };
     const snakeCaseParams = {
       location_id: config.locationId,
       pipeline_id: config.pipelineId,
-      status,
       limit,
     };
+    if (status) {
+      camelCaseParams.status = status;
+      snakeCaseParams.status = status;
+    }
 
     if (cursor?.startAfterId) {
       camelCaseParams.startAfterId = cursor.startAfterId;
@@ -1141,6 +1230,8 @@ const fetchOpportunitiesByStatus = async (
       opportunities.push(opportunity);
     });
 
+    if (shouldStopDatePagination(pageItems, dateFilters)) break;
+
     const nextCursor = getNextPaginationCursor(payload, pageItems, limit);
     const nextCursorKey = nextCursor
       ? `${nextCursor.startAfterId}::${nextCursor.startAfter || ""}`
@@ -1164,6 +1255,14 @@ const fetchAllOpportunityStatuses = async (
   config,
   dateFilters = {},
 ) => {
+  try {
+    return dedupeOpportunitiesById(
+      await fetchOpportunitiesByStatus(client, config, "", dateFilters),
+    );
+  } catch (error) {
+    if (error?.code !== "GHL_BAD_REQUEST") throw error;
+  }
+
   const opportunities = [];
 
   for (const status of PAUTAS_OPPORTUNITY_STATUSES) {
@@ -1278,6 +1377,49 @@ const createRequestThrottle = (minimumIntervalMs = 0) => {
   return waitForTurn;
 };
 
+const fetchContactsByIdsInBatches = async ({
+  client,
+  locationId,
+  contactIds = [],
+}) => {
+  const contactsById = new Map();
+  const requestedBatchSize = Number(
+    process.env.GHL_CONTACT_BATCH_SIZE ?? 100,
+  );
+  const batchSize = Number.isFinite(requestedBatchSize)
+    ? Math.min(100, Math.max(1, requestedBatchSize))
+    : 100;
+
+  for (let index = 0; index < contactIds.length; index += batchSize) {
+    const contactIdBatch = contactIds.slice(index, index + batchSize);
+    const payload = await requestGhl(client, {
+      method: "POST",
+      url: "/contacts/search",
+      data: {
+        locationId,
+        page: 1,
+        pageLimit: contactIdBatch.length,
+        filters: [
+          {
+            field: "id",
+            operator: "eq",
+            value: contactIdBatch,
+          },
+        ],
+      },
+    });
+
+    extractContacts(payload)
+      .filter(Boolean)
+      .forEach((contact) => {
+        const contactId = toId(contact?.id || contact?._id);
+        if (contactId) contactsById.set(contactId, contact);
+      });
+  }
+
+  return contactsById;
+};
+
 const pruneContactSourceIdCache = () => {
   const now = Date.now();
   for (const [contactId, entry] of contactSourceIdCache.entries()) {
@@ -1332,6 +1474,7 @@ const resolveSourceIdsForOpportunities = async ({
   client,
   opportunities = [],
   customFieldDefinitions = [],
+  locationId = "",
 }) => {
   const customFieldDefinitionMap =
     customFieldDefinitions instanceof Map
@@ -1368,6 +1511,41 @@ const resolveSourceIdsForOpportunities = async ({
   const uniqueContactIds = Array.from(contactIdsToFetch).filter(
     (contactId) => !sourceIdsByContact.has(contactId),
   );
+
+  if (uniqueContactIds.length && locationId) {
+    try {
+      const contactsById = await fetchContactsByIdsInBatches({
+        client,
+        locationId,
+        contactIds: uniqueContactIds,
+      });
+
+      uniqueContactIds.forEach((contactId) => {
+        const sourceId = extractSourceIdFromContact(
+          contactsById.get(contactId),
+          customFieldDefinitionMap,
+        );
+        sourceIdsByContact.set(contactId, sourceId || null);
+        setCachedContactSourceId(contactId, sourceId || null);
+      });
+
+      return sourceIdsByContact;
+    } catch (error) {
+      const canFallbackToIndividualRequests =
+        error.code === "GHL_BAD_REQUEST" || error.upstreamStatus === 404;
+
+      if (!canFallbackToIndividualRequests) throw error;
+
+      console.warn(
+        "La busqueda agrupada de contactos GHL no esta disponible; se usara el fallback individual.",
+        {
+          code: error.code,
+          upstreamStatus: error.upstreamStatus,
+        },
+      );
+    }
+  }
+
   const contactCache = new Map();
   const requestedConcurrency = Number(
     process.env.GHL_CONTACT_CONCURRENCY ?? 3,
@@ -1688,6 +1866,7 @@ const loadPautasBaseData = async ({ client, config, dateFilters }) => {
     client,
     opportunities,
     customFieldDefinitions,
+    locationId: config.locationId,
   });
 
   return {
@@ -1727,6 +1906,7 @@ async function obtenerRendimientoPautasPorSourceId({
   fechaInicio,
   fechaFin,
   etapa,
+  status,
   sourceId,
 } = {}) {
   const config = getGhlConfig();
@@ -1755,6 +1935,7 @@ async function obtenerRendimientoPautasPorSourceId({
     customFieldDefinitions: data.customFieldDefinitions,
     sourceIdsByContact: data.sourceIdsByContact,
     etapa,
+    status,
     sourceId,
   });
   report.meta.cache = cache;
@@ -1900,7 +2081,9 @@ module.exports = {
   extractSourceIdFromContact,
   extractSourceIdFromOpportunity,
   getOpportunityContactId,
+  getOpportunityStatus,
   fetchAllOpportunityStatuses,
+  fetchContactsByIdsInBatches,
   mapWithConcurrency,
   resolveSourceIdsForOpportunities,
   resolvePautasDateFilters,
@@ -1909,6 +2092,7 @@ module.exports = {
   extractOpportunities,
   extractPipelines,
   extractUsers,
+  extractContacts,
   getNextStartAfterId,
   errorHasAnyMessage,
   extractCompanyIdFromLocation,

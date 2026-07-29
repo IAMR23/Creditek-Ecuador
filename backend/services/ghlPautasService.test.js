@@ -4,8 +4,10 @@ const {
   extractSourceIdFromContact,
   extractSourceIdFromOpportunity,
   fetchAllOpportunityStatuses,
+  fetchContactsByIdsInBatches,
   getOrLoadPautasData,
   getOpportunityContactId,
+  getOpportunityStatus,
   mapWithConcurrency,
   resolvePautasDateFilters,
   resolveSourceIdsForOpportunities,
@@ -103,11 +105,24 @@ describe("ghlService rendimiento de pautas", () => {
       tasaAplicacion: 50,
       tasaNoContesta: 25,
       tasaNoAplicacion: 0,
+      openTotal: 1,
+      wonTotal: 1,
+      lostTotal: 1,
+      abandonedTotal: 1,
+      tasaWon: 25,
+      tasaLost: 25,
+      tasaAbandoned: 25,
       values: {
         aplica: 1,
         "costa-aplica": 1,
         "no-contesta": 1,
         venta: 1,
+      },
+      statusValues: {
+        open: 1,
+        won: 1,
+        lost: 1,
+        abandoned: 1,
       },
     });
     expect(typeof report.rows[0].sourceId).toBe("string");
@@ -124,10 +139,29 @@ describe("ghlService rendimiento de pautas", () => {
       aplicanTotal: 2,
       noAplicanTotal: 1,
       noContestaTotal: 1,
+      openTotal: 1,
+      wonTotal: 1,
+      lostTotal: 1,
+      abandonedTotal: 1,
       tasaAplicacion: 33.33,
       tasaNoContesta: 16.67,
       tasaNoAplicacion: 16.67,
+      tasaWon: 16.67,
+      tasaLost: 16.67,
+      tasaAbandoned: 16.67,
     });
+    expect(
+      Object.values(report.totals.values).reduce(
+        (sum, value) => sum + value,
+        0,
+      ),
+    ).toBe(report.totals.total);
+    expect(
+      Object.values(report.totals.statusValues).reduce(
+        (sum, value) => sum + value,
+        0,
+      ),
+    ).toBe(report.totals.total);
     expect(report.meta).toMatchObject({
       sourceIdCount: 2,
       rowCount: 3,
@@ -261,7 +295,197 @@ describe("ghlService rendimiento de pautas", () => {
     });
   });
 
-  test("consulta estados abiertos y cerrados, filtra fechas y deduplica IDs", async () => {
+  test("normaliza las variantes del estado y usa unknown cuando falta", () => {
+    expect(getOpportunityStatus({ status: " WON " })).toBe("won");
+    expect(getOpportunityStatus({ opportunityStatus: "Lost" })).toBe("lost");
+    expect(getOpportunityStatus({ state: "ABANDONED" })).toBe("abandoned");
+    expect(getOpportunityStatus({ statusName: " Follow Up " })).toBe(
+      "follow up",
+    );
+    expect(
+      getOpportunityStatus({
+        status: " ",
+        opportunityStatus: "Open",
+      }),
+    ).toBe("open");
+    expect(getOpportunityStatus({})).toBe("unknown");
+  });
+
+  test("cuenta etapa y estado como dimensiones independientes sin etapas ficticias", () => {
+    const report = buildPautasPerformance({
+      pipelineId: "pipeline-1",
+      pipelines: [pipeline],
+      sourceIdsByContact: new Map([["contact-1", "source-1"]]),
+      opportunities: [
+        {
+          id: "opp-won",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "venta",
+          contactId: "contact-1",
+          status: "won",
+        },
+        {
+          id: "opp-lost",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "aplica",
+          contactId: "contact-1",
+          status: "lost",
+        },
+        {
+          id: "opp-open",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "no-aplica",
+          contactId: "contact-1",
+          status: "open",
+        },
+        {
+          id: "opp-extra",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "venta",
+          contactId: "contact-1",
+          opportunityStatus: "Qualified",
+        },
+        {
+          id: "opp-unknown",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "venta",
+          contactId: "contact-1",
+        },
+        {
+          id: "opp-won",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "no-aplica",
+          contactId: "contact-1",
+          status: "lost",
+        },
+      ],
+    });
+
+    expect(report.columns.map((column) => column.id)).toEqual(
+      pipeline.stages.map((stage) => stage.id),
+    );
+    expect(report.columns.map((column) => column.id)).not.toEqual(
+      expect.arrayContaining(["won", "lost"]),
+    );
+    expect(report.statusColumns.map((column) => column.id)).toEqual([
+      "open",
+      "won",
+      "lost",
+      "abandoned",
+      "qualified",
+      "unknown",
+    ]);
+    expect(report.rows[0]).toMatchObject({
+      total: 5,
+      values: {
+        venta: 3,
+        aplica: 1,
+        "no-aplica": 1,
+      },
+      statusValues: {
+        open: 1,
+        won: 1,
+        lost: 1,
+        abandoned: 0,
+        qualified: 1,
+        unknown: 1,
+      },
+      aplicanTotal: 1,
+      noAplicanTotal: 1,
+      openTotal: 1,
+      wonTotal: 1,
+      lostTotal: 1,
+      abandonedTotal: 0,
+      tasaWon: 20,
+      tasaLost: 20,
+      tasaAbandoned: 0,
+    });
+    expect(
+      Object.values(report.rows[0].values).reduce(
+        (sum, value) => sum + value,
+        0,
+      ),
+    ).toBe(report.rows[0].total);
+    expect(
+      Object.values(report.rows[0].statusValues).reduce(
+        (sum, value) => sum + value,
+        0,
+      ),
+    ).toBe(report.rows[0].total);
+  });
+
+  test("filtra etapa y estado de forma independiente, incluidos otros estados", () => {
+    const baseOptions = {
+      pipelineId: "pipeline-1",
+      pipelines: [pipeline],
+      sourceIdsByContact: new Map([["contact-1", "source-1"]]),
+      opportunities: [
+        {
+          id: "opp-1",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "venta",
+          contactId: "contact-1",
+          status: "won",
+        },
+        {
+          id: "opp-2",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "aplica",
+          contactId: "contact-1",
+          status: "lost",
+        },
+        {
+          id: "opp-3",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "venta",
+          contactId: "contact-1",
+          state: "qualified",
+        },
+        {
+          id: "opp-4",
+          pipelineId: "pipeline-1",
+          pipelineStageId: "venta",
+          contactId: "contact-1",
+        },
+      ],
+    };
+
+    const lostInAplica = buildPautasPerformance({
+      ...baseOptions,
+      etapa: "aplica",
+      status: "LOST",
+    });
+    const wonInNoAplica = buildPautasPerformance({
+      ...baseOptions,
+      etapa: "no-aplica",
+      status: "won",
+    });
+    const otherStatuses = buildPautasPerformance({
+      ...baseOptions,
+      status: "otros",
+    });
+
+    expect(lostInAplica.totals).toMatchObject({
+      total: 1,
+      lostTotal: 1,
+      noAplicanTotal: 0,
+      tasaLost: 100,
+    });
+    expect(wonInNoAplica.totals.total).toBe(0);
+    expect(otherStatuses.totals).toMatchObject({
+      total: 2,
+      openTotal: 0,
+      wonTotal: 0,
+      lostTotal: 0,
+      abandonedTotal: 0,
+    });
+    expect(otherStatuses.totals.statusValues).toMatchObject({
+      qualified: 1,
+      unknown: 1,
+    });
+  });
+
+  test("consulta todos los estados en una sola paginacion, filtra fechas y deduplica IDs", async () => {
     const responsesByStatus = {
       open: [
         {
@@ -298,10 +522,10 @@ describe("ghlService rendimiento de pautas", () => {
       ],
     };
     const client = {
-      request: jest.fn(({ params }) =>
+      request: jest.fn(() =>
         Promise.resolve({
           data: {
-            opportunities: responsesByStatus[params.status],
+            opportunities: Object.values(responsesByStatus).flat(),
           },
         }),
       ),
@@ -319,7 +543,7 @@ describe("ghlService rendimiento de pautas", () => {
       },
     );
 
-    expect(client.request).toHaveBeenCalledTimes(4);
+    expect(client.request).toHaveBeenCalledTimes(1);
     expect(opportunities.map((opportunity) => opportunity.id)).toEqual([
       "opp-open",
       "opp-won",
@@ -330,6 +554,189 @@ describe("ghlService rendimiento de pautas", () => {
       "won",
       "abandoned",
     ]);
+  });
+
+  test("consulta los cuatro estados por separado si GHL exige status", async () => {
+    const client = {
+      request: jest.fn(({ params }) => {
+        if (!params.status) {
+          return Promise.reject({
+            response: {
+              status: 422,
+              data: {
+                message: "status is required",
+              },
+            },
+          });
+        }
+
+        return Promise.resolve({
+          data: {
+            opportunities: [
+              {
+                id: `opp-${params.status}`,
+                status: params.status,
+                createdAt: "2026-07-10T12:00:00.000Z",
+              },
+            ],
+          },
+        });
+      }),
+    };
+
+    const opportunities = await fetchAllOpportunityStatuses(
+      client,
+      {
+        locationId: "location-1",
+        pipelineId: "pipeline-1",
+      },
+      {
+        fechaInicio: "2026-07-01",
+        fechaFin: "2026-07-31",
+      },
+    );
+
+    expect(client.request).toHaveBeenCalledTimes(5);
+    expect(opportunities.map((opportunity) => opportunity.status)).toEqual([
+      "open",
+      "won",
+      "lost",
+      "abandoned",
+    ]);
+  });
+
+  test("detiene la consulta unica cuando la pagina ya es anterior al rango", async () => {
+    const client = {
+      request: jest.fn(() =>
+        Promise.resolve({
+          data: {
+            opportunities: [
+              {
+                id: "old-open",
+                status: "open",
+                createdAt: "2026-06-30T12:00:00.000Z",
+              },
+            ],
+            meta: {
+              nextPageUrl:
+                "https://services.leadconnectorhq.com/opportunities/search?startAfterId=next-open",
+            },
+          },
+        }),
+      ),
+    };
+
+    const opportunities = await fetchAllOpportunityStatuses(
+      client,
+      {
+        locationId: "location-1",
+        pipelineId: "pipeline-1",
+      },
+      {
+        fechaInicio: "2026-07-01",
+        fechaFin: "2026-07-31",
+      },
+    );
+
+    expect(opportunities).toEqual([]);
+    expect(client.request).toHaveBeenCalledTimes(1);
+  });
+
+  test("consulta contactos por lote y conserva sus custom fields", async () => {
+    const client = {
+      request: jest.fn().mockResolvedValue({
+        data: {
+          contacts: [
+            {
+              id: "contact-1",
+              customFields: [
+                {
+                  key: "meta_source_id",
+                  value: "source-1",
+                },
+              ],
+            },
+            {
+              id: "contact-2",
+              customFields: [
+                {
+                  key: "meta_source_id",
+                  value: "source-2",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+
+    const contactsById = await fetchContactsByIdsInBatches({
+      client,
+      locationId: "location-1",
+      contactIds: ["contact-1", "contact-2"],
+    });
+
+    expect(client.request).toHaveBeenCalledTimes(1);
+    expect(client.request).toHaveBeenCalledWith({
+      method: "POST",
+      url: "/contacts/search",
+      data: {
+        locationId: "location-1",
+        page: 1,
+        pageLimit: 2,
+        filters: [
+          {
+            field: "id",
+            operator: "eq",
+            value: ["contact-1", "contact-2"],
+          },
+        ],
+      },
+    });
+    expect(contactsById.get("contact-1")?.customFields).toHaveLength(1);
+    expect(contactsById.get("contact-2")?.customFields).toHaveLength(1);
+  });
+
+  test("resuelve varios Source ID con una sola consulta agrupada", async () => {
+    const client = {
+      request: jest.fn().mockResolvedValue({
+        data: {
+          contacts: [
+            {
+              id: "contact-1",
+              customFields: [
+                {
+                  key: "meta_source_id",
+                  value: "source-1",
+                },
+              ],
+            },
+            {
+              id: "contact-2",
+              customFields: [
+                {
+                  key: "meta_source_id",
+                  value: "source-2",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+
+    const sourceIdsByContact = await resolveSourceIdsForOpportunities({
+      client,
+      locationId: "location-1",
+      opportunities: [
+        { id: "opp-1", contactId: "contact-1" },
+        { id: "opp-2", contactId: "contact-2" },
+      ],
+    });
+
+    expect(client.request).toHaveBeenCalledTimes(1);
+    expect(sourceIdsByContact.get("contact-1")).toBe("source-1");
+    expect(sourceIdsByContact.get("contact-2")).toBe("source-2");
   });
 
   test("consulta cada contacto una sola vez y tolera contactos inaccesibles", async () => {

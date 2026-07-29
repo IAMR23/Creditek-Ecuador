@@ -118,6 +118,21 @@ const perteneceASeccion = (vendedor, seccion) =>
     (cargo) => getSeccionPorCargo(cargo) === seccion,
   );
 
+const getVendedorParaSeccion = (vendedor, seccion) => {
+  if (seccion !== "VENDEDORES" || !vendedor.ventasPersonalesVendedor) {
+    return vendedor;
+  }
+
+  return {
+    ...vendedor,
+    ...vendedor.ventasPersonalesVendedor,
+    esJefeComercial: false,
+    esSupervisorComercial: false,
+    vendedoresJunior: [],
+    vistaVentasPersonales: true,
+  };
+};
+
 const SECCIONES = [
   { id: "VENDEDORES", label: "Vendedores" },
   { id: "JEFES", label: "Jefes comerciales" },
@@ -148,9 +163,13 @@ export default function PagosComisiones() {
   const vendedores = useMemo(() => report?.vendedores || [], [report]);
   const vendedoresSeccion = useMemo(
     () =>
-      vendedores.filter((vendedor) =>
-        perteneceASeccion(vendedor, seccionActiva),
-      ),
+      vendedores
+        .filter((vendedor) =>
+          perteneceASeccion(vendedor, seccionActiva),
+        )
+        .map((vendedor) =>
+          getVendedorParaSeccion(vendedor, seccionActiva),
+        ),
     [seccionActiva, vendedores],
   );
 
@@ -646,8 +665,11 @@ export default function PagosComisiones() {
                                 </span>
                               ) : null}
                               <span className="block text-[10px] font-semibold text-emerald-700">
-                                Comisión calculada como:{" "}
-                                {vendedor.cargoComision || vendedor.cargo}
+                                {vendedor.vistaVentasPersonales
+                                  ? "Solo ventas personales; la comisión se liquida en Jefes comerciales"
+                                  : `Comisión calculada como: ${
+                                      vendedor.cargoComision || vendedor.cargo
+                                    }`}
                               </span>
                             </>
                           ) : null}

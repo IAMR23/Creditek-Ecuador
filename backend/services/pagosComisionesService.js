@@ -155,6 +155,51 @@ const buildEmptyWeeks = (weeks) =>
     return acc;
   }, {});
 
+const buildPersonalSellerView = ({ vendedor, weeks, semanasPersonales }) => {
+  const semanas = buildEmptyWeeks(weeks);
+  const total = emptyWeekValues();
+
+  weeks.forEach((week) => {
+    const source = semanasPersonales?.[week.startDate] || emptyWeekValues();
+    const values = semanas[week.startDate];
+    values.venden = toNumber(source.venden);
+    values.valorVendido = round(source.valorVendido, 2);
+    values.totalComisiones = 0;
+    values.noCumpleMetas = 0;
+    values.valorMultaCalculado = 0;
+    values.valorDescontar = 0;
+    values.multaOmitida = false;
+    values.personalNuevo = isNewPersonnelDuringWeek({
+      fechaCreacionUsuario: vendedor.fechaCreacionUsuario,
+      week,
+    });
+    values.semanaLaborada = isActiveDuringWeek({
+      fechaIngreso: vendedor.fechaIngreso || vendedor.fechaCreacionUsuario,
+      fechaSalida: vendedor.fechaSalida,
+      week,
+    });
+    values.semanaCompletaParaDescuento = isActiveFullWeek({
+      fechaIngreso: vendedor.fechaIngreso || vendedor.fechaCreacionUsuario,
+      fechaSalida: vendedor.fechaSalida,
+      week,
+    });
+    values.semanaFutura = isFutureCommercialWeek(week);
+
+    total.venden += values.venden;
+    total.valorVendido += values.valorVendido;
+  });
+
+  total.valorVendido = round(total.valorVendido, 2);
+  return {
+    semanas,
+    total,
+    resumenMensual: {
+      ...emptyMonthlyValues(),
+      ventasTvCelulaMensual: total.venden,
+    },
+  };
+};
+
 const getDetalleValue = (detalle) => {
   const cantidad = toNumber(detalle.cantidad) || 1;
   const precioVendedor = toNumber(detalle.precioVendedor);
@@ -1211,6 +1256,9 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
       ({ usuarioId, nombre }) => ({ usuarioId, nombre }),
     );
     jefe.vendedoresExcluidosBono = equipoBono.excluded;
+    if (integrantesEquipo.some((member) => member.esLiderVendedor)) {
+      jefe.semanasPersonalesVendedor = jefeProduccion.semanas;
+    }
     jefe.semanas = buildEmptyWeeks(weeks);
     jefe.total = emptyWeekValues();
 
@@ -1250,6 +1298,14 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
         sanctionsByRole,
         penaltyAdjustments,
       );
+      if (vendedor.semanasPersonalesVendedor) {
+        vendedor.ventasPersonalesVendedor = buildPersonalSellerView({
+          vendedor,
+          weeks,
+          semanasPersonales: vendedor.semanasPersonalesVendedor,
+        });
+        delete vendedor.semanasPersonalesVendedor;
+      }
       vendedor.cargosPago = (vendedor.posicionesPago || []).map(
         ({ rolPagoId, cargo, nivel }) => ({ rolPagoId, cargo, nivel }),
       );
@@ -1426,6 +1482,7 @@ const actualizarOmisionMulta = async ({
 
 module.exports = {
   isCargoPagoComisionable,
+  buildPersonalSellerView,
   getCommissionablePaidPosition,
   hasCommissionablePaidPosition,
   isIndividualSellerPosition,

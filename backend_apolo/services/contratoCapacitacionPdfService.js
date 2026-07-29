@@ -19,6 +19,26 @@ const TEXT_START_Y = 658;
 const MAX_LINES = 6;
 const MAX_NAME_LENGTH = 180;
 const MAX_IDENTIFICATION_LENGTH = 30;
+const DURATION_DAYS = 6;
+const DURATION_TEXT_START_Y = 266;
+const DURATION_TEXT_MAX_WIDTH = 468;
+const DURATION_FONT_SIZE = 12;
+const DURATION_LINE_HEIGHT = 14.2;
+const DURATION_MAX_LINES = 5;
+const MONTH_NAMES = [
+  "ENERO",
+  "FEBRERO",
+  "MARZO",
+  "ABRIL",
+  "MAYO",
+  "JUNIO",
+  "JULIO",
+  "AGOSTO",
+  "SEPTIEMBRE",
+  "OCTUBRE",
+  "NOVIEMBRE",
+  "DICIEMBRE",
+];
 
 let templateBytesPromise = null;
 
@@ -28,7 +48,58 @@ const limpiarTexto = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const normalizarDatosContrato = ({ nombreCompleto, cedula }) => {
+const parsearFechaIngreso = (value) => {
+  const fecha = limpiarTexto(value);
+  const match = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    const error = new Error(
+      "El usuario del postulante no tiene una fecha de ingreso válida.",
+    );
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const year = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const day = Number.parseInt(match[3], 10);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    const error = new Error(
+      "El usuario del postulante no tiene una fecha de ingreso válida.",
+    );
+    error.statusCode = 422;
+    throw error;
+  }
+
+  return date;
+};
+
+const fechaIso = (date) => date.toISOString().slice(0, 10);
+
+const calcularFechaSalidaCapacitacion = (fechaIngreso) => {
+  const salida = parsearFechaIngreso(fechaIngreso);
+  salida.setUTCDate(salida.getUTCDate() + DURATION_DAYS - 1);
+  return fechaIso(salida);
+};
+
+const formatearFechaContrato = (value) => {
+  const date = parsearFechaIngreso(value);
+  return `${String(date.getUTCDate()).padStart(2, "0")} de ${
+    MONTH_NAMES[date.getUTCMonth()]
+  } de ${date.getUTCFullYear()}`;
+};
+
+const normalizarDatosContrato = ({
+  nombreCompleto,
+  cedula,
+  fechaIngreso,
+}) => {
   const nombre = limpiarTexto(nombreCompleto).toLocaleUpperCase("es-EC");
   const identificacion = limpiarTexto(cedula);
 
@@ -58,11 +129,24 @@ const normalizarDatosContrato = ({ nombreCompleto, cedula }) => {
     throw error;
   }
 
-  return { nombre, cedula: identificacion };
+  const ingreso = fechaIso(parsearFechaIngreso(fechaIngreso));
+
+  return {
+    nombre,
+    cedula: identificacion,
+    fechaIngreso: ingreso,
+    fechaSalidaCapacitacion: calcularFechaSalidaCapacitacion(ingreso),
+  };
 };
 
 const construirComparecencia = ({ nombre, cedula }) =>
   `Comparecen a la celebración del presente Convenio de Capacitación y Evaluación Pre-laboral, por una parte, APOLO BUSINESS SOLUTIONS, con RUC No. 1714319066001, representada legalmente por el señor LENIN ADOLFO APOLO CÁRDENAS, a quien en adelante se le denominará “LA ENTIDAD CAPACITADORA”; y por otra parte el (la) señor (ita) ${nombre} portador(a) de la cédula No ${cedula}, a quien en adelante se le denominará “LA PERSONA EN CAPACITACIÓN”`;
+
+const construirDuracion = ({
+  fechaIngreso,
+  fechaSalidaCapacitacion,
+}) =>
+  `El proceso de capacitación tendrá una duración de SEIS (6) días, desarrollándose en jornadas de SEIS (6) horas diarias efectivas, excluyendo la hora destinada al almuerzo, iniciando el día ${formatearFechaContrato(fechaIngreso)} y finalizando el día ${formatearFechaContrato(fechaSalidaCapacitacion)}.`;
 
 const dividirPalabra = (word, font, size, maxWidth) => {
   const fragments = [];
@@ -187,8 +271,13 @@ const cargarPlantilla = async () => {
 const generarContratoCapacitacionPdf = async ({
   nombreCompleto,
   cedula,
+  fechaIngreso,
 }) => {
-  const datos = normalizarDatosContrato({ nombreCompleto, cedula });
+  const datos = normalizarDatosContrato({
+    nombreCompleto,
+    cedula,
+    fechaIngreso,
+  });
   const document = await PDFDocument.load(await cargarPlantilla());
 
   if (document.getPageCount() !== 4) {
@@ -211,6 +300,28 @@ const generarContratoCapacitacionPdf = async ({
     });
   });
 
+  const durationLines = envolverTexto(
+    construirDuracion(datos),
+    font,
+    DURATION_FONT_SIZE,
+    DURATION_TEXT_MAX_WIDTH,
+  );
+
+  if (durationLines.length > DURATION_MAX_LINES) {
+    throw new Error("Las fechas no caben en el formato del contrato.");
+  }
+
+  durationLines.forEach((words, index) => {
+    dibujarLineaJustificada({
+      page: firstPage,
+      words,
+      font,
+      size: DURATION_FONT_SIZE,
+      y: DURATION_TEXT_START_Y - index * DURATION_LINE_HEIGHT,
+      justify: index < durationLines.length - 1,
+    });
+  });
+
   document.setTitle(
     `Acuerdo de capacitación - ${datos.nombre}`,
   );
@@ -223,7 +334,10 @@ const generarContratoCapacitacionPdf = async ({
 };
 
 module.exports = {
+  calcularFechaSalidaCapacitacion,
   construirComparecencia,
+  construirDuracion,
+  formatearFechaContrato,
   generarContratoCapacitacionPdf,
   normalizarDatosContrato,
   envolverTexto,

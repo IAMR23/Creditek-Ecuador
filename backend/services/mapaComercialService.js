@@ -5,6 +5,15 @@ const normalizarTexto = (value) =>
     .trim()
     .toLowerCase();
 
+const ESTADOS_UBICACION_PENDIENTE = new Set([
+  "pendiente",
+  "procesando",
+  "error",
+  "omitido",
+  "ambiguo",
+  "ambigua",
+]);
+
 const toNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -148,6 +157,66 @@ const clasificarUbicacionPermitida = (value) => {
   }
 
   return "formato_no_permitido";
+};
+
+const calcularUbicacionesPendientesSinProcesar = ({
+  ventas = [],
+  ubicacionesNormalizadas = [],
+  limit = 100,
+}) => {
+  const normalizadasEntrega = ubicacionesNormalizadas.filter(
+    (ubicacion) => normalizarTexto(ubicacion.entidadTipo) === "entrega",
+  );
+  const idsConRegistro = new Set(
+    normalizadasEntrega.map((ubicacion) => Number(ubicacion.entidadId)),
+  );
+  const normalizadasPendientes = normalizadasEntrega
+    .filter((ubicacion) =>
+      ESTADOS_UBICACION_PENDIENTE.has(
+        normalizarTexto(ubicacion.estadoGeocodificacion),
+      ),
+    )
+    .map((ubicacion) => ({
+      ...ubicacion,
+      sinRegistroNormalizado: false,
+    }));
+  const ventasSinRegistro = ventas
+    .filter((venta) => {
+      const ubicacionOriginal = String(venta.ubicacionOriginal || "").trim();
+      return (
+        ubicacionOriginal &&
+        !idsConRegistro.has(Number(venta.ventaId))
+      );
+    })
+    .map((venta) => ({
+      id: null,
+      entidadTipo: "entrega",
+      entidadId: venta.ventaId,
+      ubicacionOriginal: String(venta.ubicacionOriginal || "").trim(),
+      tipoUbicacion: null,
+      estadoGeocodificacion: "pendiente",
+      precision: null,
+      procesadoEn: null,
+      errorDetalle: null,
+      fecha: venta.fecha || null,
+      sinRegistroNormalizado: true,
+    }));
+  const pendientes = [...normalizadasPendientes, ...ventasSinRegistro].sort(
+    (a, b) => {
+      const fechaA = String(a.updatedAt || a.fecha || "");
+      const fechaB = String(b.updatedAt || b.fecha || "");
+      return fechaB.localeCompare(fechaA);
+    },
+  );
+  const limiteNumerico = Number(limit);
+  const limiteSeguro = Number.isFinite(limiteNumerico)
+    ? Math.min(Math.max(Math.floor(limiteNumerico), 1), 500)
+    : 100;
+
+  return {
+    pendientes: pendientes.slice(0, limiteSeguro),
+    totalPendientes: pendientes.length,
+  };
 };
 
 const parseDmsCoordinate = (degrees, minutes, seconds, direction) => {
@@ -464,6 +533,7 @@ const calcularDiasSinVentas = (ultimaVenta, fechaFin) => {
 };
 
 module.exports = {
+  calcularUbicacionesPendientesSinProcesar,
   clasificarUbicacionPermitida,
   construirMapaComercial,
   clasificarUbicacion,

@@ -1,4 +1,5 @@
 const {
+  calcularUbicacionesPendientesSinProcesar,
   clasificarUbicacionPermitida,
   construirMapaComercial,
   extraerCoordenadasGooglePermitidas,
@@ -127,5 +128,131 @@ describe("mapaComercialService", () => {
     expect(clasificarUbicacionPermitida("Puente 7")).toBe("formato_no_permitido");
     expect(clasificarUbicacionPermitida("-0.7588503,-78.6146328")).toBe("formato_no_permitido");
     expect(clasificarUbicacionPermitida("https://www.google.com/maps/place/Sector")).toBe("google_sin_coordenadas");
+  });
+
+  test("calcula pendientes sin crear registros ni normalizar ventas", () => {
+    const resultado = calcularUbicacionesPendientesSinProcesar({
+      ventas: [
+        {
+          ventaId: 10,
+          fecha: "2026-07-28",
+          ubicacionOriginal: "https://maps.app.goo.gl/sin-normalizar",
+        },
+        {
+          ventaId: 11,
+          fecha: "2026-07-27",
+          ubicacionOriginal: "https://www.google.com/maps?q=-0.7588503,-78.6146328",
+        },
+        {
+          ventaId: 12,
+          fecha: "2026-07-26",
+          ubicacionOriginal: "https://www.google.com/maps/place/Sector",
+        },
+        {
+          ventaId: 13,
+          fecha: "2026-07-25",
+          ubicacionOriginal: "https://www.google.com/maps/place/Pendiente",
+        },
+        {
+          ventaId: 14,
+          fecha: "2026-07-24",
+          ubicacionOriginal: "https://www.google.com/maps/place/Error",
+        },
+        {
+          ventaId: 15,
+          fecha: "2026-07-23",
+          ubicacionOriginal: "ubicacion omitida",
+        },
+        {
+          ventaId: 16,
+          fecha: "2026-07-22",
+          ubicacionOriginal: "ubicacion manual",
+        },
+        {
+          ventaId: 17,
+          fecha: "2026-07-21",
+          ubicacionOriginal: "https://maps.app.goo.gl/procesando",
+        },
+      ],
+      ubicacionesNormalizadas: [
+        {
+          id: 101,
+          entidadTipo: "entrega",
+          entidadId: 11,
+          estadoGeocodificacion: "procesado",
+          ubicacionOriginal: "https://www.google.com/maps?q=-0.7588503,-78.6146328",
+        },
+        {
+          id: 102,
+          entidadTipo: "entrega",
+          entidadId: 12,
+          estadoGeocodificacion: "AMBIGUO",
+          ubicacionOriginal: "https://www.google.com/maps/place/Sector",
+        },
+        {
+          id: 103,
+          entidadTipo: "entrega",
+          entidadId: 13,
+          estadoGeocodificacion: "pendiente",
+          ubicacionOriginal: "https://www.google.com/maps/place/Pendiente",
+        },
+        {
+          id: 104,
+          entidadTipo: "entrega",
+          entidadId: 14,
+          estadoGeocodificacion: "error",
+          ubicacionOriginal: "https://www.google.com/maps/place/Error",
+        },
+        {
+          id: 105,
+          entidadTipo: "entrega",
+          entidadId: 15,
+          estadoGeocodificacion: "omitido",
+          ubicacionOriginal: "ubicacion omitida",
+        },
+        {
+          id: 106,
+          entidadTipo: "entrega",
+          entidadId: 16,
+          estadoGeocodificacion: "manual",
+          ubicacionOriginal: "ubicacion manual",
+        },
+        {
+          id: 107,
+          entidadTipo: "entrega",
+          entidadId: 17,
+          estadoGeocodificacion: "procesando",
+          ubicacionOriginal: "https://maps.app.goo.gl/procesando",
+        },
+      ],
+    });
+
+    expect(resultado.totalPendientes).toBe(6);
+    expect(resultado.pendientes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: null,
+          entidadId: 10,
+          estadoGeocodificacion: "pendiente",
+          sinRegistroNormalizado: true,
+        }),
+        expect.objectContaining({
+          id: 102,
+          entidadId: 12,
+          estadoGeocodificacion: "AMBIGUO",
+          sinRegistroNormalizado: false,
+        }),
+        expect.objectContaining({ entidadId: 13, estadoGeocodificacion: "pendiente" }),
+        expect.objectContaining({ entidadId: 14, estadoGeocodificacion: "error" }),
+        expect.objectContaining({ entidadId: 15, estadoGeocodificacion: "omitido" }),
+        expect.objectContaining({ entidadId: 17, estadoGeocodificacion: "procesando" }),
+      ]),
+    );
+    expect(resultado.pendientes).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ entidadId: 11 }),
+        expect.objectContaining({ entidadId: 16 }),
+      ]),
+    );
   });
 });

@@ -1,5 +1,6 @@
 const {
   isCargoPagoComisionable,
+  buildPersonalSellerView,
   getCommissionablePaidPosition,
   hasCommissionablePaidPosition,
   getLeaderCommissionMembers,
@@ -546,6 +547,45 @@ describe("pagosComisionesService", () => {
           esLiderVendedor: true,
         }),
       ],
+    });
+  });
+
+  test("vista de vendedores muestra solo ventas personales del doble cargo", () => {
+    const weeks = [
+      { startDate: "2026-07-02", endDate: "2026-07-08" },
+      { startDate: "2026-07-09", endDate: "2026-07-15" },
+    ];
+    const view = buildPersonalSellerView({
+      vendedor: {
+        fechaCreacionUsuario: "2026-01-01",
+        fechaIngreso: "2026-01-01",
+      },
+      weeks,
+      semanasPersonales: {
+        "2026-07-02": {
+          venden: 2,
+          valorVendido: 656,
+          totalComisiones: 200,
+        },
+        "2026-07-09": {
+          venden: 4,
+          valorVendido: 1486,
+          totalComisiones: 300,
+        },
+      },
+    });
+
+    expect(view.total).toMatchObject({
+      venden: 6,
+      valorVendido: 2142,
+      totalComisiones: 0,
+      valorDescontar: 0,
+    });
+    expect(view.resumenMensual).toMatchObject({
+      ventasTvCelulaMensual: 6,
+      valorComisionSemanal: 0,
+      valorComisionMensual: 0,
+      totalPagar: 0,
     });
   });
 
