@@ -11,6 +11,18 @@ router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
 
 router.get("/cargas", controller.listarCargas);
 router.get("/cargas/consolidado-ventas", controller.consolidarVentas);
+router.get(
+  "/cargas/:cargaId/conciliacion-entradas",
+  controller.obtenerConciliacionEntradas,
+);
+router.post(
+  "/cargas/:cargaId/conciliacion-entradas/reconciliar",
+  controller.reconciliarEntradas,
+);
+router.post(
+  "/cargas/:cargaId/conciliacion-entradas/:resultadoId/confirmar",
+  controller.confirmarConciliacionEntrada,
+);
 router.get("/cargas/:id", controller.obtenerCarga);
 router.patch("/cargas/:id/anular", controller.anularCarga);
 

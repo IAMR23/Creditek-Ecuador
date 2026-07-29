@@ -48,6 +48,10 @@ jest.mock("../../models/UsuarioAgencia", () => ({
 jest.mock("../../models/Usuario", () => ({}));
 jest.mock("../../models/Agencia", () => ({}));
 
+jest.mock("../../services/conciliacionEntradasService", () => ({
+  conciliarCargasPorFecha: jest.fn(),
+}));
+
 const { sequelize } = require("../../config/db");
 const CierreCaja = require("../../models/CierreCaja/CierreCaja");
 const MovimientoCaja = require("../../models/CierreCaja/MovimientoCaja");
@@ -56,6 +60,9 @@ const Denominacion = require("../../models/CierreCaja/Denominacion");
 const RetiroCaja = require("../../models/CierreCaja/RetiroCaja");
 const ReaperturaCierreCaja = require("../../models/CierreCaja/ReaperturaCierreCaja");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
+const {
+  conciliarCargasPorFecha,
+} = require("../../services/conciliacionEntradasService");
 const {
   cerrarCaja,
   obtenerTodosLosCierresCaja,
@@ -97,6 +104,11 @@ describe("cierreCaja controller", () => {
     MovimientoCaja.findAll.mockResolvedValue([]);
     ReaperturaCierreCaja.findAll.mockResolvedValue([]);
     UsuarioAgencia.findOne.mockResolvedValue({ id: 11, agenciaId: 3 });
+    conciliarCargasPorFecha.mockResolvedValue({
+      fecha: "2026-06-12",
+      cargasProcesadas: 0,
+      conciliaciones: [],
+    });
   });
 
   test("crea un cierre exitoso y limpia temporales del usuario-agencia", async () => {
@@ -155,6 +167,9 @@ describe("cierreCaja controller", () => {
       transaction,
     });
     expect(transaction.commit).toHaveBeenCalled();
+    expect(conciliarCargasPorFecha).toHaveBeenCalledWith(
+      expect.objectContaining({ origen: "CIERRE", usuarioId: 7 }),
+    );
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -390,6 +405,7 @@ describe("cierreCaja controller", () => {
       { transaction },
     );
     expect(transaction.commit).toHaveBeenCalled();
+    expect(conciliarCargasPorFecha).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -498,6 +514,11 @@ describe("cierreCaja controller", () => {
       { transaction },
     );
     expect(transaction.commit).toHaveBeenCalled();
+    expect(conciliarCargasPorFecha).toHaveBeenCalledWith({
+      fecha: "2026-06-12",
+      origen: "RECIERRE",
+      usuarioId: 99,
+    });
     expect(res.status).toHaveBeenCalledWith(200);
   });
 });

@@ -6,6 +6,9 @@ const {
   guardarCargaControlFinanciero,
   obtenerFechaReporte,
 } = require("../../services/controlFinancieroService");
+const {
+  conciliarCarga,
+} = require("../../services/conciliacionEntradasService");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -235,6 +238,20 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
       archivoGenerado: filename,
     });
     const { carga } = persistencia;
+    let conciliacionEntradas = null;
+
+    try {
+      conciliacionEntradas = await conciliarCarga({
+        cargaId: carga.id,
+        origen: "CARGA",
+        usuarioId: req.user?.id,
+      });
+    } catch (errorConciliacion) {
+      console.error(
+        "La carga se guardo, pero no se pudo conciliar sus entradas:",
+        errorConciliacion,
+      );
+    }
 
     if (summary) {
       res.setHeader("X-RVE-Registros", String(summary.registrosCaja || 0));
@@ -259,6 +276,12 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
       "X-RVE-Archivos-Omitidos",
       String(persistencia.archivosOmitidos),
     );
+    if (conciliacionEntradas?.id) {
+      res.setHeader(
+        "X-RVE-Conciliacion-Entradas",
+        String(conciliacionEntradas.id),
+      );
+    }
 
     return res.download(outputFile, filename, async (error) => {
       await limpiarTemporal(tempRoot);

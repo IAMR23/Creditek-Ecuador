@@ -10,8 +10,31 @@ const { Op } = require("sequelize");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const Usuario = require("../../models/Usuario");
 const Agencia = require("../../models/Agencia");
+const {
+  conciliarCargasPorFecha,
+} = require("../../services/conciliacionEntradasService");
 
 const ESTADOS_CIERRE_ACTIVOS = ["CERRADO", "REABIERTO"];
+
+const conciliarEntradasSinBloquearCierre = async ({
+  fecha,
+  origen,
+  usuarioId,
+}) => {
+  try {
+    return await conciliarCargasPorFecha({ fecha, origen, usuarioId });
+  } catch (error) {
+    console.error(
+      "El cierre se guardo, pero no se pudo conciliar sus entradas:",
+      error,
+    );
+    return {
+      fecha,
+      cargasProcesadas: 0,
+      error: true,
+    };
+  }
+};
 
 const obtenerFechaEcuador = (fecha = new Date()) =>
   fecha.toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
@@ -503,11 +526,17 @@ const cerrarCaja = async (req, res) => {
     });
 
     await t.commit();
+    const conciliacionEntradas = await conciliarEntradasSinBloquearCierre({
+      fecha: fechaCierre,
+      origen: "CIERRE",
+      usuarioId,
+    });
 
     return res.status(200).json({
       message: "Caja cerrada correctamente",
       cierre: cierreCreado,
       totalMovimientos: movimientosUnificados.length,
+      conciliacionEntradas,
     });
   } catch (error) {
     await t.rollback();
@@ -1013,12 +1042,18 @@ const actualizarCierreCajaReabierto = async (req, res) => {
     }
 
     await t.commit();
+    const conciliacionEntradas = await conciliarEntradasSinBloquearCierre({
+      fecha: fechaCierre,
+      origen: "RECIERRE",
+      usuarioId: req.user.id,
+    });
 
     const detalleActualizado = await obtenerDetalleCierre(id);
 
     return res.status(200).json({
       message: "Cierre de caja actualizado y cerrado correctamente",
       data: detalleActualizado,
+      conciliacionEntradas,
     });
   } catch (error) {
     await t.rollback();

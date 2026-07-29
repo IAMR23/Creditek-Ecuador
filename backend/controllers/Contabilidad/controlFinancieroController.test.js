@@ -16,10 +16,21 @@ jest.mock("../../config/db", () => ({
   },
 }));
 
+jest.mock("../../services/conciliacionEntradasService", () => ({
+  conciliarCarga: jest.fn(),
+  confirmarCoincidenciaManual: jest.fn(),
+  obtenerConciliacionCarga: jest.fn(),
+}));
+
 const ControlFinancieroCarga = require("../../models/ControlFinancieroCarga");
 const ControlFinancieroRegistro = require("../../models/ControlFinancieroRegistro");
 const { Op } = require("sequelize");
 const { sequelize } = require("../../config/db");
+const {
+  conciliarCarga,
+  confirmarCoincidenciaManual,
+  obtenerConciliacionCarga,
+} = require("../../services/conciliacionEntradasService");
 const controller = require("./controlFinancieroController");
 
 const crearRes = () => {
@@ -208,6 +219,81 @@ describe("controlFinancieroController", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(ControlFinancieroCarga.findByPk).not.toHaveBeenCalled();
+  });
+
+  test("devuelve la ultima conciliacion historica de la carga", async () => {
+    obtenerConciliacionCarga.mockResolvedValue({
+      carga: { id: 5, fechaReporte: "2026-07-22", estado: "ACTIVA" },
+      conciliacion: {
+        id: "12",
+        resumen: { cuadrados: 1 },
+        resultados: [],
+      },
+    });
+    const res = crearRes();
+
+    await controller.obtenerConciliacionEntradas(
+      { params: { cargaId: "5" } },
+      res,
+    );
+
+    expect(obtenerConciliacionCarga).toHaveBeenCalledWith("5");
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        conciliacion: expect.objectContaining({ id: "12" }),
+      }),
+    );
+  });
+
+  test("permite ejecutar nuevamente la conciliacion", async () => {
+    conciliarCarga.mockResolvedValue({ id: "13", resultados: [] });
+    const res = crearRes();
+
+    await controller.reconciliarEntradas(
+      { params: { cargaId: "5" }, user: { id: 7 } },
+      res,
+    );
+
+    expect(conciliarCarga).toHaveBeenCalledWith({
+      cargaId: "5",
+      origen: "MANUAL",
+      usuarioId: 7,
+    });
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true }),
+    );
+  });
+
+  test("confirma una coincidencia manual sin modificar movimientos", async () => {
+    confirmarCoincidenciaManual.mockResolvedValue({
+      id: "14",
+      resultados: [],
+    });
+    const res = crearRes();
+
+    await controller.confirmarConciliacionEntrada(
+      {
+        params: { cargaId: "5", resultadoId: "resultado-1" },
+        body: {
+          clienteControlNormalizado: "SEGUNDO FRANCISCO CANDO LOJA",
+          observacion: "Contrato verificado",
+        },
+        user: { id: 7 },
+      },
+      res,
+    );
+
+    expect(confirmarCoincidenciaManual).toHaveBeenCalledWith({
+      cargaId: "5",
+      resultadoId: "resultado-1",
+      clienteControlNormalizado: "SEGUNDO FRANCISCO CANDO LOJA",
+      observacion: "Contrato verificado",
+      usuarioId: 7,
+    });
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true }),
+    );
   });
 
   test("anula una carga sin eliminar sus registros", async () => {

@@ -18,6 +18,10 @@ jest.mock("../../services/controlFinancieroService", () => ({
   obtenerFechaReporte: jest.fn(),
 }));
 
+jest.mock("../../services/conciliacionEntradasService", () => ({
+  conciliarCarga: jest.fn(),
+}));
+
 const fs = require("fs");
 const fsp = require("fs/promises");
 const { spawn } = require("child_process");
@@ -25,6 +29,9 @@ const {
   guardarCargaControlFinanciero,
   obtenerFechaReporte,
 } = require("../../services/controlFinancieroService");
+const {
+  conciliarCarga,
+} = require("../../services/conciliacionEntradasService");
 const controller = require("./reportesCajaVentasController");
 
 const crearRes = () => {
@@ -78,6 +85,7 @@ describe("reportesCajaVentasController", () => {
       archivosAgregados: 1,
       archivosOmitidos: 0,
     });
+    conciliarCarga.mockResolvedValue({ id: "31" });
     const res = crearRes();
 
     await controller.extraerCierreCajaConVentas(
@@ -97,6 +105,15 @@ describe("reportesCajaVentasController", () => {
     expect(obtenerFechaReporte).toHaveBeenCalledWith(datos.ventasTv);
     expect(guardarCargaControlFinanciero).toHaveBeenCalledWith(
       expect.objectContaining({ datos, usuarioId: 7 }),
+    );
+    expect(conciliarCarga).toHaveBeenCalledWith({
+      cargaId: 25,
+      origen: "CARGA",
+      usuarioId: 7,
+    });
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "X-RVE-Conciliacion-Entradas",
+      "31",
     );
     expect(res.status).not.toHaveBeenCalledWith(400);
     expect(res.download).toHaveBeenCalledWith(

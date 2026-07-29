@@ -3,6 +3,11 @@ const { sequelize } = require("../../config/db");
 const ControlFinancieroCarga = require("../../models/ControlFinancieroCarga");
 const ControlFinancieroRegistro = require("../../models/ControlFinancieroRegistro");
 const Usuario = require("../../models/Usuario");
+const {
+  conciliarCarga,
+  confirmarCoincidenciaManual,
+  obtenerConciliacionCarga,
+} = require("../../services/conciliacionEntradasService");
 
 const includeUsuario = {
   model: Usuario,
@@ -26,6 +31,18 @@ const parsePositiveInt = (value, fallback, max = 100) => {
 };
 
 const esFechaIso = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+
+const responderErrorConciliacion = (error, res, fallback) => {
+  console.error(fallback, error);
+  return res.status(Number(error.status) || 500).json({
+    ok: false,
+    code: error.code || undefined,
+    message:
+      Number(error.status) && Number(error.status) < 500
+        ? error.message
+        : fallback,
+  });
+};
 
 const serializarCarga = (registro) => {
   const carga = registro.get ? registro.get({ plain: true }) : registro;
@@ -244,6 +261,70 @@ exports.obtenerCarga = async (req, res) => {
       ok: false,
       message: "No se pudo cargar el detalle de control financiero.",
     });
+  }
+};
+
+exports.obtenerConciliacionEntradas = async (req, res) => {
+  try {
+    const resultado = await obtenerConciliacionCarga(req.params.cargaId);
+    return res.json({
+      ok: true,
+      carga: resultado.carga,
+      conciliacion: resultado.conciliacion,
+      message: resultado.conciliacion
+        ? undefined
+        : "La carga aun no tiene una conciliacion de entradas.",
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo cargar la conciliacion de entradas.",
+    );
+  }
+};
+
+exports.reconciliarEntradas = async (req, res) => {
+  try {
+    const conciliacion = await conciliarCarga({
+      cargaId: req.params.cargaId,
+      origen: "MANUAL",
+      usuarioId: req.user?.id,
+    });
+    return res.json({
+      ok: true,
+      message: "La conciliacion de entradas fue ejecutada correctamente.",
+      conciliacion,
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo ejecutar la conciliacion de entradas.",
+    );
+  }
+};
+
+exports.confirmarConciliacionEntrada = async (req, res) => {
+  try {
+    const conciliacion = await confirmarCoincidenciaManual({
+      cargaId: req.params.cargaId,
+      resultadoId: req.params.resultadoId,
+      clienteControlNormalizado: req.body?.clienteControlNormalizado,
+      observacion: req.body?.observacion,
+      usuarioId: req.user?.id,
+    });
+    return res.json({
+      ok: true,
+      message: "La coincidencia manual fue confirmada y conciliada.",
+      conciliacion,
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo confirmar la coincidencia manual.",
+    );
   }
 };
 
