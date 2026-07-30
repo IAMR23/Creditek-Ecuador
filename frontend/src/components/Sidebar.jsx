@@ -111,21 +111,13 @@ export default function Sidebar({ auth }) {
             icon: <Table2 size={20} />,
             path: "/ghl/oportunidades-matriz",
           },
-        ],
-      },
-
-      ghl: {
-        title: "GHL",
-        permission: ["Gerencia", "Administracion", "Sistemas"],
-        items: [
-          {
+            {
             label: "Rendimiento de pautas",
             icon: <BarChart3 size={20} />,
             path: "/ghl/rendimiento-pautas",
           },
         ],
       },
-
       Marketing: {
         title: "Marketing",
         permission: "Marketing",

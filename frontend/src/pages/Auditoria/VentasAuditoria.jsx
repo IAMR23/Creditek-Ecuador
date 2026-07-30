@@ -292,26 +292,36 @@ export default function VentasAuditoria() {
   );
 
   const resumen = useMemo(() => {
-    const totalVenta = filasFiltradasPorCliente.reduce(
+    const totalVenta = filasVisibles.reduce(
       (acc, fila) => acc + toNumber(fila["Precio Vendedor"]),
       0,
     );
-    const diferencias = filasFiltradasPorCliente.reduce(
-      (acc, fila) => acc + toNumber(fila.Diferencia),
-      0,
+    const diferenciasResumen = filasVisibles.reduce(
+      (acc, fila) => {
+        const diferencia = toNumber(fila.Diferencia);
+
+        acc.total += Math.abs(diferencia);
+        if (diferencia > 0) acc.enContra += Math.abs(diferencia);
+        if (diferencia < 0) acc.aFavor += Math.abs(diferencia);
+
+        return acc;
+      },
+      { total: 0, aFavor: 0, enContra: 0 },
     );
-    const activas = filasFiltradasPorCliente.filter(
+    const activas = filasVisibles.filter(
       (fila) => fila.Estado === "Activo",
     ).length;
 
     return {
-      registros: filasFiltradasPorCliente.length,
+      registros: filasVisibles.length,
       activas,
-      desactivadas: filasFiltradasPorCliente.length - activas,
+      desactivadas: filasVisibles.length - activas,
       totalVenta: Number(totalVenta.toFixed(2)),
-      diferencias: Number(diferencias.toFixed(2)),
+      diferencias: Number(diferenciasResumen.total.toFixed(2)),
+      aFavor: Number(diferenciasResumen.aFavor.toFixed(2)),
+      enContra: Number(diferenciasResumen.enContra.toFixed(2)),
     };
-  }, [filasFiltradasPorCliente]);
+  }, [filasVisibles]);
 
   const cargarUsuarios = async () => {
     try {
@@ -625,7 +635,12 @@ export default function VentasAuditoria() {
         </head>
         <body>
           <h1>Reporte Ventas Auditoria</h1>
-          <div class="summary">Total de registros: ${filasVisibles.length}</div>
+          <div class="summary">
+            Total de registros: ${filasVisibles.length} |
+            Diferencia total: $${resumen.diferencias.toFixed(2)} |
+            A favor: $${resumen.aFavor.toFixed(2)} |
+            En contra: $${resumen.enContra.toFixed(2)}
+          </div>
           <div class="meta">${filtrosHtml}</div>
           <table>
             <thead>
@@ -689,6 +704,9 @@ export default function VentasAuditoria() {
       ],
       ["Vista", vistaResultados === "errores" ? "Solo errores" : "Todos"],
       ["Registros exportados", filasVisibles.length],
+      ["Diferencia total", resumen.diferencias],
+      ["A favor", resumen.aFavor],
+      ["En contra", resumen.enContra],
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(filasExcel);
@@ -1076,12 +1094,14 @@ export default function VentasAuditoria() {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         <Metric label="Registros" value={resumen.registros} />
         <Metric label="Activas" value={resumen.activas} tone="green" />
         <Metric label="Desactivadas" value={resumen.desactivadas} tone="red" />
         <Metric label="Total Venta" value={`$${resumen.totalVenta.toFixed(2)}`} tone="blue" />
         <Metric label="Diferencia" value={`$${resumen.diferencias.toFixed(2)}`} tone="slate" />
+        <Metric label="A favor" value={`$${resumen.aFavor.toFixed(2)}`} tone="green" />
+        <Metric label="En contra" value={`$${resumen.enContra.toFixed(2)}`} tone="red" />
       </div>
 
       <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
