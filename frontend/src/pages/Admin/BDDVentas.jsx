@@ -156,6 +156,9 @@ export default function BDDVentas() {
         const precio = Number.parseFloat(venta.precioVendedor);
         const costoProducto = Number.parseFloat(venta.costoProducto);
         const margenPorcentual = Number.parseFloat(venta.margenPorcentual);
+        const utilidadSobreCosto = Number.parseFloat(
+          venta.utilidadSobreCosto,
+        );
 
         return {
           Fecha: normalizarTexto(venta.fecha),
@@ -175,8 +178,11 @@ export default function BDDVentas() {
           "Costo del Producto": Number.isFinite(costoProducto)
             ? costoProducto
             : "",
-          "Margen Porcentual (%)": Number.isFinite(margenPorcentual)
+          "Margen sobre la venta (%)": Number.isFinite(margenPorcentual)
             ? margenPorcentual
+            : "",
+          "Utilidad sobre el costo (%)": Number.isFinite(utilidadSobreCosto)
+            ? utilidadSobreCosto
             : "",
         };
       });

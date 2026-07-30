@@ -20,6 +20,9 @@ const {
   normalizarFecha,
   seleccionarCostoHistorico,
 } = require("../../utils/seleccionarCostoHistorico");
+const {
+  calcularIndicadoresCostoHistorico,
+} = require("../../utils/calcularIndicadoresCostoHistorico");
 
 exports.obtenerReporte = async ({
   fechaInicio,
@@ -186,7 +189,7 @@ if (origenId && origenId !== "todos") {
       modeloId: { [Op.in]: modeloIds },
       ...(fechaFin && { fechaCompra: { [Op.lte]: fechaFin } }),
     },
-    attributes: ["id", "modeloId", "fechaCompra", "costo", "margenPorcentual"],
+    attributes: ["id", "modeloId", "fechaCompra", "precioCarga", "costo"],
     order: [
       ["modeloId", "ASC"],
       ["fechaCompra", "DESC"],
@@ -212,12 +215,22 @@ if (origenId && origenId !== "todos") {
         fechaVenta,
       );
 
-      detalle.costoHistoricoReporte = historico
-        ? {
-            costo: historico.costo,
-            margenPorcentual: historico.margenPorcentual,
-          }
-        : null;
+      if (!historico) {
+        detalle.costoHistoricoReporte = null;
+        return;
+      }
+
+      const indicadores = calcularIndicadoresCostoHistorico(
+        historico.precioCarga,
+        historico.costo,
+      );
+
+      detalle.costoHistoricoReporte = {
+        costo: historico.costo,
+        margenPorcentual: indicadores.margenPorcentual,
+        utilidadSobreCosto: indicadores.utilidadSobreCosto,
+        rentabilidad: indicadores.rentabilidad,
+      };
     });
   });
 
@@ -271,6 +284,9 @@ exports.formatearReporte = (ventas) => {
   
         precioVendedor: detalle.precioVendedor || "",
         costoProducto: detalle.costoHistoricoReporte?.costo ?? "",
+        utilidadSobreCosto:
+          detalle.costoHistoricoReporte?.utilidadSobreCosto ?? "",
+        rentabilidad: detalle.costoHistoricoReporte?.rentabilidad ?? "",
         margenPorcentual:
           detalle.costoHistoricoReporte?.margenPorcentual ?? "",
 

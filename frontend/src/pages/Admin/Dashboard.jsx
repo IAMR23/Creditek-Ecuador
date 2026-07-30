@@ -218,6 +218,10 @@ export default function Dashboard() {
         const margenPorcentual = Number.parseFloat(
           costoHistorico?.margenPorcentual,
         );
+        const rentabilidad = Number.parseFloat(
+          costoHistorico?.rentabilidad ??
+            costoHistorico?.utilidadSobreCosto,
+        );
 
         return {
           tipo: tipo.toLowerCase(),
@@ -230,6 +234,7 @@ export default function Dashboard() {
           margenPorcentual: Number.isFinite(margenPorcentual)
             ? margenPorcentual
             : "",
+          rentabilidad: Number.isFinite(rentabilidad) ? rentabilidad : "",
           total: "",
           forma_pago: "contado",
         };
@@ -249,7 +254,8 @@ export default function Dashboard() {
         "Proyeccion",
         "Pedido",
         "Costo del Producto",
-        "Margen Porcentual (%)",
+        "Margen sobre la venta (%)",
+        "Rentabilidad (utilidad sobre el costo) (%)",
         "Total",
         "Forma De Pago",
       ],
@@ -267,6 +273,7 @@ export default function Dashboard() {
         row.pedido,
         row.costo,
         row.margenPorcentual,
+        row.rentabilidad,
         { f: `F${excelRow}*G${excelRow}` },
         row.forma_pago,
       ]);

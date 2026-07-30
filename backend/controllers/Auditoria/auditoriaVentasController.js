@@ -30,6 +30,9 @@ const VentaObsequio = require("../../models/VentaObsequio");
 const {
   seleccionarCostoHistorico,
 } = require("../../utils/seleccionarCostoHistorico");
+const {
+  calcularIndicadoresCostoHistorico,
+} = require("../../utils/calcularIndicadoresCostoHistorico");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 
@@ -351,7 +354,7 @@ exports.obtenerCostosHistoricosPorTipoModelo = async (
       modeloId: { [Op.in]: modeloIds },
       ...(fechaHasta && { fechaCompra: { [Op.lte]: fechaHasta } }),
     },
-    attributes: ["id", "modeloId", "fechaCompra", "costo", "margenPorcentual"],
+    attributes: ["id", "modeloId", "fechaCompra", "precioCarga", "costo"],
     order: [
       ["modeloId", "ASC"],
       ["fechaCompra", "DESC"],
@@ -375,12 +378,21 @@ exports.obtenerCostosHistoricosPorTipoModelo = async (
         fechaHasta,
       );
 
+      const indicadores = historico
+        ? calcularIndicadoresCostoHistorico(
+            historico.precioCarga,
+            historico.costo,
+          )
+        : {};
+
       return [
         clave,
         historico
           ? {
               costo: historico.costo,
-              margenPorcentual: historico.margenPorcentual,
+              margenPorcentual: indicadores.margenPorcentual,
+              utilidadSobreCosto: indicadores.utilidadSobreCosto,
+              rentabilidad: indicadores.rentabilidad,
             }
           : null,
       ];

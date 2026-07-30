@@ -848,6 +848,14 @@ const connectDB = async () => {
           type: Sequelize.DECIMAL(10, 2),
           allowNull: true,
         },
+        utilidadSobreCosto: {
+          type: Sequelize.DECIMAL(10, 2),
+          allowNull: true,
+        },
+        rentabilidad: {
+          type: Sequelize.DECIMAL(10, 2),
+          allowNull: true,
+        },
       };
 
       for (const [columnName, definition] of Object.entries(

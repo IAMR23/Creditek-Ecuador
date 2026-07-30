@@ -3,6 +3,9 @@ const { Op } = require("sequelize");
 const router = express.Router();
 const CostoHistorico = require("../models/CostoHistorico");
 const Modelo = require("../models/Modelo");
+const {
+  calcularIndicadoresCostoHistorico,
+} = require("../utils/calcularIndicadoresCostoHistorico");
 
 const parseDecimalOpcional = (valor, campo, { permitirNegativo = false } = {}) => {
   if (valor === null || valor === undefined || valor === "") {
@@ -86,22 +89,36 @@ const validarCostoHistorico = async (
     return { error: "Ya existe un costo para este modelo en esa fecha" };
   }
 
+  const indicadores = calcularIndicadoresCostoHistorico(
+    precioCargaParsed.value,
+    costoNum,
+  );
+
   return {
     data: {
       modeloId: modeloIdNum,
       costo: Number(costoNum.toFixed(2)),
       precioCarga: precioCargaParsed.value,
       precioContado: precioContadoParsed.value,
-      margen:
-        precioCargaParsed.value !== null
-          ? Number((precioCargaParsed.value - costoNum).toFixed(2))
-          : null,
-      margenPorcentual:
-        precioCargaParsed.value && precioCargaParsed.value > 0
-          ? Number((((precioCargaParsed.value - costoNum) / precioCargaParsed.value) * 100).toFixed(2))
-          : null,
+      margen: indicadores.margen,
+      margenPorcentual: indicadores.margenPorcentual,
+      utilidadSobreCosto: indicadores.utilidadSobreCosto,
+      rentabilidad: indicadores.rentabilidad,
       fechaCompra,
     },
+  };
+};
+
+const serializarCostoHistorico = (costoHistorico) => {
+  const costo = costoHistorico.toJSON();
+  const indicadores = calcularIndicadoresCostoHistorico(
+    costo.precioCarga,
+    costo.costo,
+  );
+
+  return {
+    ...costo,
+    ...indicadores,
   };
 };
 
@@ -116,7 +133,7 @@ router.get("/", async (req, res) => {
       ],
     });
 
-    res.json(costos);
+    res.json(costos.map(serializarCostoHistorico));
   } catch (error) {
     res.status(500).json({ message: "Error interno del servidor", error: error.message });
   }
@@ -128,7 +145,7 @@ router.get("/:id", async (req, res) => {
       include: [{ model: Modelo, as: "modelo" }],
     });
     if (!costo) return res.status(404).json({ message: "No encontrado" });
-    res.json(costo);
+    res.json(serializarCostoHistorico(costo));
   } catch (error) {
     res.status(500).json({ message: "Error interno del servidor", error: error.message });
   }
@@ -148,7 +165,7 @@ router.post("/", async (req, res) => {
       nota: nota?.trim() || null,
     });
 
-    return res.status(201).json(nuevoCosto);
+    return res.status(201).json(serializarCostoHistorico(nuevoCosto));
   } catch (error) {
     console.error("Error al crear costo:", error);
     return res.status(500).json({
@@ -175,7 +192,7 @@ router.put("/:id", async (req, res) => {
       nota: nota?.trim() || null,
     });
 
-    res.json(costo);
+    res.json(serializarCostoHistorico(costo));
   } catch (error) {
     res.status(500).json({ message: "Error interno del servidor", error: error.message });
   }

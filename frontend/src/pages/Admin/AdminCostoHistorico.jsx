@@ -9,8 +9,6 @@ const emptyForm = {
   precioCarga: "",
   precioContado: "",
   costo: "",
-  margen: "",
-  margenPorcentual: "",
   fechaCompra: "",
   nota: "",
 };
@@ -36,12 +34,17 @@ const parseNumber = (value) => {
   return Number.isNaN(number) ? null : number;
 };
 
-const calcularMargen = ({ precioCarga, costo }) => {
+const calcularIndicadores = ({ precioCarga, costo }) => {
   const precioCargaNum = parseNumber(precioCarga);
   const costoNum = parseNumber(costo);
 
   if (precioCargaNum === null || costoNum === null) {
-    return { margen: "", margenPorcentual: "" };
+    return {
+      margen: "",
+      margenPorcentual: "",
+      utilidadSobreCosto: "",
+      rentabilidad: "",
+    };
   }
 
   const margen = Number((precioCargaNum - costoNum).toFixed(2));
@@ -49,15 +52,26 @@ const calcularMargen = ({ precioCarga, costo }) => {
     precioCargaNum > 0
       ? Number(((margen / precioCargaNum) * 100).toFixed(2))
       : "";
+  const rentabilidad =
+    costoNum > 0
+      ? Number(((margen / costoNum) * 100).toFixed(2))
+      : "";
 
-  return { margen, margenPorcentual };
+  return {
+    margen,
+    margenPorcentual,
+    utilidadSobreCosto: rentabilidad,
+    rentabilidad,
+  };
 };
 
 const hasExtraValues = (registro) =>
   registro?.precioCarga != null ||
   registro?.precioContado != null ||
   registro?.margen != null ||
-  registro?.margenPorcentual != null;
+  registro?.margenPorcentual != null ||
+  registro?.utilidadSobreCosto != null ||
+  registro?.rentabilidad != null;
 
 const renderCostoDetalle = (registro) => {
   if (!registro) return <span>-</span>;
@@ -66,13 +80,26 @@ const renderCostoDetalle = (registro) => {
     return <span>{formatCurrency(registro.costo)}</span>;
   }
 
+  const calculo = calcularIndicadores(registro);
+  const margen = registro.margen ?? calculo.margen;
+  const margenPorcentual =
+    registro.margenPorcentual ?? calculo.margenPorcentual;
+  const rentabilidad =
+    registro.rentabilidad ??
+    registro.utilidadSobreCosto ??
+    calculo.rentabilidad;
+
   return (
     <div className="space-y-0.5 text-right leading-tight">
       <div>Precio Carga: {formatCurrency(registro.precioCarga)}</div>
       <div>Precio Contado: {formatCurrency(registro.precioContado)}</div>
       <div>Costo: {formatCurrency(registro.costo)}</div>
-      <div>Margen: {formatCurrency(registro.margen)}</div>
-      <div>Margen Porcentual: {formatPercent(registro.margenPorcentual)}</div>
+      <div>Margen: {formatCurrency(margen)}</div>
+      <div>Margen sobre la venta: {formatPercent(margenPorcentual)}</div>
+      <div>
+        Rentabilidad (utilidad sobre el costo):{" "}
+        {formatPercent(rentabilidad)}
+      </div>
     </div>
   );
 };
@@ -181,7 +208,10 @@ export default function CostosHistoricosCRUD() {
     () => buildCostMatrix(filteredCostos, modelos),
     [filteredCostos, modelos],
   );
-  const calculoMargen = useMemo(() => calcularMargen(form), [form]);
+  const calculoIndicadores = useMemo(
+    () => calcularIndicadores(form),
+    [form],
+  );
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -202,8 +232,6 @@ export default function CostosHistoricosCRUD() {
       precioCarga: costo.precioCarga ?? "",
       precioContado: costo.precioContado ?? "",
       costo: costo.costo ?? "",
-      margen: costo.margen ?? "",
-      margenPorcentual: costo.margenPorcentual ?? "",
       fechaCompra,
       nota: costo.nota || "",
     });
@@ -452,11 +480,13 @@ export default function CostosHistoricosCRUD() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-gray-700">Margen</span>
+                  <span className="mb-1 block text-sm font-medium text-gray-700">
+                    Margen
+                  </span>
                   <input
                     type="number"
                     name="margen"
-                    value={calculoMargen.margen}
+                    value={calculoIndicadores.margen}
                     placeholder="0.00"
                     step="0.01"
                     className="w-full rounded border bg-gray-100 p-2 text-gray-700"
@@ -464,14 +494,29 @@ export default function CostosHistoricosCRUD() {
                   />
                 </label>
 
-                <label className="block sm:col-span-2">
+                <label className="block">
                   <span className="mb-1 block text-sm font-medium text-gray-700">
-                    Margen Porcentual
+                    Margen sobre la venta (%)
                   </span>
                   <input
                     type="number"
                     name="margenPorcentual"
-                    value={calculoMargen.margenPorcentual}
+                    value={calculoIndicadores.margenPorcentual}
+                    placeholder="0.00"
+                    step="0.01"
+                    className="w-full rounded border bg-gray-100 p-2 text-gray-700"
+                    readOnly
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">
+                    Rentabilidad (utilidad sobre el costo) (%)
+                  </span>
+                  <input
+                    type="number"
+                    name="rentabilidad"
+                    value={calculoIndicadores.rentabilidad}
                     placeholder="0.00"
                     step="0.01"
                     className="w-full rounded border bg-gray-100 p-2 text-gray-700"
