@@ -1,11 +1,19 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
+import * as XLSX from "xlsx";
 import {
+  AlertTriangle,
   BadgeDollarSign,
   CalendarDays,
+  CalendarCog,
+  CheckCircle2,
+  Download,
   FileSpreadsheet,
+  Lock,
   RefreshCw,
+  Save,
+  X,
 } from "lucide-react";
 import { api } from "../../api/client";
 
@@ -83,6 +91,45 @@ const getCargosPagoLabel = (row) =>
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return date.toLocaleDateString("es-EC", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+const addDays = (date, days) => {
+  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  copy.setDate(copy.getDate() + days);
+  return copy;
+};
+const toDateOnly = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const getFirstThursdayOfYear = (year) => {
+  const firstDay = new Date(Number(year), 0, 1);
+  const daysSinceThursday = (firstDay.getDay() - 4 + 7) % 7;
+  return addDays(firstDay, -daysSinceThursday);
+};
+const buildCalendarPreview = (year, meses) => {
+  let startDate = getFirstThursdayOfYear(year);
+  return meses.map((mes) => {
+    const cantidadSemanas = Number(mes.cantidadSemanas || 0);
+    const fechaInicio = toDateOnly(startDate);
+    const endDate = addDays(startDate, cantidadSemanas * 7 - 1);
+    startDate = addDays(endDate, 1);
+    return {
+      ...mes,
+      fechaInicio,
+      fechaFin: toDateOnly(endDate),
+    };
+  });
+};
+const isPastCommercialMonth = (year, month) =>
+  Number(year) < currentDate.getFullYear() ||
+  (Number(year) === currentDate.getFullYear() &&
+    Number(month) < currentDate.getMonth() + 1);
 const getCargosComerciales = (vendedor) => {
   const cargos = (vendedor.cargosPago || [])
     .map((position) => position.cargo)
@@ -139,6 +186,55 @@ const SECCIONES = [
   { id: "SUPERVISORES", label: "Supervisores" },
 ];
 
+const EXPORT_OPTIONS = [
+  { value: "TODAS", label: "Las 3 secciones" },
+  { value: "VENDEDORES", label: "Vendedores" },
+  { value: "JEFES", label: "Jefes comerciales" },
+  { value: "SUPERVISORES", label: "Supervisores" },
+];
+
+const getRowsForSection = (vendedores, seccion) =>
+  vendedores
+    .filter((vendedor) => perteneceASeccion(vendedor, seccion))
+    .map((vendedor) => getVendedorParaSeccion(vendedor, seccion));
+
+const buildExcelRows = ({ rows, weeks, sectionLabel }) =>
+  rows.map((row, index) => {
+    const mensual = getMonthlyValues(row);
+    const base = {
+      "#": index + 1,
+      Seccion: sectionLabel,
+      Colaborador: row.nombre || "",
+      Cargo: row.cargoComision || row.cargo || "",
+      "Cargos pago": getCargosPagoLabel(row),
+      Agencias: (row.agencias || []).join(", "),
+      "Doble cargo": row.tieneMultiplesCargos ? "SI" : "NO",
+      "Fecha ingreso": getFechaIngresoVisible(row) || "",
+      "Fecha salida": row.fechaSalida || "",
+    };
+
+    weeks.forEach((week, weekIndex) => {
+      const values = getWeekValues(row, week);
+      const prefix = `S${weekIndex + 1} ${week.label}`;
+      base[`${prefix} ventas`] = values.venden || 0;
+      base[`${prefix} valor vendido`] = Number(values.valorVendido || 0);
+      base[`${prefix} comision`] = Number(values.totalComisiones || 0);
+      base[`${prefix} no cumple metas`] = values.noCumpleMetas || 0;
+      base[`${prefix} descuento`] = Number(values.valorDescontar || 0);
+    });
+
+    return {
+      ...base,
+      "Ventas mensuales": mensual.ventasTvCelulaMensual || 0,
+      "Valor comision semanal": Number(mensual.valorComisionSemanal || 0),
+      "Valor comision mensual": Number(mensual.valorComisionMensual || 0),
+      "Total comisiones": Number(mensual.totalComisionesSemanaMensual || 0),
+      "Total no cumple metas": mensual.totalNoCumpleMetas || 0,
+      "Total valor a descontar": Number(mensual.totalValorDescontar || 0),
+      "Total a pagar": Number(mensual.totalPagar || 0),
+    };
+  });
+
 export default function PagosComisiones() {
   const [filters, setFilters] = useState(initialFilters);
   const [report, setReport] = useState(null);
@@ -153,6 +249,15 @@ export default function PagosComisiones() {
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
   const [guardandoMulta, setGuardandoMulta] = useState("");
   const [seccionActiva, setSeccionActiva] = useState("VENDEDORES");
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configMeses, setConfigMeses] = useState([]);
+  const [configOriginalMeses, setConfigOriginalMeses] = useState([]);
+  const [configResumen, setConfigResumen] = useState(null);
+  const [exportScope, setExportScope] = useState("TODAS");
+  const [exportandoExcel, setExportandoExcel] = useState(false);
+  const [pagandoPeriodo, setPagandoPeriodo] = useState(false);
 
   const years = useMemo(() => {
     const currentYear = currentDate.getFullYear();
@@ -160,7 +265,42 @@ export default function PagosComisiones() {
   }, []);
 
   const weeks = useMemo(() => report?.weeks || [], [report]);
+  const configuracionMes = report?.configuracionMes || null;
+  const estadoPago = report?.estadoPago || null;
+  const periodoPagado = Boolean(estadoPago?.pagado);
+  const selectedMonthLabel =
+    MONTHS.find((month) => Number(month.value) === Number(filters.month))?.label ||
+    "";
   const vendedores = useMemo(() => report?.vendedores || [], [report]);
+  const configMesesPreview = useMemo(
+    () => buildCalendarPreview(filters.year, configMeses),
+    [configMeses, filters.year],
+  );
+  const semanasConfiguradas = useMemo(
+    () =>
+      configMeses.reduce(
+        (total, item) => total + Number(item.cantidadSemanas || 0),
+        0,
+      ),
+    [configMeses],
+  );
+  const semanasRequeridas = configResumen?.semanasRequeridas || 0;
+  const configuracionValida =
+    configMeses.length === 12 && semanasConfiguradas === semanasRequeridas;
+  const configPastChanged = useMemo(
+    () =>
+      configMeses.some((item) => {
+        const original = configOriginalMeses.find(
+          (row) => Number(row.mes) === Number(item.mes),
+        );
+        return (
+          original &&
+          Number(original.cantidadSemanas) !== Number(item.cantidadSemanas) &&
+          isPastCommercialMonth(filters.year, item.mes)
+        );
+      }),
+    [configMeses, configOriginalMeses, filters.year],
+  );
   const vendedoresSeccion = useMemo(
     () =>
       vendedores
@@ -253,6 +393,185 @@ export default function PagosComisiones() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const cargarConfiguracionMeses = async () => {
+    setConfigLoading(true);
+    try {
+      const { data } = await api.get(`${ENDPOINT}/configuracion-meses`, {
+        params: { year: filters.year },
+      });
+      const meses = (data.meses || []).map((item) => ({
+        mes: Number(item.mes),
+        cantidadSemanas: Number(item.cantidadSemanas),
+        observacion: item.observacion || "",
+        estado: item.estado,
+        configuradaManualmente: Boolean(item.configuradaManualmente),
+        fechaInicio: item.fechaInicio,
+        fechaFin: item.fechaFin,
+      }));
+      setConfigMeses(meses);
+      setConfigOriginalMeses(meses);
+      setConfigResumen(data.resumen || null);
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message ||
+          "No se pudo cargar la configuracion de meses",
+        "error",
+      );
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const abrirConfiguracionMes = async () => {
+    setConfigOpen(true);
+    await cargarConfiguracionMeses();
+  };
+
+  const cambiarCantidadSemanas = (mes, cantidadSemanas) => {
+    setConfigMeses((current) =>
+      current.map((item) =>
+        Number(item.mes) === Number(mes)
+          ? { ...item, cantidadSemanas: Number(cantidadSemanas) }
+          : item,
+      ),
+    );
+  };
+
+  const guardarConfiguracionAnual = async () => {
+    if (!configuracionValida) return;
+
+    if (configPastChanged) {
+      const confirmacion = await Swal.fire({
+        title: "Recalcular periodo",
+        text: "Cambiar esta configuracion recalculara las semanas y valores del reporte de comisiones de este periodo.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Guardar cambios",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#059669",
+      });
+      if (!confirmacion.isConfirmed) return;
+    }
+
+    setConfigSaving(true);
+    try {
+      const { data } = await api.put(
+        `${ENDPOINT}/configuracion-anual/${filters.year}`,
+        {
+          meses: configMeses.map(({ mes, cantidadSemanas, observacion }) => ({
+            mes,
+            cantidadSemanas,
+            observacion,
+          })),
+        },
+      );
+      const meses = (data.meses || []).map((item) => ({
+        mes: Number(item.mes),
+        cantidadSemanas: Number(item.cantidadSemanas),
+        observacion: item.observacion || "",
+        estado: item.estado,
+        configuradaManualmente: Boolean(item.configuradaManualmente),
+        fechaInicio: item.fechaInicio,
+        fechaFin: item.fechaFin,
+      }));
+      setConfigMeses(meses);
+      setConfigOriginalMeses(meses);
+      setConfigResumen(data.resumen || null);
+      await fetchReport();
+      Swal.fire("Listo", "Configuracion anual guardada", "success");
+      setConfigOpen(false);
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message ||
+          "No se pudo guardar la configuracion anual",
+        "error",
+      );
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const exportarExcel = () => {
+    if (!report || !weeks.length) {
+      Swal.fire("Sin datos", "Genere el reporte antes de exportar", "info");
+      return;
+    }
+
+    setExportandoExcel(true);
+    try {
+      const workbook = XLSX.utils.book_new();
+      const scopes =
+        exportScope === "TODAS"
+          ? SECCIONES.map((seccion) => seccion.id)
+          : [exportScope];
+
+      scopes.forEach((scope) => {
+        const section = SECCIONES.find((item) => item.id === scope);
+        const rows = getRowsForSection(vendedores, scope);
+        const excelRows = buildExcelRows({
+          rows,
+          weeks,
+          sectionLabel: section?.label || scope,
+        });
+        const worksheet = XLSX.utils.json_to_sheet(excelRows);
+        worksheet["!cols"] = Object.keys(excelRows[0] || { Colaborador: "" }).map(
+          (key) => ({ wch: Math.min(Math.max(String(key).length + 2, 12), 34) }),
+        );
+        XLSX.utils.book_append_sheet(
+          workbook,
+          worksheet,
+          (section?.label || scope).slice(0, 31),
+        );
+      });
+
+      const estado = periodoPagado ? "PAGADO" : "ABIERTO";
+      const mes = selectedMonthLabel || filters.month;
+      XLSX.writeFile(
+        workbook,
+        `Pagos_Comisiones_${mes}_${filters.year}_${estado}.xlsx`,
+      );
+    } catch (error) {
+      console.error("Error exportando pagos comisiones", error);
+      Swal.fire("Error", "No se pudo generar el archivo Excel", "error");
+    } finally {
+      setExportandoExcel(false);
+    }
+  };
+
+  const marcarPeriodoPagado = async () => {
+    if (!report || periodoPagado) return;
+
+    const confirmacion = await Swal.fire({
+      title: "Marcar como pagado",
+      text: "Al marcar este periodo como pagado, el reporte quedara guardado y ya no se recalculara.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Marcar pagado",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#059669",
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    setPagandoPeriodo(true);
+    try {
+      const { data } = await api.put(
+        `${ENDPOINT}/periodos/${filters.year}/${filters.month}/pagado`,
+      );
+      setReport(data);
+      Swal.fire("Listo", "Periodo marcado como pagado", "success");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo marcar el periodo pagado",
+        "error",
+      );
+    } finally {
+      setPagandoPeriodo(false);
     }
   };
 
@@ -383,7 +702,7 @@ export default function PagosComisiones() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[150px_160px_auto]">
+            <div className="grid gap-3 sm:grid-cols-[150px_160px_auto_auto]">
               <select
                 value={filters.month}
                 onChange={(event) =>
@@ -421,8 +740,39 @@ export default function PagosComisiones() {
                 <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                 Generar
               </button>
+              <button
+                type="button"
+                onClick={abrirConfiguracionMes}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                <CalendarCog size={16} />
+                Configuracion de mes
+              </button>
             </div>
           </div>
+          {configuracionMes ? (
+            <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-4 text-sm text-slate-700">
+              <span className="font-semibold text-slate-900">
+                {selectedMonthLabel} {filters.year}
+              </span>
+              <span>
+                {configuracionMes.cantidadSemanasConfigurada} semanas comerciales
+              </span>
+              <span>
+                Periodo: {formatDate(configuracionMes.fechaInicio)} al{" "}
+                {formatDate(configuracionMes.fechaFin)}
+              </span>
+              <span>
+                Bono mensual aplicado:{" "}
+                {configuracionMes.cantidadSemanasConfigurada} semanas
+              </span>
+              {!configuracionMes.configuradaManualmente ? (
+                <span className="text-amber-700">
+                  Fallback historico sin configuracion anual manual
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <nav className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
@@ -464,6 +814,68 @@ export default function PagosComisiones() {
             value={formatMoney(totalVisible.resumenMensual.totalPagar)}
           />
         </div>
+
+        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className={`rounded-lg p-2 ${
+                  periodoPagado
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {periodoPagado ? <Lock size={20} /> : <CheckCircle2 size={20} />}
+              </div>
+              <div>
+                <h2 className="font-semibold text-slate-900">
+                  Estado del periodo
+                </h2>
+                <p className="text-sm text-slate-600">
+                  {periodoPagado
+                    ? `Pagado${estadoPago?.pagadoAt ? ` el ${formatDate(estadoPago.pagadoAt)}` : ""}. El reporte esta congelado.`
+                    : "Abierto. El reporte se recalcula con ventas, semanas y configuraciones actuales."}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[190px_auto_auto]">
+              <select
+                value={exportScope}
+                onChange={(event) => setExportScope(event.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              >
+                {EXPORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={exportarExcel}
+                disabled={!report || exportandoExcel}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <Download size={16} />
+                {exportandoExcel ? "Exportando..." : "Exportar Excel"}
+              </button>
+              <button
+                type="button"
+                onClick={marcarPeriodoPagado}
+                disabled={!report || periodoPagado || pagandoPeriodo || loading}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                <Lock size={16} />
+                {periodoPagado
+                  ? "Pagado"
+                  : pagandoPeriodo
+                    ? "Guardando..."
+                    : "Marcar pagado"}
+              </button>
+            </div>
+          </div>
+        </section>
 
         {seccionActiva === "VENDEDORES" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -703,6 +1115,7 @@ export default function PagosComisiones() {
                           vendedor={vendedor}
                           week={week}
                           onToggleMulta={actualizarOmisionMulta}
+                          periodoPagado={periodoPagado}
                           guardando={
                             guardandoMulta === `${vendedor.usuarioId}-${week.startDate}`
                           }
@@ -752,6 +1165,175 @@ export default function PagosComisiones() {
             }
           />
         )}
+        {configOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+            <section className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-lg bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Configuracion de mes
+                  </h2>
+                  <div className="mt-1 flex flex-wrap gap-3 text-sm text-slate-600">
+                    <span>Año: {filters.year}</span>
+                    <span>Semanas configuradas: {semanasConfiguradas}</span>
+                    <span>Semanas requeridas: {semanasRequeridas || "-"}</span>
+                    <span
+                      className={
+                        configuracionValida
+                          ? "font-semibold text-emerald-700"
+                          : "font-semibold text-red-700"
+                      }
+                    >
+                      {configuracionValida
+                        ? "Configuracion valida"
+                        : "Configuracion invalida"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfigOpen(false)}
+                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  title="Cerrar"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {!configuracionValida ? (
+                <div className="mx-5 mt-4 flex gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                  <span>
+                    Ajuste los meses para que la suma sea igual a las semanas
+                    requeridas del calendario comercial anual.
+                  </span>
+                </div>
+              ) : null}
+
+              {configPastChanged ? (
+                <div className="mx-5 mt-4 flex gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                  <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                  <span>
+                    Cambiar esta configuracion recalculara las semanas y valores
+                    del reporte de comisiones de este periodo.
+                  </span>
+                </div>
+              ) : null}
+
+              <div className="max-h-[58vh] overflow-auto p-5">
+                {configLoading ? (
+                  <div className="py-12 text-center text-sm text-slate-500">
+                    Cargando configuracion...
+                  </div>
+                ) : (
+                  <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700">
+                        <th className="border border-slate-200 px-3 py-2">Mes</th>
+                        <th className="border border-slate-200 px-3 py-2">
+                          Cantidad de semanas
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2">
+                          Fecha inicial
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2">
+                          Fecha final
+                        </th>
+                        <th className="border border-slate-200 px-3 py-2">Estado</th>
+                        <th className="border border-slate-200 px-3 py-2">Accion</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {configMesesPreview.map((item) => {
+                        const monthLabel =
+                          MONTHS.find((month) => month.value === item.mes)?.label ||
+                          item.mes;
+                        const original = configOriginalMeses.find(
+                          (row) => Number(row.mes) === Number(item.mes),
+                        );
+                        const changed =
+                          original &&
+                          Number(original.cantidadSemanas) !==
+                            Number(item.cantidadSemanas);
+                        return (
+                          <tr key={item.mes} className="odd:bg-white even:bg-slate-50">
+                            <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-900">
+                              {monthLabel}
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              <select
+                                value={item.cantidadSemanas}
+                                onChange={(event) =>
+                                  cambiarCantidadSemanas(
+                                    item.mes,
+                                    event.target.value,
+                                  )
+                                }
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                              >
+                                <option value={4}>4 semanas</option>
+                                <option value={5}>5 semanas</option>
+                              </select>
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              {formatDate(item.fechaInicio)}
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              {formatDate(item.fechaFin)}
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              <span
+                                className={`rounded px-2 py-1 text-xs font-semibold ${
+                                  item.configuradaManualmente
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {item.configuradaManualmente
+                                  ? "Configurado"
+                                  : "Fallback"}
+                              </span>
+                            </td>
+                            <td className="border border-slate-200 px-3 py-2">
+                              {changed ? (
+                                <span className="text-xs font-semibold text-blue-700">
+                                  Pendiente
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-400">
+                                  Sin cambios
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfigOpen(false)}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={guardarConfiguracionAnual}
+                  disabled={!configuracionValida || configSaving || configLoading}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {configSaving ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1034,6 +1616,7 @@ function WeekValues({
   week = null,
   onToggleMulta = null,
   guardando = false,
+  periodoPagado = false,
 }) {
   const noCumpleClass = total
     ? "border border-slate-950 px-2 py-1.5"
@@ -1043,6 +1626,7 @@ function WeekValues({
     vendedor &&
     week &&
     onToggleMulta &&
+    !periodoPagado &&
     !values.personalNuevo &&
     !vendedor.tieneMultiplesCargos &&
     Number(values.valorMultaCalculado || 0) > 0;

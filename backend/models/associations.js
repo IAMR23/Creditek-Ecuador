@@ -52,6 +52,9 @@ const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
+const ConfiguracionMesComision = require('./ConfiguracionMesComision');
+const PagoComisionPeriodo = require('./PagoComisionPeriodo');
+const MetaMinimaMultaConfiguracion = require('./MetaMinimaMultaConfiguracion');
 const InventarioSistema = require('./InventarioSistema');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
@@ -504,6 +507,14 @@ RolPago.hasMany(SancionConfiguracion, { foreignKey: "rolPagoId", as: "sancionesC
 SancionConfiguracion.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
 RolPago.hasMany(ComisionConfiguracion, { foreignKey: "rolPagoId", as: "comisionesConfiguracion" });
 ComisionConfiguracion.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
+RolPago.hasOne(MetaMinimaMultaConfiguracion, {
+  foreignKey: "rolPagoId",
+  as: "metaMinimaMultaConfiguracion",
+});
+MetaMinimaMultaConfiguracion.belongsTo(RolPago, {
+  foreignKey: "rolPagoId",
+  as: "rolPago",
+});
 Usuario.hasMany(PagoComisionMultaAjuste, {
   foreignKey: "usuarioId",
   as: "ajustesMultasComisiones",
@@ -517,6 +528,46 @@ Usuario.hasMany(PagoComisionMultaAjuste, {
   as: "ajustesMultasComisionesRealizados",
 });
 PagoComisionMultaAjuste.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(ConfiguracionMesComision, {
+  foreignKey: "creadoPorId",
+  as: "configuracionesMesesComisionesCreadas",
+});
+ConfiguracionMesComision.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+Usuario.hasMany(ConfiguracionMesComision, {
+  foreignKey: "actualizadoPorId",
+  as: "configuracionesMesesComisionesActualizadas",
+});
+ConfiguracionMesComision.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(PagoComisionPeriodo, {
+  foreignKey: "pagadoPorId",
+  as: "periodosComisionesPagados",
+});
+PagoComisionPeriodo.belongsTo(Usuario, {
+  foreignKey: "pagadoPorId",
+  as: "pagadoPor",
+});
+Usuario.hasMany(MetaMinimaMultaConfiguracion, {
+  foreignKey: "creadoPorId",
+  as: "metasMinimasMultasCreadas",
+});
+MetaMinimaMultaConfiguracion.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+Usuario.hasMany(MetaMinimaMultaConfiguracion, {
+  foreignKey: "actualizadoPorId",
+  as: "metasMinimasMultasActualizadas",
+});
+MetaMinimaMultaConfiguracion.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
 });

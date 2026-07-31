@@ -189,6 +189,21 @@ export default function Sidebar({ auth }) {
             icon: <LucideTicketPercent size={20} />,
             path: "/contabilidad/comisiones",
           },
+              {
+            label: "Base de Datos Ventas",
+            icon: <BarChart3 size={20} />,
+            path: "/bdd-ventas",
+          },
+          {
+            label: "Configuracion de meta minima",
+            icon: <ShieldCheck size={20} />,
+            path: "/contabilidad/metas-minimas-multas",
+          },
+          {
+            label: "Meta minima sin multa",
+            icon: <ShieldCheck size={20} />,
+            path: "/contabilidad/meta-minima-sin-multa",
+          },
           {
             label: "Pagos comisiones",
             icon: <FileSpreadsheet size={20} />,
@@ -269,11 +284,7 @@ export default function Sidebar({ auth }) {
             icon: <ClipboardList size={20} />,
             path: "/conciliacion-facturas",
           },
-            {
-            label: "Base de Datos Ventas",
-            icon: <BarChart3 size={20} />,
-            path: "/bdd-ventas",
-          },
+        
         ],
       },
 

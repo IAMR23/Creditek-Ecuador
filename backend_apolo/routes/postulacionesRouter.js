@@ -26,7 +26,9 @@ const INTERVIEW_STATUSES = [
   "NO_ASISTIO",
   "CANCELADA",
   "SELECCIONADO",
+  "NO_ASISTIO_CAP",
 ];
+const SELECTED_INTERVIEW_STATUSES = ["SELECCIONADO", "NO_ASISTIO_CAP"];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
 const GUAYAQUIL_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -301,14 +303,14 @@ const buildListWhere = (query = {}) => {
     where.descartada = false;
     where.estadoEntrevista =
       INTERVIEW_STATUSES.includes(estadoEntrevista) &&
-      estadoEntrevista !== "SELECCIONADO"
+      !SELECTED_INTERVIEW_STATUSES.includes(estadoEntrevista)
         ? estadoEntrevista
-        : { [Op.ne]: "SELECCIONADO" };
+        : { [Op.notIn]: SELECTED_INTERVIEW_STATUSES };
   }
   if (fase === "seleccionado" || fase === "seleccionados") {
     where.pasaEntrevista = true;
     where.descartada = false;
-    where.estadoEntrevista = "SELECCIONADO";
+    where.estadoEntrevista = { [Op.in]: SELECTED_INTERVIEW_STATUSES };
   }
   if (fase === "descartado") where.descartada = true;
   if (
@@ -691,7 +693,7 @@ const buildResumen = async () => {
   const activeInterviewWhere = {
     pasaEntrevista: true,
     descartada: false,
-    estadoEntrevista: { [Op.ne]: "SELECCIONADO" },
+    estadoEntrevista: { [Op.notIn]: SELECTED_INTERVIEW_STATUSES },
   };
 
   const [
@@ -714,7 +716,7 @@ const buildResumen = async () => {
       where: {
         pasaEntrevista: true,
         descartada: false,
-        estadoEntrevista: "SELECCIONADO",
+        estadoEntrevista: { [Op.in]: SELECTED_INTERVIEW_STATUSES },
       },
     }),
     Postulacion.count({ where: { descartada: true } }),
@@ -724,7 +726,9 @@ const buildResumen = async () => {
     Postulacion.count({
       where: {
         ...activeInterviewWhere,
-        estadoEntrevista: { [Op.notIn]: ["CANCELADA", "NO_ASISTIO"] },
+        estadoEntrevista: {
+          [Op.notIn]: ["CANCELADA", "NO_ASISTIO", ...SELECTED_INTERVIEW_STATUSES],
+        },
         fechaEntrevista: { [Op.between]: [todayStart, todayEnd] },
       },
     }),

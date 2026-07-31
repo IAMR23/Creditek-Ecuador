@@ -1,13 +1,20 @@
-// ✅ Sin ningún import
+const CACHE_PREFIX = "rve-sw";
+const CACHE_NAME = `${CACHE_PREFIX}-20260731-1`;
+
 let API_URL = null;
 let token = null;
 let notifiedKeys = new Set();
 let pollingInterval = null;
 
 self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
   if (event.data?.type === "SET_TOKEN") {
     token = event.data.token;
-    API_URL = event.data.apiUrl; // ✅ Llega desde la app
+    API_URL = event.data.apiUrl;
     startPolling();
   }
 });
@@ -46,7 +53,7 @@ async function checkTasks() {
       if (notifiedKeys.has(key)) return;
       notifiedKeys.add(key);
 
-      self.registration.showNotification("⏰ Recordatorio de tarea", {
+      self.registration.showNotification("Recordatorio de tarea", {
         body: `${task.title}${task.description ? " - " + task.description : ""}`,
         tag: key,
         vibrate: [200, 100, 200],
@@ -57,13 +64,24 @@ async function checkTasks() {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
     });
-
   } catch (err) {
     console.error("[SW] Error al chequear tareas:", err);
   }
 }
 
 self.addEventListener("install", () => self.skipWaiting());
+
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+            .map((key) => caches.delete(key))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
 });

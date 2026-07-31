@@ -71,6 +71,76 @@ const buildWeekLabel = (startDate, endDate) => {
   return `${startDate.getDate()} DE ${startMonth} ${startYear} AL ${endDate.getDate()} DE ${endMonth} ${endYear}`;
 };
 
+const getFirstThursdayOfYear = (yearInput) => {
+  const year = Number(yearInput);
+  if (!Number.isInteger(year) || year < 1900 || year > 2500) {
+    throw new Error("El anio debe ser valido");
+  }
+
+  const firstDay = new Date(year, 0, 1);
+  const daysSinceThursday = (firstDay.getDay() - THURSDAY + 7) % 7;
+  return addDays(firstDay, -daysSinceThursday);
+};
+
+const getRequiredCommercialWeeksForYear = (yearInput) => {
+  const startDate = getFirstThursdayOfYear(yearInput);
+  const nextStartDate = getFirstThursdayOfYear(Number(yearInput) + 1);
+  const days = Math.round((nextStartDate - startDate) / (24 * 60 * 60 * 1000));
+  return days / 7;
+};
+
+const normalizeMonthWeeksConfiguration = (yearInput, monthsConfig = []) => {
+  const year = Number(yearInput);
+  if (!Number.isInteger(year) || year < 1900 || year > 2500) {
+    throw new Error("El anio debe ser valido");
+  }
+
+  const byMonth = new Map();
+  monthsConfig.forEach((item) => {
+    const mes = Number(item?.mes);
+    const cantidadSemanas = Number(item?.cantidadSemanas);
+
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
+      throw new Error("Cada configuracion debe tener mes entre 1 y 12");
+    }
+    if (![4, 5].includes(cantidadSemanas)) {
+      throw new Error("La cantidad de semanas debe ser 4 o 5");
+    }
+    if (byMonth.has(mes)) {
+      throw new Error(`El mes ${mes} esta duplicado en la configuracion`);
+    }
+
+    byMonth.set(mes, { mes, cantidadSemanas });
+  });
+
+  if (byMonth.size !== 12) {
+    throw new Error("Debe configurar los 12 meses del anio");
+  }
+
+  return Array.from({ length: 12 }, (_, index) => byMonth.get(index + 1));
+};
+
+const validateAnnualCommercialWeeksConfiguration = (yearInput, monthsConfig = []) => {
+  const meses = normalizeMonthWeeksConfiguration(yearInput, monthsConfig);
+  const semanasConfiguradas = meses.reduce(
+    (total, item) => total + item.cantidadSemanas,
+    0,
+  );
+  const semanasRequeridas = getRequiredCommercialWeeksForYear(yearInput);
+  const valida = semanasConfiguradas === semanasRequeridas;
+
+  return {
+    valida,
+    anio: Number(yearInput),
+    semanasConfiguradas,
+    semanasRequeridas,
+    meses,
+    message: valida
+      ? "Configuracion valida"
+      : `La configuracion suma ${semanasConfiguradas} semanas, pero el calendario comercial ${yearInput} requiere ${semanasRequeridas}.`,
+  };
+};
+
 const getCommercialWeekStart = (value) => {
   const date = parseLocalDateOnly(value);
   const daysSinceThursday = (date.getDay() - THURSDAY + 7) % 7;
@@ -102,12 +172,60 @@ const getCommercialWeeksByMonth = (yearInput, monthInput) => {
   return weeks;
 };
 
+const generateAnnualCommercialCalendar = ({
+  year: yearInput,
+  monthsConfig,
+  startDate: startDateInput,
+  validateTotal = true,
+}) => {
+  const year = Number(yearInput);
+  const meses = normalizeMonthWeeksConfiguration(year, monthsConfig);
+
+  if (validateTotal) {
+    const validation = validateAnnualCommercialWeeksConfiguration(year, meses);
+    if (!validation.valida) {
+      throw new Error(validation.message);
+    }
+  }
+
+  let startDate = startDateInput
+    ? parseLocalDateOnly(startDateInput)
+    : getFirstThursdayOfYear(year);
+  const weeks = [];
+
+  meses.forEach(({ mes, cantidadSemanas }) => {
+    for (let index = 0; index < cantidadSemanas; index += 1) {
+      const endDate = addDays(startDate, 6);
+      weeks.push({
+        startDate: toDateOnly(startDate),
+        endDate: toDateOnly(endDate),
+        label: buildWeekLabel(startDate, endDate),
+        monthOwner: mes,
+        yearOwner: year,
+      });
+      startDate = addDays(startDate, 7);
+    }
+  });
+
+  return weeks;
+};
+
+const getCommercialWeeksByConfiguredMonth = ({ year, month, monthsConfig }) =>
+  generateAnnualCommercialCalendar({ year, monthsConfig }).filter(
+    (week) => Number(week.monthOwner) === Number(month),
+  );
+
 module.exports = {
   MONTH_NAMES,
   addDays,
+  generateAnnualCommercialCalendar,
   getCommercialWeekKey,
   getCommercialWeekStart,
   getCommercialWeeksByMonth,
+  getCommercialWeeksByConfiguredMonth,
+  getFirstThursdayOfYear,
+  getRequiredCommercialWeeksForYear,
   parseLocalDateOnly,
   toDateOnly,
+  validateAnnualCommercialWeeksConfiguration,
 };

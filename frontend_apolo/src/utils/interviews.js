@@ -39,6 +39,11 @@ export const INTERVIEW_STATUS = {
     className: "border-teal-200 bg-teal-50 text-teal-800",
     dotClassName: "bg-teal-600",
   },
+  NO_ASISTIO_CAP: {
+    label: "No asistio a la capacitacion",
+    className: "border-red-200 bg-red-50 text-red-700",
+    dotClassName: "bg-red-500",
+  },
 };
 
 export const getPersonalData = (postulacion) =>

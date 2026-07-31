@@ -309,6 +309,36 @@ describe("pagosComisionesService", () => {
     expect(calculateMonthlyBonus({ rules, venden: 14.5 })).toBe(100);
   });
 
+  test("bono mensual prioriza la tabla configurada para 4 o 5 semanas", () => {
+    const configs = [
+      { grupo: "VENDEDORES DE PISO Y FURGONETA", periodo: "BONO_MENSUAL_4_SEMANAS", unidadesVendidas: "16", bono: 40 },
+      { grupo: "VENDEDORES DE PISO Y FURGONETA", periodo: "BONO_MENSUAL_5_SEMANAS", unidadesVendidas: "20", bono: 55 },
+      { grupo: "VENDEDORES DE PISO Y FURGONETA", periodo: "BONO_MENSUAL", unidadesVendidas: "18", bono: 45 },
+    ];
+
+    const rules4 = buildMonthlyRulesByGroup(configs, 4);
+    const rules5 = buildMonthlyRulesByGroup(configs, 5);
+
+    expect(
+      calculateMonthlyBonus({
+        rules: rules4["VENDEDORES DE PISO Y FURGONETA"],
+        venden: 19,
+      }),
+    ).toBe(40);
+    expect(
+      calculateMonthlyBonus({
+        rules: rules5["VENDEDORES DE PISO Y FURGONETA"],
+        venden: 19,
+      }),
+    ).toBe(0);
+    expect(
+      calculateMonthlyBonus({
+        rules: rules5["VENDEDORES DE PISO Y FURGONETA"],
+        venden: 20,
+      }),
+    ).toBe(55);
+  });
+
   test("supervisor piso y call center usan la misma logica con sus propias configuraciones", () => {
     const grouped = buildMonthlyRulesByGroup([
       { grupo: "SUPERVISOR PISO", subgrupo: "2 vendedores", periodo: "BONO_MENSUAL", promedioPorVendedor: "12", bono: 60 },

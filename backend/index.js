@@ -215,6 +215,8 @@ connectDB()
     app.use("/api/contabilidad/sanciones-configuracion", require("./routes/Contabilidad/sancionesConfiguracionRoutes"));
     app.use("/api/contabilidad/sanciones-ventas", require("./routes/Contabilidad/sancionesVentasRoutes"));
     app.use("/api/contabilidad/pagos-comisiones", require("./routes/Contabilidad/pagosComisionesRoutes"));
+    app.use("/api/contabilidad/metas-minimas-multas", require("./routes/Contabilidad/metaMinimaMultaRoutes"));
+    app.use("/api/dashboard", require("./routes/dashboardMetaMinimaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));

@@ -36,7 +36,7 @@ export default function InterviewFilters({
           <select value={filters.estadoEntrevista} onChange={update("estadoEntrevista")} className={inputClass}>
             <option value="">Todos los estados</option>
             {Object.entries(INTERVIEW_STATUS)
-              .filter(([value]) => value !== "SELECCIONADO")
+              .filter(([value]) => !["SELECCIONADO", "NO_ASISTIO_CAP"].includes(value))
               .map(([value, meta]) => (
                 <option key={value} value={value}>{meta.label}</option>
               ))}

@@ -267,6 +267,11 @@ function InterviewActions({
               Marcar como seleccionado
             </button>
           )}
+          {selectedMode && getInterviewStatus(interview) !== "NO_ASISTIO_CAP" && (
+            <button type="button" onClick={() => onStatusChange(interview, "NO_ASISTIO_CAP")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
+              No asistio a la capacitacion
+            </button>
+          )}
           {scheduled && (
             <button type="button" onClick={() => onStatusChange(interview, "NO_ASISTIO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
               Registrar que no asistió

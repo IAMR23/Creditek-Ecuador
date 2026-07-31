@@ -83,6 +83,7 @@ import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
 import MapaComercial from "./pages/Sistemas/MapaComercial";
 import Inventarios from "./pages/Sistemas/Inventarios";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
+import { initAppVersionWatcher } from "./utils/appVersion";
 
 import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
@@ -97,6 +98,8 @@ import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
 import Nomina from "./pages/Contabilidad/Nomina";
 import RolesPago from "./pages/Contabilidad/RolesPago";
 import Comisiones from "./pages/Contabilidad/Comisiones";
+import MetaMinimaMultaConfiguracion from "./pages/Contabilidad/MetaMinimaMultaConfiguracion";
+import MetaMinimaSinMulta from "./pages/Contabilidad/MetaMinimaSinMulta";
 import PagosComisiones from "./pages/Contabilidad/PagosComisiones";
 import SancionesConfiguracion from "./pages/Contabilidad/SancionesConfiguracion";
 import SancionesVentas from "./pages/Contabilidad/SancionesVentas";
@@ -247,6 +250,7 @@ function App() {
     registerSW().then(() => {
       initSWWithToken();
     });
+    initAppVersionWatcher();
   }, []);
 
   if (authLoading) {
@@ -431,6 +435,20 @@ function App() {
                 <Route
                   path="contabilidad/comisiones"
                   element={protect(<Comisiones />, "/contabilidad/comisiones")}
+                />
+                <Route
+                  path="contabilidad/metas-minimas-multas"
+                  element={protect(
+                    <MetaMinimaMultaConfiguracion />,
+                    "/contabilidad/metas-minimas-multas",
+                  )}
+                />
+                <Route
+                  path="contabilidad/meta-minima-sin-multa"
+                  element={protect(
+                    <MetaMinimaSinMulta />,
+                    "/contabilidad/meta-minima-sin-multa",
+                  )}
                 />
                 <Route
                   path="contabilidad/pagos-comisiones"

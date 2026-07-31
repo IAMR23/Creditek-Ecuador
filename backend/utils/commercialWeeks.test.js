@@ -1,6 +1,9 @@
 const {
+  generateAnnualCommercialCalendar,
   getCommercialWeekKey,
   getCommercialWeeksByMonth,
+  getRequiredCommercialWeeksForYear,
+  validateAnnualCommercialWeeksConfiguration,
 } = require("./commercialWeeks");
 
 describe("commercialWeeks", () => {
@@ -57,6 +60,82 @@ describe("commercialWeeks", () => {
       endDate: "2027-01-06",
       monthOwner: 12,
       yearOwner: 2026,
+    });
+  });
+
+  test("calendario anual configurado asigna meses consecutivos sin huecos", () => {
+    const monthsConfig = [
+      { mes: 1, cantidadSemanas: 4 },
+      { mes: 2, cantidadSemanas: 5 },
+      { mes: 3, cantidadSemanas: 4 },
+      { mes: 4, cantidadSemanas: 4 },
+      { mes: 5, cantidadSemanas: 5 },
+      { mes: 6, cantidadSemanas: 4 },
+      { mes: 7, cantidadSemanas: 4 },
+      { mes: 8, cantidadSemanas: 5 },
+      { mes: 9, cantidadSemanas: 4 },
+      { mes: 10, cantidadSemanas: 5 },
+      { mes: 11, cantidadSemanas: 4 },
+      { mes: 12, cantidadSemanas: 4 },
+    ];
+
+    const weeks = generateAnnualCommercialCalendar({
+      year: 2026,
+      monthsConfig,
+    });
+
+    expect(getRequiredCommercialWeeksForYear(2026)).toBe(52);
+    expect(weeks).toHaveLength(52);
+    expect(weeks.filter((week) => week.monthOwner === 1)).toEqual([
+      expect.objectContaining({ startDate: "2026-01-01", endDate: "2026-01-07" }),
+      expect.objectContaining({ startDate: "2026-01-08", endDate: "2026-01-14" }),
+      expect.objectContaining({ startDate: "2026-01-15", endDate: "2026-01-21" }),
+      expect.objectContaining({ startDate: "2026-01-22", endDate: "2026-01-28" }),
+    ]);
+    expect(weeks.filter((week) => week.monthOwner === 2)[0]).toMatchObject({
+      startDate: "2026-01-29",
+      endDate: "2026-02-04",
+    });
+    expect(weeks.filter((week) => week.monthOwner === 7)).toHaveLength(4);
+    expect(weeks.filter((week) => week.monthOwner === 8)).toHaveLength(5);
+    expect(weeks.filter((week) => week.monthOwner === 7).at(-1)).toMatchObject({
+      startDate: "2026-07-23",
+      endDate: "2026-07-29",
+    });
+    expect(weeks.filter((week) => week.monthOwner === 8)[0]).toMatchObject({
+      startDate: "2026-07-30",
+      endDate: "2026-08-05",
+    });
+    expect(weeks.at(-1)).toMatchObject({
+      startDate: "2026-12-24",
+      endDate: "2026-12-30",
+      monthOwner: 12,
+    });
+
+    weeks.slice(1).forEach((week, index) => {
+      expect(getCommercialWeekKey(week.startDate)).toBe(week.startDate);
+      const previous = weeks[index];
+      const expectedStart = new Date(`${previous.endDate}T00:00:00`);
+      expectedStart.setDate(expectedStart.getDate() + 1);
+      expect(week.startDate).toBe(expectedStart.toISOString().slice(0, 10));
+    });
+  });
+
+  test("rechaza configuracion anual con suma incompatible", () => {
+    const monthsConfig = Array.from({ length: 12 }, (_, index) => ({
+      mes: index + 1,
+      cantidadSemanas: 4,
+    }));
+
+    const validation = validateAnnualCommercialWeeksConfiguration(
+      2026,
+      monthsConfig,
+    );
+
+    expect(validation).toMatchObject({
+      valida: false,
+      semanasConfiguradas: 48,
+      semanasRequeridas: 52,
     });
   });
 });

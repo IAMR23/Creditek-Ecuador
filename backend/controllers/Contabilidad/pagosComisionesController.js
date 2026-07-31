@@ -18,6 +18,72 @@ const obtenerReporte = async (req, res) => {
   }
 };
 
+const listarConfiguracionMeses = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.listarConfiguracionMesesComision({
+      year: req.query.year,
+    });
+    res.json(resultado);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
+const obtenerConfiguracionMes = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.obtenerConfiguracionMesComision({
+      year: req.params.year,
+      month: req.params.month,
+    });
+    res.json(resultado);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
+const actualizarConfiguracionMes = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.guardarConfiguracionMesComision({
+      year: req.params.year,
+      month: req.params.month,
+      cantidadSemanas: req.body.cantidadSemanas,
+      observacion: req.body.observacion,
+      usuarioId: req.user.id,
+    });
+    res.json(resultado);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
+const actualizarConfiguracionAnual = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.guardarConfiguracionAnualComision({
+      year: req.params.year,
+      meses: req.body.meses,
+      usuarioId: req.user.id,
+    });
+    res.json(resultado);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
+const marcarPeriodoPagado = async (req, res) => {
+  try {
+    const resultado =
+      await pagosComisionesService.marcarPeriodoPagosComisionesPagado({
+        year: req.params.year,
+        month: req.params.month,
+        usuarioId: req.user.id,
+        observacion: req.body.observacion,
+      });
+    res.json(resultado);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
 const actualizarJefeComercial = async (req, res) => {
   try {
     const usuarioId = Number(req.params.usuarioId);
@@ -109,6 +175,11 @@ const actualizarOmisionMulta = async (req, res) => {
 
 module.exports = {
   obtenerReporte,
+  listarConfiguracionMeses,
+  obtenerConfiguracionMes,
+  actualizarConfiguracionMes,
+  actualizarConfiguracionAnual,
+  marcarPeriodoPagado,
   actualizarJefeComercial,
   actualizarSupervisorComercial,
   actualizarOmisionMulta,

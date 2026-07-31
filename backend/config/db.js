@@ -776,6 +776,10 @@ const connectDB = async () => {
     await seedComisionesConfiguracion();
     const { seedSancionesConfiguracion } = require("../seeders/sancionesConfiguracionSeeder");
     await seedSancionesConfiguracion();
+    const {
+      seedMetaMinimaMultaConfiguracion,
+    } = require("../seeders/metaMinimaMultaSeeder");
+    await seedMetaMinimaMultaConfiguracion();
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

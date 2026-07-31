@@ -358,7 +358,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
 
   const changeStatus = async (interview, status) => {
     const meta = INTERVIEW_STATUS[status];
-    const destructive = ["NO_ASISTIO", "CANCELADA"].includes(status);
+    const destructive = ["NO_ASISTIO", "NO_ASISTIO_CAP", "CANCELADA"].includes(status);
     const result = await Swal.fire({
       icon: destructive ? "warning" : "question",
       title: `Cambiar estado a “${meta?.label || status}”`,

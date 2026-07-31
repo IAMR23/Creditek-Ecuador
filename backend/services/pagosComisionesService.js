@@ -1,4 +1,5 @@
 const { Op } = require("sequelize");
+const { sequelize } = require("../config/db");
 const Venta = require("../models/Venta");
 const DetalleVenta = require("../models/DetalleVenta");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
@@ -10,10 +11,14 @@ const NominaEmpleado = require("../models/NominaEmpleado");
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
 const SancionConfiguracion = require("../models/SancionConfiguracion");
 const PagoComisionMultaAjuste = require("../models/PagoComisionMultaAjuste");
+const ConfiguracionMesComision = require("../models/ConfiguracionMesComision");
+const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
 const {
   addDays,
+  generateAnnualCommercialCalendar,
   getCommercialWeekKey,
   getCommercialWeeksByMonth,
+  validateAnnualCommercialWeeksConfiguration,
   parseLocalDateOnly,
   toDateOnly,
 } = require("../utils/commercialWeeks");
@@ -774,6 +779,338 @@ const parseReportPeriod = ({ year, month }) => {
   return { numericYear, numericMonth };
 };
 
+const getDefaultMonthsConfiguration = (year) =>
+  Array.from({ length: 12 }, (_, index) => {
+    const mes = index + 1;
+    return {
+      mes,
+      cantidadSemanas: getCommercialWeeksByMonth(year, mes).length,
+    };
+  });
+
+const serializeConfiguracionMes = (row) => ({
+  id: row.id,
+  anio: row.anio,
+  mes: row.mes,
+  cantidadSemanas: row.cantidadSemanas,
+  observacion: row.observacion || "",
+  activo: Boolean(row.activo),
+  creadoPorId: row.creadoPorId || null,
+  actualizadoPorId: row.actualizadoPorId || null,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
+const getActiveMonthConfigurations = async (year) =>
+  ConfiguracionMesComision.findAll({
+    where: { anio: year, activo: true },
+    order: [["mes", "ASC"]],
+  });
+
+const buildEffectiveMonthsConfiguration = (year, activeRows = []) => {
+  const byMonth = new Map(
+    getDefaultMonthsConfiguration(year).map((item) => [item.mes, item]),
+  );
+
+  activeRows.forEach((row) => {
+    byMonth.set(Number(row.mes), {
+      mes: Number(row.mes),
+      cantidadSemanas: Number(row.cantidadSemanas),
+    });
+  });
+
+  return Array.from({ length: 12 }, (_, index) => byMonth.get(index + 1));
+};
+
+const validateAnnualConfigurationOrFail = (year, monthsConfig) => {
+  try {
+    return validateAnnualCommercialWeeksConfiguration(year, monthsConfig);
+  } catch (error) {
+    throw createHttpError(error.message, 400);
+  }
+};
+
+const serializePeriodoPagado = (row) => ({
+  id: row.id,
+  anio: row.anio,
+  mes: row.mes,
+  estado: row.estado,
+  pagado: row.estado === "PAGADO" && row.activo,
+  pagadoPorId: row.pagadoPorId || null,
+  pagadoAt: row.pagadoAt || null,
+  observacion: row.observacion || "",
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
+const getPeriodoPagado = async (year, month) =>
+  PagoComisionPeriodo.findOne({
+    where: {
+      anio: year,
+      mes: month,
+      activo: true,
+      estado: "PAGADO",
+    },
+  });
+
+const buildReportePagado = (periodo) => ({
+  ...(periodo.reporteSnapshot || {}),
+  estadoPago: serializePeriodoPagado(periodo),
+});
+
+const getConfiguredCalendarForYear = async (year) => {
+  const activeRows = await getActiveMonthConfigurations(year);
+  if (activeRows.length !== 12) {
+    return {
+      configured: false,
+      activeRows,
+      weeks: null,
+      monthsConfig: buildEffectiveMonthsConfiguration(year, activeRows),
+    };
+  }
+
+  const monthsConfig = activeRows.map((row) => ({
+    mes: Number(row.mes),
+    cantidadSemanas: Number(row.cantidadSemanas),
+  }));
+  const validation = validateAnnualConfigurationOrFail(year, monthsConfig);
+  if (!validation.valida) {
+    throw createHttpError(validation.message, 400);
+  }
+
+  return {
+    configured: true,
+    activeRows,
+    monthsConfig,
+    weeks: generateAnnualCommercialCalendar({ year, monthsConfig }),
+  };
+};
+
+const getCommercialWeeksByConfiguredMonth = async (year, month) => {
+  const calendar = await getConfiguredCalendarForYear(year);
+
+  if (!calendar.configured) {
+    const weeks = getCommercialWeeksByMonth(year, month);
+    return {
+      weeks,
+      configuracionMes: {
+        anio: year,
+        mes: month,
+        cantidadSemanasConfigurada: weeks.length,
+        fechaInicio: weeks[0]?.startDate || null,
+        fechaFin: weeks[weeks.length - 1]?.endDate || null,
+        configuradaManualmente: false,
+      },
+    };
+  }
+
+  const weeks = calendar.weeks.filter(
+    (week) => Number(week.monthOwner) === Number(month),
+  );
+
+  return {
+    weeks,
+    configuracionMes: {
+      anio: year,
+      mes: month,
+      cantidadSemanasConfigurada: weeks.length,
+      fechaInicio: weeks[0]?.startDate || null,
+      fechaFin: weeks[weeks.length - 1]?.endDate || null,
+      configuradaManualmente: true,
+    },
+  };
+};
+
+const buildMonthRowsWithDates = ({ year, monthsConfig, configuredRowsByMonth }) => {
+  let weeksByMonth = new Map();
+  let calendarError = null;
+
+  try {
+    const calendar = generateAnnualCommercialCalendar({
+      year,
+      monthsConfig,
+      validateTotal: false,
+    });
+    weeksByMonth = calendar.reduce((map, week) => {
+      const key = Number(week.monthOwner);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(week);
+      return map;
+    }, new Map());
+  } catch (error) {
+    calendarError = error.message;
+  }
+
+  return monthsConfig.map((item) => {
+    const configuredRow = configuredRowsByMonth.get(Number(item.mes));
+    const weeks = weeksByMonth.get(Number(item.mes)) || [];
+    const fallbackWeeks = getCommercialWeeksByMonth(year, item.mes);
+
+    return {
+      ...(configuredRow ? serializeConfiguracionMes(configuredRow) : {}),
+      anio: year,
+      mes: item.mes,
+      cantidadSemanas: item.cantidadSemanas,
+      fechaInicio: (weeks[0] || fallbackWeeks[0])?.startDate || null,
+      fechaFin:
+        (weeks[weeks.length - 1] || fallbackWeeks[fallbackWeeks.length - 1])
+          ?.endDate || null,
+      estado: configuredRow ? "CONFIGURADO" : "FALLBACK",
+      configuradaManualmente: Boolean(configuredRow),
+      activo: configuredRow ? Boolean(configuredRow.activo) : false,
+      observacion: configuredRow?.observacion || "",
+      errorCalendario: calendarError,
+    };
+  });
+};
+
+const listarConfiguracionMesesComision = async ({ year }) => {
+  const numericYear = Number(year);
+  if (!Number.isInteger(numericYear)) {
+    throw createHttpError("Debe enviar year como numero", 400);
+  }
+
+  const activeRows = await getActiveMonthConfigurations(numericYear);
+  const configuredRowsByMonth = new Map(
+    activeRows.map((row) => [Number(row.mes), row]),
+  );
+  const monthsConfig = buildEffectiveMonthsConfiguration(numericYear, activeRows);
+  const validation = validateAnnualConfigurationOrFail(
+    numericYear,
+    monthsConfig,
+  );
+
+  return {
+    anio: numericYear,
+    meses: buildMonthRowsWithDates({
+      year: numericYear,
+      monthsConfig,
+      configuredRowsByMonth,
+    }),
+    resumen: {
+      semanasConfiguradas: validation.semanasConfiguradas,
+      semanasRequeridas: validation.semanasRequeridas,
+      valida: validation.valida,
+      configuracionCompleta: activeRows.length === 12,
+      configuradaManualmente: activeRows.length === 12 && validation.valida,
+      message: validation.message,
+    },
+  };
+};
+
+const obtenerConfiguracionMesComision = async ({ year, month }) => {
+  const { numericYear, numericMonth } = parseReportPeriod({ year, month });
+  const annual = await listarConfiguracionMesesComision({ year: numericYear });
+  return annual.meses.find((item) => Number(item.mes) === numericMonth);
+};
+
+const validateMonthConfigPayload = ({ year, month, cantidadSemanas }) => {
+  const { numericYear, numericMonth } = parseReportPeriod({ year, month });
+  const numericWeeks = Number(cantidadSemanas);
+  if (![4, 5].includes(numericWeeks)) {
+    throw createHttpError("La cantidad de semanas debe ser 4 o 5", 400);
+  }
+  return { numericYear, numericMonth, numericWeeks };
+};
+
+const guardarConfiguracionMesComision = async ({
+  year,
+  month,
+  cantidadSemanas,
+  observacion,
+  usuarioId,
+}) => {
+  const { numericYear, numericMonth, numericWeeks } = validateMonthConfigPayload({
+    year,
+    month,
+    cantidadSemanas,
+  });
+  const activeRows = await getActiveMonthConfigurations(numericYear);
+  const monthsConfig = buildEffectiveMonthsConfiguration(numericYear, activeRows).map(
+    (item) =>
+      item.mes === numericMonth
+        ? { ...item, cantidadSemanas: numericWeeks }
+        : item,
+  );
+  const validation = validateAnnualConfigurationOrFail(
+    numericYear,
+    monthsConfig,
+  );
+  if (!validation.valida) throw createHttpError(validation.message, 400);
+
+  const [row] = await ConfiguracionMesComision.findOrCreate({
+    where: { anio: numericYear, mes: numericMonth },
+    defaults: {
+      cantidadSemanas: numericWeeks,
+      observacion: observacion || null,
+      activo: true,
+      creadoPorId: usuarioId || null,
+      actualizadoPorId: usuarioId || null,
+    },
+  });
+
+  await row.update({
+    cantidadSemanas: numericWeeks,
+    observacion: observacion || null,
+    activo: true,
+    actualizadoPorId: usuarioId || null,
+  });
+
+  return obtenerConfiguracionMesComision({
+    year: numericYear,
+    month: numericMonth,
+  });
+};
+
+const guardarConfiguracionAnualComision = async ({ year, meses, usuarioId }) => {
+  const numericYear = Number(year);
+  if (!Number.isInteger(numericYear)) {
+    throw createHttpError("Debe enviar year como numero", 400);
+  }
+  if (!Array.isArray(meses)) {
+    throw createHttpError("Debe enviar un arreglo de meses", 400);
+  }
+
+  const normalizedMonths = meses.map((item) => ({
+    mes: Number(item?.mes),
+    cantidadSemanas: Number(item?.cantidadSemanas),
+    observacion: item?.observacion || null,
+  }));
+  const validation = validateAnnualConfigurationOrFail(
+    numericYear,
+    normalizedMonths,
+  );
+  if (!validation.valida) throw createHttpError(validation.message, 400);
+
+  await sequelize.transaction(async (transaction) => {
+    for (const item of normalizedMonths) {
+      const [row] = await ConfiguracionMesComision.findOrCreate({
+        where: { anio: numericYear, mes: item.mes },
+        defaults: {
+          cantidadSemanas: item.cantidadSemanas,
+          observacion: item.observacion,
+          activo: true,
+          creadoPorId: usuarioId || null,
+          actualizadoPorId: usuarioId || null,
+        },
+        transaction,
+      });
+
+      await row.update(
+        {
+          cantidadSemanas: item.cantidadSemanas,
+          observacion: item.observacion,
+          activo: true,
+          actualizadoPorId: usuarioId || null,
+        },
+        { transaction },
+      );
+    }
+  });
+
+  return listarConfiguracionMesesComision({ year: numericYear });
+};
+
 const mergeAgencias = (current = [], incoming = []) =>
   [...new Set([...current, ...incoming].filter(Boolean))].sort();
 
@@ -1143,9 +1480,12 @@ const finalizarVendedor = (
   );
 };
 
-const obtenerReportePagosComisiones = async ({ year, month }) => {
+const construirReportePagosComisiones = async ({ year, month }) => {
   const { numericYear, numericMonth } = parseReportPeriod({ year, month });
-  const weeks = getCommercialWeeksByMonth(numericYear, numericMonth);
+  const { weeks, configuracionMes } = await getCommercialWeeksByConfiguredMonth(
+    numericYear,
+    numericMonth,
+  );
   const weekKeys = new Set(weeks.map((week) => week.startDate));
   const fechaInicio = weeks[0].startDate;
   const fechaFin = weeks[weeks.length - 1].endDate;
@@ -1167,7 +1507,11 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
   ]);
 
   const weeklyRulesByGroup = buildWeeklyRulesByGroup(configs);
-  const monthlyRulesByGroup = buildMonthlyRulesByGroup(configs, weeks.length);
+  const cantidadSemanasConfigurada = configuracionMes.cantidadSemanasConfigurada;
+  const monthlyRulesByGroup = buildMonthlyRulesByGroup(
+    configs,
+    cantidadSemanasConfigurada,
+  );
   const sanctionsByRole = buildSanctionsByRole(sanciones);
   const penaltyAdjustments = buildPenaltyAdjustmentsMap(penaltyAdjustmentsRows);
   const vendedoresMap = new Map();
@@ -1382,10 +1726,92 @@ const obtenerReportePagosComisiones = async ({ year, month }) => {
     month: numericMonth,
     fechaInicio,
     fechaFin,
+    configuracionMes,
+    estadoPago: {
+      pagado: false,
+      estado: "ABIERTO",
+      anio: numericYear,
+      mes: numericMonth,
+    },
     weeks,
     vendedores,
     total,
   };
+};
+
+const obtenerReportePagosComisiones = async ({ year, month }) => {
+  const { numericYear, numericMonth } = parseReportPeriod({ year, month });
+  const periodoPagado = await getPeriodoPagado(numericYear, numericMonth);
+  if (periodoPagado) return buildReportePagado(periodoPagado);
+
+  return construirReportePagosComisiones({
+    year: numericYear,
+    month: numericMonth,
+  });
+};
+
+const marcarPeriodoPagosComisionesPagado = async ({
+  year,
+  month,
+  usuarioId,
+  observacion,
+}) => {
+  const { numericYear, numericMonth } = parseReportPeriod({ year, month });
+  const periodoPagado = await getPeriodoPagado(numericYear, numericMonth);
+  if (periodoPagado) return buildReportePagado(periodoPagado);
+
+  const pagadoAt = new Date();
+  const reporte = await construirReportePagosComisiones({
+    year: numericYear,
+    month: numericMonth,
+  });
+  const estadoPago = {
+    pagado: true,
+    estado: "PAGADO",
+    anio: numericYear,
+    mes: numericMonth,
+    pagadoPorId: usuarioId || null,
+    pagadoAt,
+    observacion: observacion || "",
+  };
+  const reporteSnapshot = {
+    ...reporte,
+    estadoPago,
+  };
+
+  const periodo = await sequelize.transaction(async (transaction) => {
+    const [row] = await PagoComisionPeriodo.findOrCreate({
+      where: { anio: numericYear, mes: numericMonth },
+      defaults: {
+        estado: "PAGADO",
+        reporteSnapshot,
+        observacion: observacion || null,
+        activo: true,
+        pagadoPorId: usuarioId || null,
+        pagadoAt,
+      },
+      transaction,
+    });
+
+    if (row.estado === "PAGADO" && row.activo && row.reporteSnapshot) {
+      return row;
+    }
+
+    await row.update(
+      {
+        estado: "PAGADO",
+        reporteSnapshot,
+        observacion: observacion || null,
+        activo: true,
+        pagadoPorId: usuarioId || null,
+        pagadoAt,
+      },
+      { transaction },
+    );
+    return row;
+  });
+
+  return buildReportePagado(periodo);
 };
 
 const createHttpError = (message, statusCode) => {
@@ -1394,7 +1820,7 @@ const createHttpError = (message, statusCode) => {
   return error;
 };
 
-const parseCommercialWeek = (semanaInicio) => {
+const parseCommercialWeek = async (semanaInicio) => {
   const value = String(semanaInicio || "");
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match || getCommercialWeekKey(value) !== value) {
@@ -1406,14 +1832,21 @@ const parseCommercialWeek = (semanaInicio) => {
 
   const year = Number(match[1]);
   const month = Number(match[2]);
-  const week = getCommercialWeeksByMonth(year, month).find(
-    (item) => item.startDate === value,
-  );
+  const calendar = await getConfiguredCalendarForYear(year);
+  const week = calendar.configured
+    ? calendar.weeks.find((item) => item.startDate === value)
+    : getCommercialWeeksByMonth(year, month).find(
+        (item) => item.startDate === value,
+      );
   if (!week) {
     throw createHttpError("La semana comercial no es valida", 400);
   }
 
-  return { year, month, week };
+  return {
+    year: Number(week.yearOwner || year),
+    month: Number(week.monthOwner || month),
+    week,
+  };
 };
 
 const actualizarOmisionMulta = async ({
@@ -1430,7 +1863,11 @@ const actualizarOmisionMulta = async ({
     throw createHttpError("Debe indicar si la multa sera omitida", 400);
   }
 
-  const { year, month, week } = parseCommercialWeek(semanaInicio);
+  const { year, month, week } = await parseCommercialWeek(semanaInicio);
+  const periodoPagado = await getPeriodoPagado(year, month);
+  if (periodoPagado) {
+    throw createHttpError("No se puede modificar multas de un periodo pagado", 400);
+  }
   const reporte = await obtenerReportePagosComisiones({ year, month });
   const vendedor = reporte.vendedores.find(
     (item) => Number(item.usuarioId) === numericUsuarioId,
@@ -1509,6 +1946,12 @@ module.exports = {
   isNewPersonnelDuringWeek,
   isActiveDuringPeriod,
   isFutureCommercialWeek,
+  getCommercialWeeksByConfiguredMonth,
+  listarConfiguracionMesesComision,
+  obtenerConfiguracionMesComision,
+  guardarConfiguracionMesComision,
+  guardarConfiguracionAnualComision,
   obtenerReportePagosComisiones,
+  marcarPeriodoPagosComisionesPagado,
   actualizarOmisionMulta,
 };

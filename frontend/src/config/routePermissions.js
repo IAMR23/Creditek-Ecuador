@@ -75,6 +75,8 @@ export const ROUTE_PERMISSIONS = {
   "/nomina": ["Contabilidad", "Administracion"],
   "/contabilidad/roles-pago": ["Contabilidad", "Administracion"],
   "/contabilidad/comisiones": ["Contabilidad", "Administracion"],
+  "/contabilidad/metas-minimas-multas": ["Contabilidad", "Administracion"],
+  "/contabilidad/meta-minima-sin-multa": ["Contabilidad", "Administracion"],
   "/contabilidad/pagos-comisiones": ["Contabilidad", "Administracion"],
   "/contabilidad/sanciones-configuracion": ["Contabilidad", "Administracion"],
   "/contabilidad/sanciones-ventas": ["Contabilidad", "Administracion"],
