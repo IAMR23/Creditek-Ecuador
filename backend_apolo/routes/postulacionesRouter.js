@@ -1305,6 +1305,7 @@ router.patch("/:id/familiares/:familiarIndex", auth, async (req, res) => {
         ultima_revision_familiar_txt: new Date().toISOString(),
       }),
     };
+    postulacion.changed("formulario", true);
     await postulacion.save();
 
     return res.json({
@@ -1378,6 +1379,7 @@ router.patch("/:id/titular-txt", auth, async (req, res) => {
         ultima_revision_titular_txt: new Date().toISOString(),
       }),
     };
+    postulacion.changed("formulario", true);
     await postulacion.save();
 
     return res.json({

@@ -28,6 +28,7 @@ const PAGE_SIZE = 10;
 const MAX_BULK_TXT_FILES = 200;
 const MAX_TXT_FILE_BYTES = 75 * 1024;
 const BULK_TXT_CONCURRENCY = 4;
+const FAMILY_OBSERVATION_SAVE_DELAY_MS = 500;
 const createEmptyFilters = () => ({
   q: "",
   fechaDesde: "",
@@ -193,6 +194,16 @@ export default function Postulaciones({ modo = "postulacion" }) {
   const familyTxtInputRef = useRef(null);
   const familyTxtTargetRef = useRef(null);
   const bulkFamilyTxtInputRef = useRef(null);
+  const familyObservationTimersRef = useRef(new Map());
+
+  useEffect(() => {
+    const timers = familyObservationTimersRef.current;
+
+    return () => {
+      timers.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      timers.clear();
+    };
+  }, []);
 
   const total = useMemo(() => pagination.total || postulaciones.length, [pagination.total, postulaciones.length]);
 
@@ -665,22 +676,10 @@ export default function Postulaciones({ modo = "postulacion" }) {
     try {
       setSavingFamilyReviewKey(key);
       setError("");
-      const res = await api.patch(
+      await api.patch(
         `/api/postulaciones/${postulacion.id}/familiares/${familiarIndex}`,
         changes,
       );
-      const postulacionActualizada = res.data?.data;
-
-      if (postulacionActualizada) {
-        setPostulaciones((prev) =>
-          prev.map((item) =>
-            item.id === postulacion.id ? postulacionActualizada : item,
-          ),
-        );
-        setSelected((prev) =>
-          prev?.id === postulacion.id ? postulacionActualizada : prev,
-        );
-      }
     } catch (err) {
       const message =
         err.response?.data?.message || "No se pudo guardar la revision del familiar";
@@ -691,13 +690,37 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }
   };
 
+  const cancelarGuardadoObservacionFamiliar = (postulacionId, familiarIndex) => {
+    const key = `${postulacionId}-${familiarIndex}`;
+    const timeoutId = familyObservationTimersRef.current.get(key);
+
+    if (timeoutId) window.clearTimeout(timeoutId);
+    familyObservationTimersRef.current.delete(key);
+  };
+
+  const guardarObservacionFamiliar = (postulacion, familiarIndex, observacion) => {
+    cancelarGuardadoObservacionFamiliar(postulacion.id, familiarIndex);
+    guardarRevisionFamiliar(postulacion, familiarIndex, { observacion });
+  };
+
   const cambiarLimpioFamiliar = (postulacion, familiarIndex, limpio) => {
+    const observacion =
+      getFamiliaresTxt(postulacion)[familiarIndex]?.observacion || "";
+    cancelarGuardadoObservacionFamiliar(postulacion.id, familiarIndex);
     actualizarFamiliarLocal(postulacion.id, familiarIndex, { limpio });
-    guardarRevisionFamiliar(postulacion, familiarIndex, { limpio });
+    guardarRevisionFamiliar(postulacion, familiarIndex, { limpio, observacion });
   };
 
   const cambiarObservacionFamiliar = (postulacion, familiarIndex, observacion) => {
     actualizarFamiliarLocal(postulacion.id, familiarIndex, { observacion });
+    cancelarGuardadoObservacionFamiliar(postulacion.id, familiarIndex);
+
+    const key = `${postulacion.id}-${familiarIndex}`;
+    const timeoutId = window.setTimeout(() => {
+      familyObservationTimersRef.current.delete(key);
+      guardarRevisionFamiliar(postulacion, familiarIndex, { observacion });
+    }, FAMILY_OBSERVATION_SAVE_DELAY_MS);
+    familyObservationTimersRef.current.set(key, timeoutId);
   };
 
   const cambiarLimpioTitular = (postulacion, limpio) => {
@@ -1677,9 +1700,11 @@ export default function Postulaciones({ modo = "postulacion" }) {
                                           cambiarObservacionFamiliar(p, index, event.target.value)
                                         }
                                         onBlur={(event) =>
-                                          guardarRevisionFamiliar(p, index, {
-                                            observacion: event.target.value,
-                                          })
+                                          guardarObservacionFamiliar(
+                                            p,
+                                            index,
+                                            event.target.value,
+                                          )
                                         }
                                         maxLength={1000}
                                         placeholder="Escribe una observacion"
@@ -1689,6 +1714,11 @@ export default function Postulaciones({ modo = "postulacion" }) {
                                       {savingFamilyReviewKey === `${p.id}-${index}` && (
                                         <p className="mt-1 text-[10px] font-semibold text-orange-600">
                                           Guardando...
+                                        </p>
+                                      )}
+                                      {savingFamilyReviewKey !== `${p.id}-${index}` && (
+                                        <p className="mt-1 text-[10px] font-semibold text-slate-400">
+                                          Se guarda automaticamente
                                         </p>
                                       )}
                                     </div>
