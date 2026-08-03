@@ -761,6 +761,70 @@ const buildResumen = async () => {
   };
 };
 
+const buildDashboardMetrics = async (query = {}) => {
+  const createdAtRange = parseDateRange(query);
+  const periodWhere = createdAtRange ? { createdAt: createdAtRange } : {};
+  const activeInterviewWhere = {
+    ...periodWhere,
+    pasaEntrevista: true,
+    descartada: false,
+    estadoEntrevista: { [Op.notIn]: SELECTED_INTERVIEW_STATUSES },
+  };
+
+  const [
+    postulaciones,
+    entrevistas,
+    descartados,
+    conTitulo,
+    estudiando,
+    totalPeriodo,
+  ] = await Promise.all([
+      Postulacion.count({
+        where: {
+          ...periodWhere,
+          pasaEntrevista: false,
+          descartada: false,
+        },
+      }),
+      Postulacion.count({ where: activeInterviewWhere }),
+      Postulacion.count({
+        where: { ...periodWhere, descartada: true },
+      }),
+      Postulacion.count({
+        where: {
+          ...periodWhere,
+          [Op.and]: [
+            sequelizeWhere(
+              json("formulario.datos_personales.tieneTituloTercerNivel"),
+              { [Op.iLike]: "si" },
+            ),
+          ],
+        },
+      }),
+      Postulacion.count({
+        where: {
+          ...periodWhere,
+          [Op.and]: [
+            sequelizeWhere(
+              json("formulario.datos_personales.estudiaActualmente"),
+              { [Op.iLike]: "si" },
+            ),
+          ],
+        },
+      }),
+      Postulacion.count({ where: periodWhere }),
+    ]);
+
+  return {
+    postulaciones,
+    entrevistas,
+    descartados,
+    conTitulo,
+    estudiando,
+    totalPeriodo,
+  };
+};
+
 const validatePayload = (payload) => {
   const errors = [];
   const datos = payload.datos_personales || {};
@@ -860,6 +924,59 @@ router.get("/resumen", auth, async (_req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Error al obtener resumen de postulaciones",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/dashboard", auth, async (req, res) => {
+  try {
+    const metrics = await buildDashboardMetrics(req.query);
+
+    return res.json({
+      ok: true,
+      data: metrics,
+    });
+  } catch (error) {
+    console.error("Error obteniendo dashboard de postulaciones:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener el dashboard de postulaciones",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/cedulas", auth, async (req, res) => {
+  try {
+    const rows = await Postulacion.findAll({
+      where: buildListWhere(req.query),
+      attributes: ["cedula"],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+    const cedulas = [
+      ...new Set(
+        rows
+          .map(({ cedula }) => String(cedula || "").replace(/\D/g, ""))
+          .filter((cedula) => /^\d{10}$/.test(cedula)),
+      ),
+    ];
+
+    return res.json({
+      ok: true,
+      data: {
+        cedulas,
+        total: cedulas.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error exportando cedulas de postulaciones:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al exportar las cedulas filtradas",
       error: error.message,
     });
   }

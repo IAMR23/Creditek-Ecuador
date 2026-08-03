@@ -6,6 +6,7 @@ import {
   Building2,
   ClipboardList,
   FileText,
+  LayoutDashboard,
   Shield,
   UserCheck,
   Users,
@@ -87,6 +88,11 @@ export default function Sidebar() {
       </div>
 
       <nav className="p-3 flex flex-col gap-2">
+        <NavLink to="/dashboard" className={linkClass}>
+          <LayoutDashboard size={18} />
+          Dashboard
+        </NavLink>
+
         <NavLink to="/agencias" className={linkClass}>
           <Building2 size={18} />
           Agencias

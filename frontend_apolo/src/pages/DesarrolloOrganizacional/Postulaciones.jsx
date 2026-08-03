@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ClipboardCopy,
   Eye,
   Pencil,
   RefreshCw,
@@ -44,6 +45,20 @@ const createInitialFilters = (modo) => ({
   edadDesde: modo === "postulacion" ? "18" : "",
   edadHasta: modo === "postulacion" ? "35" : "",
   tituloTercerNivel: modo === "postulacion" ? "no" : "",
+  estudiaActualmente: modo === "postulacion" ? "no" : "",
+});
+
+const buildFilterParams = (filters, modo) => ({
+  q: filters.q.trim() || undefined,
+  fechaDesde: filters.fechaDesde || undefined,
+  fechaHasta: filters.fechaHasta || undefined,
+  estado: filters.estado || undefined,
+  edadDesde: filters.edadDesde || undefined,
+  edadHasta: filters.edadHasta || undefined,
+  ciudad: filters.ciudad.trim() || undefined,
+  tituloTercerNivel: filters.tituloTercerNivel || undefined,
+  estudiaActualmente: filters.estudiaActualmente || undefined,
+  fase: modo,
 });
 
 const getDatos = (postulacion) => postulacion?.formulario?.datos_personales || {};
@@ -87,6 +102,29 @@ const processWithConcurrency = async (items, concurrency, worker) => {
 
   await Promise.all(runners);
   return results;
+};
+
+const copyTextToClipboard = async (text) => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // Algunos navegadores bloquean la API moderna fuera de un contexto seguro.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+
+  if (!copied) throw new Error("El navegador no permitio copiar al portapapeles.");
 };
 
 const formatDate = (date) => {
@@ -150,6 +188,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
     total: 0,
   });
   const [bulkImportResult, setBulkImportResult] = useState(null);
+  const [copyingCedulas, setCopyingCedulas] = useState(false);
   const requestIdRef = useRef(0);
   const familyTxtInputRef = useRef(null);
   const familyTxtTargetRef = useRef(null);
@@ -199,16 +238,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
         params: {
           page: pageToLoad,
           limit: PAGE_SIZE,
-          q: filtersToUse.q.trim() || undefined,
-          fechaDesde: filtersToUse.fechaDesde || undefined,
-          fechaHasta: filtersToUse.fechaHasta || undefined,
-          estado: filtersToUse.estado || undefined,
-          edadDesde: filtersToUse.edadDesde || undefined,
-          edadHasta: filtersToUse.edadHasta || undefined,
-          ciudad: filtersToUse.ciudad.trim() || undefined,
-          tituloTercerNivel: filtersToUse.tituloTercerNivel || undefined,
-          estudiaActualmente: filtersToUse.estudiaActualmente || undefined,
-          fase: modo,
+          ...buildFilterParams(filtersToUse, modo),
         },
       });
       const items = res.data.data || [];
@@ -242,6 +272,50 @@ export default function Postulaciones({ modo = "postulacion" }) {
 
   const limpiarFiltros = () => {
     setFilters(createEmptyFilters());
+  };
+
+  const exportarCedulas = async () => {
+    try {
+      setCopyingCedulas(true);
+      const response = await api.get("/api/postulaciones/cedulas", {
+        params: buildFilterParams(filters, modo),
+      });
+      const cedulas = response.data?.data?.cedulas || [];
+
+      if (!cedulas.length) {
+        await Swal.fire({
+          icon: "info",
+          title: "Sin cédulas para exportar",
+          text: "El filtro actual no devolvió cédulas válidas.",
+          confirmButtonColor: "#f97316",
+        });
+        return;
+      }
+
+      const command = `npm.cmd start -- --cedulas=${cedulas.join(",")},`;
+      await copyTextToClipboard(command);
+      await Swal.fire({
+        icon: "success",
+        title: "Comando copiado",
+        text: `${cedulas.length} cédula${cedulas.length === 1 ? "" : "s"} copiada${
+          cedulas.length === 1 ? "" : "s"
+        } al portapapeles.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (exportError) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudieron exportar las cédulas",
+        text:
+          exportError.response?.data?.message ||
+          exportError.message ||
+          "Ocurrió un error al preparar el comando.",
+        confirmButtonColor: "#f97316",
+      });
+    } finally {
+      setCopyingCedulas(false);
+    }
   };
 
   const irPagina = (nextPage) => {
@@ -896,17 +970,28 @@ export default function Postulaciones({ modo = "postulacion" }) {
             </div>
 
             {!esEntrevistas && !esDescartados && (
-              <button
-                type="button"
-                onClick={seleccionarTxtFamiliaresMasivo}
-                disabled={bulkImportingTxt}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Upload size={18} />
-                {bulkImportingTxt
-                  ? `Procesando ${bulkImportProgress.processed}/${bulkImportProgress.total}`
-                  : "Carga masiva TXT"}
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={exportarCedulas}
+                  disabled={copyingCedulas || loading}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-extrabold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ClipboardCopy size={18} />
+                  {copyingCedulas ? "Copiando..." : "Exportar cédulas"}
+                </button>
+                <button
+                  type="button"
+                  onClick={seleccionarTxtFamiliaresMasivo}
+                  disabled={bulkImportingTxt}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Upload size={18} />
+                  {bulkImportingTxt
+                    ? `Procesando ${bulkImportProgress.processed}/${bulkImportProgress.total}`
+                    : "Carga masiva TXT"}
+                </button>
+              </div>
             )}
           </div>
 
@@ -927,6 +1012,36 @@ export default function Postulaciones({ modo = "postulacion" }) {
                   className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Fecha desde
+              </label>
+              <input
+                type="date"
+                value={filters.fechaDesde}
+                max={filters.fechaHasta || undefined}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, fechaDesde: e.target.value }))
+                }
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">
+                Fecha hasta
+              </label>
+              <input
+                type="date"
+                value={filters.fechaHasta}
+                min={filters.fechaDesde || undefined}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, fechaHasta: e.target.value }))
+                }
+                className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
             </div>
 
             <div>

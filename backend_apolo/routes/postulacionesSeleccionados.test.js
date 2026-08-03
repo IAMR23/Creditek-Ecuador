@@ -82,19 +82,22 @@ test("la lista de Entrevistas excluye a los postulantes seleccionados", async ()
   assert.equal(response.status, 200);
   assert.equal(lastListOptions.where.pasaEntrevista, true);
   assert.equal(lastListOptions.where.descartada, false);
-  assert.equal(
-    lastListOptions.where.estadoEntrevista[Op.ne],
-    "SELECCIONADO",
+  assert.deepEqual(
+    lastListOptions.where.estadoEntrevista[Op.notIn],
+    ["SELECCIONADO", "NO_ASISTIO_CAP"],
   );
 });
 
-test("la fase Seleccionados filtra unicamente el nuevo estado", async () => {
+test("la fase Seleccionados incluye sus estados finales", async () => {
   const response = await request("/?fase=seleccionado");
 
   assert.equal(response.status, 200);
   assert.equal(lastListOptions.where.pasaEntrevista, true);
   assert.equal(lastListOptions.where.descartada, false);
-  assert.equal(lastListOptions.where.estadoEntrevista, "SELECCIONADO");
+  assert.deepEqual(
+    lastListOptions.where.estadoEntrevista[Op.in],
+    ["SELECCIONADO", "NO_ASISTIO_CAP"],
+  );
 });
 
 test("Seleccionados incluye la fecha de ingreso y la agencia del usuario creado", async () => {
@@ -154,11 +157,17 @@ test("el resumen separa los contadores de Entrevistas y Seleccionados", async ()
   Postulacion.count = async (options = {}) => {
     const where = options.where || {};
 
-    if (where.estadoEntrevista === "SELECCIONADO") return 3;
+    if (
+      where.estadoEntrevista?.[Op.in]?.includes("SELECCIONADO") &&
+      where.estadoEntrevista?.[Op.in]?.includes("NO_ASISTIO_CAP")
+    ) {
+      return 3;
+    }
     if (
       where.pasaEntrevista === true &&
       where.descartada === false &&
-      where.estadoEntrevista?.[Op.ne] === "SELECCIONADO" &&
+      where.estadoEntrevista?.[Op.notIn]?.includes("SELECCIONADO") &&
+      where.estadoEntrevista?.[Op.notIn]?.includes("NO_ASISTIO_CAP") &&
       Object.keys(where).length === 3
     ) {
       return 5;
