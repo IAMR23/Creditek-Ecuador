@@ -1240,23 +1240,25 @@ export default function Postulaciones({ modo = "postulacion" }) {
               </p>
             </div>
           ) : (
-            <div className="overflow-hidden">
-              <table className="w-full table-fixed text-left text-[10px] leading-tight lg:text-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1600px] table-fixed text-left text-[10px] leading-tight lg:text-xs">
                 <colgroup>
-                  <col className="w-[12%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[4%]" />
-                  <col className="w-[4%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[6%]" />
                   <col className="w-[10%]" />
                   <col className="w-[6%]" />
-                  <col className="w-[4%]" />
                   <col className="w-[6%]" />
-                  <col className={esEntrevistas ? "w-[14%]" : "w-[8%]"} />
+                  <col className="w-[3%]" />
+                  <col className="w-[3%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[7%]" />
+                  <col className="w-[7%]" />
                   <col className="w-[8%]" />
-                  <col className={esEntrevistas ? "w-[10%]" : "w-[12%]"} />
+                  <col className="w-[5%]" />
+                  <col className="w-[3%]" />
+                  <col className="w-[5%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[10%]" />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
@@ -1267,6 +1269,8 @@ export default function Postulaciones({ modo = "postulacion" }) {
                     <th className={thClass}>Hijos</th>
                     <th className={thClass}>Estado civil</th>
                     <th className={thClass}>Ciudad</th>
+                    <th className={thClass}>Lugar de nacimiento</th>
+                    <th className={thClass}>Nivel de estudio</th>
                     <th className={thClass}>Direccion</th>
                     <th className={thClass}>Vivienda</th>
                     <th className={thClass}>Trab.</th>
@@ -1321,6 +1325,12 @@ export default function Postulaciones({ modo = "postulacion" }) {
                           {datos.ciudadNacimiento === "Otra"
                             ? datos.otraCiudadNacimiento || "Otra"
                             : datos.ciudadNacimiento || dash}
+                        </td>
+                        <td className={tdClass}>
+                          {titularTxt?.lugarNacimiento || datos.lugarNacimiento || dash}
+                        </td>
+                        <td className={tdClass}>
+                          {titularTxt?.nivelEstudio || datos.nivelEstudio || dash}
                         </td>
                         <td className={tdClass}>
                           {datos.direccion || dash}
@@ -1514,7 +1524,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                       </tr>
                       {expandedFamilyId === p.id && totalRegistrosTxt > 0 && (
                         <tr className="bg-slate-50">
-                          <td colSpan={14} className="px-3 py-3">
+                          <td colSpan={16} className="px-3 py-3">
                             <div className="rounded-lg border border-orange-200 bg-white p-4 shadow-sm">
                               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                 <div>

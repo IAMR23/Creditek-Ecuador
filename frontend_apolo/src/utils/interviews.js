@@ -75,6 +75,23 @@ export const getCandidateCity = (postulacion) => {
   return datos.ciudadNacimiento || "-";
 };
 
+const getImportedApplicant = (postulacion) =>
+  postulacion?.formulario?.titular_postulante ||
+  postulacion?.formulario?.importacion_familiares_txt?.titular ||
+  {};
+
+export const getCandidateBirthPlace = (postulacion) => {
+  const importedApplicant = getImportedApplicant(postulacion);
+  const datos = getPersonalData(postulacion);
+  return importedApplicant.lugarNacimiento || datos.lugarNacimiento || "-";
+};
+
+export const getCandidateEducationLevel = (postulacion) => {
+  const importedApplicant = getImportedApplicant(postulacion);
+  const datos = getPersonalData(postulacion);
+  return importedApplicant.nivelEstudio || datos.nivelEstudio || "-";
+};
+
 export const getInitials = (name = "") => {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "--";

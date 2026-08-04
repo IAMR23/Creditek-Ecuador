@@ -13,7 +13,9 @@ import {
   formatDateOnly,
   formatInterviewDate,
   formatInterviewTime,
+  getCandidateBirthPlace,
   getCandidateCity,
+  getCandidateEducationLevel,
   getCandidateEmail,
   getCandidateIdentification,
   getCandidateName,
@@ -316,6 +318,22 @@ function MobileCard(props) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Ciudad</p>
           <p className="mt-1 font-semibold text-slate-700">{getCandidateCity(interview)}</p>
         </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Lugar de nacimiento
+          </p>
+          <p className="mt-1 font-semibold text-slate-700">
+            {getCandidateBirthPlace(interview)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Nivel de estudio
+          </p>
+          <p className="mt-1 font-semibold text-slate-700">
+            {getCandidateEducationLevel(interview)}
+          </p>
+        </div>
       </div>
       <InterviewStatusBadge status={getInterviewStatus(interview)} />
       <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">
@@ -394,13 +412,15 @@ export default function InterviewTable({
       </div>
 
       <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[1120px] border-collapse text-left">
+        <table className="w-full min-w-[1400px] border-collapse text-left">
           <thead>
             <tr className="border-y border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3 font-bold">Pase a entrevista</th>
               <th className="px-5 py-3 font-bold">Aspirante</th>
               <th className="px-4 py-3 font-bold">Contacto</th>
               <th className="px-4 py-3 font-bold">Ciudad</th>
+              <th className="px-4 py-3 font-bold">Lugar de nacimiento</th>
+              <th className="px-4 py-3 font-bold">Nivel de estudio</th>
               <th className="px-4 py-3 font-bold">Estado</th>
               <th className="px-4 py-3 font-bold">
                 {selectedMode ? "Fecha de ingreso" : "Entrevista"}
@@ -424,6 +444,12 @@ export default function InterviewTable({
                     <p className="mt-1 max-w-44 truncate text-xs text-slate-500">{email || "Sin correo registrado"}</p>
                   </td>
                   <td className="px-4 py-4 text-sm font-semibold text-slate-700">{getCandidateCity(interview)}</td>
+                  <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                    {getCandidateBirthPlace(interview)}
+                  </td>
+                  <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                    {getCandidateEducationLevel(interview)}
+                  </td>
                   <td className="px-4 py-4"><InterviewStatusBadge status={getInterviewStatus(interview)} /></td>
                   <td className="px-4 py-4 text-sm">
                     {selectedMode ? (
@@ -450,7 +476,7 @@ export default function InterviewTable({
                 {!selectedMode &&
                   actions.expandedReferencesId === interview.id && (
                     <tr className="bg-slate-50/70">
-                      <td colSpan={8} className="px-5 py-4">
+                      <td colSpan={10} className="px-5 py-4">
                         <InterviewReferencesPanel
                           interview={interview}
                           savingReferenceKey={actions.savingReferenceKey}
