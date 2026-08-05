@@ -153,6 +153,19 @@ test("permite marcar una entrevista agendada como seleccionada", async () => {
   assert.equal(saved, 1);
 });
 
+test("permite marcar una entrevista como no contesto", async () => {
+  candidate.fechaEntrevista = null;
+  const response = await request("/21/estado-entrevista", {
+    method: "PATCH",
+    body: { estadoEntrevista: "NO_CONTESTO" },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.estadoEntrevista, "NO_CONTESTO");
+  assert.equal(candidate.estadoEntrevista, "NO_CONTESTO");
+  assert.equal(saved, 1);
+});
+
 test("el resumen separa los contadores de Entrevistas y Seleccionados", async () => {
   Postulacion.count = async (options = {}) => {
     const where = options.where || {};

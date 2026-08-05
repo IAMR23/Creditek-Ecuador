@@ -162,6 +162,43 @@ export default function Entrevistas({ modo = "entrevista" }) {
     window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
   };
 
+  const aplicarResumenActualizado = (resumenActualizado) => {
+    if (resumenActualizado) {
+      setSummary({ ...EMPTY_SUMMARY, ...resumenActualizado });
+      setSummaryLoading(false);
+    }
+    window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
+  };
+
+  const quitarEntrevistaVisible = (interviewId, resumenActualizado) => {
+    const currentLimit = pagination.limit || EMPTY_PAGINATION.limit;
+    const currentTotal = pagination.total || interviews.length;
+    const nextTotal = Math.max(currentTotal - 1, 0);
+    const nextTotalPages = Math.max(Math.ceil(nextTotal / currentLimit), 1);
+
+    setSelected((current) => (current?.id === interviewId ? null : current));
+    setExpandedReferencesId((current) =>
+      current === interviewId ? null : current,
+    );
+    aplicarResumenActualizado(resumenActualizado);
+
+    if (activeView === "lista" && interviews.length === 1 && page > nextTotalPages) {
+      setPage(nextTotalPages);
+      return;
+    }
+
+    setInterviews((current) =>
+      current.filter((interview) => interview.id !== interviewId),
+    );
+    setPagination((current) => ({
+      ...current,
+      total: nextTotal,
+      totalPages: nextTotalPages,
+      hasNextPage: page < nextTotalPages,
+      hasPrevPage: page > 1,
+    }));
+  };
+
   const closeDrawer = useCallback(() => {
     setDrawerOpen(false);
     setDrawerCandidate(null);
@@ -371,10 +408,32 @@ export default function Entrevistas({ modo = "entrevista" }) {
     if (!result.isConfirmed) return;
 
     try {
-      await api.patch(`/api/postulaciones/${interview.id}/estado-entrevista`, {
+      const response = await api.patch(`/api/postulaciones/${interview.id}/estado-entrevista`, {
         estadoEntrevista: status,
       });
-      refresh();
+      const updatedInterview = response.data?.data;
+      const selectedStatuses = ["SELECCIONADO", "NO_ASISTIO_CAP"];
+      const remainsInCurrentPhase = isSelectedMode
+        ? selectedStatuses.includes(status)
+        : !selectedStatuses.includes(status);
+      const matchesStatusFilter =
+        isSelectedMode || !filters.estadoEntrevista || filters.estadoEntrevista === status;
+
+      if (!remainsInCurrentPhase || !matchesStatusFilter) {
+        quitarEntrevistaVisible(interview.id, response.data?.resumen);
+      } else {
+        setInterviews((current) =>
+          current.map((item) =>
+            item.id === interview.id ? updatedInterview || { ...item, estadoEntrevista: status } : item,
+          ),
+        );
+        setSelected((current) =>
+          current?.id === interview.id
+            ? updatedInterview || { ...current, estadoEntrevista: status }
+            : current,
+        );
+        aplicarResumenActualizado(response.data?.resumen);
+      }
       Swal.fire({
         icon: "success",
         title: status === "SELECCIONADO" ? "Postulante seleccionado" : "Estado actualizado",
@@ -399,8 +458,10 @@ export default function Entrevistas({ modo = "entrevista" }) {
     if (!result.isConfirmed) return;
 
     try {
-      await api.patch(`/api/postulaciones/${interview.id}/entrevista`, { pasaEntrevista: false });
-      refresh();
+      const response = await api.patch(`/api/postulaciones/${interview.id}/entrevista`, {
+        pasaEntrevista: false,
+      });
+      quitarEntrevistaVisible(interview.id, response.data?.resumen);
       Swal.fire({ icon: "success", title: "Postulante regresado", timer: 1300, showConfirmButton: false });
     } catch (requestError) {
       Swal.fire("Error", requestError.response?.data?.message || "No se pudo regresar al postulante.", "error");
@@ -411,17 +472,27 @@ export default function Entrevistas({ modo = "entrevista" }) {
     const result = await Swal.fire({
       icon: "warning",
       title: "Descartar postulante",
-      text: `¿Deseas enviar a ${getCandidateName(interview)} a Descartados? No se eliminará de la base de datos.`,
+      text: `Indica por qué ${getCandidateName(interview)} será enviado a Descartados.`,
+      input: "textarea",
+      inputLabel: "Motivo del descarte",
+      inputPlaceholder: "Escribe el motivo del descarte",
+      inputAttributes: { maxlength: "1000" },
+      inputValidator: (value) =>
+        value?.trim() ? undefined : "Debe ingresar el motivo del descarte",
       showCancelButton: true,
       confirmButtonText: "Sí, descartar",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#dc2626",
     });
     if (!result.isConfirmed) return;
+    const motivoDescarte = String(result.value || "").trim();
 
     try {
-      await api.patch(`/api/postulaciones/${interview.id}/descartada`, { descartada: true });
-      refresh();
+      const response = await api.patch(`/api/postulaciones/${interview.id}/descartada`, {
+        descartada: true,
+        motivoDescarte,
+      });
+      quitarEntrevistaVisible(interview.id, response.data?.resumen);
       Swal.fire({ icon: "success", title: "Enviado a Descartados", timer: 1300, showConfirmButton: false });
     } catch (requestError) {
       Swal.fire("Error", requestError.response?.data?.message || "No se pudo descartar al postulante.", "error");

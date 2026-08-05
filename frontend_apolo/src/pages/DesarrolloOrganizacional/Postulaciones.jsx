@@ -147,7 +147,7 @@ const toDateTimeLocal = (value) => {
 };
 
 const thClass = "px-1.5 py-2 text-[10px] font-bold leading-tight md:px-2 lg:text-xs";
-const tdClass = "min-w-0 break-words px-1.5 py-2 text-[10px] leading-tight text-slate-700 md:px-2 lg:text-xs";
+const tdClass = "min-w-0 break-words px-2 py-1.5 text-[10px] leading-tight text-slate-700 lg:text-xs xl:table-cell xl:py-2";
 
 export default function Postulaciones({ modo = "postulacion" }) {
   const esEntrevistas = modo === "entrevista";
@@ -329,6 +329,47 @@ export default function Postulaciones({ modo = "postulacion" }) {
     }
   };
 
+  const quitarPostulacionVisible = async (postulacionId, resumenActualizado) => {
+    const currentLimit = pagination.limit || PAGE_SIZE;
+    const currentTotal = pagination.total || postulaciones.length;
+    const nextTotal = Math.max(currentTotal - 1, 0);
+    const nextTotalPages = Math.max(Math.ceil(nextTotal / currentLimit), 1);
+
+    setSelected((prev) => (prev?.id === postulacionId ? null : prev));
+    setExpandedFamilyId((prev) => (prev === postulacionId ? null : prev));
+    setObservacionesDraft((prev) => {
+      const next = { ...prev };
+      delete next[postulacionId];
+      return next;
+    });
+    setEntrevistaDrafts((prev) => {
+      const next = { ...prev };
+      delete next[postulacionId];
+      return next;
+    });
+
+    if (postulaciones.length === 1 && page > nextTotalPages) {
+      await fetchPostulaciones(nextTotalPages, filters);
+      return;
+    }
+
+    setPostulaciones((prev) => prev.filter((item) => item.id !== postulacionId));
+    setPagination((prev) => ({
+      ...prev,
+      total: nextTotal,
+      totalPages: nextTotalPages,
+      hasNextPage: page < nextTotalPages,
+      hasPrevPage: page > 1,
+    }));
+
+    if (resumenActualizado) {
+      setResumen(resumenActualizado);
+    } else {
+      void actualizarResumen();
+    }
+    window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
+  };
+
   const irPagina = (nextPage) => {
     if (nextPage < 1 || nextPage > pagination.totalPages || loading) return;
     fetchPostulaciones(nextPage, filters);
@@ -449,13 +490,10 @@ export default function Postulaciones({ modo = "postulacion" }) {
     try {
       setUpdatingStageId(postulacion.id);
       setError("");
-      await api.patch(`/api/postulaciones/${postulacion.id}/entrevista`, {
+      const response = await api.patch(`/api/postulaciones/${postulacion.id}/entrevista`, {
         pasaEntrevista,
       });
-
-      setSelected((prev) => (prev?.id === postulacion.id ? null : prev));
-      const nextPage = postulaciones.length === 1 && page > 1 ? page - 1 : page;
-      await fetchPostulaciones(nextPage, filters);
+      await quitarPostulacionVisible(postulacion.id, response.data?.resumen);
 
       Swal.fire(
         "Actualizado",
@@ -530,31 +568,47 @@ export default function Postulaciones({ modo = "postulacion" }) {
     const datos = getDatos(postulacion);
     const nombre = datos.nombreCompleto || postulacion.nombre || `ID ${postulacion.id}`;
     const seccionRestaurada = postulacion.pasaEntrevista ? "Entrevistas" : "Postulaciones";
-    const { isConfirmed } = await Swal.fire({
-      title: descartada ? "Descartar postulante" : "Restaurar postulante",
-      text: descartada
-        ? `¿Deseas mover a ${nombre} a la sección Descartados? El registro no se eliminará de la base de datos.`
-        : `¿Deseas restaurar a ${nombre} en la sección ${seccionRestaurada}?`,
-      icon: descartada ? "warning" : "question",
-      showCancelButton: true,
-      confirmButtonColor: descartada ? "#dc2626" : "#059669",
-      cancelButtonColor: "#64748b",
-      confirmButtonText: descartada ? "Sí, descartar" : "Sí, restaurar",
-      cancelButtonText: "Cancelar",
-    });
+    const result = await Swal.fire(
+      descartada
+        ? {
+            title: "Descartar postulante",
+            text: `Indica por qué ${nombre} será enviado a Descartados.`,
+            icon: "warning",
+            input: "textarea",
+            inputLabel: "Motivo del descarte",
+            inputPlaceholder: "Escribe el motivo del descarte",
+            inputAttributes: { maxlength: "1000" },
+            inputValidator: (value) =>
+              value?.trim() ? undefined : "Debe ingresar el motivo del descarte",
+            showCancelButton: true,
+            confirmButtonColor: "#dc2626",
+            cancelButtonColor: "#64748b",
+            confirmButtonText: "Sí, descartar",
+            cancelButtonText: "Cancelar",
+          }
+        : {
+            title: "Restaurar postulante",
+            text: `¿Deseas restaurar a ${nombre} en la sección ${seccionRestaurada}?`,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonColor: "#059669",
+            cancelButtonColor: "#64748b",
+            confirmButtonText: "Sí, restaurar",
+            cancelButtonText: "Cancelar",
+          },
+    );
 
-    if (!isConfirmed) return;
+    if (!result.isConfirmed) return;
+    const motivoDescarte = descartada ? String(result.value || "").trim() : undefined;
 
     try {
       setUpdatingDiscardId(postulacion.id);
       setError("");
-      await api.patch(`/api/postulaciones/${postulacion.id}/descartada`, {
+      const response = await api.patch(`/api/postulaciones/${postulacion.id}/descartada`, {
         descartada,
+        motivoDescarte,
       });
-      setSelected((prev) => (prev?.id === postulacion.id ? null : prev));
-      const nextPage = postulaciones.length === 1 && page > 1 ? page - 1 : page;
-      await fetchPostulaciones(nextPage, filters);
-      window.dispatchEvent(new CustomEvent(POSTULACIONES_EVENT));
+      await quitarPostulacionVisible(postulacion.id, response.data?.resumen);
       Swal.fire(
         "Actualizado",
         descartada
@@ -1240,40 +1294,26 @@ export default function Postulaciones({ modo = "postulacion" }) {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1600px] table-fixed text-left text-[10px] leading-tight lg:text-xs">
-                <colgroup>
+            <div className="overflow-hidden">
+              <table className="block w-full text-left text-[10px] leading-tight lg:text-xs xl:table xl:table-fixed">
+                <colgroup className="hidden xl:table-column-group">
+                  <col className="w-[14%]" />
                   <col className="w-[10%]" />
-                  <col className="w-[6%]" />
-                  <col className="w-[6%]" />
-                  <col className="w-[3%]" />
-                  <col className="w-[3%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[7%]" />
-                  <col className="w-[8%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[3%]" />
-                  <col className="w-[5%]" />
-                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
                   <col className="w-[9%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[8%]" />
                   <col className="w-[10%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[11%]" />
                 </colgroup>
-                <thead className="border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600">
+                <thead className="hidden border-b border-slate-200 bg-slate-100 text-xs uppercase tracking-wide text-slate-600 xl:table-header-group">
                   <tr>
                     <th className={thClass}>Aspirante</th>
-                    <th className={thClass}>Cedula</th>
-                    <th className={thClass}>Telefono</th>
-                    <th className={thClass}>Edad</th>
-                    <th className={thClass}>Hijos</th>
-                    <th className={thClass}>Estado civil</th>
-                    <th className={thClass}>Ciudad</th>
-                    <th className={thClass}>Lugar de nacimiento</th>
-                    <th className={thClass}>Nivel de estudio</th>
-                    <th className={thClass}>Direccion</th>
-                    <th className={thClass}>Vivienda</th>
-                    <th className={thClass}>Trab.</th>
+                    <th className={thClass}>Perfil</th>
+                    <th className={thClass}>Ubicacion</th>
+                    <th className={thClass}>Estudios</th>
+                    <th className={thClass}>Informacion adicional</th>
                     <th className={thClass}>Estado</th>
                     <th className={thClass}>
                       {esDescartados
@@ -1286,7 +1326,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                     <th className={`${thClass} text-right`}>Accion</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="block divide-y divide-slate-100 xl:table-row-group">
                   {postulaciones.map((p) => {
                     const datos = getDatos(p);
                     const vivienda = getVivienda(p);
@@ -1294,52 +1334,79 @@ export default function Postulaciones({ modo = "postulacion" }) {
                     const familiaresTxt = getFamiliaresTxt(p);
                     const totalRegistrosTxt = familiaresTxt.length + (titularTxt ? 1 : 0);
                     const trabajos = p.formulario?.historial_laboral?.length || 0;
+                    const motivoDescarte = p.formulario?.metadata?.motivo_descarte || "";
 
                     const editingObservation = editingObservationId === p.id;
 
                     return (
                       <Fragment key={p.id}>
-                      <tr className="transition hover:bg-slate-50">
+                      <tr className="grid grid-cols-1 gap-2 p-3 transition hover:bg-slate-50 sm:grid-cols-2 lg:grid-cols-3 xl:table-row xl:p-0">
                         <td className={tdClass}>
                           <div className="min-w-0 break-words font-semibold text-slate-900">
                             {datos.nombreCompleto || p.nombre || dash}
                           </div>
-                          <div className="text-xs text-slate-500">ID #{p.id}</div>
+                          <div className="mt-1 space-y-0.5 text-[9px] text-slate-500 lg:text-[10px]">
+                            <p>ID #{p.id}</p>
+                            <p className="break-all">C.I. {datos.cedula || p.cedula || dash}</p>
+                            <p className="break-all">Tel. {datos.telefono || p.telefono || dash}</p>
+                          </div>
                         </td>
                         <td className={tdClass}>
-                          {datos.cedula || p.cedula || dash}
+                          <dl className="space-y-1">
+                            <div>
+                              <dt className="font-bold text-slate-500">Edad</dt>
+                              <dd>{datos.edadCumplida || dash}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-bold text-slate-500">Hijos</dt>
+                              <dd>{datos.numeroHijos || dash}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-bold text-slate-500">Estado civil</dt>
+                              <dd>{datos.estadoCivil || dash}</dd>
+                            </div>
+                          </dl>
                         </td>
                         <td className={tdClass}>
-                          {datos.telefono || p.telefono || dash}
+                          <dl className="space-y-1">
+                            <div>
+                              <dt className="font-bold text-slate-500">Ciudad</dt>
+                              <dd>
+                                {datos.ciudadNacimiento === "Otra"
+                                  ? datos.otraCiudadNacimiento || "Otra"
+                                  : datos.ciudadNacimiento || dash}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-bold text-slate-500">Nacimiento</dt>
+                              <dd>
+                                {titularTxt?.lugarNacimiento || datos.lugarNacimiento || dash}
+                              </dd>
+                            </div>
+                          </dl>
                         </td>
                         <td className={tdClass}>
-                          {datos.edadCumplida || dash}
-                        </td>
-                        <td className={tdClass}>
-                          {datos.numeroHijos || dash}
-                        </td>
-                        <td className={tdClass}>
-                          {datos.estadoCivil || dash}
-                        </td>
-                        <td className={tdClass}>
-                          {datos.ciudadNacimiento === "Otra"
-                            ? datos.otraCiudadNacimiento || "Otra"
-                            : datos.ciudadNacimiento || dash}
-                        </td>
-                        <td className={tdClass}>
-                          {titularTxt?.lugarNacimiento || datos.lugarNacimiento || dash}
-                        </td>
-                        <td className={tdClass}>
+                          <p className="mb-1 font-bold text-slate-500 xl:hidden">Nivel de estudio</p>
                           {titularTxt?.nivelEstudio || datos.nivelEstudio || dash}
                         </td>
                         <td className={tdClass}>
-                          {datos.direccion || dash}
+                          <dl className="space-y-1">
+                            <div>
+                              <dt className="font-bold text-slate-500">Direccion</dt>
+                              <dd>{datos.direccion || dash}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-bold text-slate-500">Vivienda</dt>
+                              <dd>{vivienda.tipoVivienda || dash}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-bold text-slate-500">Trabajos</dt>
+                              <dd>{trabajos}</dd>
+                            </div>
+                          </dl>
                         </td>
                         <td className={tdClass}>
-                          {vivienda.tipoVivienda || dash}
-                        </td>
-                        <td className={tdClass}>{trabajos}</td>
-                        <td className={tdClass}>
+                          <p className="mb-1 font-bold text-slate-500 xl:hidden">Estado</p>
                           <span
                             className={`inline-block rounded-full px-1.5 py-1 text-[10px] font-bold leading-none ${
                               p.leida
@@ -1351,6 +1418,13 @@ export default function Postulaciones({ modo = "postulacion" }) {
                           </span>
                         </td>
                         <td className={tdClass}>
+                          <p className="mb-1 font-bold text-slate-500 xl:hidden">
+                            {esDescartados
+                              ? "Fecha de descarte"
+                              : esEntrevistas
+                                ? "Fecha y hora de entrevista"
+                                : "Fecha"}
+                          </p>
                           {esEntrevistas ? (
                             <div className="space-y-1.5">
                               <input
@@ -1382,6 +1456,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                           ) : formatDate(esDescartados ? p.descartadaAt : p.createdAt)}
                         </td>
                         <td className={tdClass}>
+                          <p className="mb-1 font-bold text-slate-500 xl:hidden">Observacion</p>
                           {editingObservation ? (
                             <div className="space-y-1">
                               <textarea
@@ -1413,14 +1488,37 @@ export default function Postulaciones({ modo = "postulacion" }) {
                             </div>
                           ) : (
                             <div className="space-y-1">
-                              <p className="whitespace-pre-wrap break-words text-slate-700">
-                                {p.observacion || "Sin observacion"}
-                              </p>
+                              {esDescartados && motivoDescarte && (
+                                <div className="rounded-md bg-amber-50 p-1.5 text-amber-900">
+                                  <p className="text-[9px] font-bold uppercase tracking-wide">
+                                    Motivo del descarte
+                                  </p>
+                                  <p className="mt-0.5 whitespace-pre-wrap break-words">
+                                    {motivoDescarte}
+                                  </p>
+                                </div>
+                              )}
+                              {p.observacion && (
+                                <div>
+                                  {esDescartados && motivoDescarte && (
+                                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                      Observacion general
+                                    </p>
+                                  )}
+                                  <p className="whitespace-pre-wrap break-words text-slate-700">
+                                    {p.observacion}
+                                  </p>
+                                </div>
+                              )}
+                              {!p.observacion && !(esDescartados && motivoDescarte) && (
+                                <p className="text-slate-700">Sin observacion</p>
+                              )}
                              
                             </div>
                           )}
                         </td>
                         <td className={`${tdClass} text-right`}>
+                          <p className="mb-1 text-left font-bold text-slate-500 xl:hidden">Acciones</p>
                           <div className="flex flex-wrap justify-end gap-1">
                             {esDescartados ? (
                               <button
@@ -1523,8 +1621,8 @@ export default function Postulaciones({ modo = "postulacion" }) {
                         </td>
                       </tr>
                       {expandedFamilyId === p.id && totalRegistrosTxt > 0 && (
-                        <tr className="bg-slate-50">
-                          <td colSpan={16} className="px-3 py-3">
+                        <tr className="block bg-slate-50 xl:table-row">
+                          <td colSpan={9} className="block px-3 py-3 xl:table-cell">
                             <div className="rounded-lg border border-orange-200 bg-white p-4 shadow-sm">
                               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                                 <div>

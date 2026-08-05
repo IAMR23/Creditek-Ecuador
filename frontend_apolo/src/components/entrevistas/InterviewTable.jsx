@@ -59,6 +59,25 @@ function CandidateCell({ interview }) {
   );
 }
 
+function CandidateProfileCell({ interview }) {
+  return (
+    <dl className="space-y-1 text-xs leading-4 text-slate-700">
+      <div>
+        <dt className="inline font-bold text-slate-500">Ciudad: </dt>
+        <dd className="inline font-semibold">{getCandidateCity(interview)}</dd>
+      </div>
+      <div>
+        <dt className="inline font-bold text-slate-500">Nacimiento: </dt>
+        <dd className="inline font-semibold">{getCandidateBirthPlace(interview)}</dd>
+      </div>
+      <div>
+        <dt className="inline font-bold text-slate-500">Estudios: </dt>
+        <dd className="inline font-semibold">{getCandidateEducationLevel(interview)}</dd>
+      </div>
+    </dl>
+  );
+}
+
 function InterviewDateCell({ interview }) {
   if (!interview.fechaEntrevista) {
     return <span className="text-sm font-semibold text-slate-400">Sin agendar</span>;
@@ -264,6 +283,11 @@ function InterviewActions({
               Marcar como realizada
             </button>
           )}
+          {!selectedMode && getInterviewStatus(interview) !== "NO_CONTESTO" && (
+            <button type="button" onClick={() => onStatusChange(interview, "NO_CONTESTO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 hover:bg-amber-50">
+              No contestó
+            </button>
+          )}
           {scheduled && getInterviewStatus(interview) !== "SELECCIONADO" && (
             <button type="button" onClick={() => onStatusChange(interview, "SELECCIONADO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-teal-700 hover:bg-teal-50">
               Marcar como seleccionado
@@ -400,7 +424,7 @@ export default function InterviewTable({
 
   return (
     <>
-      <div className="md:hidden">
+      <div className="xl:hidden">
         {interviews.map((interview) => (
           <MobileCard
             key={interview.id}
@@ -411,16 +435,24 @@ export default function InterviewTable({
         ))}
       </div>
 
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[1400px] border-collapse text-left">
+      <div className="hidden xl:block">
+        <table className="w-full table-fixed border-collapse text-left">
+          <colgroup>
+            <col className="w-[10%]" />
+            <col className="w-[16%]" />
+            <col className="w-[12%]" />
+            <col className="w-[17%]" />
+            <col className="w-[10%]" />
+            <col className="w-[11%]" />
+            <col className="w-[11%]" />
+            <col className="w-[13%]" />
+          </colgroup>
           <thead>
             <tr className="border-y border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3 font-bold">Pase a entrevista</th>
               <th className="px-5 py-3 font-bold">Aspirante</th>
               <th className="px-4 py-3 font-bold">Contacto</th>
-              <th className="px-4 py-3 font-bold">Ciudad</th>
-              <th className="px-4 py-3 font-bold">Lugar de nacimiento</th>
-              <th className="px-4 py-3 font-bold">Nivel de estudio</th>
+              <th className="px-4 py-3 font-bold">Perfil</th>
               <th className="px-4 py-3 font-bold">Estado</th>
               <th className="px-4 py-3 font-bold">
                 {selectedMode ? "Fecha de ingreso" : "Entrevista"}
@@ -443,13 +475,7 @@ export default function InterviewTable({
                     <p className="font-semibold text-slate-700">{getCandidatePhone(interview)}</p>
                     <p className="mt-1 max-w-44 truncate text-xs text-slate-500">{email || "Sin correo registrado"}</p>
                   </td>
-                  <td className="px-4 py-4 text-sm font-semibold text-slate-700">{getCandidateCity(interview)}</td>
-                  <td className="px-4 py-4 text-sm font-semibold text-slate-700">
-                    {getCandidateBirthPlace(interview)}
-                  </td>
-                  <td className="px-4 py-4 text-sm font-semibold text-slate-700">
-                    {getCandidateEducationLevel(interview)}
-                  </td>
+                  <td className="px-4 py-4"><CandidateProfileCell interview={interview} /></td>
                   <td className="px-4 py-4"><InterviewStatusBadge status={getInterviewStatus(interview)} /></td>
                   <td className="px-4 py-4 text-sm">
                     {selectedMode ? (
@@ -476,7 +502,7 @@ export default function InterviewTable({
                 {!selectedMode &&
                   actions.expandedReferencesId === interview.id && (
                     <tr className="bg-slate-50/70">
-                      <td colSpan={10} className="px-5 py-4">
+                      <td colSpan={8} className="px-5 py-4">
                         <InterviewReferencesPanel
                           interview={interview}
                           savingReferenceKey={actions.savingReferenceKey}

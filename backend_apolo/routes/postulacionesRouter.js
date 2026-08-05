@@ -23,6 +23,7 @@ const INTERVIEW_STATUSES = [
   "CONFIRMADA",
   "REPROGRAMADA",
   "REALIZADA",
+  "NO_CONTESTO",
   "NO_ASISTIO",
   "CANCELADA",
   "SELECCIONADO",
@@ -727,7 +728,12 @@ const buildResumen = async () => {
       where: {
         ...activeInterviewWhere,
         estadoEntrevista: {
-          [Op.notIn]: ["CANCELADA", "NO_ASISTIO", ...SELECTED_INTERVIEW_STATUSES],
+          [Op.notIn]: [
+            "CANCELADA",
+            "NO_ASISTIO",
+            "NO_CONTESTO",
+            ...SELECTED_INTERVIEW_STATUSES,
+          ],
         },
         fechaEntrevista: { [Op.between]: [todayStart, todayEnd] },
       },
@@ -1906,7 +1912,10 @@ router.patch("/:id/estado-entrevista", auth, async (req, res) => {
       });
     }
 
-    if (estadoEntrevista !== "PENDIENTE" && !postulacion.fechaEntrevista) {
+    if (
+      !["PENDIENTE", "NO_CONTESTO"].includes(estadoEntrevista) &&
+      !postulacion.fechaEntrevista
+    ) {
       return res.status(400).json({
         ok: false,
         message: "Debe agendar la entrevista antes de cambiar su estado",
@@ -1939,11 +1948,31 @@ router.patch("/:id/descartada", auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { descartada } = req.body || {};
+    const motivoDescarte =
+      typeof req.body?.motivoDescarte === "string"
+        ? req.body.motivoDescarte.trim()
+        : typeof req.body?.observacion === "string"
+          ? req.body.observacion.trim()
+          : "";
 
     if (typeof descartada !== "boolean") {
       return res.status(400).json({
         ok: false,
         message: "El estado de descarte debe ser verdadero o falso",
+      });
+    }
+
+    if (descartada && !motivoDescarte) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe ingresar el motivo por el que descarta al postulante",
+      });
+    }
+
+    if (motivoDescarte.length > 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "El motivo del descarte no puede superar 1000 caracteres",
       });
     }
 
@@ -1958,6 +1987,20 @@ router.patch("/:id/descartada", auth, async (req, res) => {
 
     postulacion.descartada = descartada;
     postulacion.descartadaAt = descartada ? new Date() : null;
+
+    if (descartada) {
+      const formulario = postulacion.formulario || {};
+      postulacion.formulario = {
+        ...formulario,
+        metadata: {
+          ...(formulario.metadata || {}),
+          motivo_descarte: motivoDescarte,
+          motivo_descarte_at: new Date().toISOString(),
+        },
+      };
+      postulacion.changed("formulario", true);
+    }
+
     await postulacion.save();
 
     const resumen = await buildResumen();

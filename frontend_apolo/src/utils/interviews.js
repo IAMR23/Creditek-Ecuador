@@ -24,6 +24,11 @@ export const INTERVIEW_STATUS = {
     className: "border-teal-200 bg-teal-50 text-teal-800",
     dotClassName: "bg-teal-600",
   },
+  NO_CONTESTO: {
+    label: "No contestó",
+    className: "border-amber-200 bg-amber-50 text-amber-800",
+    dotClassName: "bg-amber-500",
+  },
   NO_ASISTIO: {
     label: "No asistió",
     className: "border-red-200 bg-red-50 text-red-700",
