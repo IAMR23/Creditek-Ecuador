@@ -9,6 +9,13 @@ const {
 const {
   conciliarCarga,
 } = require("../../services/conciliacionEntradasService");
+const {
+  auditarVentasDesdeDirectorios,
+} = require("../../services/auditoriaVentasPdfService");
+const {
+  guardarAuditoriaVentasPdf,
+} = require("../../services/auditoriaVentasPersistenciaService");
+const auditoriaVentasController = require("../Auditoria/auditoriaVentasController");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -182,6 +189,38 @@ const limpiarTemporal = async (dir) => {
   await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
 };
 
+const crearResumenAuditoriaNoAplica = () => ({
+  estado: "NO_APLICA",
+  inconsistencias: 0,
+  tv: { aplica: false, registros: 0, inconsistencias: 0 },
+  celular: { aplica: false, registros: 0, inconsistencias: 0 },
+  errores: [],
+});
+
+const establecerHeadersAuditoria = (res, auditoria) => {
+  res.setHeader("X-RVE-Auditoria-Estado", auditoria.estado);
+  res.setHeader(
+    "X-RVE-Auditoria-Inconsistencias",
+    String(auditoria.inconsistencias || 0),
+  );
+  res.setHeader(
+    "X-RVE-Auditoria-TV-Registros",
+    String(auditoria.tv?.registros || 0),
+  );
+  res.setHeader(
+    "X-RVE-Auditoria-TV-Inconsistencias",
+    String(auditoria.tv?.inconsistencias || 0),
+  );
+  res.setHeader(
+    "X-RVE-Auditoria-Celular-Registros",
+    String(auditoria.celular?.registros || 0),
+  );
+  res.setHeader(
+    "X-RVE-Auditoria-Celular-Inconsistencias",
+    String(auditoria.celular?.inconsistencias || 0),
+  );
+};
+
 exports.extraerCierreCajaConVentas = async (req, res) => {
   const tempRoot = req.reportesCajaVentasTempRoot;
 
@@ -253,6 +292,55 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
       );
     }
 
+    let auditoriaAutomatica = crearResumenAuditoriaNoAplica();
+    try {
+      auditoriaAutomatica = await auditarVentasDesdeDirectorios({
+        directorioTv: req.ventasTvDir,
+        directorioCelular: req.ventasCelularDir,
+        directorioResultados: path.join(tempRoot, "auditoria-resultados"),
+        fechaInicio: fechaReporte,
+        fechaFin: fechaReporte,
+        usuarioId: req.user?.id,
+        app: req.app,
+        origenAuditoria: "CAJA",
+        controlFinancieroCargaId: carga.id,
+        dependencias: {
+          obtenerReporteAuditoria:
+            auditoriaVentasController.obtenerReporteAuditoria,
+          auditarRegistrosPdf: auditoriaVentasController.auditarRegistrosPdf,
+          contarDispositivosCreditoRve:
+            auditoriaVentasController.contarDispositivosCreditoRve,
+          esFilaConIncidencia:
+            auditoriaVentasController.esFilaConIncidenciaAuditoriaPdf,
+          notificarDiferenciasPrecioAuditoria:
+            auditoriaVentasController.notificarDiferenciasPrecioAuditoria,
+          persistirAuditoriaVentasPdf: guardarAuditoriaVentasPdf,
+        },
+      });
+
+      auditoriaAutomatica.errores.forEach((errorAuditoria) => {
+        console.error(
+          `Error en auditoria automatica de ventas ${errorAuditoria.tipo}:`,
+          errorAuditoria.message,
+        );
+      });
+    } catch (errorAuditoria) {
+      auditoriaAutomatica = {
+        ...crearResumenAuditoriaNoAplica(),
+        estado: "ERROR",
+        errores: [
+          {
+            tipo: "GENERAL",
+            message: errorAuditoria.message || "Error de auditoria automatica",
+          },
+        ],
+      };
+      console.error(
+        "Error inesperado ejecutando la auditoria automatica de ventas:",
+        errorAuditoria,
+      );
+    }
+
     if (summary) {
       res.setHeader("X-RVE-Registros", String(summary.registrosCaja || 0));
       res.setHeader("X-RVE-No-Leidas", String(summary.noLeidas || 0));
@@ -282,6 +370,7 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
         String(conciliacionEntradas.id),
       );
     }
+    establecerHeadersAuditoria(res, auditoriaAutomatica);
 
     return res.download(outputFile, filename, async (error) => {
       await limpiarTemporal(tempRoot);
@@ -304,3 +393,4 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
 };
 
 exports.normalizarAsignacionesAgencia = normalizarAsignacionesAgencia;
+exports.establecerHeadersAuditoria = establecerHeadersAuditoria;

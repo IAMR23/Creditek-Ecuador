@@ -124,6 +124,24 @@ router.post(
   auditoriaVentasController.auditarVentasDesdePdf,
 );
 
+router.get(
+  "/ventas/auditorias-pdf/precargada",
+  accesoAuditoria,
+  auditoriaVentasController.obtenerAuditoriaPdfPrecargada,
+);
+
+router.post(
+  "/ventas/auditorias-pdf/reauditar-control-financiero",
+  accesoAuditoria,
+  auditoriaVentasController.reauditarVentasDesdeControlFinanciero,
+);
+
+router.post(
+  "/ventas/auditorias-pdf/:auditoriaId/auditar",
+  accesoAuditoria,
+  auditoriaVentasController.reauditarVentasDesdePrecarga,
+);
+
 router.patch(
   "/ventas/detalle/:detalleVentaId",
   auditoriaVentasController.actualizarDetalleVentaAuditoria,

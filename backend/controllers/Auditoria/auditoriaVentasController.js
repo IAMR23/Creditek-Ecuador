@@ -1,8 +1,6 @@
 const Agencia = require("../../models/Agencia");
 const fs = require("fs/promises");
-const fsSync = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
 const Cliente = require("../../models/Cliente");
 const ConciliacionModeloCelular = require("../../models/ConciliacionModeloCelular");
 const ConciliacionModeloTv = require("../../models/ConciliacionModeloTv");
@@ -33,8 +31,18 @@ const {
 const {
   calcularIndicadoresCostoHistorico,
 } = require("../../utils/calcularIndicadoresCostoHistorico");
-
-const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
+const {
+  auditarVentasDesdeDirectorio,
+  auditarVentasDesdeRegistros,
+} = require("../../services/auditoriaVentasPdfService");
+const {
+  guardarAuditoriaVentasPdf,
+  obtenerAuditoriaVentasPdfPorId,
+  obtenerAuditoriaVentasPdfPrecargada,
+} = require("../../services/auditoriaVentasPersistenciaService");
+const {
+  obtenerRegistrosAuditoriaDesdeControlFinanciero,
+} = require("../../services/controlFinancieroAuditoriaService");
 
 exports.obtenerReporteAuditoria = async ({
   fechaInicio,
@@ -961,6 +969,8 @@ const contarDispositivosCreditoRve = ({ tipo, ventas }) =>
     .filter((fila) => esFormaPagoCredito(fila) && esDispositivoDelTipoPdf(fila, tipo))
     .length;
 
+exports.contarDispositivosCreditoRve = contarDispositivosCreditoRve;
+
 const normalizarCodigoPdf = (value) =>
   String(value || "")
     .normalize("NFD")
@@ -1119,6 +1129,8 @@ const esFilaConIncidenciaAuditoriaPdf = (fila) => {
   );
 };
 
+exports.esFilaConIncidenciaAuditoriaPdf = esFilaConIncidenciaAuditoriaPdf;
+
 const construirDescripcionDiferenciaPrecio = (grupo) => {
   const detalles = grupo.filas.slice(0, 8).map((fila) => {
     let referencia = "Venta sin identificador";
@@ -1166,7 +1178,7 @@ const getReferenciaDiferenciaPrecio = (fila = {}) => {
   return null;
 };
 
-const crearTareaDiferenciaPrecio = async ({ req, admin, grupo, creadorId }) => {
+const crearTareaDiferenciaPrecio = async ({ app, admin, grupo, creadorId }) => {
   const inicioDia = new Date();
   inicioDia.setHours(0, 0, 0, 0);
 
@@ -1223,7 +1235,7 @@ const crearTareaDiferenciaPrecio = async ({ req, admin, grupo, creadorId }) => {
     ],
   });
 
-  const io = req.app.get("io");
+  const io = app?.get?.("io");
   if (io) {
     io.to(`user_${admin.id}`).emit("task:sync", {
       type: "created",
@@ -1234,7 +1246,7 @@ const crearTareaDiferenciaPrecio = async ({ req, admin, grupo, creadorId }) => {
   return fullTask || task;
 };
 
-exports.notificarDiferenciasPrecioAuditoria = async (req, filas = []) => {
+exports.notificarDiferenciasPrecioAuditoria = async (contexto, filas = []) => {
   try {
     const grupos = agruparDiferenciasPrecioPorVendedor(filas);
 
@@ -1244,13 +1256,15 @@ exports.notificarDiferenciasPrecioAuditoria = async (req, filas = []) => {
 
     if (!administradores.length) return [];
 
-    const creadorId = req.user?.id || administradores[0].id;
+    const usuarioId = contexto?.usuarioId ?? contexto?.user?.id;
+    const app = contexto?.app;
+    const creadorId = usuarioId || administradores[0].id;
     const tareas = [];
 
     for (const admin of administradores) {
       for (const grupo of grupos) {
         const tarea = await crearTareaDiferenciaPrecio({
-          req,
+          app,
           admin,
           grupo,
           creadorId,
@@ -1428,78 +1442,6 @@ const similitudTexto = (left, right) => {
   );
 };
 
-const getPythonBin = () =>
-  process.env.PYTHON_BIN ||
-  process.env.PYTHON_PATH ||
-  (process.platform === "win32" ? "python" : "python3");
-
-const runPythonProcessor = ({ tipo, inputDir, outputFile }) =>
-  new Promise((resolve, reject) => {
-    const scriptPath = path.join(
-      __dirname,
-      "..",
-      "..",
-      "python_processors",
-      "main_processor.py",
-    );
-    const child = spawn(
-      getPythonBin(),
-      [scriptPath, "--tipo", tipo, "--input", inputDir, "--output", outputFile],
-      {
-        cwd: path.join(__dirname, "..", ".."),
-        env: {
-          ...process.env,
-          PYTHONDONTWRITEBYTECODE: "1",
-        },
-        windowsHide: true,
-      },
-    );
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, PYTHON_TIMEOUT_MS);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
-    });
-
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString("utf8");
-    });
-
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timer);
-
-      if (timedOut) {
-        return reject(new Error("Tiempo agotado procesando los PDFs"));
-      }
-
-      if (code !== 0) {
-        return reject(
-          new Error(stderr.trim() || stdout.trim() || "El procesador Python fallo"),
-        );
-      }
-
-      resolve({ stdout, stderr });
-    });
-  });
-
-const readJsonIfExists = async (filePath) => {
-  if (!fsSync.existsSync(filePath)) return null;
-  const content = await fs.readFile(filePath, "utf8");
-  return JSON.parse(content);
-};
-
 const getModeloMapeado = async ({ tipo, codigoPdf }) => {
   const codigoNormalizado = normalizarCodigoPdf(codigoPdf);
   const ModeloMapeo = tipo === "TV" ? ConciliacionModeloTv : ConciliacionModeloCelular;
@@ -1636,17 +1578,22 @@ const construirObservacionesAuditoria = ({ record, ventaMatch, tipo }) => {
 };
 
 const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
-  const ventasFlatten = flattenVentasAuditoria(ventas);
-  const resultadosBase = exports.formatearReporte(ventas).map((fila) => ({
-    ...fila,
-    referenciaPdf: fila.referenciaPdf || "",
-    clientePdf: "",
-    fechaPdf: "",
-    precioVendedorPdf: null,
-    entradaPdf: null,
-    similitudCliente: "",
-    observacionError: "NO_EN_PDF",
-  }));
+  const ventasFlatten = flattenVentasAuditoria(ventas).filter((fila) =>
+    esDispositivoDelTipoPdf(fila, tipo),
+  );
+  const resultadosBase = exports
+    .formatearReporte(ventas)
+    .filter((fila) => esDispositivoDelTipoPdf(fila, tipo))
+    .map((fila) => ({
+      ...fila,
+      referenciaPdf: fila.referenciaPdf || "",
+      clientePdf: "",
+      fechaPdf: "",
+      precioVendedorPdf: null,
+      entradaPdf: null,
+      similitudCliente: "",
+      observacionError: "NO_EN_PDF",
+    }));
   const resultadosPorDetalle = new Map(
     resultadosBase.map((fila) => [Number(fila.detalleVentaId), fila]),
   );
@@ -2121,95 +2068,250 @@ exports.auditarVentasDesdePdf = async (req, res) => {
       });
     }
 
-    const outputDir = path.join(tempRoot, "resultado");
-    const outputFile = path.join(outputDir, "resultado.json");
-    let processError = null;
-
-    try {
-      await runPythonProcessor({
-        tipo,
-        inputDir: req.auditoriaInputDir,
-        outputFile,
-      });
-    } catch (error) {
-      processError = error;
-    }
-
-    const resultado = await readJsonIfExists(outputFile);
-
-    if (!resultado) {
-      throw processError || new Error("No se genero resultado.json");
-    }
-
-    if (processError || !resultado.ok) {
-      return res.status(422).json({
-        ok: false,
-        message:
-          processError?.message ||
-          resultado.errores?.[0]?.detalle ||
-          "No se pudieron procesar los PDFs",
-        resultado,
-      });
-    }
-
-    const ventas = await exports.obtenerReporteAuditoria({
+    const resultadoAuditoria = await auditarVentasDesdeDirectorio({
+      tipo,
+      directorioEntrada: req.auditoriaInputDir,
+      directorioSalida: path.join(tempRoot, "resultado"),
       fechaInicio: req.body.fechaInicio,
       fechaFin: req.body.fechaFin,
-      agenciaId: req.body.agenciaId,
-      vendedorId: req.body.vendedorId,
-      modeloId: req.body.modeloId,
-      cierreCaja: req.body.cierreCaja,
-      origenId: req.body.origenId,
-      dispositivoId: req.body.dispositivoId,
-      estado: req.body.estado,
-    });
-
-    const registrosPdf = Array.isArray(resultado.registros_validos)
-      ? resultado.registros_validos
-      : [];
-    const totalRegistrosPdf = Number(resultado.total_registros) || registrosPdf.length;
-    const dispositivosCreditoPdf = totalRegistrosPdf;
-    const dispositivosCreditoRve = contarDispositivosCreditoRve({ tipo, ventas });
-    const diferenciaCredito = dispositivosCreditoRve - dispositivosCreditoPdf;
-    const auditoria = await auditarRegistrosPdf({
-      tipo,
-      registrosPdf,
-      ventas,
-    });
-    await exports.notificarDiferenciasPrecioAuditoria(req, auditoria.resultados);
-
-    return res.json({
-      ok: true,
-      tipo,
-      resumen: {
-        pdfsProcesados: resultado.pdfs_procesados || 0,
-        registrosPdf: totalRegistrosPdf,
-        registrosPdfValidos: registrosPdf.length,
-        dispositivosCreditoPdf,
-        dispositivosCreditoRve,
-        diferenciaCredito,
-        criterioCreditoRve: "formaPago credito",
-        ventasComparadas: auditoria.resultados.length,
-        erroresDetectados: auditoria.resultados.filter(
-          esFilaConIncidenciaAuditoriaPdf,
-        ).length,
-        erroresExtraccion: Array.isArray(resultado.errores)
-          ? resultado.errores.length
-          : 0,
+      usuarioId: req.user?.id,
+      app: req.app,
+      filtros: {
+        agenciaId: req.body.agenciaId,
+        vendedorId: req.body.vendedorId,
+        modeloId: req.body.modeloId,
+        cierreCaja: req.body.cierreCaja,
+        origenId: req.body.origenId,
+        dispositivoId: req.body.dispositivoId,
+        estado: req.body.estado,
       },
-      ventas: auditoria.resultados,
-      errores: resultado.errores || [],
+      obtenerReporteAuditoria: exports.obtenerReporteAuditoria,
+      auditarRegistrosPdf,
+      contarDispositivosCreditoRve,
+      esFilaConIncidencia: esFilaConIncidenciaAuditoriaPdf,
+      notificarDiferenciasPrecioAuditoria:
+        exports.notificarDiferenciasPrecioAuditoria,
+      persistirAuditoriaVentasPdf: guardarAuditoriaVentasPdf,
+      origenAuditoria: "MANUAL",
     });
+    return res.json(resultadoAuditoria);
   } catch (error) {
     console.error("Error auditando ventas desde PDF:", error);
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       ok: false,
       message: error.message || "Error al auditar PDFs",
+      ...(error.resultado ? { resultado: error.resultado } : {}),
     });
   } finally {
     if (tempRoot) {
       await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
     }
+  }
+};
+
+const formatearAuditoriaPdfPrecargada = (auditoria, fuenteControl = null) => {
+  if (!auditoria) return null;
+
+  return {
+    id: auditoria.id,
+    tipo: auditoria.tipo,
+    fechaInicio: auditoria.fechaInicio,
+    fechaFin: auditoria.fechaFin,
+    origen: auditoria.origen,
+    estado: auditoria.estado,
+    resumen: auditoria.resumen || {},
+    ventas: Array.isArray(auditoria.resultados) ? auditoria.resultados : [],
+    errores: Array.isArray(auditoria.errores) ? auditoria.errores : [],
+    actualizadoEn: auditoria.updatedAt || null,
+    fuenteControlFinanciero: fuenteControl
+      ? {
+          cargaIds: fuenteControl.cargaIds,
+          registros: fuenteControl.totalRegistrosPdf,
+          archivos: fuenteControl.pdfsProcesados,
+        }
+      : null,
+  };
+};
+
+exports.obtenerAuditoriaPdfPrecargada = async (req, res) => {
+  try {
+    const consulta = {
+      tipo: req.query.tipo,
+      fechaInicio: req.query.fechaInicio,
+      fechaFin: req.query.fechaFin,
+    };
+    const fuenteControl =
+      await obtenerRegistrosAuditoriaDesdeControlFinanciero(consulta);
+    const tieneRegistrosControl = fuenteControl.totalRegistrosPdf > 0;
+    const auditoria = await obtenerAuditoriaVentasPdfPrecargada({
+      ...consulta,
+      controlFinancieroCargaIds: tieneRegistrosControl
+        ? fuenteControl.cargaIds
+        : [],
+    });
+    const auditoriaPrecargada = auditoria
+      ? formatearAuditoriaPdfPrecargada(
+          auditoria,
+          tieneRegistrosControl ? fuenteControl : null,
+        )
+      : tieneRegistrosControl
+        ? {
+            id: null,
+            tipo: fuenteControl.tipo,
+            fechaInicio: fuenteControl.fechaInicio,
+            fechaFin: fuenteControl.fechaFin,
+            origen: "CONTROL_FINANCIERO",
+            estado: "PENDIENTE_AUDITORIA",
+            resumen: {
+              pdfsProcesados: fuenteControl.pdfsProcesados,
+              registrosPdf: fuenteControl.totalRegistrosPdf,
+              registrosPdfValidos: fuenteControl.totalRegistrosPdf,
+              erroresDetectados: 0,
+            },
+            ventas: [],
+            errores: [],
+            actualizadoEn: null,
+            fuenteControlFinanciero: {
+              cargaIds: fuenteControl.cargaIds,
+              registros: fuenteControl.totalRegistrosPdf,
+              archivos: fuenteControl.pdfsProcesados,
+            },
+          }
+        : null;
+
+    return res.json({
+      ok: true,
+      auditoria: auditoriaPrecargada,
+    });
+  } catch (error) {
+    console.error("Error obteniendo auditoria PDF precargada:", error);
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      message: error.message || "No se pudo obtener la auditoria precargada",
+    });
+  }
+};
+
+exports.reauditarVentasDesdeControlFinanciero = async (req, res) => {
+  try {
+    const fuenteControl =
+      await obtenerRegistrosAuditoriaDesdeControlFinanciero({
+        tipo: req.body.tipo,
+        fechaInicio: req.body.fechaInicio,
+        fechaFin: req.body.fechaFin,
+      });
+    if (!fuenteControl.totalRegistrosPdf) {
+      return res.status(404).json({
+        ok: false,
+        message:
+          "No existen reportes de ventas guardados en Control financiero para la fecha y tipo seleccionados",
+      });
+    }
+
+    const auditoriaExistente =
+      await obtenerAuditoriaVentasPdfPrecargada({
+        tipo: fuenteControl.tipo,
+        fechaInicio: fuenteControl.fechaInicio,
+        fechaFin: fuenteControl.fechaFin,
+        controlFinancieroCargaIds: fuenteControl.cargaIds,
+      });
+    const resultadoAuditoria = await auditarVentasDesdeRegistros({
+      auditoriaId: auditoriaExistente?.id || null,
+      tipo: fuenteControl.tipo,
+      registrosPdf: fuenteControl.registrosPdf,
+      totalRegistrosPdf: fuenteControl.totalRegistrosPdf,
+      pdfsProcesados: fuenteControl.pdfsProcesados,
+      erroresExtraccion: [],
+      fechaInicio: fuenteControl.fechaInicio,
+      fechaFin: fuenteControl.fechaFin,
+      usuarioId: req.user?.id,
+      app: req.app,
+      filtros: {
+        agenciaId: req.body.agenciaId,
+        vendedorId: req.body.vendedorId,
+        modeloId: req.body.modeloId,
+        cierreCaja: req.body.cierreCaja,
+        origenId: req.body.origenId,
+        dispositivoId: req.body.dispositivoId,
+        estado: req.body.estado,
+      },
+      origenAuditoria: "CONTROL_FINANCIERO",
+      controlFinancieroCargaId:
+        fuenteControl.cargaIds.length === 1 ? fuenteControl.cargaIds[0] : null,
+      obtenerReporteAuditoria: exports.obtenerReporteAuditoria,
+      auditarRegistrosPdf,
+      contarDispositivosCreditoRve,
+      esFilaConIncidencia: esFilaConIncidenciaAuditoriaPdf,
+      notificarDiferenciasPrecioAuditoria:
+        exports.notificarDiferenciasPrecioAuditoria,
+      persistirAuditoriaVentasPdf: guardarAuditoriaVentasPdf,
+    });
+
+    return res.json(resultadoAuditoria);
+  } catch (error) {
+    console.error(
+      "Error reauditando ventas desde Control financiero:",
+      error,
+    );
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      message:
+        error.message || "No se pudo reauditar desde Control financiero",
+    });
+  }
+};
+
+exports.reauditarVentasDesdePrecarga = async (req, res) => {
+  try {
+    const auditoria = await obtenerAuditoriaVentasPdfPorId(
+      req.params.auditoriaId,
+    );
+    if (!auditoria) {
+      return res.status(404).json({
+        ok: false,
+        message: "La auditoria PDF precargada no existe",
+      });
+    }
+
+    const resultadoAuditoria = await auditarVentasDesdeRegistros({
+      auditoriaId: auditoria.id,
+      tipo: auditoria.tipo,
+      registrosPdf: auditoria.registrosPdf,
+      totalRegistrosPdf:
+        auditoria.resumen?.registrosPdf || auditoria.registrosPdf?.length || 0,
+      pdfsProcesados: auditoria.resumen?.pdfsProcesados || 0,
+      erroresExtraccion: auditoria.errores,
+      fechaInicio: auditoria.fechaInicio,
+      fechaFin: auditoria.fechaFin,
+      usuarioId: req.user?.id,
+      app: req.app,
+      filtros: {
+        agenciaId: req.body.agenciaId,
+        vendedorId: req.body.vendedorId,
+        modeloId: req.body.modeloId,
+        cierreCaja: req.body.cierreCaja,
+        origenId: req.body.origenId,
+        dispositivoId: req.body.dispositivoId,
+        estado: req.body.estado,
+      },
+      origenAuditoria: auditoria.origen,
+      controlFinancieroCargaId: auditoria.controlFinancieroCargaId,
+      obtenerReporteAuditoria: exports.obtenerReporteAuditoria,
+      auditarRegistrosPdf,
+      contarDispositivosCreditoRve,
+      esFilaConIncidencia: esFilaConIncidenciaAuditoriaPdf,
+      notificarDiferenciasPrecioAuditoria:
+        exports.notificarDiferenciasPrecioAuditoria,
+      persistirAuditoriaVentasPdf: guardarAuditoriaVentasPdf,
+    });
+
+    return res.json(resultadoAuditoria);
+  } catch (error) {
+    console.error("Error reauditando ventas desde precarga PDF:", error);
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      message: error.message || "No se pudo reauditar la precarga PDF",
+    });
   }
 };
 

@@ -106,20 +106,46 @@ const formatearFecha = (value) => {
   });
 };
 
+const obtenerClavePlan = (plan) =>
+  plan ? `${plan.origen || "vendedor"}:${plan.id}` : null;
+
+const obtenerTipoResponsable = (plan) =>
+  plan?.origen === "secretario_ejecutivo"
+    ? "Secretario ejecutivo"
+    : "Vendedor";
+
+const puedeEliminarPlan = (plan) => plan?.puedeEliminar !== false;
+
+const combinarUsuarios = (usuariosActuales, usuariosNuevos) => {
+  const usuariosPorId = new Map(
+    usuariosActuales.map((usuario) => [String(usuario.id), usuario]),
+  );
+
+  usuariosNuevos.forEach((usuario) => {
+    if (usuario?.id && !usuariosPorId.has(String(usuario.id))) {
+      usuariosPorId.set(String(usuario.id), usuario);
+    }
+  });
+
+  return [...usuariosPorId.values()];
+};
+
 export default function VerPlanesBatalla() {
   const [planes, setPlanes] = useState([]);
   const [agencias, setAgencias] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [filtros, setFiltros] = useState(crearFiltrosIniciales);
   const [loading, setLoading] = useState(false);
-  const [planSeleccionadoId, setPlanSeleccionadoId] = useState(null);
+  const [planSeleccionadoClave, setPlanSeleccionadoClave] = useState(null);
 
   const planSeleccionado =
-    planes.find((plan) => String(plan.id) === String(planSeleccionadoId)) ||
+    planes.find(
+      (plan) => obtenerClavePlan(plan) === planSeleccionadoClave,
+    ) ||
     planes[0] ||
     null;
 
-  const vendedoresOrdenados = useMemo(
+  const responsablesOrdenados = useMemo(
     () => [...usuarios].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
     [usuarios],
   );
@@ -132,10 +158,12 @@ export default function VerPlanesBatalla() {
       ]);
 
       setAgencias(agenciasRes.data || []);
-      setUsuarios(usuariosRes.data || []);
+      setUsuarios((usuariosActuales) =>
+        combinarUsuarios(usuariosActuales, usuariosRes.data || []),
+      );
     } catch (error) {
       console.error("Error cargando catalogos:", error);
-      Swal.fire("Error", "No se pudieron cargar agencias o vendedores", "error");
+      Swal.fire("Error", "No se pudieron cargar agencias o responsables", "error");
     }
   };
 
@@ -155,7 +183,13 @@ export default function VerPlanesBatalla() {
 
       const items = data.planes || [];
       setPlanes(items);
-      setPlanSeleccionadoId(items[0]?.id || null);
+      setPlanSeleccionadoClave(obtenerClavePlan(items[0]));
+      setUsuarios((usuariosActuales) =>
+        combinarUsuarios(
+          usuariosActuales,
+          items.map((plan) => plan.usuario).filter(Boolean),
+        ),
+      );
     } catch (error) {
       console.error("Error cargando planes de batalla:", error);
       Swal.fire(
@@ -184,20 +218,22 @@ export default function VerPlanesBatalla() {
     setFiltros(crearFiltrosIniciales());
   };
 
-  const eliminarPlan = async (planId) => {
+  const eliminarPlan = async (plan) => {
     const confirm = await Swal.fire({
-      title: "Eliminar plan?",
+      title: "¿Eliminar plan?",
+      text: `Se eliminará el plan de ${plan.usuario?.nombre || "este responsable"}.`,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Si, eliminar",
+      confirmButtonText: "Sí, eliminar",
       cancelButtonText: "Cancelar",
     });
 
     if (!confirm.isConfirmed) return;
 
     try {
-      await axios.delete(`${API_URL}/api/planes-batalla/${planId}`, {
+      await axios.delete(`${API_URL}/api/planes-batalla/${plan.id}`, {
         headers: getAuthHeaders(),
+        params: { origen: plan.origen || "vendedor" },
       });
       await cargarPlanes();
     } catch (error) {
@@ -220,7 +256,8 @@ export default function VerPlanesBatalla() {
             Ver planes de batalla
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Consulta los planes enviados por vendedor, agencia y rango de fechas.
+            Consulta los planes enviados por vendedores y secretarios ejecutivos,
+            por agencia y rango de fechas.
           </p>
         </header>
 
@@ -245,12 +282,12 @@ export default function VerPlanesBatalla() {
             </SelectFiltro>
 
             <SelectFiltro
-              label="Vendedor"
+              label="Responsable"
               value={filtros.vendedorId}
               onChange={(value) => actualizarFiltro("vendedorId", value)}
             >
               <option value="todos">Todos</option>
-              {vendedoresOrdenados.map((usuario) => (
+              {responsablesOrdenados.map((usuario) => (
                 <option key={usuario.id} value={usuario.id}>
                   {nombreCortoUsuario(usuario)}
                 </option>
@@ -319,7 +356,8 @@ export default function VerPlanesBatalla() {
 
               <div className="divide-y divide-slate-100">
                 {planes.map((plan) => {
-                  const activo = String(planSeleccionado?.id) === String(plan.id);
+                  const clavePlan = obtenerClavePlan(plan);
+                  const activo = obtenerClavePlan(planSeleccionado) === clavePlan;
                   const condicion =
                     CONDICIONES_LABELS[plan.plan?.condicion] ||
                     plan.plan?.condicion ||
@@ -327,9 +365,9 @@ export default function VerPlanesBatalla() {
 
                   return (
                     <button
-                      key={plan.id}
+                      key={clavePlan}
                       type="button"
-                      onClick={() => setPlanSeleccionadoId(plan.id)}
+                      onClick={() => setPlanSeleccionadoClave(clavePlan)}
                       className={`block w-full p-4 text-left transition ${
                         activo ? "bg-emerald-50" : "hover:bg-slate-50"
                       }`}
@@ -338,6 +376,9 @@ export default function VerPlanesBatalla() {
                         <div>
                           <p className="text-sm font-black text-slate-900">
                             {plan.usuario?.nombre || "-"}
+                          </p>
+                          <p className="mt-1 text-[11px] font-black uppercase tracking-wide text-emerald-700">
+                            {obtenerTipoResponsable(plan)}
                           </p>
                           <p className="mt-1 text-xs font-semibold text-slate-500">
                             {plan.agencia?.nombre || "-"} · {condicion}
@@ -381,23 +422,28 @@ function DetallePlan({ plan, onEliminar }) {
       <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase text-slate-500">
-            Detalle del plan
+            Detalle del plan · {obtenerTipoResponsable(plan)}
           </p>
           <h2 className="text-xl font-bold text-slate-950">{condicion}</h2>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onEliminar(plan.id)}
-          className="inline-flex items-center justify-center gap-2 rounded border border-red-200 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
-        >
-          <Trash2 size={16} />
-          Eliminar
-        </button>
+        {puedeEliminarPlan(plan) && (
+          <button
+            type="button"
+            onClick={() => onEliminar(plan)}
+            className="inline-flex items-center justify-center gap-2 rounded border border-red-200 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
+          >
+            <Trash2 size={16} />
+            Eliminar
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-3 border-b border-slate-200 p-4 md:grid-cols-3">
-        <InfoPill label="Vendedor" value={plan.usuario?.nombre || "-"} />
+        <InfoPill
+          label={obtenerTipoResponsable(plan)}
+          value={plan.usuario?.nombre || "-"}
+        />
         <InfoPill label="Agencia" value={plan.agencia?.nombre || "-"} />
         <InfoPill label="Fecha" value={plan.plan?.fechaInicio || "-"} />
       </div>

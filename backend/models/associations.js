@@ -61,6 +61,7 @@ const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
 const ControlFinancieroConciliacionEntrada = require('./ControlFinancieroConciliacionEntrada');
 const NotificacionPersonal = require('./NotificacionPersonal');
 const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
+const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -761,6 +762,26 @@ Usuario.hasMany(ControlFinancieroConciliacionEntrada, {
 ControlFinancieroConciliacionEntrada.belongsTo(Usuario, {
   foreignKey: "ejecutadoPor",
   as: "ejecutor",
+});
+
+Usuario.hasMany(AuditoriaVentaPdf, {
+  foreignKey: "usuarioId",
+  as: "auditoriasVentasPdf",
+});
+
+AuditoriaVentaPdf.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+
+ControlFinancieroCarga.hasMany(AuditoriaVentaPdf, {
+  foreignKey: "controlFinancieroCargaId",
+  as: "auditoriasVentasPdf",
+});
+
+AuditoriaVentaPdf.belongsTo(ControlFinancieroCarga, {
+  foreignKey: "controlFinancieroCargaId",
+  as: "cargaControlFinanciero",
 });
 
 MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
@@ -42,12 +42,12 @@ const TABLE_COLUMNS = [
   "Precio Carga",
   "Precio Vendedor",
   "Costo",
-  "Ventas PDF",
+  "REPORTE UPH",
   "Diferencia",
   "Precio Unitario",
   "Forma Pago",
   "Entrada",
-  "Entrada PDF",
+  "ENTRADA UPH",
   "Alcance",
   "Estado",
   "Observacion",
@@ -223,7 +223,7 @@ const mapVentaAuditoria = (venta) => {
     "Precio Carga": precioVenta,
     "Precio Vendedor": precioVendedor,
     Costo: toMoney(venta.costo),
-    "Ventas PDF": toMoney(venta.precioVendedorPdf),
+    "REPORTE UPH": toMoney(venta.precioVendedorPdf),
     Diferencia: diferencia,
     "Precio Unitario":
       venta.precioVendedor != null
@@ -231,7 +231,7 @@ const mapVentaAuditoria = (venta) => {
         : "",
     "Forma Pago": venta.formaPago ?? "",
     Entrada: venta.entrada ?? "",
-    "Entrada PDF": toMoney(venta.entradaPdf),
+    "ENTRADA UPH": toMoney(venta.entradaPdf),
     Alcance: venta.alcance ?? "",
     Estado: venta.id ? (venta.activo ? "Activo" : "Desactivada") : "Sin venta",
     "Observacion Error": observacionError,
@@ -272,6 +272,8 @@ export default function VentasAuditoria() {
   const [pdfFiles, setPdfFiles] = useState([]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfResumen, setPdfResumen] = useState(null);
+  const [auditoriaPrecargada, setAuditoriaPrecargada] = useState(null);
+  const pdfInputRef = useRef(null);
   const [vistaResultados, setVistaResultados] = useState("todos");
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [filaEditandoId, setFilaEditandoId] = useState("");
@@ -414,6 +416,28 @@ export default function VentasAuditoria() {
     estado,
   ]);
 
+  const obtenerAuditoriaPrecargada = async () => {
+    if (!fechaInicio || !fechaFin) return null;
+
+    try {
+      const { data } = await axios.get(
+        `${API_URL}/auditoria/ventas/auditorias-pdf/precargada`,
+        {
+          params: {
+            tipo: pdfTipo,
+            fechaInicio,
+            fechaFin,
+          },
+        },
+      );
+
+      return data.ok ? data.auditoria : null;
+    } catch (error) {
+      console.error("Error cargando auditoria PDF precargada:", error);
+      return null;
+    }
+  };
+
   const fetchData = async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
@@ -422,6 +446,7 @@ export default function VentasAuditoria() {
 
     setError("");
     setLoading(true);
+    setAuditoriaPrecargada(null);
 
     try {
       const params = new URLSearchParams({
@@ -440,16 +465,29 @@ export default function VentasAuditoria() {
       if (estado && estado !== "todos") params.append("estado", estado);
 
       const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
-      const { data } = await axios.get(url);
+      const [{ data }, precarga] = await Promise.all([
+        axios.get(url),
+        obtenerAuditoriaPrecargada(),
+      ]);
 
       if (!data.ok) return;
 
-      const ventas = data.ventas || [];
+      const usarResultadosPrecargados = Boolean(
+        precarga && Array.isArray(precarga.ventas) && precarga.ventas.length,
+      );
+      const ventas = usarResultadosPrecargados
+        ? precarga.ventas || []
+        : data.ventas || [];
       const resultado = ventas.map(mapVentaAuditoria);
 
       setFilas(resultado);
-      setPdfResumen(null);
-      setVistaResultados("todos");
+      setAuditoriaPrecargada(precarga);
+      setPdfResumen(usarResultadosPrecargados ? precarga.resumen || null : null);
+      setVistaResultados(
+        usarResultadosPrecargados && precarga.resumen?.erroresDetectados > 0
+          ? "errores"
+          : "todos",
+      );
       setFilaEditandoId("");
       setEdicionFila({});
     } catch (error) {
@@ -474,6 +512,7 @@ export default function VentasAuditoria() {
     setBusquedaCliente("");
     setVistaResultados("todos");
     setPdfResumen(null);
+    setAuditoriaPrecargada(null);
     setFilaEditandoId("");
     setEdicionFila({});
   };
@@ -492,6 +531,7 @@ export default function VentasAuditoria() {
     origenId,
     dispositivoId,
     estado,
+    pdfTipo,
     usuarioInfo,
   ]);
 
@@ -503,41 +543,73 @@ export default function VentasAuditoria() {
   const auditarPdfs = async (event) => {
     event.preventDefault();
 
-    if (!pdfFiles.length) {
+    if (!pdfFiles.length && !auditoriaPrecargada) {
       return Swal.fire("Atencion", "Selecciona al menos un PDF", "warning");
     }
 
-    const formData = new FormData();
-    formData.append("tipo", pdfTipo);
-    formData.append("fechaInicio", fechaInicio || "");
-    formData.append("fechaFin", fechaFin || "");
-    formData.append("agenciaId", agenciaId || "");
-    formData.append("vendedorId", vendedorId || "");
-    formData.append("modeloId", modeloId || "");
-    formData.append("cierreCaja", cierreCaja || "");
-    formData.append("origenId", origenId || "");
-    formData.append("dispositivoId", dispositivoId || "");
-    formData.append("estado", estado || "");
-    pdfFiles.forEach((file) => formData.append("pdfs", file));
+    const filtrosAuditoria = {
+      agenciaId: agenciaId || "",
+      vendedorId: vendedorId || "",
+      modeloId: modeloId || "",
+      cierreCaja: cierreCaja || "",
+      origenId: origenId || "",
+      dispositivoId: dispositivoId || "",
+      estado: estado || "",
+    };
 
     try {
       setPdfLoading(true);
-      const { data } = await axios.post(
-        `${API_URL}/auditoria/ventas/importar-pdf`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
+      let response;
+
+      if (pdfFiles.length) {
+        const formData = new FormData();
+        formData.append("tipo", pdfTipo);
+        formData.append("fechaInicio", fechaInicio || "");
+        formData.append("fechaFin", fechaFin || "");
+        Object.entries(filtrosAuditoria).forEach(([key, value]) => {
+          formData.append(key, value);
+        });
+        pdfFiles.forEach((file) => formData.append("pdfs", file));
+
+        response = await axios.post(
+          `${API_URL}/auditoria/ventas/importar-pdf`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
           },
-        },
-      );
+        );
+      } else {
+        response = auditoriaPrecargada.fuenteControlFinanciero
+          ? await axios.post(
+              `${API_URL}/auditoria/ventas/auditorias-pdf/reauditar-control-financiero`,
+              {
+                ...filtrosAuditoria,
+                tipo: pdfTipo,
+                fechaInicio,
+                fechaFin,
+              },
+            )
+          : await axios.post(
+              `${API_URL}/auditoria/ventas/auditorias-pdf/${auditoriaPrecargada.id}/auditar`,
+              filtrosAuditoria,
+            );
+      }
+
+      const { data } = response;
 
       if (!data.ok) return;
 
       setFilas((data.ventas || []).map(mapVentaAuditoria));
       setPdfResumen(data.resumen || null);
+      setVistaResultados(data.resumen?.erroresDetectados > 0 ? "errores" : "todos");
       setFilaEditandoId("");
       setEdicionFila({});
+      setPdfFiles([]);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+      const precargaActualizada = await obtenerAuditoriaPrecargada();
+      setAuditoriaPrecargada(precargaActualizada);
 
       Swal.fire(
         "Listo",
@@ -1045,9 +1117,9 @@ export default function VentasAuditoria() {
       [
         "Precio Unitario",
         "Entrada",
-        "Entrada PDF",
+        "ENTRADA UPH",
         "Alcance",
-        "Ventas PDF",
+        "REPORTE UPH",
         "Costo",
       ].includes(key)
     ) {
@@ -1221,6 +1293,8 @@ export default function VentasAuditoria() {
                 setPdfTipo(event.target.value);
                 setPdfFiles([]);
                 setPdfResumen(null);
+                setAuditoriaPrecargada(null);
+                if (pdfInputRef.current) pdfInputRef.current.value = "";
               }}
               disabled={pdfLoading}
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
@@ -1235,6 +1309,7 @@ export default function VentasAuditoria() {
               PDFs
             </span>
             <input
+              ref={pdfInputRef}
               type="file"
               accept="application/pdf,.pdf"
               multiple
@@ -1246,7 +1321,11 @@ export default function VentasAuditoria() {
 
           <button
             type="submit"
-            disabled={pdfLoading || !pdfFiles.length}
+            disabled={
+              loading ||
+              pdfLoading ||
+              (!pdfFiles.length && !auditoriaPrecargada)
+            }
             className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
             {pdfLoading ? (
@@ -1254,9 +1333,35 @@ export default function VentasAuditoria() {
             ) : (
               <Upload size={16} />
             )}
-            {pdfLoading ? "Auditando..." : "Auditar PDFs"}
+            {pdfLoading
+              ? "Auditando..."
+              : pdfFiles.length
+                ? "Auditar PDFs"
+                : "Reauditar precarga"}
           </button>
         </div>
+
+        {auditoriaPrecargada && !pdfFiles.length && (
+          <div className="mt-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+            <p className="font-semibold">PDF procesado disponible</p>
+            <p className="mt-0.5">
+              {auditoriaPrecargada.tipo} · {auditoriaPrecargada.fechaInicio}
+              {auditoriaPrecargada.fechaFin !== auditoriaPrecargada.fechaInicio
+                ? ` a ${auditoriaPrecargada.fechaFin}`
+                : ""}
+              {` · ${auditoriaPrecargada.fuenteControlFinanciero ? "Control financiero" : "Carga manual"}`}
+            </p>
+            {auditoriaPrecargada.fuenteControlFinanciero && (
+              <p className="mt-0.5 font-medium">
+                {auditoriaPrecargada.fuenteControlFinanciero.registros} registros
+                guardados en la carga de la fecha seleccionada.
+              </p>
+            )}
+            <p className="mt-0.5">
+              Puedes reauditar estos registros contra la informacion actual de RVE sin volver a subir el PDF.
+            </p>
+          </div>
+        )}
 
         {pdfFiles.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">

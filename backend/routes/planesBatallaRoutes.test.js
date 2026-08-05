@@ -9,6 +9,11 @@ jest.mock("../models/PlanBatalla", () => ({
   findOne: jest.fn(),
 }));
 
+jest.mock("../models/SecretarioEjecutivoPlan", () => ({
+  destroy: jest.fn(),
+  findAll: jest.fn(),
+}));
+
 jest.mock("../models/UsuarioAgencia", () => ({}));
 jest.mock("../models/Usuario", () => ({}));
 jest.mock("../models/Agencia", () => ({}));
@@ -17,7 +22,10 @@ jest.mock("../middleware/authMiddleware", () => ({
   authenticate: (req, _res, next) => {
     req.user = {
       usuarioAgenciaId: 27,
-      permisos: [],
+      permisos: String(req.headers["x-test-permisos"] || "")
+        .split(",")
+        .map((permiso) => permiso.trim())
+        .filter(Boolean),
     };
     next();
   },
@@ -25,6 +33,7 @@ jest.mock("../middleware/authMiddleware", () => ({
 }));
 
 const PlanBatalla = require("../models/PlanBatalla");
+const SecretarioEjecutivoPlan = require("../models/SecretarioEjecutivoPlan");
 const planesBatallaRoutes = require("./planesBatallaRoutes");
 
 const crearAplicacion = () => {
@@ -68,6 +77,88 @@ const crearPlanSerializado = (datos = {}) => ({
     },
     ...datos,
   }),
+});
+
+const crearPlanSecretario = (datos = {}) => ({
+  get: () => ({
+    id: 15,
+    fecha: "2026-07-24",
+    usuarioId: 8,
+    agenciaId: 2,
+    condicion: "emergencia",
+    respuestasFormula: {
+      1: [{ estado: "PENDIENTE", descripcion: "Preparar agenda" }],
+    },
+    detalle: {},
+    prioridad: "ALTA",
+    estado: "EN_PROGRESO",
+    observaciones: "Plan de secretaria",
+    createdAt: "2026-07-24T13:00:00.000Z",
+    usuario: {
+      id: 8,
+      nombre: "Secretaria Prueba",
+      email: "secretaria@empresa.com",
+    },
+    agencia: {
+      id: 2,
+      nombre: "Matriz",
+    },
+    ...datos,
+  }),
+});
+
+describe("GET /api/planes-batalla", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("combina planes de vendedores y secretarios ejecutivos", async () => {
+    PlanBatalla.findAll.mockResolvedValue([crearPlanSerializado()]);
+    SecretarioEjecutivoPlan.findAll.mockResolvedValue([
+      crearPlanSecretario(),
+    ]);
+
+    const response = await request(crearAplicacion())
+      .get("/api/planes-batalla")
+      .query({
+        agenciaId: 2,
+        vendedorId: 8,
+        fechaInicio: "2026-07-24",
+        fechaFin: "2026-07-24",
+        condicion: "emergencia",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.planes).toHaveLength(2);
+    expect(response.body.planes[0]).toEqual(
+      expect.objectContaining({
+        id: 15,
+        origen: "secretario_ejecutivo",
+        puedeEliminar: true,
+        usuario: expect.objectContaining({ nombre: "Secretaria Prueba" }),
+        plan: expect.objectContaining({
+          fechaInicio: "2026-07-24",
+          observacion: "Plan de secretaria",
+        }),
+      }),
+    );
+    expect(response.body.planes[1]).toEqual(
+      expect.objectContaining({
+        id: 15,
+        origen: "vendedor",
+        puedeEliminar: true,
+      }),
+    );
+
+    const consultaSecretarios = SecretarioEjecutivoPlan.findAll.mock.calls[0][0];
+    expect(consultaSecretarios.where).toEqual(
+      expect.objectContaining({
+        agenciaId: 2,
+        usuarioId: 8,
+        condicion: "emergencia",
+      }),
+    );
+  });
 });
 
 describe("POST /api/planes-batalla", () => {
@@ -162,5 +253,52 @@ describe("PUT /api/planes-batalla/:id", () => {
     expect(response.status).toBe(404);
     expect(response.body.message).toBe("Plan no encontrado");
     expect(PlanBatalla.findByPk).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/planes-batalla/:id", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("elimina un plan de secretario cuando el usuario tiene permiso de Gerencia", async () => {
+    SecretarioEjecutivoPlan.destroy.mockResolvedValue(1);
+
+    const response = await request(crearAplicacion())
+      .delete("/api/planes-batalla/15")
+      .query({ origen: "secretario_ejecutivo" })
+      .set("x-test-permisos", "Gerencia");
+
+    expect(response.status).toBe(200);
+    expect(SecretarioEjecutivoPlan.destroy).toHaveBeenCalledWith({
+      where: { id: "15" },
+    });
+    expect(PlanBatalla.destroy).not.toHaveBeenCalled();
+  });
+
+  test("impide eliminar un plan de secretario sin permiso de Gerencia", async () => {
+    const response = await request(crearAplicacion())
+      .delete("/api/planes-batalla/15")
+      .query({ origen: "secretario_ejecutivo" });
+
+    expect(response.status).toBe(403);
+    expect(SecretarioEjecutivoPlan.destroy).not.toHaveBeenCalled();
+  });
+
+  test("mantiene la eliminacion de planes propios de vendedores", async () => {
+    PlanBatalla.destroy.mockResolvedValue(1);
+
+    const response = await request(crearAplicacion())
+      .delete("/api/planes-batalla/15")
+      .query({ origen: "vendedor" });
+
+    expect(response.status).toBe(200);
+    expect(PlanBatalla.destroy).toHaveBeenCalledWith({
+      where: {
+        id: "15",
+        usuarioAgenciaId: 27,
+      },
+    });
+    expect(SecretarioEjecutivoPlan.destroy).not.toHaveBeenCalled();
   });
 });

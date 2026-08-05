@@ -6,8 +6,37 @@ jest.mock("../../models/DetalleVenta", () => ({
   update: jest.fn(),
 }));
 
+jest.mock("../../services/auditoriaVentasPdfService", () => ({
+  auditarVentasDesdeDirectorio: jest.fn(),
+  auditarVentasDesdeRegistros: jest.fn(),
+}));
+
+jest.mock("../../services/auditoriaVentasPersistenciaService", () => ({
+  guardarAuditoriaVentasPdf: jest.fn(),
+  obtenerAuditoriaVentasPdfPorId: jest.fn(),
+  obtenerAuditoriaVentasPdfPrecargada: jest.fn(),
+}));
+
+jest.mock("../../services/controlFinancieroAuditoriaService", () => ({
+  obtenerRegistrosAuditoriaDesdeControlFinanciero: jest.fn(),
+}));
+
 const ConciliacionModeloTv = require("../../models/ConciliacionModeloTv");
 const DetalleVenta = require("../../models/DetalleVenta");
+const Task = require("../../models/Task");
+const Usuario = require("../../models/Usuario");
+const {
+  auditarVentasDesdeDirectorio,
+  auditarVentasDesdeRegistros,
+} = require("../../services/auditoriaVentasPdfService");
+const {
+  guardarAuditoriaVentasPdf,
+  obtenerAuditoriaVentasPdfPorId,
+  obtenerAuditoriaVentasPdfPrecargada,
+} = require("../../services/auditoriaVentasPersistenciaService");
+const {
+  obtenerRegistrosAuditoriaDesdeControlFinanciero,
+} = require("../../services/controlFinancieroAuditoriaService");
 const controller = require("./auditoriaVentasController");
 
 const crearVentaTv = ({ ventaId, detalleId }) => ({
@@ -59,6 +88,22 @@ const crearRegistroPdfTv = ({ factura, fecha }) => ({
   entrada_detectada: true,
 });
 
+const crearVentaCelular = () => ({
+  ...crearVentaTv({ ventaId: 3801, detalleId: 3677 }),
+  detalleVenta: [
+    {
+      ...crearVentaTv({ ventaId: 3801, detalleId: 3677 }).detalleVenta[0],
+      id: 3677,
+      modeloId: 72,
+      modelo: { nombre: "CELULAR PRUEBA" },
+      dispositivoMarca: {
+        dispositivo: { nombre: "CELULAR" },
+        marca: { nombre: "MARCA" },
+      },
+    },
+  ],
+});
+
 describe("auditarRegistrosPdf", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -105,5 +150,278 @@ describe("auditarRegistrosPdf", () => {
       { referenciaPdf: "LA32ZEC" },
       { where: { id: 3676 } },
     );
+  });
+
+  it("no marca celulares como faltantes al auditar un PDF de TV", async () => {
+    const ventas = [
+      crearVentaTv({ ventaId: 3799, detalleId: 3675 }),
+      crearVentaCelular(),
+    ];
+
+    const auditoria = await controller.auditarRegistrosPdf({
+      tipo: "TV",
+      registrosPdf: [
+        crearRegistroPdfTv({ factura: "PDF-1", fecha: "7/16/26 8:02 PM" }),
+      ],
+      ventas,
+    });
+
+    expect(auditoria.resultados).toHaveLength(1);
+    expect(auditoria.resultados[0]).toEqual(
+      expect.objectContaining({ detalleVentaId: 3675, observacionError: "OK" }),
+    );
+  });
+});
+
+describe("auditarVentasDesdePdf", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("conserva la respuesta del endpoint manual usando el servicio comun", async () => {
+    const resultado = {
+      ok: true,
+      tipo: "TV",
+      resumen: {
+        pdfsProcesados: 1,
+        registrosPdf: 2,
+        registrosPdfValidos: 2,
+        dispositivosCreditoPdf: 2,
+        dispositivosCreditoRve: 2,
+        diferenciaCredito: 0,
+        criterioCreditoRve: "formaPago credito",
+        ventasComparadas: 2,
+        erroresDetectados: 0,
+        erroresExtraccion: 0,
+      },
+      ventas: [],
+      errores: [],
+    };
+    auditarVentasDesdeDirectorio.mockResolvedValue(resultado);
+    const req = {
+      body: {
+        tipo: "tv",
+        fechaInicio: "2026-07-25",
+        fechaFin: "2026-07-25",
+        agenciaId: "4",
+      },
+      files: [{ originalname: "venta-tv.pdf" }],
+      user: { id: 7 },
+      app: { get: jest.fn() },
+      auditoriaTempRoot: "C:/temp/auditoria-manual-test",
+      auditoriaInputDir: "C:/temp/auditoria-manual-test/input",
+    };
+    const res = {
+      json: jest.fn(),
+      status: jest.fn(),
+    };
+    res.status.mockReturnValue(res);
+
+    await controller.auditarVentasDesdePdf(req, res);
+
+    expect(auditarVentasDesdeDirectorio).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: "TV",
+        fechaInicio: "2026-07-25",
+        fechaFin: "2026-07-25",
+        usuarioId: 7,
+        filtros: expect.objectContaining({ agenciaId: "4" }),
+        persistirAuditoriaVentasPdf: guardarAuditoriaVentasPdf,
+      }),
+    );
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(resultado);
+  });
+
+  test("devuelve una auditoria automatica precargada sin exponer registros internos", async () => {
+    obtenerRegistrosAuditoriaDesdeControlFinanciero.mockResolvedValue({
+      tipo: "TV",
+      fechaInicio: "2026-07-25",
+      fechaFin: "2026-07-25",
+      cargaIds: [25],
+      registrosPdf: [{ factura: "TV-1" }],
+      totalRegistrosPdf: 1,
+      pdfsProcesados: 1,
+    });
+    obtenerAuditoriaVentasPdfPrecargada.mockResolvedValue({
+      id: 51,
+      tipo: "TV",
+      fechaInicio: "2026-07-25",
+      fechaFin: "2026-07-25",
+      origen: "CAJA",
+      estado: "COMPLETADA_CON_INCONSISTENCIAS",
+      registrosPdf: [{ factura: "INTERNO" }],
+      resultados: [{ detalleVentaId: 10, observacionError: "NO_EN_PDF" }],
+      resumen: { erroresDetectados: 1 },
+      errores: [],
+      updatedAt: "2026-07-25T20:00:00.000Z",
+    });
+    const req = {
+      query: {
+        tipo: "TV",
+        fechaInicio: "2026-07-25",
+        fechaFin: "2026-07-25",
+      },
+    };
+    const res = { json: jest.fn(), status: jest.fn() };
+    res.status.mockReturnValue(res);
+
+    await controller.obtenerAuditoriaPdfPrecargada(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      auditoria: expect.objectContaining({
+        id: 51,
+        origen: "CAJA",
+        ventas: [{ detalleVentaId: 10, observacionError: "NO_EN_PDF" }],
+        fuenteControlFinanciero: {
+          cargaIds: [25],
+          registros: 1,
+          archivos: 1,
+        },
+      }),
+    });
+    expect(res.json.mock.calls[0][0].auditoria).not.toHaveProperty(
+      "registrosPdf",
+    );
+  });
+
+  test("reaudita desde la carga de Control financiero de la fecha seleccionada", async () => {
+    const registrosPdf = [{ factura: "TV-DIA-3" }];
+    obtenerRegistrosAuditoriaDesdeControlFinanciero.mockResolvedValue({
+      tipo: "TV",
+      fechaInicio: "2026-08-03",
+      fechaFin: "2026-08-03",
+      cargaIds: [33],
+      registrosPdf,
+      totalRegistrosPdf: 1,
+      pdfsProcesados: 1,
+    });
+    obtenerAuditoriaVentasPdfPrecargada.mockResolvedValue({ id: 70 });
+    const resultado = {
+      ok: true,
+      tipo: "TV",
+      resumen: { registrosPdf: 1, erroresDetectados: 1 },
+      ventas: [{ observacionError: "NO_EN_PDF" }],
+      errores: [],
+    };
+    auditarVentasDesdeRegistros.mockResolvedValue(resultado);
+    const req = {
+      body: {
+        tipo: "TV",
+        fechaInicio: "2026-08-03",
+        fechaFin: "2026-08-03",
+      },
+      user: { id: 7 },
+      app: { get: jest.fn() },
+    };
+    const res = { json: jest.fn(), status: jest.fn() };
+    res.status.mockReturnValue(res);
+
+    await controller.reauditarVentasDesdeControlFinanciero(req, res);
+
+    expect(
+      obtenerRegistrosAuditoriaDesdeControlFinanciero,
+    ).toHaveBeenCalledWith({
+      tipo: "TV",
+      fechaInicio: "2026-08-03",
+      fechaFin: "2026-08-03",
+    });
+    expect(auditarVentasDesdeRegistros).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auditoriaId: 70,
+        registrosPdf,
+        fechaInicio: "2026-08-03",
+        fechaFin: "2026-08-03",
+        controlFinancieroCargaId: 33,
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith(resultado);
+  });
+
+  test("reaudita los registros persistidos sin necesitar archivos PDF", async () => {
+    obtenerAuditoriaVentasPdfPorId.mockResolvedValue({
+      id: 52,
+      tipo: "CELULAR",
+      fechaInicio: "2026-07-25",
+      fechaFin: "2026-07-25",
+      origen: "CAJA",
+      controlFinancieroCargaId: 25,
+      registrosPdf: [{ imei: "123" }],
+      resultados: [],
+      resumen: { registrosPdf: 1, pdfsProcesados: 1 },
+      errores: [],
+    });
+    const resultado = {
+      ok: true,
+      tipo: "CELULAR",
+      resumen: { registrosPdf: 1, erroresDetectados: 0 },
+      ventas: [],
+      errores: [],
+    };
+    auditarVentasDesdeRegistros.mockResolvedValue(resultado);
+    const req = {
+      params: { auditoriaId: "52" },
+      body: { agenciaId: "4" },
+      user: { id: 7 },
+      app: { get: jest.fn() },
+    };
+    const res = { json: jest.fn(), status: jest.fn() };
+    res.status.mockReturnValue(res);
+
+    await controller.reauditarVentasDesdePrecarga(req, res);
+
+    expect(auditarVentasDesdeRegistros).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auditoriaId: 52,
+        tipo: "CELULAR",
+        registrosPdf: [{ imei: "123" }],
+        controlFinancieroCargaId: 25,
+        filtros: expect.objectContaining({ agenciaId: "4" }),
+        persistirAuditoriaVentasPdf: guardarAuditoriaVentasPdf,
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith(resultado);
+  });
+});
+
+describe("notificarDiferenciasPrecioAuditoria", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("no crea tareas duplicadas cuando ya existe la tarea del detalle", async () => {
+    jest.spyOn(Usuario, "findAll").mockResolvedValue([
+      {
+        id: 15,
+        rol: { nombre: "ADMINISTRADOR" },
+        roles: [],
+      },
+    ]);
+    const tareaExistente = { id: 99, assignedTo: 15 };
+    const findOne = jest.spyOn(Task, "findOne").mockResolvedValue(tareaExistente);
+    const create = jest.spyOn(Task, "create").mockResolvedValue({ id: 100 });
+    const filas = [
+      {
+        id: 20,
+        detalleVentaId: 30,
+        activo: true,
+        vendedor: "VENDEDOR PRUEBA",
+        precioVenta: 120,
+        precioVendedor: 100,
+      },
+    ];
+
+    await controller.notificarDiferenciasPrecioAuditoria(
+      { usuarioId: 7, app: { get: jest.fn() } },
+      filas,
+    );
+    await controller.notificarDiferenciasPrecioAuditoria(
+      { usuarioId: 7, app: { get: jest.fn() } },
+      filas,
+    );
+
+    expect(findOne).toHaveBeenCalledTimes(2);
+    expect(create).not.toHaveBeenCalled();
   });
 });

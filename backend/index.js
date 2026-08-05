@@ -87,6 +87,12 @@ const corsOptions = {
     "X-RVE-Control-Financiero-Carga-Nueva",
     "X-RVE-Archivos-Agregados",
     "X-RVE-Archivos-Omitidos",
+    "X-RVE-Auditoria-Estado",
+    "X-RVE-Auditoria-Inconsistencias",
+    "X-RVE-Auditoria-TV-Registros",
+    "X-RVE-Auditoria-TV-Inconsistencias",
+    "X-RVE-Auditoria-Celular-Registros",
+    "X-RVE-Auditoria-Celular-Inconsistencias",
   ],
   maxAge: 3600,
 };

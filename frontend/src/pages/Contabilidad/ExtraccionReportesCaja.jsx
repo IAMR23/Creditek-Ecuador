@@ -37,6 +37,39 @@ const getFilenameFromDisposition = (disposition) => {
   return decodeURIComponent(match?.[1] || match?.[2] || "");
 };
 
+const getResumenAuditoria = (headers) => ({
+  estado: headers["x-rve-auditoria-estado"] || "NO_APLICA",
+  inconsistencias: Number(
+    headers["x-rve-auditoria-inconsistencias"] || 0,
+  ),
+  tv: {
+    registros: Number(headers["x-rve-auditoria-tv-registros"] || 0),
+    inconsistencias: Number(
+      headers["x-rve-auditoria-tv-inconsistencias"] || 0,
+    ),
+  },
+  celular: {
+    registros: Number(
+      headers["x-rve-auditoria-celular-registros"] || 0,
+    ),
+    inconsistencias: Number(
+      headers["x-rve-auditoria-celular-inconsistencias"] || 0,
+    ),
+  },
+});
+
+const getMensajeAuditoria = (auditoria) => {
+  if (auditoria.estado === "NO_APLICA") {
+    return "No se enviaron PDF de ventas para auditar.";
+  }
+
+  if (auditoria.estado === "ERROR") {
+    return "El Excel fue generado, pero no se pudo completar la auditoría automática. Puedes revisarla luego en Ventas Auditoría.";
+  }
+
+  return `Auditoría automática completada. TV: ${auditoria.tv.registros} registros, ${auditoria.tv.inconsistencias} inconsistencias. Celulares: ${auditoria.celular.registros} registros, ${auditoria.celular.inconsistencias} inconsistencias.`;
+};
+
 export default function ExtraccionReportesCaja() {
   const reportesCajaInputRef = useRef(null);
   const ventasTvInputRef = useRef(null);
@@ -170,6 +203,7 @@ export default function ExtraccionReportesCaja() {
       const archivosOmitidos = Number(
         response.headers["x-rve-archivos-omitidos"] || 0,
       );
+      const auditoria = getResumenAuditoria(response.headers);
 
       setLastSummary({
         registros: Number(response.headers["x-rve-registros"] || 0),
@@ -183,12 +217,20 @@ export default function ExtraccionReportesCaja() {
         archivosAgregados,
         archivosOmitidos,
         archivo: filename,
+        auditoria,
       });
 
-      if (!archivosAgregados && archivosOmitidos) {
+      const mensajeAuditoria = getMensajeAuditoria(auditoria);
+      if (auditoria.estado === "ERROR") {
+        Swal.fire(
+          "Excel generado con advertencia",
+          mensajeAuditoria,
+          "warning",
+        );
+      } else if (!archivosAgregados && archivosOmitidos) {
         Swal.fire(
           "Archivos repetidos",
-          "El Excel fue generado, pero los archivos ya estaban guardados en la carga de ese dia.",
+          `El Excel fue generado, pero los archivos ya estaban guardados en la carga de ese dia. ${mensajeAuditoria}`,
           "info",
         );
       } else {
@@ -197,7 +239,7 @@ export default function ExtraccionReportesCaja() {
           : "";
         Swal.fire(
           "Listo",
-          `El Excel fue generado y se agregaron ${archivosAgregados} archivo(s) a Control financiero.${detalleOmitidos}`,
+          `El Excel fue generado y se agregaron ${archivosAgregados} archivo(s) a Control financiero.${detalleOmitidos} ${mensajeAuditoria}`,
           "success",
         );
       }
@@ -448,6 +490,23 @@ export default function ExtraccionReportesCaja() {
                 </p>
               </div>
             )}
+            <div
+              className={`mt-3 rounded-md border p-3 ${
+                lastSummary.auditoria.estado === "ERROR"
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-emerald-200 bg-white/70"
+              }`}
+            >
+              <p className="font-semibold">
+                Auditoría automática: {lastSummary.auditoria.estado}
+              </p>
+              <p className="mt-1">
+                {getMensajeAuditoria(lastSummary.auditoria)}
+              </p>
+              <p className="mt-1 font-medium">
+                Inconsistencias totales: {lastSummary.auditoria.inconsistencias}
+              </p>
+            </div>
           </section>
         )}
       </div>

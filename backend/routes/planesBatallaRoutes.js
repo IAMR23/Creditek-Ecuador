@@ -1,6 +1,7 @@
 const express = require("express");
 const { Op } = require("sequelize");
 const PlanBatalla = require("../models/PlanBatalla");
+const SecretarioEjecutivoPlan = require("../models/SecretarioEjecutivoPlan");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
@@ -32,12 +33,27 @@ const includeUsuarioAgencia = ({ agenciaId, vendedorId } = {}) => ({
   ],
 });
 
+const includeSecretarioEjecutivo = [
+  {
+    model: Usuario,
+    as: "usuario",
+    attributes: ["id", "nombre", "email"],
+  },
+  {
+    model: Agencia,
+    as: "agencia",
+    attributes: ["id", "nombre"],
+  },
+];
+
 const serializarPlan = (plan) => {
   const item = plan.get ? plan.get({ plain: true }) : plan;
   const usuarioAgencia = item.usuarioAgencia || {};
 
   return {
     id: item.id,
+    origen: "vendedor",
+    puedeEliminar: true,
     enviadoEn: item.createdAt,
     usuarioAgenciaId: item.usuarioAgenciaId,
     usuario: {
@@ -61,6 +77,38 @@ const serializarPlan = (plan) => {
   };
 };
 
+const serializarPlanSecretarioEjecutivo = (plan) => {
+  const item = plan.get ? plan.get({ plain: true }) : plan;
+
+  return {
+    id: item.id,
+    origen: "secretario_ejecutivo",
+    puedeEliminar: true,
+    enviadoEn: item.createdAt,
+    usuarioAgenciaId: null,
+    usuario: {
+      id: item.usuario?.id || item.usuarioId || null,
+      nombre: item.usuario?.nombre || "",
+      email: item.usuario?.email || "",
+      usuarioAgenciaId: null,
+    },
+    agencia: {
+      id: item.agencia?.id || item.agenciaId || null,
+      nombre: item.agencia?.nombre || "",
+    },
+    estado: item.estado || "",
+    prioridad: item.prioridad || "",
+    plan: {
+      condicion: item.condicion,
+      fechaInicio: item.fecha,
+      fechaFin: item.fecha,
+      respuestasFormula: item.respuestasFormula || {},
+      detalle: item.detalle || {},
+      observacion: item.observaciones || "",
+    },
+  };
+};
+
 const buildWherePlanes = ({ fechaInicio, fechaFin, condicion } = {}) => {
   const where = {};
 
@@ -77,6 +125,44 @@ const buildWherePlanes = ({ fechaInicio, fechaFin, condicion } = {}) => {
   }
 
   return where;
+};
+
+const buildWherePlanesSecretarios = ({
+  fechaInicio,
+  fechaFin,
+  condicion,
+  agenciaId,
+  vendedorId,
+} = {}) => {
+  const where = {};
+
+  if (condicion && condicion !== "todos") {
+    where.condicion = condicion;
+  }
+
+  if (fechaInicio && fechaFin) {
+    where.fecha = { [Op.between]: [fechaInicio, fechaFin] };
+  } else if (fechaInicio) {
+    where.fecha = { [Op.gte]: fechaInicio };
+  } else if (fechaFin) {
+    where.fecha = { [Op.lte]: fechaFin };
+  }
+
+  if (agenciaId && agenciaId !== "todos") {
+    where.agenciaId = Number(agenciaId);
+  }
+
+  if (vendedorId && vendedorId !== "todos") {
+    where.usuarioId = Number(vendedorId);
+  }
+
+  return where;
+};
+
+const ordenarPlanesPorEnvio = (a, b) => {
+  const fechaA = new Date(a.enviadoEn || 0).getTime();
+  const fechaB = new Date(b.enviadoEn || 0).getTime();
+  return fechaB - fechaA;
 };
 
 const buscarPlanPorClaveIdempotencia = (usuarioAgenciaId, claveIdempotencia) =>
@@ -221,13 +307,25 @@ router.get(
     try {
       const { agenciaId, vendedorId } = req.query;
 
-      const planes = await PlanBatalla.findAll({
-        where: buildWherePlanes(req.query),
-        include: [includeUsuarioAgencia({ agenciaId, vendedorId })],
-        order: [["createdAt", "DESC"]],
-      });
+      const [planesVendedores, planesSecretarios] = await Promise.all([
+        PlanBatalla.findAll({
+          where: buildWherePlanes(req.query),
+          include: [includeUsuarioAgencia({ agenciaId, vendedorId })],
+          order: [["createdAt", "DESC"]],
+        }),
+        SecretarioEjecutivoPlan.findAll({
+          where: buildWherePlanesSecretarios(req.query),
+          include: includeSecretarioEjecutivo,
+          order: [["createdAt", "DESC"]],
+        }),
+      ]);
 
-      return res.json({ ok: true, planes: planes.map(serializarPlan) });
+      const planes = [
+        ...planesVendedores.map(serializarPlan),
+        ...planesSecretarios.map(serializarPlanSecretarioEjecutivo),
+      ].sort(ordenarPlanesPorEnvio);
+
+      return res.json({ ok: true, planes });
     } catch (error) {
       console.error("Error listando planes de batalla:", error);
       return res.status(500).json({
@@ -313,9 +411,37 @@ router.put("/:id", authenticate, async (req, res) => {
 
 router.delete("/:id", authenticate, async (req, res) => {
   try {
-    const where = { id: req.params.id };
+    const origen = String(req.query.origen || "vendedor").trim().toLowerCase();
     const permisos = req.user?.permisos || [];
     const esGerencia = permisos.includes("Gerencia");
+
+    if (!["vendedor", "secretario_ejecutivo"].includes(origen)) {
+      return res.status(400).json({
+        ok: false,
+        message: "Origen de plan no valido",
+      });
+    }
+
+    if (origen === "secretario_ejecutivo") {
+      if (!esGerencia) {
+        return res.status(403).json({
+          ok: false,
+          message: "No tienes permisos para esta accion",
+        });
+      }
+
+      const eliminado = await SecretarioEjecutivoPlan.destroy({
+        where: { id: req.params.id },
+      });
+
+      if (!eliminado) {
+        return res.status(404).json({ ok: false, message: "Plan no encontrado" });
+      }
+
+      return res.json({ ok: true, message: "Plan eliminado" });
+    }
+
+    const where = { id: req.params.id };
 
     if (!esGerencia) {
       where.usuarioAgenciaId = req.user.usuarioAgenciaId;
