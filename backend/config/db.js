@@ -566,6 +566,20 @@ const ensureComisionesConfiguracionSchema = async (queryInterface, tables) => {
   `);
 };
 
+const ensurePagosComisionesSchema = async (queryInterface, tables) => {
+  if (!tables.includes("pagos_comisiones_multas_ajustes")) return;
+
+  await addColumnIfMissing(
+    queryInterface,
+    "pagos_comisiones_multas_ajustes",
+    "valorDescontar",
+    {
+      type: Sequelize.DECIMAL(12, 2),
+      allowNull: true,
+    },
+  );
+};
+
 const ensureMapaComercialSchema = async (tables) => {
   if (tables.includes("mapa_comercial_zonas")) {
     await sequelize.query(`
@@ -765,6 +779,7 @@ const connectDB = async () => {
     await ensureUsuariosSchema(queryInterface, tables);
     await ensureRolesPagoSchema(tables);
     await ensureComisionesConfiguracionSchema(queryInterface, tables);
+    await ensurePagosComisionesSchema(queryInterface, tables);
     await ensureNominaSchema(queryInterface, tables);
     await ensureMapaComercialSchema(tables);
     await ensureDetalleEntregasUbicacionSchema(queryInterface, tables);

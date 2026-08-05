@@ -165,6 +165,22 @@ const actualizarOmisionMulta = async (req, res) => {
       usuarioId: req.params.usuarioId,
       semanaInicio: req.params.semanaInicio,
       omitida: req.body.omitida,
+      valorDescontar: req.body.valorDescontar,
+      restaurarValorCalculado: req.body.restaurarValorCalculado,
+      actualizadoPorId: req.user.id,
+    });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
+const actualizarValoresMultas = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.actualizarValoresMultas({
+      year: req.body.year,
+      month: req.body.month,
+      ajustes: req.body.ajustes,
       actualizadoPorId: req.user.id,
     });
     return res.json(resultado);
@@ -183,4 +199,5 @@ module.exports = {
   actualizarJefeComercial,
   actualizarSupervisorComercial,
   actualizarOmisionMulta,
+  actualizarValoresMultas,
 };

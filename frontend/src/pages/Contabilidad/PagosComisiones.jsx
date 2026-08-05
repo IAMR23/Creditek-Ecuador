@@ -91,6 +91,15 @@ const getCargosPagoLabel = (row) =>
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
+const parseValorDescuentoInput = (value) => {
+  const normalizado = String(value ?? "").trim().replace(",", ".");
+  if (!normalizado) return null;
+  const numero = Number(normalizado);
+  return Number.isFinite(numero) && numero >= 0 && numero <= 9999999999.99
+    ? numero
+    : null;
+};
+const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
@@ -247,7 +256,8 @@ export default function PagosComisiones() {
   const [juniorSupervisorId, setJuniorSupervisorId] = useState("");
   const [supervisorComercialId, setSupervisorComercialId] = useState("");
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
-  const [guardandoMulta, setGuardandoMulta] = useState("");
+  const [descuentosEditados, setDescuentosEditados] = useState({});
+  const [guardandoDescuentos, setGuardandoDescuentos] = useState(false);
   const [seccionActiva, setSeccionActiva] = useState("VENDEDORES");
   const [configOpen, setConfigOpen] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
@@ -268,10 +278,67 @@ export default function PagosComisiones() {
   const configuracionMes = report?.configuracionMes || null;
   const estadoPago = report?.estadoPago || null;
   const periodoPagado = Boolean(estadoPago?.pagado);
+  const cantidadDescuentosEditados = Object.keys(descuentosEditados).length;
   const selectedMonthLabel =
     MONTHS.find((month) => Number(month.value) === Number(filters.month))?.label ||
     "";
-  const vendedores = useMemo(() => report?.vendedores || [], [report]);
+  const vendedoresBase = useMemo(() => report?.vendedores || [], [report]);
+  const vendedores = useMemo(() => {
+    if (!Object.keys(descuentosEditados).length) return vendedoresBase;
+
+    return vendedoresBase.map((vendedor) => {
+      let semanasConVistaPrevia = null;
+      let diferenciaDescuentos = 0;
+
+      weeks.forEach((week) => {
+        const key = `${vendedor.usuarioId}-${week.startDate}`;
+        const ajuste = descuentosEditados[key];
+        if (!ajuste) return;
+
+        const values = getWeekValues(vendedor, week);
+        const valorVistaPrevia = ajuste.restaurarValorCalculado
+          ? Number(values.valorMultaCalculado || 0)
+          : parseValorDescuentoInput(ajuste.valorDescontar);
+        if (valorVistaPrevia === null) return;
+
+        const valorPersistido = Number(values.valorDescontar || 0);
+        if (!semanasConVistaPrevia) semanasConVistaPrevia = { ...vendedor.semanas };
+        semanasConVistaPrevia[week.startDate] = {
+          ...values,
+          valorDescontar: roundMoney(valorVistaPrevia),
+          valorDescontarPersistido: valorPersistido,
+          vistaPreviaDescuento: true,
+        };
+        diferenciaDescuentos += valorVistaPrevia - valorPersistido;
+      });
+
+      if (!semanasConVistaPrevia) return vendedor;
+
+      const mensual = getMonthlyValues(vendedor);
+      const totalValorDescontar = roundMoney(
+        Number(mensual.totalValorDescontar || 0) + diferenciaDescuentos,
+      );
+      return {
+        ...vendedor,
+        semanas: semanasConVistaPrevia,
+        total: vendedor.total
+          ? {
+              ...vendedor.total,
+              valorDescontar: roundMoney(
+                Number(vendedor.total.valorDescontar || 0) + diferenciaDescuentos,
+              ),
+            }
+          : vendedor.total,
+        resumenMensual: {
+          ...mensual,
+          totalValorDescontar,
+          totalPagar: roundMoney(
+            Number(mensual.totalComisionesSemanaMensual || 0) - totalValorDescontar,
+          ),
+        },
+      };
+    });
+  }, [descuentosEditados, vendedoresBase, weeks]);
   const configMesesPreview = useMemo(
     () => buildCalendarPreview(filters.year, configMeses),
     [configMeses, filters.year],
@@ -379,11 +446,12 @@ export default function PagosComisiones() {
     setVendedorFiltro("");
   };
 
-  const fetchReport = async () => {
+  const fetchReport = async (reportFilters = filters) => {
     setLoading(true);
     try {
-      const { data } = await api.get(ENDPOINT, { params: filters });
+      const { data } = await api.get(ENDPOINT, { params: reportFilters });
       setReport(data);
+      setDescuentosEditados({});
     } catch (error) {
       console.error("Error cargando pagos de comisiones", error);
       Swal.fire(
@@ -644,39 +712,129 @@ export default function PagosComisiones() {
     }
   };
 
-  const actualizarOmisionMulta = async ({ vendedor, week, omitida }) => {
-    const accion = omitida ? "Omitir multa" : "Restaurar multa";
+  const cambiarValorDescuento = ({ vendedor, week, values, value }) => {
+    const key = `${vendedor.usuarioId}-${week.startDate}`;
+    const valorIngresado = parseValorDescuentoInput(value);
+    const valorActual = Number(
+      values.valorDescontarPersistido ?? values.valorDescontar ?? 0,
+    );
+
+    setDescuentosEditados((actuales) => {
+      const siguientes = { ...actuales };
+      if (
+        valorIngresado !== null &&
+        Math.round(valorIngresado * 100) === Math.round(valorActual * 100)
+      ) {
+        delete siguientes[key];
+      } else {
+        siguientes[key] = {
+          usuarioId: vendedor.usuarioId,
+          vendedor: vendedor.nombre,
+          semanaInicio: week.startDate,
+          semana: week.label,
+          valorDescontar: value,
+          restaurarValorCalculado: false,
+        };
+      }
+      return siguientes;
+    });
+  };
+
+  const restaurarValorDescuento = ({ vendedor, week, values }) => {
+    const key = `${vendedor.usuarioId}-${week.startDate}`;
+    setDescuentosEditados((actuales) => {
+      const siguientes = { ...actuales };
+      if (!values.descuentoModificado) {
+        delete siguientes[key];
+        return siguientes;
+      }
+      siguientes[key] = {
+        usuarioId: vendedor.usuarioId,
+        vendedor: vendedor.nombre,
+        semanaInicio: week.startDate,
+        semana: week.label,
+        valorDescontar: Number(values.valorMultaCalculado || 0).toFixed(2),
+        restaurarValorCalculado: true,
+      };
+      return siguientes;
+    });
+  };
+
+  const guardarValoresDescuento = async () => {
+    if (!cantidadDescuentosEditados || !report || periodoPagado) return;
+
+    const ajustes = [];
+    for (const ajuste of Object.values(descuentosEditados)) {
+      if (ajuste.restaurarValorCalculado) {
+        ajustes.push({
+          usuarioId: ajuste.usuarioId,
+          semanaInicio: ajuste.semanaInicio,
+          restaurarValorCalculado: true,
+        });
+        continue;
+      }
+      const valorDescontar = parseValorDescuentoInput(ajuste.valorDescontar);
+      if (valorDescontar === null) {
+        Swal.fire(
+          "Valor invalido",
+          `Revise el descuento de ${ajuste.vendedor} en ${ajuste.semana}.`,
+          "warning",
+        );
+        return;
+      }
+      ajustes.push({
+        usuarioId: ajuste.usuarioId,
+        semanaInicio: ajuste.semanaInicio,
+        valorDescontar,
+      });
+    }
+
     const confirmacion = await Swal.fire({
-      title: accion,
-      text: omitida
-        ? `Se perdonara el valor a descontar de ${vendedor.nombre} en ${week.label}.`
-        : `Se volvera a aplicar el valor calculado a ${vendedor.nombre} en ${week.label}.`,
-      icon: "warning",
+      title: "Guardar todos los descuentos",
+      text: `Se guardaran ${ajustes.length} valor(es) modificado(s) del reporte.`,
+      icon: "question",
       showCancelButton: true,
-      confirmButtonText: accion,
+      confirmButtonText: "Guardar todo",
       cancelButtonText: "Cancelar",
-      confirmButtonColor: omitida ? "#dc2626" : "#059669",
+      confirmButtonColor: "#059669",
     });
     if (!confirmacion.isConfirmed) return;
 
-    const key = `${vendedor.usuarioId}-${week.startDate}`;
-    setGuardandoMulta(key);
+    setGuardandoDescuentos(true);
     try {
-      const { data } = await api.put(
-        `${ENDPOINT}/vendedores/${vendedor.usuarioId}/multas/${week.startDate}`,
-        { omitida },
-      );
-      await fetchReport();
+      const periodoReporte = { year: report.year, month: report.month };
+      const { data } = await api.put(`${ENDPOINT}/multas`, {
+        ...periodoReporte,
+        ajustes,
+      });
+      setDescuentosEditados({});
+      setFilters(periodoReporte);
+      await fetchReport(periodoReporte);
       Swal.fire("Listo", data.message, "success");
     } catch (error) {
       Swal.fire(
         "Error",
-        error.response?.data?.message || "No se pudo actualizar la multa",
+        error.response?.data?.message || "No se pudieron guardar los descuentos",
         "error",
       );
     } finally {
-      setGuardandoMulta("");
+      setGuardandoDescuentos(false);
     }
+  };
+
+  const generarReporte = async () => {
+    if (cantidadDescuentosEditados) {
+      const confirmacion = await Swal.fire({
+        title: "Cambios sin guardar",
+        text: "Al generar otro reporte se descartaran los descuentos modificados.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Descartar y generar",
+        cancelButtonText: "Cancelar",
+      });
+      if (!confirmacion.isConfirmed) return;
+    }
+    await fetchReport(filters);
   };
 
   useEffect(() => {
@@ -733,7 +891,7 @@ export default function PagosComisiones() {
 
               <button
                 type="button"
-                onClick={fetchReport}
+                onClick={generarReporte}
                 disabled={loading}
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
@@ -810,7 +968,11 @@ export default function PagosComisiones() {
           />
           <Metric label="Unidades vendidas" value={totalVisible.general.venden || 0} />
           <Metric
-            label="Total a pagar"
+            label={
+              cantidadDescuentosEditados
+                ? "Total a pagar (vista previa)"
+                : "Total a pagar"
+            }
             value={formatMoney(totalVisible.resumenMensual.totalPagar)}
           />
         </div>
@@ -836,10 +998,15 @@ export default function PagosComisiones() {
                     ? `Pagado${estadoPago?.pagadoAt ? ` el ${formatDate(estadoPago.pagadoAt)}` : ""}. El reporte esta congelado.`
                     : "Abierto. El reporte se recalcula con ventas, semanas y configuraciones actuales."}
                 </p>
+                {cantidadDescuentosEditados ? (
+                  <p className="mt-1 text-xs font-semibold text-amber-700">
+                    {cantidadDescuentosEditados} descuento(s) pendiente(s) de guardar.
+                  </p>
+                ) : null}
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[190px_auto_auto]">
+            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-[190px_auto_auto_auto]">
               <select
                 value={exportScope}
                 onChange={(event) => setExportScope(event.target.value)}
@@ -853,8 +1020,24 @@ export default function PagosComisiones() {
               </select>
               <button
                 type="button"
+                onClick={guardarValoresDescuento}
+                disabled={
+                  !cantidadDescuentosEditados ||
+                  guardandoDescuentos ||
+                  periodoPagado ||
+                  loading
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                <Save size={16} />
+                {guardandoDescuentos
+                  ? "Guardando todo..."
+                  : `Guardar todo (${cantidadDescuentosEditados})`}
+              </button>
+              <button
+                type="button"
                 onClick={exportarExcel}
-                disabled={!report || exportandoExcel}
+                disabled={!report || exportandoExcel || cantidadDescuentosEditados > 0}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
               >
                 <Download size={16} />
@@ -863,7 +1046,13 @@ export default function PagosComisiones() {
               <button
                 type="button"
                 onClick={marcarPeriodoPagado}
-                disabled={!report || periodoPagado || pagandoPeriodo || loading}
+                disabled={
+                  !report ||
+                  periodoPagado ||
+                  pagandoPeriodo ||
+                  loading ||
+                  cantidadDescuentosEditados > 0
+                }
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
               >
                 <Lock size={16} />
@@ -1114,11 +1303,13 @@ export default function PagosComisiones() {
                           values={getWeekValues(vendedor, week)}
                           vendedor={vendedor}
                           week={week}
-                          onToggleMulta={actualizarOmisionMulta}
-                          periodoPagado={periodoPagado}
-                          guardando={
-                            guardandoMulta === `${vendedor.usuarioId}-${week.startDate}`
+                          descuentoEditado={
+                            descuentosEditados[`${vendedor.usuarioId}-${week.startDate}`]
                           }
+                          onCambiarDescuento={cambiarValorDescuento}
+                          onRestaurarDescuento={restaurarValorDescuento}
+                          periodoPagado={periodoPagado}
+                          guardando={guardandoDescuentos}
                         />
                       ))}
                       <MonthlyValues values={getMonthlyValues(vendedor)} />
@@ -1614,7 +1805,9 @@ function WeekValues({
   total = false,
   vendedor = null,
   week = null,
-  onToggleMulta = null,
+  descuentoEditado = null,
+  onCambiarDescuento = null,
+  onRestaurarDescuento = null,
   guardando = false,
   periodoPagado = false,
 }) {
@@ -1625,11 +1818,15 @@ function WeekValues({
     !total &&
     vendedor &&
     week &&
-    onToggleMulta &&
+    onCambiarDescuento &&
     !periodoPagado &&
     !values.personalNuevo &&
     !vendedor.tieneMultiplesCargos &&
     Number(values.valorMultaCalculado || 0) > 0;
+  const valorInput = descuentoEditado
+    ? descuentoEditado.valorDescontar
+    : Number(values.valorDescontar || 0).toFixed(2);
+  const valorInputValido = parseValorDescuentoInput(valorInput) !== null;
 
   return (
     <>
@@ -1673,39 +1870,53 @@ function WeekValues({
               ? "Semana parcial"
               : puedeGestionarMulta
                 ? (
-                  <div className="flex min-w-[112px] flex-col items-center gap-1">
-                    <span className={values.multaOmitida ? "font-semibold text-emerald-700" : ""}>
-                      {values.multaOmitida
-                        ? "Multa omitida"
-                        : formatMoney(values.valorDescontar || 0)}
-                    </span>
-                    {values.multaOmitida ? (
-                      <span className="text-[10px] text-slate-500 line-through">
-                        {formatMoney(values.valorMultaCalculado)}
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
+                  <div className="flex min-w-[128px] flex-col items-center gap-1">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={valorInput}
                       disabled={guardando}
-                      onClick={() =>
-                        onToggleMulta({
+                      onChange={(event) =>
+                        onCambiarDescuento({
                           vendedor,
                           week,
-                          omitida: !values.multaOmitida,
+                          values,
+                          value: event.target.value,
                         })
                       }
-                      className={`rounded px-2 py-1 text-[10px] font-bold text-white disabled:opacity-60 ${
-                        values.multaOmitida
-                          ? "bg-emerald-600 hover:bg-emerald-700"
-                          : "bg-red-700 hover:bg-red-800"
+                      aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
+                      className={`w-24 rounded border bg-white px-2 py-1 text-center text-xs font-semibold outline-none focus:ring-2 disabled:opacity-60 ${
+                        !valorInputValido
+                          ? "border-red-600 text-red-700 focus:ring-red-200"
+                          : descuentoEditado
+                            ? "border-amber-500 text-amber-800 focus:ring-amber-200"
+                            : "border-slate-300 text-red-700 focus:ring-red-200"
                       }`}
-                    >
-                      {guardando
-                        ? "Guardando..."
-                        : values.multaOmitida
-                          ? "Restaurar multa"
-                          : "Omitir multa"}
-                    </button>
+                    />
+                    <span className="text-[10px] text-slate-500">
+                      Sancion: {formatMoney(values.valorMultaCalculado)}
+                    </span>
+                    {descuentoEditado ? (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
+                        Pendiente de guardar
+                      </span>
+                    ) : null}
+                    {(values.descuentoModificado || descuentoEditado) && onRestaurarDescuento ? (
+                      <button
+                        type="button"
+                        disabled={guardando}
+                        onClick={() =>
+                          onRestaurarDescuento({
+                            vendedor,
+                            week,
+                            values,
+                          })
+                        }
+                        className="text-[10px] font-semibold text-emerald-700 underline hover:text-emerald-800 disabled:opacity-60"
+                      >
+                        Usar sancion
+                      </button>
+                    ) : null}
                   </div>
                 )
                 : formatMoney(values.valorDescontar || 0)}

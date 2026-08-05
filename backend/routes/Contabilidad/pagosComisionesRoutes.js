@@ -14,6 +14,7 @@ router.get("/configuracion-meses/:year/:month", controller.obtenerConfiguracionM
 router.put("/configuracion-meses/:year/:month", controller.actualizarConfiguracionMes);
 router.put("/configuracion-anual/:year", controller.actualizarConfiguracionAnual);
 router.put("/periodos/:year/:month/pagado", controller.marcarPeriodoPagado);
+router.put("/multas", controller.actualizarValoresMultas);
 router.put("/vendedores/:usuarioId/jefe-comercial", controller.actualizarJefeComercial);
 router.put("/vendedores/:usuarioId/supervisor-comercial", controller.actualizarSupervisorComercial);
 router.put(

@@ -30,6 +30,33 @@ const normalizarSeguidores = (value) => {
   return { valido, valor: valido ? numero : 0 };
 };
 
+const normalizarBooleano = (value) => {
+  if (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    String(value).toLowerCase() === "true" ||
+    String(value).toLowerCase() === "on"
+  ) {
+    return { valido: true, valor: true };
+  }
+
+  if (
+    value === false ||
+    value === 0 ||
+    value === "0" ||
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    String(value).toLowerCase() === "false" ||
+    String(value).toLowerCase() === "off"
+  ) {
+    return { valido: true, valor: false };
+  }
+
+  return { valido: false, valor: false };
+};
+
 const normalizarFecha = (value) => {
   const fecha = String(value || "").trim();
   if (!fecha) return { valido: false, valor: null };
@@ -61,7 +88,7 @@ const parsearContenidos = (value) => {
   }
 };
 
-const resolverContenidos = (payload = {}, { requerirFecha = false } = {}) => {
+const resolverContenidos = (payload = {}) => {
   const parseado = parsearContenidos(payload.contenidos);
   if (!parseado.valido) {
     return {
@@ -85,7 +112,6 @@ const resolverContenidos = (payload = {}, { requerirFecha = false } = {}) => {
   }
 
   const errores = [];
-  if (!items.length) errores.push("Agrega al menos un contenido a la pagina");
   if (items.length > MAX_CONTENIDOS_POR_PAGINA) {
     errores.push(
       `Solo se permiten ${MAX_CONTENIDOS_POR_PAGINA} contenidos por pagina`,
@@ -94,26 +120,50 @@ const resolverContenidos = (payload = {}, { requerirFecha = false } = {}) => {
 
   const contenidos = items
     .slice(0, MAX_CONTENIDOS_POR_PAGINA)
+    .filter(
+      (item) =>
+        limpiarTexto(item?.producto, 120) ||
+        limpiarTexto(item?.tipoContenido, 80) ||
+        String(item?.fecha || "").trim() ||
+        normalizarBooleano(item?.cumplidoFacebook).valor ||
+        normalizarBooleano(item?.cumplidoInstagram).valor ||
+        normalizarBooleano(item?.cumplidoTiktok).valor,
+    )
     .map((item, index) => {
       const producto = limpiarTexto(item?.producto, 120);
       const tipoContenido = limpiarTexto(item?.tipoContenido, 80);
       const fecha = normalizarFecha(item?.fecha);
+      const cumplidoFacebook = normalizarBooleano(item?.cumplidoFacebook);
+      const cumplidoInstagram = normalizarBooleano(item?.cumplidoInstagram);
+      const cumplidoTiktok = normalizarBooleano(item?.cumplidoTiktok);
 
-      if (!producto) {
-        errores.push(`El producto del contenido ${index + 1} es obligatorio`);
-      }
-      if (!tipoContenido) {
-        errores.push(
-          `El tipo del contenido ${index + 1} es obligatorio`,
-        );
-      }
-      if (requerirFecha && !item?.fecha) {
-        errores.push(`La fecha del contenido ${index + 1} es obligatoria`);
-      } else if (item?.fecha && !fecha.valido) {
+      if (item?.fecha && !fecha.valido) {
         errores.push(`La fecha del contenido ${index + 1} no es valida`);
       }
+      if (!cumplidoFacebook.valido) {
+        errores.push(
+          `El cumplimiento de Facebook del contenido ${index + 1} no es valido`,
+        );
+      }
+      if (!cumplidoInstagram.valido) {
+        errores.push(
+          `El cumplimiento de Instagram del contenido ${index + 1} no es valido`,
+        );
+      }
+      if (!cumplidoTiktok.valido) {
+        errores.push(
+          `El cumplimiento de TikTok del contenido ${index + 1} no es valido`,
+        );
+      }
 
-      return { producto, tipoContenido, fecha: fecha.valor };
+      return {
+        producto,
+        tipoContenido,
+        fecha: fecha.valor,
+        cumplidoFacebook: cumplidoFacebook.valor,
+        cumplidoInstagram: cumplidoInstagram.valor,
+        cumplidoTiktok: cumplidoTiktok.valor,
+      };
     });
 
   return { errores, contenidos };
@@ -124,9 +174,7 @@ const validarPautaMarketing = (payload = {}) => {
   const seguidoresFacebook = normalizarSeguidores(payload.seguidoresFacebook);
   const seguidoresInstagram = normalizarSeguidores(payload.seguidoresInstagram);
   const seguidoresTiktok = normalizarSeguidores(payload.seguidoresTiktok);
-  const contenidosResultado = resolverContenidos(payload, {
-    requerirFecha: true,
-  });
+  const contenidosResultado = resolverContenidos(payload);
   const errores = [...contenidosResultado.errores];
 
   if (!nombrePagina) errores.push("El nombre de la pagina es obligatorio");
@@ -140,7 +188,6 @@ const validarPautaMarketing = (payload = {}) => {
   if (!seguidoresTiktok.valido) {
     errores.push("La cantidad de seguidores de TikTok no es valida");
   }
-
   const primerContenido = contenidosResultado.contenidos[0] || {
     producto: "",
     tipoContenido: "",
@@ -187,6 +234,7 @@ module.exports = {
   MAX_CONTENIDOS_POR_PAGINA,
   TIPOS_CONTENIDO,
   limpiarTexto,
+  normalizarBooleano,
   normalizarFecha,
   normalizarSeguidores,
   resolverContenidos,

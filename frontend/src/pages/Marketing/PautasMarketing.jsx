@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Facebook,
   FileImage,
   ImagePlus,
@@ -39,6 +41,9 @@ const crearContenido = (contenido = {}) => ({
   producto: contenido.producto || "",
   tipoContenido: contenido.tipoContenido || "",
   fecha: contenido.fecha || "",
+  cumplidoFacebook: Boolean(contenido.cumplidoFacebook),
+  cumplidoInstagram: Boolean(contenido.cumplidoInstagram),
+  cumplidoTiktok: Boolean(contenido.cumplidoTiktok),
 });
 
 const obtenerContenidos = (pauta = {}) => {
@@ -90,6 +95,20 @@ const formatoCompacto = new Intl.NumberFormat("es-EC", {
   maximumFractionDigits: 1,
 });
 
+const formatoMes = new Intl.DateTimeFormat("es-EC", {
+  month: "long",
+  year: "numeric",
+});
+
+const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+const fechaIsoLocal = (fecha) => {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+};
+
 const formatearFecha = (value) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) {
     return "Sin fecha";
@@ -104,6 +123,16 @@ const formatearFecha = (value) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const contenidoCoincideFecha = (contenido, fechaDesde, fechaHasta) => {
+  if (!fechaDesde && !fechaHasta) return true;
+
+  const fecha = String(contenido?.fecha || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  if (fechaDesde && fecha < fechaDesde) return false;
+  if (fechaHasta && fecha > fechaHasta) return false;
+  return true;
 };
 
 function ImagenPauta({ src, alt }) {
@@ -143,6 +172,157 @@ function Seguidores({ icon, red, cantidad, color }) {
   );
 }
 
+function CheckCumplimiento({
+  icon,
+  red,
+  nombreRed,
+  color,
+  checked,
+  disabled,
+  onChange,
+}) {
+  return (
+    <label
+      className={`flex min-w-0 cursor-pointer items-center justify-between gap-1 rounded-lg border px-2 py-1.5 transition ${
+        checked
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-slate-200 bg-white"
+      } ${disabled ? "cursor-wait opacity-60" : ""}`}
+      title={`${nombreRed}: ${checked ? "cumplido" : "pendiente"}`}
+    >
+      <span className={`inline-flex min-w-0 items-center gap-1 ${color}`}>
+        {icon}
+        <span className="truncate text-[10px] font-black uppercase">{red}</span>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 shrink-0 cursor-pointer accent-emerald-600 disabled:cursor-wait"
+        aria-label={`Marcar ${nombreRed} como cumplido`}
+      />
+    </label>
+  );
+}
+
+function FormularioContenidoRapido({
+  numero,
+  contenido,
+  guardando,
+  onChange,
+  onGuardar,
+  onCancelar,
+}) {
+  return (
+    <form
+      onSubmit={onGuardar}
+      className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5"
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-black text-emerald-700 shadow-sm">
+          {numero}
+        </span>
+        <p className="text-xs font-black text-slate-700">Nuevo contenido</p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="block">
+          <span className="sr-only">Dispositivo o producto</span>
+          <input
+            value={contenido.producto}
+            onChange={(event) => onChange("producto", event.target.value)}
+            maxLength={120}
+            placeholder="Dispositivo / producto"
+            disabled={guardando}
+            className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label>
+            <span className="sr-only">Tipo de contenido</span>
+            <select
+              value={contenido.tipoContenido}
+              onChange={(event) =>
+                onChange("tipoContenido", event.target.value)
+              }
+              disabled={guardando}
+              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+            >
+              <option value="">Tipo de contenido</option>
+              {TIPOS_CONTENIDO_INICIALES.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipo}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Fecha de pauta</span>
+            <input
+              type="date"
+              value={contenido.fecha}
+              onChange={(event) => onChange("fecha", event.target.value)}
+              disabled={guardando}
+              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-[11px] outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+            />
+          </label>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1">
+          <CheckCumplimiento
+            icon={<Facebook size={13} aria-hidden="true" />}
+            red="FB"
+            nombreRed="Facebook"
+            color="text-blue-600"
+            checked={contenido.cumplidoFacebook}
+            disabled={guardando}
+            onChange={(cumplido) => onChange("cumplidoFacebook", cumplido)}
+          />
+          <CheckCumplimiento
+            icon={<Instagram size={13} aria-hidden="true" />}
+            red="IG"
+            nombreRed="Instagram"
+            color="text-fuchsia-600"
+            checked={contenido.cumplidoInstagram}
+            disabled={guardando}
+            onChange={(cumplido) => onChange("cumplidoInstagram", cumplido)}
+          />
+          <CheckCumplimiento
+            icon={<Music2 size={13} aria-hidden="true" />}
+            red="TK"
+            nombreRed="TikTok"
+            color="text-slate-800"
+            checked={contenido.cumplidoTiktok}
+            disabled={guardando}
+            onChange={(cumplido) => onChange("cumplidoTiktok", cumplido)}
+          />
+        </div>
+      </div>
+
+      <div className="mt-2 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancelar}
+          disabled={guardando}
+          className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-slate-500 transition hover:bg-white disabled:opacity-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={guardando}
+          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+        >
+          <Save size={13} aria-hidden="true" />
+          {guardando ? "Guardando..." : "Guardar"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function TarjetaResumen({ icon, label, value, detail }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -162,6 +342,238 @@ function TarjetaResumen({ icon, label, value, detail }) {
   );
 }
 
+function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
+  const [mesSeleccionado, setMesSeleccionado] = useState("");
+  const hoy = fechaIsoLocal(new Date());
+
+  const agenda = useMemo(
+    () =>
+      pautas.flatMap((pauta) =>
+        obtenerContenidos(pauta)
+          .filter((contenido) =>
+            contenidoCoincideFecha(contenido, fechaDesde, fechaHasta),
+          )
+          .map((contenido, index) => ({
+            id: `${pauta.id}-${index}`,
+            pauta,
+            pagina: pauta.nombrePagina,
+            dispositivo: contenido.producto || "Dispositivo pendiente",
+            tipoContenido: contenido.tipoContenido || "Contenido pendiente",
+            fecha: /^\d{4}-\d{2}-\d{2}$/.test(contenido.fecha || "")
+              ? contenido.fecha
+              : "",
+          })),
+      ),
+    [fechaDesde, fechaHasta, pautas],
+  );
+
+  useEffect(() => {
+    setMesSeleccionado(fechaDesde ? fechaDesde.slice(0, 7) : "");
+  }, [fechaDesde, fechaHasta]);
+
+  const agendaConFecha = useMemo(
+    () =>
+      agenda
+        .filter((item) => item.fecha)
+        .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    [agenda],
+  );
+  const agendaSinFecha = useMemo(
+    () => agenda.filter((item) => !item.fecha),
+    [agenda],
+  );
+
+  const mesPredeterminado = useMemo(() => {
+    const siguiente = agendaConFecha.find((item) => item.fecha >= hoy);
+    const referencia =
+      siguiente || agendaConFecha[agendaConFecha.length - 1];
+    return referencia?.fecha.slice(0, 7) || hoy.slice(0, 7);
+  }, [agendaConFecha, hoy]);
+  const mesVisible = mesSeleccionado || mesPredeterminado;
+
+  const datosMes = useMemo(() => {
+    const [anio, mes] = mesVisible.split("-").map(Number);
+    const primerDia = new Date(anio, mes - 1, 1);
+    const diasDelMes = new Date(anio, mes, 0).getDate();
+    const espaciosIniciales = (primerDia.getDay() + 6) % 7;
+    const totalCeldas = Math.ceil((espaciosIniciales + diasDelMes) / 7) * 7;
+    const celdas = Array.from({ length: totalCeldas }, (_, posicion) => {
+      const dia = posicion - espaciosIniciales + 1;
+      if (dia < 1 || dia > diasDelMes) return null;
+
+      return `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    });
+
+    return {
+      celdas,
+      titulo: formatoMes.format(primerDia),
+    };
+  }, [mesVisible]);
+
+  const eventosPorFecha = useMemo(() => {
+    const agrupados = new Map();
+    agendaConFecha.forEach((item) => {
+      const eventos = agrupados.get(item.fecha) || [];
+      eventos.push(item);
+      agrupados.set(item.fecha, eventos);
+    });
+    return agrupados;
+  }, [agendaConFecha]);
+
+  const moverMes = (cantidad) => {
+    const [anio, mes] = mesVisible.split("-").map(Number);
+    const nuevoMes = new Date(anio, mes - 1 + cantidad, 1);
+    setMesSeleccionado(fechaIsoLocal(nuevoMes).slice(0, 7));
+  };
+
+  return (
+    <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
+        <div>
+          <div className="flex items-center gap-2 text-emerald-700">
+            <CalendarDays size={20} aria-hidden="true" />
+            <h2 className="text-lg font-black text-slate-800">
+              Calendario de contenidos
+            </h2>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            Cada viñeta indica qué publicar, el dispositivo y la página.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => moverMes(-1)}
+            className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
+            aria-label="Mes anterior"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <p className="min-w-40 text-center text-sm font-black capitalize text-slate-700">
+            {datosMes.titulo}
+          </p>
+          <button
+            type="button"
+            onClick={() => moverMes(1)}
+            className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
+            aria-label="Mes siguiente"
+          >
+            <ChevronRight size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMesSeleccionado(hoy.slice(0, 7))}
+            className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+          >
+            Hoy
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto p-4 sm:p-5">
+        <div className="min-w-[900px]">
+          <div className="grid grid-cols-7 gap-2">
+            {DIAS_SEMANA.map((dia) => (
+              <div
+                key={dia}
+                className="px-2 pb-1 text-center text-[11px] font-black uppercase tracking-wide text-slate-400"
+              >
+                {dia}
+              </div>
+            ))}
+
+            {datosMes.celdas.map((fecha, index) => {
+              const eventos = fecha ? eventosPorFecha.get(fecha) || [] : [];
+
+              return fecha ? (
+                <div
+                  key={fecha}
+                  className={`min-h-32 rounded-xl border p-2 ${
+                    fecha === hoy
+                      ? "border-emerald-300 bg-emerald-50/50"
+                      : "border-slate-200 bg-slate-50/60"
+                  }`}
+                >
+                  <p
+                    className={`mb-1 text-xs font-black ${
+                      fecha === hoy ? "text-emerald-700" : "text-slate-500"
+                    }`}
+                  >
+                    {Number(fecha.slice(-2))}
+                  </p>
+                  <ul className="max-h-28 space-y-1 overflow-y-auto">
+                    {eventos.map((evento) => (
+                      <li key={evento.id}>
+                        <button
+                          type="button"
+                          onClick={() => onEditar(evento.pauta)}
+                          className="flex w-full gap-1.5 rounded-lg bg-white px-2 py-1.5 text-left shadow-sm transition hover:bg-emerald-50"
+                          title={`Publicar ${evento.tipoContenido} de ${evento.dispositivo} en ${evento.pagina}`}
+                        >
+                          <span className="shrink-0 font-black text-emerald-600">
+                            •
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block break-words text-[10px] font-bold leading-4 text-slate-700">
+                              Publicar {evento.tipoContenido} de {evento.dispositivo}
+                            </span>
+                            <span className="block truncate text-[9px] text-slate-400">
+                              Página: {evento.pagina}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div
+                  key={`vacio-${index}`}
+                  className="min-h-32 rounded-xl bg-slate-50/30"
+                  aria-hidden="true"
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {agendaSinFecha.length > 0 && (
+        <div className="border-t border-slate-200 px-4 py-4 sm:px-5">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-black text-slate-700">
+              Por programar
+            </h3>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+              {agendaSinFecha.length} sin fecha
+            </span>
+          </div>
+          <ul className="grid max-h-40 gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-4">
+            {agendaSinFecha.map((evento) => (
+              <li key={evento.id}>
+                <button
+                  type="button"
+                  onClick={() => onEditar(evento.pauta)}
+                  className="flex w-full gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-left transition hover:bg-amber-50"
+                >
+                  <span className="font-black text-amber-600">•</span>
+                  <span className="min-w-0 text-xs text-slate-600">
+                    <strong>{evento.tipoContenido}</strong> de {evento.dispositivo}
+                    <span className="block truncate text-[10px] text-slate-400">
+                      Página: {evento.pagina}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PautasMarketing() {
   const [pautas, setPautas] = useState([]);
   const [tiposContenido, setTiposContenido] = useState(
@@ -175,6 +587,14 @@ export default function PautasMarketing() {
   const [preview, setPreview] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [filtroContenido, setFiltroContenido] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [cumplimientosActualizando, setCumplimientosActualizando] = useState(
+    [],
+  );
+  const [contenidoRapido, setContenidoRapido] = useState(null);
+  const [guardandoContenidoRapido, setGuardandoContenidoRapido] =
+    useState(false);
 
   const cargarPautas = useCallback(async () => {
     try {
@@ -224,6 +644,7 @@ export default function PautasMarketing() {
 
   const abrirNuevo = () => {
     liberarPreview();
+    setContenidoRapido(null);
     setEditando(null);
     setForm(crearFormulario());
     setPreview("");
@@ -232,6 +653,7 @@ export default function PautasMarketing() {
 
   const abrirEdicion = (pauta) => {
     liberarPreview();
+    setContenidoRapido(null);
     setEditando(pauta);
     setForm(crearFormulario(pauta));
     setPreview(resolverImagen(pauta.imagen));
@@ -271,16 +693,100 @@ export default function PautasMarketing() {
   };
 
   const quitarContenido = (clave) => {
-    setForm((actual) => {
-      if (actual.contenidos.length === 1) return actual;
+    setForm((actual) => ({
+      ...actual,
+      contenidos: actual.contenidos.filter(
+        (contenido) => contenido.clave !== clave,
+      ),
+    }));
+  };
 
-      return {
-        ...actual,
-        contenidos: actual.contenidos.filter(
-          (contenido) => contenido.clave !== clave,
-        ),
-      };
+  const abrirContenidoRapido = (pauta) => {
+    const contenidos = obtenerContenidos(pauta);
+    if (contenidos.length >= 100) {
+      Swal.fire(
+        "Límite alcanzado",
+        "Solo se permiten 100 contenidos por página.",
+        "info",
+      );
+      return;
+    }
+
+    setContenidoRapido({
+      ...crearContenido(),
+      pautaId: pauta.id,
     });
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const lista = document.getElementById(`contenidos-pauta-${pauta.id}`);
+        lista?.scrollTo({ top: lista.scrollHeight, behavior: "smooth" });
+      });
+    });
+  };
+
+  const cambiarContenidoRapido = (campo, value) => {
+    setContenidoRapido((actual) =>
+      actual ? { ...actual, [campo]: value } : actual,
+    );
+  };
+
+  const guardarContenidoRapido = async (event) => {
+    event.preventDefault();
+    if (!contenidoRapido) return;
+
+    const {
+      pautaId,
+      producto,
+      tipoContenido,
+      fecha,
+      cumplidoFacebook,
+      cumplidoInstagram,
+      cumplidoTiktok,
+    } = contenidoRapido;
+    const tieneDatos =
+      [producto, tipoContenido, fecha].some((value) => String(value).trim()) ||
+      cumplidoFacebook ||
+      cumplidoInstagram ||
+      cumplidoTiktok;
+
+    if (!tieneDatos) {
+      Swal.fire(
+        "Contenido vacío",
+        "Ingresa al menos un dato antes de guardar.",
+        "info",
+      );
+      return;
+    }
+
+    try {
+      setGuardandoContenidoRapido(true);
+      const { data } = await api.post(
+        `/api/marketing/pautas/${pautaId}/contenidos`,
+        {
+          producto,
+          tipoContenido,
+          fecha,
+          cumplidoFacebook,
+          cumplidoInstagram,
+          cumplidoTiktok,
+        },
+      );
+      setPautas((actuales) =>
+        actuales.map((pauta) =>
+          pauta.id === pautaId ? data.pauta : pauta,
+        ),
+      );
+      setContenidoRapido(null);
+    } catch (error) {
+      Swal.fire(
+        "No se pudo agregar",
+        getErrorMessage(error, "Revisa el contenido e intenta nuevamente"),
+        "error",
+      );
+    } finally {
+      setGuardandoContenidoRapido(false);
+    }
   };
 
   const seleccionarImagen = (event) => {
@@ -313,13 +819,37 @@ export default function PautasMarketing() {
       return;
     }
 
-    const contenidos = form.contenidos.map(
-      ({ producto, tipoContenido, fecha }) => ({
-        producto,
-        tipoContenido,
-        fecha,
-      }),
-    );
+    const contenidos = form.contenidos
+      .map(
+        ({
+          producto,
+          tipoContenido,
+          fecha,
+          cumplidoFacebook,
+          cumplidoInstagram,
+          cumplidoTiktok,
+        }) => ({
+          producto,
+          tipoContenido,
+          fecha,
+          cumplidoFacebook,
+          cumplidoInstagram,
+          cumplidoTiktok,
+        }),
+      )
+      .filter(
+        ({
+          producto,
+          tipoContenido,
+          fecha,
+          cumplidoFacebook,
+          cumplidoInstagram,
+          cumplidoTiktok,
+        }) =>
+          [producto, tipoContenido, fecha].some((value) =>
+            String(value).trim(),
+          ) || cumplidoFacebook || cumplidoInstagram || cumplidoTiktok,
+      );
     const data = new FormData();
     data.append("nombrePagina", form.nombrePagina);
     data.append("seguidoresFacebook", form.seguidoresFacebook || "0");
@@ -361,6 +891,65 @@ export default function PautasMarketing() {
     }
   };
 
+  const cambiarCumplimiento = async (pauta, indice, red, cumplido) => {
+    const claveActualizacion = `${pauta.id}-${indice}-${red}`;
+    if (
+      cumplimientosActualizando.some((clave) =>
+        clave.startsWith(`${pauta.id}-`),
+      )
+    ) {
+      return;
+    }
+    const contenidoAnterior = obtenerContenidos(pauta)[indice];
+
+    const aplicarCumplimiento = (items, valor) =>
+      items.map((item) => {
+        if (item.id !== pauta.id) return item;
+
+        return {
+          ...item,
+          contenidos: obtenerContenidos(item).map((contenido, posicion) =>
+            posicion === indice
+              ? { ...contenido, [red]: valor }
+              : contenido,
+          ),
+        };
+      });
+
+    setCumplimientosActualizando((actuales) => [
+      ...actuales,
+      claveActualizacion,
+    ]);
+    setPautas((actuales) => aplicarCumplimiento(actuales, cumplido));
+
+    try {
+      const { data } = await api.patch(
+        `/api/marketing/pautas/${pauta.id}/contenidos/${indice}/cumplimiento`,
+        { red, cumplido },
+      );
+      const valorGuardado = Boolean(
+        data.pauta?.contenidos?.[indice]?.[red],
+      );
+      setPautas((actuales) => aplicarCumplimiento(actuales, valorGuardado));
+    } catch (error) {
+      setPautas((actuales) =>
+        aplicarCumplimiento(
+          actuales,
+          Boolean(contenidoAnterior?.[red]),
+        ),
+      );
+      Swal.fire(
+        "No se pudo actualizar",
+        getErrorMessage(error, "Intenta marcar nuevamente la red social"),
+        "error",
+      );
+    } finally {
+      setCumplimientosActualizando((actuales) =>
+        actuales.filter((clave) => clave !== claveActualizacion),
+      );
+    }
+  };
+
   const eliminarPauta = async (pauta) => {
     const confirmacion = await Swal.fire({
       icon: "warning",
@@ -394,6 +983,7 @@ export default function PautasMarketing() {
 
   const pautasFiltradas = useMemo(() => {
     const texto = busqueda.trim().toLocaleLowerCase("es");
+    const filtroFechaActivo = Boolean(fechaDesde || fechaHasta);
 
     return pautas.filter((pauta) => {
       const contenidos = obtenerContenidos(pauta);
@@ -415,14 +1005,31 @@ export default function PautasMarketing() {
         contenidos.some(
           (contenido) => contenido.tipoContenido === filtroContenido,
         );
+      const coincideFecha =
+        !filtroFechaActivo ||
+        contenidos.some((contenido) =>
+          contenidoCoincideFecha(contenido, fechaDesde, fechaHasta),
+        );
 
-      return coincideTexto && coincideContenido;
+      return coincideTexto && coincideContenido && coincideFecha;
     });
-  }, [busqueda, filtroContenido, pautas]);
+  }, [busqueda, fechaDesde, fechaHasta, filtroContenido, pautas]);
 
   const resumen = useMemo(() => {
-    const contenidos = pautas.flatMap(obtenerContenidos);
-    const seguidores = pautas.reduce(
+    const filtroFechaActivo = Boolean(fechaDesde || fechaHasta);
+    const pautasEnRango = filtroFechaActivo
+      ? pautas.filter((pauta) =>
+          obtenerContenidos(pauta).some((contenido) =>
+            contenidoCoincideFecha(contenido, fechaDesde, fechaHasta),
+          ),
+        )
+      : pautas;
+    const contenidos = pautasEnRango.flatMap((pauta) =>
+      obtenerContenidos(pauta).filter((contenido) =>
+        contenidoCoincideFecha(contenido, fechaDesde, fechaHasta),
+      ),
+    );
+    const seguidores = pautasEnRango.reduce(
       (total, pauta) =>
         total +
         Number(pauta.seguidoresFacebook || 0) +
@@ -432,14 +1039,14 @@ export default function PautasMarketing() {
     );
 
     return {
-      paginas: pautas.length,
+      paginas: pautasEnRango.length,
       contenidos: contenidos.length,
       productos: new Set(
         contenidos.map((contenido) => contenido.producto).filter(Boolean),
       ).size,
       seguidores,
     };
-  }, [pautas]);
+  }, [fechaDesde, fechaHasta, pautas]);
 
   const productosExistentes = useMemo(
     () =>
@@ -513,25 +1120,31 @@ export default function PautasMarketing() {
           />
         </section>
 
-        <section className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row">
-          <label className="relative flex-1">
-            <span className="sr-only">Buscar páginas o contenidos</span>
-            <Search
-              size={18}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={busqueda}
-              onChange={(event) => setBusqueda(event.target.value)}
-              placeholder="Buscar por página, producto o tipo de contenido..."
-              className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-            />
+        <section className="mt-6 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(18rem,1fr)_14rem_11rem_11rem_auto] xl:items-end">
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">
+              Búsqueda global
+            </span>
+            <span className="relative block">
+              <Search
+                size={18}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(event) => setBusqueda(event.target.value)}
+                placeholder="Página, dispositivo o contenido..."
+                className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+            </span>
           </label>
 
-          <label className="md:w-64">
-            <span className="sr-only">Filtrar por tipo de contenido</span>
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">
+              Tipo de contenido
+            </span>
             <select
               value={filtroContenido}
               onChange={(event) => setFiltroContenido(event.target.value)}
@@ -545,14 +1158,65 @@ export default function PautasMarketing() {
               ))}
             </select>
           </label>
+
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">
+              Fecha desde
+            </span>
+            <input
+              type="date"
+              value={fechaDesde}
+              max={fechaHasta || undefined}
+              onChange={(event) => {
+                const value = event.target.value;
+                setFechaDesde(value);
+                if (fechaHasta && value && value > fechaHasta) {
+                  setFechaHasta(value);
+                }
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+
+          <label>
+            <span className="mb-1.5 block text-xs font-bold text-slate-500">
+              Fecha hasta
+            </span>
+            <input
+              type="date"
+              value={fechaHasta}
+              min={fechaDesde || undefined}
+              onChange={(event) => {
+                const value = event.target.value;
+                setFechaHasta(value);
+                if (fechaDesde && value && value < fechaDesde) {
+                  setFechaDesde(value);
+                }
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFechaDesde("");
+              setFechaHasta("");
+            }}
+            disabled={!fechaDesde && !fechaHasta}
+            className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <X size={15} aria-hidden="true" />
+            Limpiar fechas
+          </button>
         </section>
 
         {loading ? (
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
+          <div className="mt-6 grid snap-x snap-mandatory grid-flow-col auto-cols-[82%] items-start gap-4 overflow-x-auto pb-4 sm:auto-cols-[calc((100%_-_1rem)/2)] lg:auto-cols-[calc((100%_-_3rem)/4)]">
+            {Array.from({ length: 4 }).map((_, index) => (
               <div
                 key={index}
-                className="h-[30rem] animate-pulse rounded-2xl border border-slate-200 bg-white"
+                className="h-[25rem] snap-start animate-pulse rounded-2xl border border-slate-200 bg-white"
               />
             ))}
           </div>
@@ -568,7 +1232,7 @@ export default function PautasMarketing() {
             </h2>
             <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">
               {pautas.length
-                ? "Prueba con otra búsqueda o cambia el filtro de contenido."
+                ? "Prueba con otra búsqueda, tipo de contenido o rango de fechas."
                 : "Agrega la primera página con su imagen, seguidores y lista de contenidos pautados."}
             </p>
             {!pautas.length && (
@@ -583,14 +1247,26 @@ export default function PautasMarketing() {
             )}
           </section>
         ) : (
-          <div className="mt-6 grid items-start gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-6 grid snap-x snap-mandatory grid-flow-col auto-cols-[82%] items-start gap-4 overflow-x-auto pb-4 sm:auto-cols-[calc((100%_-_1rem)/2)] lg:auto-cols-[calc((100%_-_3rem)/4)]">
             {pautasFiltradas.map((pauta) => {
-              const contenidos = obtenerContenidos(pauta);
+              const todosLosContenidos = obtenerContenidos(pauta);
+              const contenidos = todosLosContenidos
+                .map((contenido, indiceOriginal) => ({
+                  ...contenido,
+                  indiceOriginal,
+                }))
+                .filter((contenido) =>
+                  contenidoCoincideFecha(
+                    contenido,
+                    fechaDesde,
+                    fechaHasta,
+                  ),
+                );
 
               return (
                 <article
                   key={pauta.id}
-                  className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                  className="group snap-start overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
                 >
                   <div className="relative aspect-[16/9] overflow-hidden bg-slate-100">
                     <ImagenPauta
@@ -618,8 +1294,8 @@ export default function PautasMarketing() {
                     </div>
                   </div>
 
-                  <div className="p-5">
-                    <h2 className="break-words text-xl font-black leading-tight text-slate-800">
+                  <div className="p-3.5">
+                    <h2 className="break-words text-base font-black leading-tight text-slate-800">
                       {pauta.nombrePagina}
                     </h2>
 
@@ -654,49 +1330,127 @@ export default function PautasMarketing() {
                             Contenido pautado
                           </p>
                           <p className="text-xs text-slate-500">
-                            {contenidos.length}{" "}
+                            {fechaDesde || fechaHasta
+                              ? `${contenidos.length} de ${todosLosContenidos.length}`
+                              : contenidos.length}{" "}
                             {contenidos.length === 1
                               ? "contenido"
                               : "contenidos"}{" "}
-                            · Producto + formato
+                            · Datos opcionales
                           </p>
                         </div>
                         <button
                           type="button"
-                          onClick={() => abrirEdicion(pauta)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+                          onClick={() => abrirContenidoRapido(pauta)}
+                          disabled={
+                            guardandoContenidoRapido ||
+                            contenidoRapido?.pautaId === pauta.id
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Plus size={14} aria-hidden="true" />
-                          Agregar
+                          {contenidoRapido?.pautaId === pauta.id
+                            ? "Agregando"
+                            : "Agregar"}
                         </button>
                       </div>
 
-                      <div className="space-y-2">
-                        {contenidos.map((contenido, index) => (
+                      <div
+                        id={`contenidos-pauta-${pauta.id}`}
+                        className="max-h-72 space-y-2 overflow-y-auto pr-1"
+                      >
+                        {contenidos.length === 0 && (
+                          <p className="rounded-xl border border-dashed border-slate-200 px-3 py-5 text-center text-xs text-slate-400">
+                            Sin contenidos en este rango
+                          </p>
+                        )}
+                        {contenidos.map((contenido) => (
                           <div
-                            key={`${contenido.producto}-${contenido.tipoContenido}-${contenido.fecha}-${index}`}
-                            className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3"
+                            key={`${contenido.producto}-${contenido.tipoContenido}-${contenido.fecha}-${contenido.indiceOriginal}`}
+                            className="rounded-xl border border-slate-100 bg-slate-50 p-2.5"
                           >
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-black text-emerald-700 shadow-sm">
-                              {index + 1}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="break-words text-sm font-bold text-slate-700">
-                                {contenido.producto}
-                              </p>
-                              <p className="text-xs text-slate-400">Producto</p>
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-black text-emerald-700 shadow-sm">
+                                {contenido.indiceOriginal + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="break-words text-xs font-bold text-slate-700">
+                                  {contenido.producto || "Sin dispositivo"}
+                                </p>
+                                <p className="truncate text-[10px] text-slate-400">
+                                  {contenido.tipoContenido || "Sin tipo"} · {formatearFecha(contenido.fecha)}
+                                </p>
+                              </div>
                             </div>
-                            <div className="flex max-w-[48%] shrink-0 flex-col items-end gap-1.5">
-                              <span className="max-w-full break-words rounded-full bg-emerald-100 px-2.5 py-1 text-center text-[11px] font-bold text-emerald-700">
-                                {contenido.tipoContenido}
-                              </span>
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                                <CalendarDays size={13} aria-hidden="true" />
-                                {formatearFecha(contenido.fecha)}
-                              </span>
+
+                            <div className="mt-2 grid grid-cols-3 gap-1 border-t border-slate-200 pt-2">
+                              <CheckCumplimiento
+                                icon={<Facebook size={13} aria-hidden="true" />}
+                                red="FB"
+                                nombreRed="Facebook"
+                                color="text-blue-600"
+                                checked={Boolean(contenido.cumplidoFacebook)}
+                                disabled={cumplimientosActualizando.some(
+                                  (clave) => clave.startsWith(`${pauta.id}-`),
+                                )}
+                                onChange={(cumplido) =>
+                                  cambiarCumplimiento(
+                                    pauta,
+                                    contenido.indiceOriginal,
+                                    "cumplidoFacebook",
+                                    cumplido,
+                                  )
+                                }
+                              />
+                              <CheckCumplimiento
+                                icon={<Instagram size={13} aria-hidden="true" />}
+                                red="IG"
+                                nombreRed="Instagram"
+                                color="text-fuchsia-600"
+                                checked={Boolean(contenido.cumplidoInstagram)}
+                                disabled={cumplimientosActualizando.some(
+                                  (clave) => clave.startsWith(`${pauta.id}-`),
+                                )}
+                                onChange={(cumplido) =>
+                                  cambiarCumplimiento(
+                                    pauta,
+                                    contenido.indiceOriginal,
+                                    "cumplidoInstagram",
+                                    cumplido,
+                                  )
+                                }
+                              />
+                              <CheckCumplimiento
+                                icon={<Music2 size={13} aria-hidden="true" />}
+                                red="TK"
+                                nombreRed="TikTok"
+                                color="text-slate-800"
+                                checked={Boolean(contenido.cumplidoTiktok)}
+                                disabled={cumplimientosActualizando.some(
+                                  (clave) => clave.startsWith(`${pauta.id}-`),
+                                )}
+                                onChange={(cumplido) =>
+                                  cambiarCumplimiento(
+                                    pauta,
+                                    contenido.indiceOriginal,
+                                    "cumplidoTiktok",
+                                    cumplido,
+                                  )
+                                }
+                              />
                             </div>
                           </div>
                         ))}
+                        {contenidoRapido?.pautaId === pauta.id && (
+                          <FormularioContenidoRapido
+                            numero={todosLosContenidos.length + 1}
+                            contenido={contenidoRapido}
+                            guardando={guardandoContenidoRapido}
+                            onChange={cambiarContenidoRapido}
+                            onGuardar={guardarContenidoRapido}
+                            onCancelar={() => setContenidoRapido(null)}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -704,6 +1458,15 @@ export default function PautasMarketing() {
               );
             })}
           </div>
+        )}
+
+        {!loading && (
+          <CalendarioPautas
+            pautas={pautasFiltradas}
+            onEditar={abrirEdicion}
+            fechaDesde={fechaDesde}
+            fechaHasta={fechaHasta}
+          />
         )}
       </div>
 
@@ -874,7 +1637,7 @@ export default function PautasMarketing() {
                     Contenidos de esta página
                   </h3>
                   <p className="text-sm text-slate-500">
-                    Agrega una fila por cada producto y formato pautado.
+                    Dispositivo/producto, tipo de contenido y fecha son opcionales.
                   </p>
                 </div>
                 <button
@@ -888,6 +1651,12 @@ export default function PautasMarketing() {
               </div>
 
               <div className="space-y-3">
+                {form.contenidos.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
+                    No hay contenidos agregados. Puedes guardar la página así o
+                    agregar uno cuando lo necesites.
+                  </div>
+                )}
                 {form.contenidos.map((contenido, index) => (
                   <div
                     key={contenido.clave}
@@ -899,7 +1668,7 @@ export default function PautasMarketing() {
 
                     <label>
                       <span className="mb-1.5 block text-xs font-bold text-slate-600">
-                        Producto <span className="text-red-500">*</span>
+                        Dispositivo / producto <span className="font-normal text-slate-400">(opcional)</span>
                       </span>
                       <input
                         value={contenido.producto}
@@ -912,7 +1681,6 @@ export default function PautasMarketing() {
                         }
                         list="productos-marketing"
                         maxLength={120}
-                        required
                         placeholder="Ej. Honor X8D"
                         className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                       />
@@ -920,7 +1688,7 @@ export default function PautasMarketing() {
 
                     <label>
                       <span className="mb-1.5 block text-xs font-bold text-slate-600">
-                        Tipo de contenido <span className="text-red-500">*</span>
+                        Tipo de contenido <span className="font-normal text-slate-400">(opcional)</span>
                       </span>
                       <input
                         value={contenido.tipoContenido}
@@ -933,7 +1701,6 @@ export default function PautasMarketing() {
                         }
                         list="tipos-contenido-marketing"
                         maxLength={80}
-                        required
                         placeholder="Video, carrusel, post..."
                         className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                       />
@@ -941,7 +1708,7 @@ export default function PautasMarketing() {
 
                     <label>
                       <span className="mb-1.5 block text-xs font-bold text-slate-600">
-                        Fecha de pauta <span className="text-red-500">*</span>
+                        Fecha de pauta <span className="font-normal text-slate-400">(opcional)</span>
                       </span>
                       <input
                         type="date"
@@ -953,7 +1720,6 @@ export default function PautasMarketing() {
                             event.target.value,
                           )
                         }
-                        required
                         className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                       />
                     </label>
@@ -961,17 +1727,62 @@ export default function PautasMarketing() {
                     <button
                       type="button"
                       onClick={() => quitarContenido(contenido.clave)}
-                      disabled={form.contenidos.length === 1}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                       aria-label={`Eliminar contenido ${index + 1}`}
-                      title={
-                        form.contenidos.length === 1
-                          ? "La página debe conservar al menos un contenido"
-                          : "Eliminar contenido"
-                      }
+                      title="Eliminar contenido"
                     >
                       <Trash2 size={18} />
                     </button>
+
+                    <fieldset className="lg:col-span-3 lg:col-start-2">
+                      <legend className="mb-2 text-xs font-bold text-slate-600">
+                        Cumplimiento de este contenido
+                      </legend>
+                      <div className="grid grid-cols-3 gap-2">
+                        <CheckCumplimiento
+                          icon={<Facebook size={14} aria-hidden="true" />}
+                          red="Facebook"
+                          nombreRed="Facebook"
+                          color="text-blue-600"
+                          checked={contenido.cumplidoFacebook}
+                          onChange={(cumplido) =>
+                            cambiarContenido(
+                              contenido.clave,
+                              "cumplidoFacebook",
+                              cumplido,
+                            )
+                          }
+                        />
+                        <CheckCumplimiento
+                          icon={<Instagram size={14} aria-hidden="true" />}
+                          red="Instagram"
+                          nombreRed="Instagram"
+                          color="text-fuchsia-600"
+                          checked={contenido.cumplidoInstagram}
+                          onChange={(cumplido) =>
+                            cambiarContenido(
+                              contenido.clave,
+                              "cumplidoInstagram",
+                              cumplido,
+                            )
+                          }
+                        />
+                        <CheckCumplimiento
+                          icon={<Music2 size={14} aria-hidden="true" />}
+                          red="TikTok"
+                          nombreRed="TikTok"
+                          color="text-slate-800"
+                          checked={contenido.cumplidoTiktok}
+                          onChange={(cumplido) =>
+                            cambiarContenido(
+                              contenido.clave,
+                              "cumplidoTiktok",
+                              cumplido,
+                            )
+                          }
+                        />
+                      </div>
+                    </fieldset>
                   </div>
                 ))}
               </div>

@@ -1,6 +1,7 @@
 const {
   MAX_CONTENIDOS_POR_PAGINA,
   TIPOS_CONTENIDO,
+  normalizarBooleano,
   normalizarFecha,
   normalizarSeguidores,
   resolverContenidos,
@@ -26,6 +27,9 @@ describe("pautaMarketingService", () => {
           producto: " Honor X8D ",
           tipoContenido: " Video ",
           fecha: "2026-07-28",
+          cumplidoFacebook: true,
+          cumplidoInstagram: false,
+          cumplidoTiktok: true,
         },
         {
           producto: " TV 55 pulgadas ",
@@ -48,6 +52,9 @@ describe("pautaMarketingService", () => {
           producto: "Honor X8D",
           tipoContenido: "Video",
           fecha: "2026-07-28",
+          cumplidoFacebook: true,
+          cumplidoInstagram: false,
+          cumplidoTiktok: true,
         },
         {
           producto: "TV 55 pulgadas",
@@ -66,7 +73,14 @@ describe("pautaMarketingService", () => {
 
     expect(resultado.errores).toEqual([]);
     expect(resultado.contenidos).toEqual([
-      { producto: "Celular", tipoContenido: "Post", fecha: null },
+      {
+        producto: "Celular",
+        tipoContenido: "Post",
+        fecha: null,
+        cumplidoFacebook: false,
+        cumplidoInstagram: false,
+        cumplidoTiktok: false,
+      },
     ]);
   });
 
@@ -84,17 +98,26 @@ describe("pautaMarketingService", () => {
     );
   });
 
-  test("requiere al menos un contenido con producto y tipo", () => {
+  test("permite contenidos vacios o con campos opcionales", () => {
     const vacio = validarPautaMarketing({ nombrePagina: "Pagina Uno" });
     const incompleto = validarPautaMarketing({
       nombrePagina: "Pagina Uno",
       contenidos: [{ producto: "", tipoContenido: "Video" }],
     });
 
-    expect(vacio.errores).toContain("Agrega al menos un contenido a la pagina");
-    expect(incompleto.errores).toContain(
-      "El producto del contenido 1 es obligatorio",
-    );
+    expect(vacio.errores).toEqual([]);
+    expect(vacio.data.contenidos).toEqual([]);
+    expect(incompleto.errores).toEqual([]);
+    expect(incompleto.data.contenidos).toEqual([
+      {
+        producto: "",
+        tipoContenido: "Video",
+        fecha: null,
+        cumplidoFacebook: false,
+        cumplidoInstagram: false,
+        cumplidoTiktok: false,
+      },
+    ]);
   });
 
   test("rechaza cantidades negativas, decimales o fuera del limite", () => {
@@ -103,7 +126,7 @@ describe("pautaMarketingService", () => {
     expect(normalizarSeguidores("1000000000000").valido).toBe(false);
   });
 
-  test("valida una fecha real en formato ISO por contenido", () => {
+  test("valida la fecha solo cuando fue informada", () => {
     expect(normalizarFecha("2026-07-28")).toEqual({
       valido: true,
       valor: "2026-07-28",
@@ -114,9 +137,26 @@ describe("pautaMarketingService", () => {
       nombrePagina: "Pagina Uno",
       contenidos: [{ producto: "TV", tipoContenido: "Video" }],
     });
-    expect(sinFecha.errores).toContain(
-      "La fecha del contenido 1 es obligatoria",
+    const fechaInvalida = validarPautaMarketing({
+      nombrePagina: "Pagina Uno",
+      contenidos: [
+        { producto: "TV", tipoContenido: "Video", fecha: "2026-02-30" },
+      ],
+    });
+
+    expect(sinFecha.errores).toEqual([]);
+    expect(fechaInvalida.errores).toContain(
+      "La fecha del contenido 1 no es valida",
     );
+  });
+
+  test("normaliza el cumplimiento de las redes sociales", () => {
+    expect(normalizarBooleano(true)).toEqual({ valido: true, valor: true });
+    expect(normalizarBooleano("false")).toEqual({
+      valido: true,
+      valor: false,
+    });
+    expect(normalizarBooleano("desconocido").valido).toBe(false);
   });
 
   test("serializa los contenidos y BIGINT para el frontend", () => {
@@ -133,6 +173,9 @@ describe("pautaMarketingService", () => {
             producto: "TV",
             tipoContenido: "Carrusel",
             fecha: "2026-07-28",
+            cumplidoFacebook: true,
+            cumplidoInstagram: false,
+            cumplidoTiktok: true,
           },
           {
             producto: "Celular",
@@ -151,6 +194,9 @@ describe("pautaMarketingService", () => {
           producto: "TV",
           tipoContenido: "Carrusel",
           fecha: "2026-07-28",
+          cumplidoFacebook: true,
+          cumplidoInstagram: false,
+          cumplidoTiktok: true,
         },
         {
           producto: "Celular",

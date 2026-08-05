@@ -1,26 +1,64 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
-import { API_URL } from "../../../config";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { nombreCortoUsuario } from "../../utils/nombres";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import DashboardGraficas from "./DashboardGraficas";
 import MetasDiarias from "./MetasDiaras";
 import * as XLSX from "xlsx";
 import { FaFileExcel } from "react-icons/fa";
+import api from "../../api/client";
 
 const STORAGE_KEY = "dashboard_filtros";
+const TIPOS_VENDEDOR = [
+  { value: "", label: "Todos" },
+  { value: "CALL_CENTER", label: "Call Center" },
+  { value: "PISO", label: "Piso" },
+];
+
+const normalizarCargo = (cargo) =>
+  String(cargo || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+
+const obtenerCargosUsuario = (usuario) => {
+  const cargos = (usuario?.rolesPago || [])
+    .map((rolPago) => rolPago?.cargo)
+    .filter(Boolean);
+
+  if (usuario?.rolPago?.cargo) cargos.push(usuario.rolPago.cargo);
+
+  return [...new Set(cargos.map(normalizarCargo))];
+};
+
+const perteneceATipoVendedor = (usuario, tipoVendedor) => {
+  if (!tipoVendedor) return true;
+
+  const cargos = obtenerCargosUsuario(usuario);
+
+  if (tipoVendedor === "CALL_CENTER") {
+    return cargos.some((cargo) => cargo.includes("CALL CENTER"));
+  }
+
+  if (tipoVendedor === "PISO") {
+    return cargos.some((cargo) => cargo.includes("PISO"));
+  }
+
+  return true;
+};
 
 export default function Dashboard() {
   // 🔥 Cargar filtros desde localStorage UNA SOLA VEZ
   const filtrosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
-  const [filas, setFilas] = useState([]);
+  const [, setFilas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [usuarioInfo, setUsuarioInfo] = useState(null);
   const [agencias, setAgencias] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
+  const [usuariosCargados, setUsuariosCargados] = useState(false);
   const [estadisticas, setEstadisticas] = useState(null);
 
   // ✅ Estados persistentes
@@ -45,11 +83,18 @@ export default function Dashboard() {
     filtrosGuardados.vendedorId || "",
   );
 
+  const [tipoVendedor, setTipoVendedor] = useState(
+    ["CALL_CENTER", "PISO"].includes(filtrosGuardados.tipoVendedor)
+      ? filtrosGuardados.tipoVendedor
+      : "",
+  );
+
   const [cierreCajaTipo, setCierreCajaTipo] = useState(
     filtrosGuardados.cierreCajaTipo || "",
   );
 
   const [user, setUser] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -63,7 +108,7 @@ export default function Dashboard() {
     } else {
       navigate("/login");
     }
-  }, []);
+  }, [navigate]);
 
   // 🔥 Guardar en localStorage AUTOMÁTICO
   useEffect(() => {
@@ -74,29 +119,39 @@ export default function Dashboard() {
         fechaFin,
         agenciaId,
         vendedorId,
+        tipoVendedor,
         cierreCajaTipo,
       }),
     );
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo]);
+  }, [
+    fechaInicio,
+    fechaFin,
+    agenciaId,
+    vendedorId,
+    tipoVendedor,
+    cierreCajaTipo,
+  ]);
 
   // -----------------------------
   // CARGAS INICIALES
   // -----------------------------
   const cargarUsuarios = async () => {
     try {
-      const res = await axios.get(`${API_URL}/usuarios`, {
+      const res = await api.get("/usuarios", {
         params: { rol: "Vendedor" },
       });
       setUsuarios(res.data || []);
     } catch (error) {
       console.error("Error cargando usuarios:", error);
       setUsuarios([]);
+    } finally {
+      setUsuariosCargados(true);
     }
   };
 
   const cargarAgencias = async () => {
     try {
-      const res = await axios.get(`${API_URL}/agencias`);
+      const res = await api.get("/agencias");
       setAgencias(res.data || []);
     } catch (error) {
       console.error("Error cargando agencias:", error);
@@ -108,6 +163,71 @@ export default function Dashboard() {
     cargarAgencias();
     cargarUsuarios();
   }, []);
+
+  const usuariosFiltrados = useMemo(
+    () =>
+      usuarios.filter((usuario) =>
+        perteneceATipoVendedor(usuario, tipoVendedor),
+      ),
+    [tipoVendedor, usuarios],
+  );
+
+  const vendedoresIdsTipoParam = useMemo(
+    () =>
+      tipoVendedor
+        ? usuariosFiltrados.map((usuario) => String(usuario.id)).join(",")
+        : "",
+    [tipoVendedor, usuariosFiltrados],
+  );
+
+  const vendedorCompatibleConTipo = useMemo(
+    () =>
+      !tipoVendedor ||
+      !vendedorId ||
+      usuariosFiltrados.some(
+        (usuario) => String(usuario.id) === String(vendedorId),
+      ),
+    [tipoVendedor, usuariosFiltrados, vendedorId],
+  );
+
+  const cantidadesPorTipo = useMemo(
+    () => ({
+      "": usuarios.length,
+      CALL_CENTER: usuarios.filter((usuario) =>
+        perteneceATipoVendedor(usuario, "CALL_CENTER"),
+      ).length,
+      PISO: usuarios.filter((usuario) =>
+        perteneceATipoVendedor(usuario, "PISO"),
+      ).length,
+    }),
+    [usuarios],
+  );
+
+  const seleccionarTipoVendedor = (nuevoTipo) => {
+    setTipoVendedor(nuevoTipo);
+    setVendedorId((vendedorActual) => {
+      if (!nuevoTipo || !vendedorActual) return vendedorActual;
+
+      const vendedorSeleccionado = usuarios.find(
+        (usuario) => String(usuario.id) === String(vendedorActual),
+      );
+
+      return perteneceATipoVendedor(vendedorSeleccionado, nuevoTipo)
+        ? vendedorActual
+        : "";
+    });
+  };
+
+  useEffect(() => {
+    if (!usuariosCargados || !tipoVendedor || !vendedorId) return;
+
+    if (!vendedorCompatibleConTipo) setVendedorId("");
+  }, [
+    tipoVendedor,
+    usuariosCargados,
+    vendedorCompatibleConTipo,
+    vendedorId,
+  ]);
 
   const toggleAgencia = (id) => {
     setAgenciaId((prev) => {
@@ -138,9 +258,23 @@ export default function Dashboard() {
   // -----------------------------
   // FETCH DATA
   // -----------------------------
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    if (tipoVendedor && !usuariosCargados) return;
+    if (tipoVendedor && vendedorId && !vendedorCompatibleConTipo) return;
+
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
+      return;
+    }
+
+    if (tipoVendedor && !vendedorId && !vendedoresIdsTipoParam) {
+      setFilas([]);
+      setEstadisticas(null);
+      setError(
+        `No hay vendedores activos de ${
+          tipoVendedor === "CALL_CENTER" ? "Call Center" : "Piso"
+        }.`,
+      );
       return;
     }
 
@@ -154,11 +288,14 @@ export default function Dashboard() {
       });
 
       if (agenciaId.length > 0) params.append("agenciaId", agenciaId.join(","));
-      if (vendedorId) params.append("vendedorId", vendedorId);
+      if (vendedorId) {
+        params.append("vendedorId", vendedorId);
+      } else if (tipoVendedor) {
+        params.append("vendedorId", vendedoresIdsTipoParam);
+      }
       if (cierreCajaTipo) params.append("cierreCaja", cierreCajaTipo);
 
-      const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
-      const { data } = await axios.get(url);
+      const { data } = await api.get(`/auditoria/ventas2?${params.toString()}`);
 
       if (!data.ok) return;
 
@@ -193,21 +330,24 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    agenciaId,
+    cierreCajaTipo,
+    fechaFin,
+    fechaInicio,
+    tipoVendedor,
+    usuariosCargados,
+    vendedorCompatibleConTipo,
+    vendedorId,
+    vendedoresIdsTipoParam,
+  ]);
 
   // 🔥 Se ejecuta cuando cambian filtros
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
-  }, [
-    fechaInicio,
-    fechaFin,
-    agenciaId,
-    vendedorId,
-    cierreCajaTipo,
-    usuarioInfo,
-  ]);
+  }, [fetchData, fechaFin, fechaInicio, usuarioInfo?.id]);
 
   const generarDataExcel = (porTipoModelo, costosHistoricos = {}) => {
     return Object.entries(porTipoModelo)
@@ -299,7 +439,47 @@ export default function Dashboard() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 mb-5">
+        <div className="mb-5 rounded-2xl border border-gray-200 bg-gray-50 p-3 md:p-4">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-gray-800">
+              Equipo de vendedores
+            </p>
+            <p className="text-xs text-gray-500">
+              Filtra los indicadores comerciales por el canal.
+            </p>
+          </div>
 
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {TIPOS_VENDEDOR.map((tipo) => {
+              const seleccionado = tipoVendedor === tipo.value;
+
+              return (
+                <button
+                  key={tipo.value || "TODOS"}
+                  type="button"
+                  aria-pressed={seleccionado}
+                  onClick={() => seleccionarTipoVendedor(tipo.value)}
+                  className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
+                    seleccionado
+                      ? "border-green-500 bg-green-600 text-white shadow-sm"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-green-300 hover:bg-green-50"
+                  }`}
+                >
+                  <span className="text-sm font-semibold">{tipo.label}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      seleccionado
+                        ? "bg-white/20 text-white"
+                        : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {usuariosCargados ? cantidadesPorTipo[tipo.value] : "..."}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
           <div className="flex flex-col">
@@ -426,8 +606,14 @@ export default function Dashboard() {
               value={vendedorId}
               onChange={(e) => setVendedorId(e.target.value)}
             >
-              <option value="">Todos</option>
-              {usuarios.map((u) => (
+              <option value="">
+                {tipoVendedor === "CALL_CENTER"
+                  ? "Todos los de Call Center"
+                  : tipoVendedor === "PISO"
+                    ? "Todos los de Piso"
+                    : "Todos"}
+              </option>
+              {usuariosFiltrados.map((u) => (
                 <option key={u.id} value={u.id}>
                   {nombreCortoUsuario(u)}
                 </option>

@@ -406,6 +406,7 @@ describe("pagosComisionesService", () => {
       valorMultaCalculado: 16,
       valorDescontar: 0,
       multaOmitida: true,
+      descuentoModificado: true,
     });
 
     expect(
@@ -420,6 +421,24 @@ describe("pagosComisionesService", () => {
       valorMultaCalculado: 16,
       valorDescontar: 16,
       multaOmitida: false,
+      descuentoModificado: false,
+    });
+  });
+
+  test("permite reemplazar el valor calculado de la sancion", () => {
+    expect(
+      calculateWeeklyPenalty({
+        config: { minimoUnidades: 9, valorMultaUnidad: 8 },
+        unidadesVendidas: 7,
+        aplicaDescuento: true,
+        valorDescontarAjustado: 11.5,
+      }),
+    ).toEqual({
+      noCumpleMetas: 2,
+      valorMultaCalculado: 16,
+      valorDescontar: 11.5,
+      multaOmitida: false,
+      descuentoModificado: true,
     });
   });
 
@@ -713,6 +732,7 @@ describe("pagosComisionesService", () => {
       valorMultaCalculado: 0,
       valorDescontar: 0,
       multaOmitida: false,
+      descuentoModificado: false,
     });
   });
 

@@ -738,6 +738,7 @@ const calculateWeeklyPenalty = ({
   unidadesVendidas,
   aplicaDescuento,
   multaOmitida,
+  valorDescontarAjustado,
 }) => {
   if (!aplicaDescuento) {
     return {
@@ -745,18 +746,31 @@ const calculateWeeklyPenalty = ({
       valorMultaCalculado: 0,
       valorDescontar: 0,
       multaOmitida: false,
+      descuentoModificado: false,
     };
   }
 
   const noCumpleMetas = calculateMissingUnits({ config, unidadesVendidas });
   const valorMultaCalculado = calculateSalesPenalty({ config, unidadesVendidas });
-  const omisionAplicada = Boolean(multaOmitida && valorMultaCalculado > 0);
+  const tieneValorAjustado =
+    valorDescontarAjustado !== null &&
+    valorDescontarAjustado !== undefined &&
+    valorDescontarAjustado !== "";
+  const omisionAnterior = Boolean(
+    !tieneValorAjustado && multaOmitida && valorMultaCalculado > 0,
+  );
+  const valorDescontar = tieneValorAjustado
+    ? round(Math.max(0, toNumber(valorDescontarAjustado)), 2)
+    : omisionAnterior
+      ? 0
+      : valorMultaCalculado;
 
   return {
     noCumpleMetas,
     valorMultaCalculado,
-    valorDescontar: omisionAplicada ? 0 : valorMultaCalculado,
-    multaOmitida: omisionAplicada,
+    valorDescontar,
+    multaOmitida: valorMultaCalculado > 0 && valorDescontar === 0,
+    descuentoModificado: tieneValorAjustado || omisionAnterior,
   };
 };
 
@@ -1297,7 +1311,14 @@ const buildPenaltyAdjustmentsMap = (adjustments) =>
   adjustments.reduce((map, adjustment) => {
     map.set(
       getPenaltyAdjustmentKey(adjustment.usuarioId, adjustment.semanaInicio),
-      Boolean(adjustment.omitida),
+      {
+        multaOmitida: Boolean(adjustment.omitida),
+        valorDescontarAjustado:
+          adjustment.valorDescontar === null ||
+          adjustment.valorDescontar === undefined
+            ? null
+            : toNumber(adjustment.valorDescontar),
+      },
     );
     return map;
   }, new Map());
@@ -1384,7 +1405,7 @@ const finalizarVendedor = (
         fechaCreacionUsuario: vendedor.fechaCreacionUsuario,
         week,
       });
-    const multaOmitida = penaltyAdjustments.get(
+    const penaltyAdjustment = penaltyAdjustments.get(
       getPenaltyAdjustmentKey(vendedor.usuarioId, week.startDate),
     );
     const penalty = calculateWeeklyPenalty({
@@ -1392,12 +1413,14 @@ const finalizarVendedor = (
       unidadesVendidas: values.venden,
       aplicaDescuento:
         semanaCompletaParaDescuento && !semanaFutura && !personalNuevo,
-      multaOmitida,
+      multaOmitida: penaltyAdjustment?.multaOmitida,
+      valorDescontarAjustado: penaltyAdjustment?.valorDescontarAjustado,
     });
     values.noCumpleMetas = penalty.noCumpleMetas;
     values.valorMultaCalculado = penalty.valorMultaCalculado;
     values.valorDescontar = penalty.valorDescontar;
     values.multaOmitida = penalty.multaOmitida;
+    values.descuentoModificado = penalty.descuentoModificado;
     values.personalNuevo = personalNuevo;
     values.semanaLaborada = semanaLaborada;
     values.semanaCompletaParaDescuento = semanaCompletaParaDescuento;
@@ -1502,7 +1525,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       where: {
         semanaInicio: { [Op.between]: [fechaInicio, fechaFin] },
       },
-      attributes: ["usuarioId", "semanaInicio", "omitida"],
+      attributes: ["usuarioId", "semanaInicio", "omitida", "valorDescontar"],
     }),
   ]);
 
@@ -1849,18 +1872,69 @@ const parseCommercialWeek = async (semanaInicio) => {
   };
 };
 
+const normalizarValorDescontar = (valorDescontar) => {
+  if (valorDescontar === null || valorDescontar === undefined || valorDescontar === "") {
+    throw createHttpError("El valor a descontar es obligatorio", 400);
+  }
+
+  const valorNormalizado =
+    typeof valorDescontar === "string"
+      ? valorDescontar.trim().replace(",", ".")
+      : valorDescontar;
+  const valorAjustado = Number(valorNormalizado);
+  if (!Number.isFinite(valorAjustado) || valorAjustado < 0) {
+    throw createHttpError("El valor a descontar debe ser un numero mayor o igual a cero", 400);
+  }
+  if (valorAjustado > 9999999999.99) {
+    throw createHttpError("El valor a descontar excede el limite permitido", 400);
+  }
+  return round(valorAjustado, 2);
+};
+
+const validarMultaEditable = (values) => {
+  if (!values || values.semanaFutura) {
+    throw createHttpError("No se puede modificar una multa de una semana futura", 400);
+  }
+  if (values.personalNuevo) {
+    throw createHttpError(
+      "El personal nuevo no genera multa durante sus primeros 30 dias",
+      400,
+    );
+  }
+  if (!values.semanaCompletaParaDescuento) {
+    throw createHttpError("La semana parcial o no laborada no genera multa", 400);
+  }
+  if (toNumber(values.valorMultaCalculado) <= 0) {
+    throw createHttpError("El vendedor no tiene una multa calculada en esta semana", 400);
+  }
+};
+
 const actualizarOmisionMulta = async ({
   usuarioId,
   semanaInicio,
   omitida,
+  valorDescontar,
+  restaurarValorCalculado,
   actualizadoPorId,
 }) => {
   const numericUsuarioId = Number(usuarioId);
   if (!Number.isInteger(numericUsuarioId) || numericUsuarioId <= 0) {
     throw createHttpError("El vendedor no es valido", 400);
   }
-  if (typeof omitida !== "boolean") {
-    throw createHttpError("Debe indicar si la multa sera omitida", 400);
+
+  const restauraValor = restaurarValorCalculado === true;
+  const recibioValorEditable = valorDescontar !== undefined;
+  if (!restauraValor && !recibioValorEditable && typeof omitida !== "boolean") {
+    throw createHttpError("Debe indicar el valor a descontar", 400);
+  }
+
+  let valorAjustado = null;
+  let multaOmitida = Boolean(omitida);
+  if (recibioValorEditable && !restauraValor) {
+    valorAjustado = normalizarValorDescontar(valorDescontar);
+    multaOmitida = valorAjustado === 0;
+  } else if (restauraValor) {
+    multaOmitida = false;
   }
 
   const { year, month, week } = await parseCommercialWeek(semanaInicio);
@@ -1877,21 +1951,7 @@ const actualizarOmisionMulta = async ({
   }
 
   const values = vendedor.semanas[week.startDate];
-  if (!values || values.semanaFutura) {
-    throw createHttpError("No se puede modificar una multa de una semana futura", 400);
-  }
-  if (values.personalNuevo) {
-    throw createHttpError(
-      "El personal nuevo no genera multa durante sus primeros 30 dias",
-      400,
-    );
-  }
-  if (!values.semanaCompletaParaDescuento) {
-    throw createHttpError("La semana parcial o no laborada no genera multa", 400);
-  }
-  if (toNumber(values.valorMultaCalculado) <= 0) {
-    throw createHttpError("El vendedor no tiene una multa calculada en esta semana", 400);
-  }
+  validarMultaEditable(values);
 
   const [ajuste] = await PagoComisionMultaAjuste.findOrCreate({
     where: {
@@ -1899,21 +1959,120 @@ const actualizarOmisionMulta = async ({
       semanaInicio: week.startDate,
     },
     defaults: {
-      omitida,
+      omitida: multaOmitida,
+      valorDescontar: valorAjustado,
       actualizadoPorId: actualizadoPorId || null,
     },
   });
 
   await ajuste.update({
-    omitida,
+    omitida: multaOmitida,
+    valorDescontar: valorAjustado,
     actualizadoPorId: actualizadoPorId || null,
   });
 
   return {
-    message: omitida ? "Multa omitida correctamente" : "Multa restaurada correctamente",
+    message: restauraValor
+      ? "Se restauro el valor calculado de la sancion"
+      : recibioValorEditable
+        ? "Valor a descontar actualizado correctamente"
+        : multaOmitida
+          ? "Multa omitida correctamente"
+          : "Multa restaurada correctamente",
     usuarioId: numericUsuarioId,
     semanaInicio: week.startDate,
-    omitida,
+    omitida: multaOmitida,
+    valorDescontar: valorAjustado,
+    usaValorCalculado: valorAjustado === null && !multaOmitida,
+  };
+};
+
+const actualizarValoresMultas = async ({
+  year,
+  month,
+  ajustes,
+  actualizadoPorId,
+}) => {
+  const { numericYear, numericMonth } = parseReportPeriod({ year, month });
+  if (!Array.isArray(ajustes) || ajustes.length === 0) {
+    throw createHttpError("Debe enviar al menos un valor a descontar", 400);
+  }
+  if (ajustes.length > 500) {
+    throw createHttpError("Solo se pueden guardar hasta 500 descuentos por operacion", 400);
+  }
+
+  const periodoPagado = await getPeriodoPagado(numericYear, numericMonth);
+  if (periodoPagado) {
+    throw createHttpError("No se pueden modificar multas de un periodo pagado", 400);
+  }
+
+  const reporte = await construirReportePagosComisiones({
+    year: numericYear,
+    month: numericMonth,
+  });
+  const semanasValidas = new Set(reporte.weeks.map((week) => week.startDate));
+  const vendedoresPorId = new Map(
+    reporte.vendedores.map((vendedor) => [Number(vendedor.usuarioId), vendedor]),
+  );
+  const clavesProcesadas = new Set();
+
+  const ajustesValidados = ajustes.map((ajuste, index) => {
+    try {
+      const usuarioId = Number(ajuste?.usuarioId);
+      const semanaInicio = String(ajuste?.semanaInicio || "").slice(0, 10);
+      if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
+        throw createHttpError("El vendedor no es valido", 400);
+      }
+      if (!semanasValidas.has(semanaInicio)) {
+        throw createHttpError("La semana no pertenece al periodo seleccionado", 400);
+      }
+
+      const clave = getPenaltyAdjustmentKey(usuarioId, semanaInicio);
+      if (clavesProcesadas.has(clave)) {
+        throw createHttpError("El descuento esta repetido", 400);
+      }
+      clavesProcesadas.add(clave);
+
+      const vendedor = vendedoresPorId.get(usuarioId);
+      if (!vendedor) {
+        throw createHttpError("Vendedor no encontrado en el reporte seleccionado", 404);
+      }
+      validarMultaEditable(vendedor.semanas[semanaInicio]);
+
+      const restauraValor = ajuste.restaurarValorCalculado === true;
+      const valorAjustado = restauraValor
+        ? null
+        : normalizarValorDescontar(ajuste.valorDescontar);
+      return {
+        usuarioId,
+        semanaInicio,
+        omitida: !restauraValor && valorAjustado === 0,
+        valorDescontar: valorAjustado,
+        actualizadoPorId: actualizadoPorId || null,
+      };
+    } catch (error) {
+      error.message = `Ajuste ${index + 1}: ${error.message}`;
+      throw error;
+    }
+  });
+
+  await sequelize.transaction(async (transaction) => {
+    for (const ajusteData of ajustesValidados) {
+      const [ajuste] = await PagoComisionMultaAjuste.findOrCreate({
+        where: {
+          usuarioId: ajusteData.usuarioId,
+          semanaInicio: ajusteData.semanaInicio,
+        },
+        defaults: ajusteData,
+        transaction,
+      });
+      await ajuste.update(ajusteData, { transaction });
+    }
+  });
+
+  return {
+    message: `${ajustesValidados.length} descuento(s) guardado(s) correctamente`,
+    actualizados: ajustesValidados.length,
   };
 };
 
@@ -1954,4 +2113,5 @@ module.exports = {
   obtenerReportePagosComisiones,
   marcarPeriodoPagosComisionesPagado,
   actualizarOmisionMulta,
+  actualizarValoresMultas,
 };
