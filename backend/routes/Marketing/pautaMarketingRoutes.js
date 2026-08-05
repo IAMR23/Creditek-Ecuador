@@ -15,6 +15,7 @@ router.use(authenticate, requirePermission("Marketing", "Administracion"));
 router.get("/", controller.listar);
 router.post("/", procesarImagenMarketing, controller.crear);
 router.post("/:id/contenidos", controller.agregarContenido);
+router.put("/:id/contenidos/:indice", controller.actualizarContenido);
 router.put("/:id", procesarImagenMarketing, controller.actualizar);
 router.patch(
   "/:id/contenidos/:indice/cumplimiento",

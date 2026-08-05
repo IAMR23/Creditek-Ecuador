@@ -57,6 +57,7 @@ startTaskReminderJob();
 const allowedOrigins = [
   process.env.WEB_CORS,
   "http://192.168.1.123:5173",
+  "http://192.168.1.4:5173",
   /^https?:\/\/localhost:\d+$/,
   /^https?:\/\/127\.0\.0\.1:\d+$/,
   /^https?:\/\/(www\.)?creditek-ecuador\.com(:\d+)?$/,

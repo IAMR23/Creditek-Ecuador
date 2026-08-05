@@ -237,6 +237,79 @@ exports.agregarContenido = async (req, res) => {
   }
 };
 
+exports.actualizarContenido = async (req, res) => {
+  try {
+    const indiceContenido = Number(req.params.indice);
+    if (!Number.isSafeInteger(indiceContenido) || indiceContenido < 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "El contenido indicado no es valido",
+      });
+    }
+
+    const pauta = await PautaMarketing.findOne({
+      where: { id: req.params.id, activo: true },
+    });
+
+    if (!pauta) {
+      return res.status(404).json({
+        ok: false,
+        message: "Pauta de marketing no encontrada",
+      });
+    }
+
+    const contenidos = resolverContenidos({
+      contenidos: pauta.contenidos,
+      producto: pauta.producto,
+      tipoContenido: pauta.tipoContenido,
+    }).contenidos;
+
+    if (!contenidos[indiceContenido]) {
+      return res.status(404).json({
+        ok: false,
+        message: "Contenido de pauta no encontrado",
+      });
+    }
+
+    const contenidoResultado = resolverContenidos({ contenidos: [req.body] });
+    if (contenidoResultado.errores.length) {
+      return res.status(400).json({
+        ok: false,
+        message: contenidoResultado.errores[0],
+        errores: contenidoResultado.errores,
+      });
+    }
+
+    const contenidoActualizado = contenidoResultado.contenidos[0];
+    if (!contenidoActualizado) {
+      return res.status(400).json({
+        ok: false,
+        message: "Ingresa al menos un dato para conservar el contenido",
+      });
+    }
+
+    contenidos[indiceContenido] = contenidoActualizado;
+    const primerContenido = contenidos[0];
+    await pauta.update({
+      contenidos,
+      producto: primerContenido.producto,
+      tipoContenido: primerContenido.tipoContenido,
+      actualizadoPorId: req.user?.id || null,
+    });
+
+    return res.json({
+      ok: true,
+      pauta: serializarPautaMarketing(pauta),
+    });
+  } catch (error) {
+    console.error("Error actualizando contenido de pauta:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo actualizar el contenido",
+    });
+  }
+};
+
 exports.actualizarCumplimiento = async (req, res) => {
   try {
     const campo = String(req.body?.red || "");

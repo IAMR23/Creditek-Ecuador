@@ -209,6 +209,7 @@ function CheckCumplimiento({
 function FormularioContenidoRapido({
   numero,
   contenido,
+  titulo = "Nuevo contenido",
   guardando,
   onChange,
   onGuardar,
@@ -223,7 +224,7 @@ function FormularioContenidoRapido({
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-black text-emerald-700 shadow-sm">
           {numero}
         </span>
-        <p className="text-xs font-black text-slate-700">Nuevo contenido</p>
+        <p className="text-xs font-black text-slate-700">{titulo}</p>
       </div>
 
       <div className="space-y-2">
@@ -342,7 +343,66 @@ function TarjetaResumen({ icon, label, value, detail }) {
   );
 }
 
-function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
+function ChecksRedesCalendario({ evento, disabled, onChange }) {
+  return (
+    <div className="grid grid-cols-3 gap-1 border-t border-slate-100 px-1.5 py-1.5">
+      <CheckCumplimiento
+        red="FB"
+        nombreRed="Facebook"
+        color="text-blue-600"
+        checked={Boolean(evento.cumplidoFacebook)}
+        disabled={disabled}
+        onChange={(cumplido) =>
+          onChange(
+            evento.pauta,
+            evento.indiceOriginal,
+            "cumplidoFacebook",
+            cumplido,
+          )
+        }
+      />
+      <CheckCumplimiento
+        red="IG"
+        nombreRed="Instagram"
+        color="text-fuchsia-600"
+        checked={Boolean(evento.cumplidoInstagram)}
+        disabled={disabled}
+        onChange={(cumplido) =>
+          onChange(
+            evento.pauta,
+            evento.indiceOriginal,
+            "cumplidoInstagram",
+            cumplido,
+          )
+        }
+      />
+      <CheckCumplimiento
+        red="TK"
+        nombreRed="TikTok"
+        color="text-slate-800"
+        checked={Boolean(evento.cumplidoTiktok)}
+        disabled={disabled}
+        onChange={(cumplido) =>
+          onChange(
+            evento.pauta,
+            evento.indiceOriginal,
+            "cumplidoTiktok",
+            cumplido,
+          )
+        }
+      />
+    </div>
+  );
+}
+
+function CalendarioPautas({
+  pautas,
+  onEditar,
+  onCambiarCumplimiento,
+  cumplimientosActualizando,
+  fechaDesde,
+  fechaHasta,
+}) {
   const [mesSeleccionado, setMesSeleccionado] = useState("");
   const hoy = fechaIsoLocal(new Date());
 
@@ -350,15 +410,23 @@ function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
     () =>
       pautas.flatMap((pauta) =>
         obtenerContenidos(pauta)
-          .filter((contenido) =>
+          .map((contenido, indiceOriginal) => ({
+            contenido,
+            indiceOriginal,
+          }))
+          .filter(({ contenido }) =>
             contenidoCoincideFecha(contenido, fechaDesde, fechaHasta),
           )
-          .map((contenido, index) => ({
-            id: `${pauta.id}-${index}`,
+          .map(({ contenido, indiceOriginal }) => ({
+            id: `${pauta.id}-${indiceOriginal}`,
             pauta,
+            indiceOriginal,
             pagina: pauta.nombrePagina,
             dispositivo: contenido.producto || "Dispositivo pendiente",
             tipoContenido: contenido.tipoContenido || "Contenido pendiente",
+            cumplidoFacebook: contenido.cumplidoFacebook,
+            cumplidoInstagram: contenido.cumplidoInstagram,
+            cumplidoTiktok: contenido.cumplidoTiktok,
             fecha: /^\d{4}-\d{2}-\d{2}$/.test(contenido.fecha || "")
               ? contenido.fecha
               : "",
@@ -472,7 +540,7 @@ function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
       </div>
 
       <div className="overflow-x-auto p-4 sm:p-5">
-        <div className="min-w-[900px]">
+        <div className="min-w-[1120px]">
           <div className="grid grid-cols-7 gap-2">
             {DIAS_SEMANA.map((dia) => (
               <div
@@ -502,13 +570,16 @@ function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
                   >
                     {Number(fecha.slice(-2))}
                   </p>
-                  <ul className="max-h-28 space-y-1 overflow-y-auto">
+                  <ul className="max-h-44 space-y-1 overflow-y-auto">
                     {eventos.map((evento) => (
-                      <li key={evento.id}>
+                      <li
+                        key={evento.id}
+                        className="overflow-hidden rounded-lg bg-white shadow-sm"
+                      >
                         <button
                           type="button"
                           onClick={() => onEditar(evento.pauta)}
-                          className="flex w-full gap-1.5 rounded-lg bg-white px-2 py-1.5 text-left shadow-sm transition hover:bg-emerald-50"
+                          className="flex w-full gap-1.5 px-2 py-1.5 text-left transition hover:bg-emerald-50"
                           title={`Publicar ${evento.tipoContenido} de ${evento.dispositivo} en ${evento.pagina}`}
                         >
                           <span className="shrink-0 font-black text-emerald-600">
@@ -523,6 +594,13 @@ function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
                             </span>
                           </span>
                         </button>
+                        <ChecksRedesCalendario
+                          evento={evento}
+                          disabled={cumplimientosActualizando.some((clave) =>
+                            clave.startsWith(`${evento.pauta.id}-`),
+                          )}
+                          onChange={onCambiarCumplimiento}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -551,11 +629,14 @@ function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
           </div>
           <ul className="grid max-h-40 gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-4">
             {agendaSinFecha.map((evento) => (
-              <li key={evento.id}>
+              <li
+                key={evento.id}
+                className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50/60"
+              >
                 <button
                   type="button"
                   onClick={() => onEditar(evento.pauta)}
-                  className="flex w-full gap-2 rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-left transition hover:bg-amber-50"
+                  className="flex w-full gap-2 px-3 py-2 text-left transition hover:bg-amber-50"
                 >
                   <span className="font-black text-amber-600">•</span>
                   <span className="min-w-0 text-xs text-slate-600">
@@ -565,6 +646,13 @@ function CalendarioPautas({ pautas, onEditar, fechaDesde, fechaHasta }) {
                     </span>
                   </span>
                 </button>
+                <ChecksRedesCalendario
+                  evento={evento}
+                  disabled={cumplimientosActualizando.some((clave) =>
+                    clave.startsWith(`${evento.pauta.id}-`),
+                  )}
+                  onChange={onCambiarCumplimiento}
+                />
               </li>
             ))}
           </ul>
@@ -594,6 +682,9 @@ export default function PautasMarketing() {
   );
   const [contenidoRapido, setContenidoRapido] = useState(null);
   const [guardandoContenidoRapido, setGuardandoContenidoRapido] =
+    useState(false);
+  const [contenidoEditando, setContenidoEditando] = useState(null);
+  const [guardandoContenidoEditando, setGuardandoContenidoEditando] =
     useState(false);
 
   const cargarPautas = useCallback(async () => {
@@ -645,6 +736,7 @@ export default function PautasMarketing() {
   const abrirNuevo = () => {
     liberarPreview();
     setContenidoRapido(null);
+    setContenidoEditando(null);
     setEditando(null);
     setForm(crearFormulario());
     setPreview("");
@@ -654,6 +746,7 @@ export default function PautasMarketing() {
   const abrirEdicion = (pauta) => {
     liberarPreview();
     setContenidoRapido(null);
+    setContenidoEditando(null);
     setEditando(pauta);
     setForm(crearFormulario(pauta));
     setPreview(resolverImagen(pauta.imagen));
@@ -712,6 +805,7 @@ export default function PautasMarketing() {
       return;
     }
 
+    setContenidoEditando(null);
     setContenidoRapido({
       ...crearContenido(),
       pautaId: pauta.id,
@@ -786,6 +880,80 @@ export default function PautasMarketing() {
       );
     } finally {
       setGuardandoContenidoRapido(false);
+    }
+  };
+
+  const abrirEdicionContenido = (pauta, contenido) => {
+    setContenidoRapido(null);
+    setContenidoEditando({
+      ...crearContenido(contenido),
+      pautaId: pauta.id,
+      indice: contenido.indiceOriginal,
+    });
+  };
+
+  const cambiarContenidoEditando = (campo, value) => {
+    setContenidoEditando((actual) =>
+      actual ? { ...actual, [campo]: value } : actual,
+    );
+  };
+
+  const guardarContenidoEditando = async (event) => {
+    event.preventDefault();
+    if (!contenidoEditando) return;
+
+    const {
+      pautaId,
+      indice,
+      producto,
+      tipoContenido,
+      fecha,
+      cumplidoFacebook,
+      cumplidoInstagram,
+      cumplidoTiktok,
+    } = contenidoEditando;
+    const tieneDatos =
+      [producto, tipoContenido, fecha].some((value) => String(value).trim()) ||
+      cumplidoFacebook ||
+      cumplidoInstagram ||
+      cumplidoTiktok;
+
+    if (!tieneDatos) {
+      Swal.fire(
+        "Contenido vacío",
+        "Ingresa al menos un dato antes de guardar.",
+        "info",
+      );
+      return;
+    }
+
+    try {
+      setGuardandoContenidoEditando(true);
+      const { data } = await api.put(
+        `/api/marketing/pautas/${pautaId}/contenidos/${indice}`,
+        {
+          producto,
+          tipoContenido,
+          fecha,
+          cumplidoFacebook,
+          cumplidoInstagram,
+          cumplidoTiktok,
+        },
+      );
+      setPautas((actuales) =>
+        actuales.map((pauta) =>
+          pauta.id === pautaId ? data.pauta : pauta,
+        ),
+      );
+      setContenidoEditando(null);
+    } catch (error) {
+      Swal.fire(
+        "No se pudo editar",
+        getErrorMessage(error, "Revisa el contenido e intenta nuevamente"),
+        "error",
+      );
+    } finally {
+      setGuardandoContenidoEditando(false);
     }
   };
 
@@ -1262,6 +1430,11 @@ export default function PautasMarketing() {
                     fechaHasta,
                   ),
                 );
+              const guardandoContenidoPauta =
+                (guardandoContenidoRapido &&
+                  contenidoRapido?.pautaId === pauta.id) ||
+                (guardandoContenidoEditando &&
+                  contenidoEditando?.pautaId === pauta.id);
 
               return (
                 <article
@@ -1344,6 +1517,7 @@ export default function PautasMarketing() {
                           onClick={() => abrirContenidoRapido(pauta)}
                           disabled={
                             guardandoContenidoRapido ||
+                            guardandoContenidoEditando ||
                             contenidoRapido?.pautaId === pauta.id
                           }
                           className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1364,8 +1538,29 @@ export default function PautasMarketing() {
                             Sin contenidos en este rango
                           </p>
                         )}
-                        {contenidos.map((contenido) => (
-                          <div
+                        {contenidos.map((contenido) => {
+                          const editandoEsteContenido =
+                            contenidoEditando?.pautaId === pauta.id &&
+                            contenidoEditando?.indice ===
+                              contenido.indiceOriginal;
+
+                          if (editandoEsteContenido) {
+                            return (
+                              <FormularioContenidoRapido
+                                key={`editar-${pauta.id}-${contenido.indiceOriginal}`}
+                                numero={contenido.indiceOriginal + 1}
+                                contenido={contenidoEditando}
+                                titulo="Editar contenido"
+                                guardando={guardandoContenidoEditando}
+                                onChange={cambiarContenidoEditando}
+                                onGuardar={guardarContenidoEditando}
+                                onCancelar={() => setContenidoEditando(null)}
+                              />
+                            );
+                          }
+
+                          return (
+                            <div
                             key={`${contenido.producto}-${contenido.tipoContenido}-${contenido.fecha}-${contenido.indiceOriginal}`}
                             className="rounded-xl border border-slate-100 bg-slate-50 p-2.5"
                           >
@@ -1373,15 +1568,30 @@ export default function PautasMarketing() {
                               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-black text-emerald-700 shadow-sm">
                                 {contenido.indiceOriginal + 1}
                               </span>
-                              <div className="min-w-0 flex-1">
+                               <div className="min-w-0 flex-1">
                                 <p className="break-words text-xs font-bold text-slate-700">
                                   {contenido.producto || "Sin dispositivo"}
                                 </p>
                                 <p className="truncate text-[10px] text-slate-400">
                                   {contenido.tipoContenido || "Sin tipo"} · {formatearFecha(contenido.fecha)}
-                                </p>
-                              </div>
-                            </div>
+                                 </p>
+                               </div>
+                               <button
+                                 type="button"
+                                 onClick={() =>
+                                   abrirEdicionContenido(pauta, contenido)
+                                 }
+                                 disabled={
+                                   guardandoContenidoRapido ||
+                                   guardandoContenidoEditando
+                                 }
+                                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 shadow-sm transition hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                 aria-label={`Editar contenido ${contenido.indiceOriginal + 1}`}
+                                 title="Editar contenido"
+                               >
+                                 <Pencil size={13} />
+                               </button>
+                             </div>
 
                             <div className="mt-2 grid grid-cols-3 gap-1 border-t border-slate-200 pt-2">
                               <CheckCumplimiento
@@ -1390,9 +1600,12 @@ export default function PautasMarketing() {
                                 nombreRed="Facebook"
                                 color="text-blue-600"
                                 checked={Boolean(contenido.cumplidoFacebook)}
-                                disabled={cumplimientosActualizando.some(
-                                  (clave) => clave.startsWith(`${pauta.id}-`),
-                                )}
+                                disabled={
+                                  guardandoContenidoPauta ||
+                                  cumplimientosActualizando.some((clave) =>
+                                    clave.startsWith(`${pauta.id}-`),
+                                  )
+                                }
                                 onChange={(cumplido) =>
                                   cambiarCumplimiento(
                                     pauta,
@@ -1408,9 +1621,12 @@ export default function PautasMarketing() {
                                 nombreRed="Instagram"
                                 color="text-fuchsia-600"
                                 checked={Boolean(contenido.cumplidoInstagram)}
-                                disabled={cumplimientosActualizando.some(
-                                  (clave) => clave.startsWith(`${pauta.id}-`),
-                                )}
+                                disabled={
+                                  guardandoContenidoPauta ||
+                                  cumplimientosActualizando.some((clave) =>
+                                    clave.startsWith(`${pauta.id}-`),
+                                  )
+                                }
                                 onChange={(cumplido) =>
                                   cambiarCumplimiento(
                                     pauta,
@@ -1426,9 +1642,12 @@ export default function PautasMarketing() {
                                 nombreRed="TikTok"
                                 color="text-slate-800"
                                 checked={Boolean(contenido.cumplidoTiktok)}
-                                disabled={cumplimientosActualizando.some(
-                                  (clave) => clave.startsWith(`${pauta.id}-`),
-                                )}
+                                disabled={
+                                  guardandoContenidoPauta ||
+                                  cumplimientosActualizando.some((clave) =>
+                                    clave.startsWith(`${pauta.id}-`),
+                                  )
+                                }
                                 onChange={(cumplido) =>
                                   cambiarCumplimiento(
                                     pauta,
@@ -1439,8 +1658,9 @@ export default function PautasMarketing() {
                                 }
                               />
                             </div>
-                          </div>
-                        ))}
+                            </div>
+                          );
+                        })}
                         {contenidoRapido?.pautaId === pauta.id && (
                           <FormularioContenidoRapido
                             numero={todosLosContenidos.length + 1}
@@ -1464,6 +1684,8 @@ export default function PautasMarketing() {
           <CalendarioPautas
             pautas={pautasFiltradas}
             onEditar={abrirEdicion}
+            onCambiarCumplimiento={cambiarCumplimiento}
+            cumplimientosActualizando={cumplimientosActualizando}
             fechaDesde={fechaDesde}
             fechaHasta={fechaHasta}
           />
