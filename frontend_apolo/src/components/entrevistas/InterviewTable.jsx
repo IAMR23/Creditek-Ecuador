@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ClipboardCheck,
   EllipsisVertical,
   FileDown,
   PhoneCall,
@@ -182,6 +183,7 @@ function InterviewActions({
   onDownloadContract,
   downloadingContractId,
   onCreateUser,
+  onEvaluate,
   checkingUserCandidateId,
   userExistsCandidateIds,
   onStatusChange,
@@ -238,6 +240,16 @@ function InterviewActions({
               : userExists
                 ? "Usuario existente"
                 : "Crear usuario"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onEvaluate(interview)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-extrabold text-violet-700 transition hover:bg-violet-100"
+            aria-label={`Evaluar desempeño de ${getCandidateName(interview)}`}
+            title="Abrir evaluación de desempeño"
+          >
+            <ClipboardCheck size={14} />
+            Evaluación
           </button>
         </>
       )}

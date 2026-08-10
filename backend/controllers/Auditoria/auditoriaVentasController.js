@@ -979,6 +979,13 @@ const normalizarCodigoPdf = (value) =>
     .trim()
     .toUpperCase();
 
+const normalizarContrato = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+
 const toNumero = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(String(value).replace(",", "."));
@@ -1487,6 +1494,7 @@ const flattenVentasAuditoria = (ventas) => {
         cliente: venta.cliente?.cliente || "",
         tipo: detalle.dispositivoMarca?.dispositivo?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
+        contrato: detalle.contrato || "",
         referenciaPdf: detalle.referenciaPdf || "",
         precioVendedor: toNumero(detalle.precioVendedor),
         entrada: toNumero(detalle.entrada),
@@ -1604,6 +1612,8 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
   for (const record of registrosPdf) {
     const codigoPdf = record.codigo_pdf || "";
     const referenciaRecordPdf = getReferenciaRecordPdf({ tipo, record });
+    const contratoPdf = String(record.factura || "").trim();
+    const contratoPdfNormalizado = normalizarContrato(contratoPdf);
     const mapeo = await getModeloMapeado({ tipo, codigoPdf });
 
     if (!mapeo?.modeloRveId) {
@@ -1624,13 +1634,24 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       .map((venta) => ({
         ...venta,
         fechaOk: fechaPdf ? venta.fecha === fechaPdf : false,
+        contratoOk: Boolean(
+          contratoPdfNormalizado &&
+            normalizarContrato(venta.contrato) === contratoPdfNormalizado,
+        ),
         similitudCliente: similitudTexto(record.cliente, venta.cliente),
       }))
-      .sort((a, b) => b.similitudCliente - a.similitudCliente);
+      .sort((a, b) => {
+        if (a.contratoOk !== b.contratoOk) return a.contratoOk ? -1 : 1;
+        return b.similitudCliente - a.similitudCliente;
+      });
 
     const candidatosDisponibles = candidatos.filter(
       (venta) => !detallesAsignados.has(Number(venta.detalleVentaId)),
     );
+
+    const matchPorContrato = contratoPdfNormalizado
+      ? candidatosDisponibles.find((venta) => venta.contratoOk)
+      : null;
 
     const matchPorImei =
       tipo === "CELULAR" && record.imei
@@ -1643,9 +1664,12 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
           )
         : null;
 
-    const match = matchPorImei || candidatosDisponibles.find(
-      (venta) => venta.fechaOk && venta.similitudCliente >= 85,
-    );
+    const match =
+      matchPorContrato ||
+      matchPorImei ||
+      candidatosDisponibles.find(
+        (venta) => venta.fechaOk && venta.similitudCliente >= 85,
+      );
 
     if (!match) {
       const detalleCelularYaAsignado =
@@ -1670,9 +1694,14 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
               normalizarCodigoPdf(venta.referenciaPdf) ===
                 normalizarCodigoPdf(referenciaRecordPdf),
           ),
+          contratoOk: Boolean(
+            contratoPdfNormalizado &&
+              normalizarContrato(venta.contrato) === contratoPdfNormalizado,
+          ),
           similitudCliente: similitudTexto(record.cliente, venta.cliente),
         }))
         .sort((a, b) => {
+          if (a.contratoOk !== b.contratoOk) return a.contratoOk ? -1 : 1;
           if (a.referenciaOk !== b.referenciaOk) return a.referenciaOk ? -1 : 1;
           if (a.fechaOk !== b.fechaOk) return a.fechaOk ? -1 : 1;
           return b.similitudCliente - a.similitudCliente;
@@ -1680,12 +1709,18 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       const candidatosModeloDiferenteDisponibles = candidatosModeloDiferente.filter(
         (venta) => !detallesAsignados.has(Number(venta.detalleVentaId)),
       );
+      const matchModeloDiferentePorContrato = contratoPdfNormalizado
+        ? candidatosModeloDiferenteDisponibles.find(
+            (venta) => venta.contratoOk,
+          )
+        : null;
       const matchModeloDiferentePorReferencia = referenciaRecordPdf
         ? candidatosModeloDiferenteDisponibles.find(
             (venta) => venta.fechaOk && venta.similitudCliente >= 85 && venta.referenciaOk,
           )
         : null;
       const matchModeloDiferente =
+        matchModeloDiferentePorContrato ||
         matchModeloDiferentePorReferencia ||
         candidatosModeloDiferenteDisponibles.find(
           (venta) => venta.fechaOk && venta.similitudCliente >= 85,
@@ -1694,9 +1729,14 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       if (!detalleCelularYaAsignado && matchModeloDiferente) {
         detallesAsignados.add(Number(matchModeloDiferente.detalleVentaId));
 
-        if (referenciaRecordPdf) {
+        if (referenciaRecordPdf || contratoPdf) {
           await DetalleVenta.update(
-            { referenciaPdf: referenciaRecordPdf },
+            {
+              ...(referenciaRecordPdf
+                ? { referenciaPdf: referenciaRecordPdf }
+                : {}),
+              ...(contratoPdf ? { contrato: contratoPdf } : {}),
+            },
             { where: { id: matchModeloDiferente.detalleVentaId } },
           );
         }
@@ -1709,6 +1749,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
         resultadosPorDetalle.set(Number(matchModeloDiferente.detalleVentaId), {
           ...filaBase,
+          contrato: contratoPdf || filaBase?.contrato || "",
           referenciaPdf: referenciaRecordPdf || filaBase?.referenciaPdf || "",
           clientePdf: record.cliente || "",
           fechaPdf,
@@ -1772,16 +1813,14 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
     detallesAsignados.add(Number(match.detalleVentaId));
 
-    if (tipo === "CELULAR" && record.imei) {
+    if (referenciaRecordPdf || contratoPdf) {
       await DetalleVenta.update(
-        { referenciaPdf: referenciaRecordPdf },
-        { where: { id: match.detalleVentaId } },
-      );
-    }
-
-    if (tipo === "TV" && codigoPdf) {
-      await DetalleVenta.update(
-        { referenciaPdf: referenciaRecordPdf },
+        {
+          ...(referenciaRecordPdf
+            ? { referenciaPdf: referenciaRecordPdf }
+            : {}),
+          ...(contratoPdf ? { contrato: contratoPdf } : {}),
+        },
         { where: { id: match.detalleVentaId } },
       );
     }
@@ -1799,6 +1838,7 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
     resultadosPorDetalle.set(Number(match.detalleVentaId), {
       ...filaBase,
+      contrato: contratoPdf || filaBase?.contrato || "",
       referenciaPdf: referenciaRecordPdf || filaBase?.referenciaPdf || "",
       clientePdf: record.cliente || "",
       fechaPdf,

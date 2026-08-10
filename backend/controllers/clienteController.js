@@ -1,4 +1,44 @@
 const Cliente = require("../models/Cliente");
+const { buscarPersonaPorCedula } = require("../services/personasService");
+
+exports.buscarClientePorCedula = async (req, res) => {
+  const cedula = String(req.params.cedula || "").trim();
+
+  if (!/^\d{10}$/.test(cedula)) {
+    return res.status(400).json({
+      encontrado: false,
+      mensaje: "La cedula debe tener exactamente 10 digitos numericos.",
+    });
+  }
+
+  try {
+    const cliente = await buscarPersonaPorCedula(cedula, {
+      attributes: [
+        "id",
+        "cliente",
+        "cedula",
+        "telefono",
+        "correo",
+        "direccion",
+      ],
+    });
+
+    if (!cliente) {
+      return res.status(404).json({
+        encontrado: false,
+        mensaje: "Cliente nuevo, por favor ingrese los datos.",
+      });
+    }
+
+    return res.json({ encontrado: true, cliente });
+  } catch (error) {
+    console.error("Error buscando cliente por cedula:", error);
+    return res.status(500).json({
+      encontrado: false,
+      mensaje: "No se pudo buscar el cliente.",
+    });
+  }
+};
 
 // Crear cliente
 exports.crearCliente = async (req, res) => {

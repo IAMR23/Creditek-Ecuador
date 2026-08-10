@@ -12,7 +12,7 @@ const Cliente = sequelize.define(
 
     cliente: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
     },
 
     cedula: {
@@ -34,6 +34,16 @@ const Cliente = sequelize.define(
       allowNull: true,
     },
     clienteContifico: { type: DataTypes.STRING, allowNull: true },
+    rolId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "roles",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
   },
   {
     timestamps: true,

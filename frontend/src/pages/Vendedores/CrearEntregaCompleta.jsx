@@ -9,6 +9,7 @@ import {
   esUbicacionClienteValida,
   MENSAJE_UBICACION_CLIENTE_INVALIDA,
 } from "../../utils/validarUbicacionCliente";
+import BusquedaClienteCedula from "../../components/clientes/BusquedaClienteCedula";
 
 const CrearEntregaCompleta = () => {
   const [loading, setLoading] = useState(false);
@@ -92,7 +93,6 @@ const CrearEntregaCompleta = () => {
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
-    identificadorAnuncio: "",
     formaPagoId: "",
     entrada: "",
     alcance: "",
@@ -485,7 +485,6 @@ Detalle:
 - Alcance : $${valorTexto(detalle.alcance, "0")}
 - Contrato: ${valorTexto(detalle.contrato)}
 - Proceso completo: ${entrega.procesoCompleto ? "Sí" : "No"}
-- Identificador anuncio: ${valorTexto(detalle.identificadorAnuncio)}
 - Ubicación del cliente: ${valorTexto(detalle.ubicacion)}
 - Ubicación del dispositivo: ${valorTexto(detalle.ubicacionDispositivo)}
 - Observación del detalle: ${valorTexto(detalle.observacionDetalle)}
@@ -517,6 +516,24 @@ ${textoObsequios}`;
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <BusquedaClienteCedula
+          cedula={cliente.cedula}
+          variante="naranja"
+          onCedulaChange={(cedula) =>
+            setCliente((prev) => ({ ...prev, cedula }))
+          }
+          onClienteEncontrado={(datosCliente) => setCliente(datosCliente)}
+          onClienteNuevo={(cedula) =>
+            setCliente({
+              cliente: "",
+              cedula,
+              telefono: "",
+              correo: "",
+              direccion: "",
+            })
+          }
+        />
+
         <h4 className="font-bold">Datos del Cliente</h4>
 
         <div className="space-y-4">
@@ -924,20 +941,6 @@ ${textoObsequios}`;
             name="contrato"
             placeholder="Número de contrato"
             value={detalle.contrato}
-            onChange={handleChange}
-            className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Identificador anuncio
-          </label>
-          <input
-            type="text"
-            name="identificadorAnuncio"
-            placeholder="Identificador del anuncio"
-            value={detalle.identificadorAnuncio || ""}
             onChange={handleChange}
             className="w-full p-2 border border-orange-500 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           />

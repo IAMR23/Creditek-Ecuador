@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import api from "../../api/client";
 import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
@@ -15,6 +15,30 @@ const filaVacia = {
   observacion: "",
   guardado: false,
 };
+
+const camposMovimiento = [
+  "responsable",
+  "detalle",
+  "valor",
+  "formaPago",
+  "recibo",
+  "entidad",
+  "observacion",
+];
+
+const estaVacio = (value) => String(value ?? "").trim() === "";
+
+const filaEstaTotalmenteVacia = (fila) =>
+  camposMovimiento.every((campo) => estaVacio(fila?.[campo]));
+
+const filaEsPlaceholderAutomatico = (fila, index, totalFilas) =>
+  !fila?.id &&
+  index === totalFilas - 1 &&
+  estaVacio(fila?.detalle) &&
+  estaVacio(fila?.valor) &&
+  estaVacio(fila?.formaPago) &&
+  estaVacio(fila?.entidad) &&
+  estaVacio(fila?.observacion);
 
 const formatearFechaLocal = (fecha) => {
   if (!fecha) return "";
@@ -50,6 +74,22 @@ const tieneValorNoNegativo = (value) => {
 const convertirNumeroDosDecimales = (value) =>
   Number((Number(normalizarNumeroPositivoTexto(value)) || 0).toFixed(2));
 
+const construirSnapshotMovimiento = (fila) => ({
+  responsable: fila.responsable || "",
+  detalle: fila.detalle || "",
+  entidad: fila.entidad || "",
+  valor: convertirNumeroDosDecimales(fila.valor),
+  formaPago: fila.formaPago || null,
+  recibo: fila.recibo ? Number(fila.recibo) : null,
+  observacion: fila.observacion || "",
+});
+
+const obtenerMensajeError = (error, fallback) =>
+  error?.response?.data?.message ||
+  error?.response?.data?.msg ||
+  error?.message ||
+  fallback;
+
 const crearDenominacionesBase = () => [
   { denominacion: 100, cantidad: "", total: 0 },
   { denominacion: 50, cantidad: "", total: 0 },
@@ -72,6 +112,9 @@ export default function MovimientoCaja() {
   const [denominacionesSaving, setDenominacionesSaving] = useState(false);
   const [cierreActual, setCierreActual] = useState(null);
   const [fechaCaja, setFechaCaja] = useState(getHoyLocal());
+  const cierreLockRef = useRef(false);
+  const estadoRequestIdRef = useRef(0);
+  const denominacionesRequestIdRef = useRef(0);
 
   const [detalles, setDetalles] = useState(() => crearDenominacionesBase());
 
@@ -88,32 +131,82 @@ export default function MovimientoCaja() {
     setDetalles(newDetalles);
   };
 
-  const filaEsMovimientoValido = (fila) => {
-    return (
+  const filaEsMovimientoValido = (fila) =>
+    Boolean(
       fila.detalle?.trim() &&
       tieneValorNoNegativo(fila.valor) &&
-      fila.formaPago?.trim()
+      fila.formaPago?.trim(),
     );
-  };
 
-  const cargarEstadoCierre = async (fecha = fechaCaja) => {
+  const cargarEstadoCierre = useCallback(async (fecha) => {
+    const requestId = ++estadoRequestIdRef.current;
+
     try {
       setEstadoLoading(true);
       const res = await api.get("/api/contabilidad/cierre-caja/estado", {
         params: { fecha },
       });
-      setCierreActual(res.data?.cierre || null);
+
+      const cierre = res.data?.cierre || null;
+      if (requestId === estadoRequestIdRef.current) {
+        setCierreActual(cierre);
+      }
+
+      return { ok: true, cierre };
     } catch (error) {
       console.error(error?.response?.data || error);
+      return { ok: false, error };
     } finally {
-      setEstadoLoading(false);
+      if (requestId === estadoRequestIdRef.current) {
+        setEstadoLoading(false);
+      }
     }
-  };
+  }, []);
 
   const cerrarCaja = async () => {
+    if (cierreLockRef.current || loading || denominacionesSaving) return;
+
+    cierreLockRef.current = true;
+
     try {
       if (cierreActual) {
         alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
+        return;
+      }
+
+      const filasParaCerrar = rows
+        .map((fila, index) => ({ fila, index }))
+        .filter(
+          ({ fila, index }) =>
+            !filaEstaTotalmenteVacia(fila) &&
+            !filaEsPlaceholderAutomatico(fila, index, rows.length),
+        );
+      const filasInvalidas = filasParaCerrar.filter(
+        ({ fila }) => !filaEsMovimientoValido(fila),
+      );
+
+      if (filasInvalidas.length) {
+        const items = filasInvalidas.map(({ index }) => index + 1).join(", ");
+        await Swal.fire({
+          icon: "warning",
+          title: "Hay movimientos incompletos",
+          text: `Complete detalle, valor y forma de pago en ${
+            filasInvalidas.length === 1 ? "la fila" : "las filas"
+          } ${items}.`,
+        });
+        return;
+      }
+
+      const movimientos = filasParaCerrar.map(({ fila }) =>
+        construirSnapshotMovimiento(fila),
+      );
+
+      if (!movimientos.length) {
+        await Swal.fire({
+          icon: "warning",
+          title: "No hay movimientos para cerrar",
+          text: "Registre al menos un movimiento completo antes de cerrar la caja.",
+        });
         return;
       }
 
@@ -132,22 +225,7 @@ export default function MovimientoCaja() {
 
       setLoading(true);
 
-      const denominacionesGuardadas = await guardarDenominaciones({
-        mostrarExito: false,
-      });
-      if (!denominacionesGuardadas) return;
-
-      await Promise.all(
-        rows
-          .filter((row) => row.id)
-          .filter(filaEsMovimientoValido)
-          .map((row) =>
-            api.put(
-              `/api/movimientos/${row.id}`,
-              construirPayloadMovimiento(row),
-            ),
-          ),
-      );
+      const fechaCierre = fechaCaja;
 
       const retirosLimpios = retiros
         .filter(
@@ -168,44 +246,54 @@ export default function MovimientoCaja() {
           total: convertirNumeroDosDecimales(d.total),
         }));
 
-      const movimientosPendientes = rows
-        .filter((row) => !row.id)
-        .filter(filaEsMovimientoValido)
-        .map((row) => ({
-          responsable: row.responsable || "",
-          detalle: row.detalle || "",
-          entidad: row.entidad || "",
-          valor: convertirNumeroDosDecimales(row.valor),
-          formaPago: row.formaPago || null,
-          recibo: row.recibo ? Number(row.recibo) : null,
-          observacion: row.observacion || "",
-        }));
-
       const payload = {
         cierre: {
-          fecha: fechaCaja,
+          fecha: fechaCierre,
           observacion: "Cierre desde sistema",
         },
         denominaciones,
         retiros: retirosLimpios,
-        movimientosPendientes,
+        movimientos,
       };
 
       const response = await api.post("/api/contabilidad/cierre-caja", payload);
 
-      await Swal.fire("Cierre de caja completado", "", "success");
-      setCierreActual(response.data?.cierre || null);
-
+      setCierreActual(response.data?.cierre || { fecha: fechaCierre });
       setRows([{ ...filaVacia }]);
       setRetiros([{ monto: "", motivo: "", autorizadoPor: "" }]);
       setDetalles(crearDenominacionesBase());
+
+      await Swal.fire("Cierre de caja completado", "", "success");
     } catch (error) {
       console.error(error?.response?.data || error);
-      if (error?.response?.status === 409) {
-        setCierreActual(error.response.data?.cierre || { fecha: fechaCaja });
+
+      const fechaCierre = fechaCaja;
+      const estado = await cargarEstadoCierre(fechaCierre);
+
+      if (estado.ok && estado.cierre) {
+        setCierreActual(estado.cierre);
+        setRows([{ ...filaVacia }]);
+        setRetiros([{ monto: "", motivo: "", autorizadoPor: "" }]);
+        setDetalles(crearDenominacionesBase());
+
+        await Swal.fire({
+          icon: "success",
+          title: "Cierre de caja confirmado",
+          text: "Se verificó que la caja ya quedó cerrada para esta fecha.",
+        });
+        return;
       }
-      alert(error?.response?.data?.message || "Error al cerrar caja");
+
+      const mensaje = obtenerMensajeError(error, "Error al cerrar caja");
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo cerrar la caja",
+        text: estado.ok
+          ? mensaje
+          : `${mensaje}. Tampoco fue posible verificar el estado del cierre.`,
+      });
     } finally {
+      cierreLockRef.current = false;
       setLoading(false);
     }
   };
@@ -263,21 +351,29 @@ export default function MovimientoCaja() {
     });
   }, []);
 
-  const cargarDenominaciones = useCallback(async () => {
+  const cargarDenominaciones = useCallback(async (fecha) => {
+    const requestId = ++denominacionesRequestIdRef.current;
+
     try {
       setDenominacionesLoading(true);
       const res = await api.get("/api/denominaciones-caja", {
-        params: { fecha: fechaCaja },
+        params: { fecha },
       });
 
-      setDetalles(mapearDenominaciones(res.data?.data || []));
+      if (requestId === denominacionesRequestIdRef.current) {
+        setDetalles(mapearDenominaciones(res.data?.data || []));
+      }
     } catch (error) {
       console.error(error?.response?.data || error);
-      alert(error?.response?.data?.message || "Error al cargar denominaciones");
+      if (requestId === denominacionesRequestIdRef.current) {
+        alert(error?.response?.data?.message || "Error al cargar denominaciones");
+      }
     } finally {
-      setDenominacionesLoading(false);
+      if (requestId === denominacionesRequestIdRef.current) {
+        setDenominacionesLoading(false);
+      }
     }
-  }, [fechaCaja, mapearDenominaciones]);
+  }, [mapearDenominaciones]);
 
   const construirPayloadDenominaciones = () =>
     detalles.map((d) => ({
@@ -325,7 +421,7 @@ export default function MovimientoCaja() {
   const handleChange = (index, field, value) => {
     setRows((prev) => {
       const newRows = [...prev];
-      newRows[index][field] = value;
+      newRows[index] = { ...newRows[index], [field]: value };
       return newRows;
     });
   };
@@ -336,13 +432,18 @@ export default function MovimientoCaja() {
 
   useEffect(() => {
     cargarEstadoCierre(fechaCaja);
-    cargarDenominaciones();
-  }, [cargarDenominaciones, fechaCaja]);
+    cargarDenominaciones(fechaCaja);
+
+    return () => {
+      estadoRequestIdRef.current += 1;
+      denominacionesRequestIdRef.current += 1;
+    };
+  }, [cargarDenominaciones, cargarEstadoCierre, fechaCaja]);
 
   const handleFilaKeyDown = (event, index, row) => {
     if (event.key !== "Enter") return;
     if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (loading || cierreActual) return;
+    if (loading || denominacionesSaving || cierreActual) return;
 
     event.preventDefault();
     if (row.id) {
@@ -353,11 +454,8 @@ export default function MovimientoCaja() {
   };
 
   const construirPayloadMovimiento = (fila) => ({
-    ...fila,
+    ...construirSnapshotMovimiento(fila),
     fecha: fechaCaja,
-    valor: convertirNumeroDosDecimales(fila.valor),
-    recibo: fila.recibo ? Number(fila.recibo) : null,
-    formaPago: fila.formaPago || null,
   });
 
   const validarFilaMovimiento = (fila) => {
@@ -555,6 +653,8 @@ export default function MovimientoCaja() {
 
   const user = useAuthUser();
   const agencia = user?.agenciaPrincipal?.nombre || "Agencia Desconocida";
+  const controlesBloqueados =
+    loading || denominacionesSaving || estadoLoading || !!cierreActual;
 
   return (
     <div className=" flex justify-between flex-row gap-2 items-start p-4">
@@ -572,13 +672,7 @@ export default function MovimientoCaja() {
           <button
             type="button"
             onClick={() => guardarDenominaciones()}
-            disabled={
-              loading ||
-              estadoLoading ||
-              denominacionesLoading ||
-              denominacionesSaving ||
-              !!cierreActual
-            }
+            disabled={controlesBloqueados || denominacionesLoading}
             className="inline-flex items-center gap-2 bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
             title="Guardar denominaciones"
           >
@@ -613,7 +707,7 @@ export default function MovimientoCaja() {
                       inputMode="numeric"
                       className="border p-1 w-full"
                       value={d.cantidad}
-                      disabled={estadoLoading || denominacionesLoading || !!cierreActual}
+                      disabled={controlesBloqueados || denominacionesLoading}
                       onChange={(e) => handleCantidadChange(i, e.target.value)}
                     />
                   </td>
@@ -633,6 +727,7 @@ export default function MovimientoCaja() {
             type="date"
             value={fechaCaja}
             onChange={(e) => setFechaCaja(e.target.value || getHoyLocal())}
+            disabled={loading || denominacionesSaving}
             className="border"
           />
         </div>
@@ -716,7 +811,7 @@ export default function MovimientoCaja() {
                   <td className="p-1">{i + 1}</td>
                   <td>
                     <input
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                       value={row.responsable}
                       onChange={(e) =>
                         handleChange(i, "responsable", e.target.value)
@@ -728,7 +823,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <select
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                       value={row.detalle}
                       onChange={(e) =>
                         handleChange(i, "detalle", e.target.value)
@@ -769,7 +864,7 @@ export default function MovimientoCaja() {
                       }
                       onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                     />
                   </td>
 
@@ -781,7 +876,7 @@ export default function MovimientoCaja() {
                       }
                       onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
                       className="w-full p-1"
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                     >
                       <option value="">-- Seleccionar --</option>
                       <option value="EFECTIVO">EFECTIVO</option>
@@ -792,7 +887,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                       type="number"
                       value={row.recibo}
                       onChange={(e) =>
@@ -805,7 +900,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                       value={row.entidad}
                       onChange={(e) =>
                         handleChange(i, "entidad", e.target.value)
@@ -817,7 +912,7 @@ export default function MovimientoCaja() {
 
                   <td>
                     <input
-                      disabled={estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                       value={row.observacion}
                       onChange={(e) =>
                         handleChange(i, "observacion", e.target.value)
@@ -831,9 +926,7 @@ export default function MovimientoCaja() {
                     <button
                       onClick={() => (row.id ? guardarFila(i) : agregarFila())}
                       disabled={
-                        loading ||
-                        estadoLoading ||
-                        !!cierreActual ||
+                        controlesBloqueados ||
                         (!row.id && i !== rows.length - 1)
                       }
                       className={`text-white p-2 disabled:bg-gray-400 ${
@@ -845,7 +938,7 @@ export default function MovimientoCaja() {
                     </button>
                     <button
                       onClick={() => eliminarFila(i)}
-                      disabled={loading || estadoLoading || !!cierreActual}
+                      disabled={controlesBloqueados}
                       className="text-white bg-red-600 p-2 disabled:bg-gray-400"
                       title="Eliminar movimiento"
                     >
@@ -883,6 +976,7 @@ export default function MovimientoCaja() {
                       type="text"
                       inputMode="decimal"
                       value={r.monto}
+                      disabled={controlesBloqueados}
                       onChange={(e) => {
                         const newData = [...retiros];
                         newData[i].monto = normalizarNumeroPositivoTexto(e.target.value);
@@ -895,6 +989,7 @@ export default function MovimientoCaja() {
                   <td>
                     <input
                       value={r.motivo}
+                      disabled={controlesBloqueados}
                       onChange={(e) => {
                         const newData = [...retiros];
                         newData[i].motivo = e.target.value;
@@ -907,6 +1002,7 @@ export default function MovimientoCaja() {
                   <td>
                     <input
                       value={r.autorizadoPor}
+                      disabled={controlesBloqueados}
                       onChange={(e) => {
                         const newData = [...retiros];
                         newData[i].autorizadoPor = e.target.value;
@@ -918,22 +1014,24 @@ export default function MovimientoCaja() {
 
                   <td className="flex justify-center items-center p-2 gap-2">
                     <button
+                      disabled={controlesBloqueados}
                       onClick={() =>
                         setRetiros([
                           ...retiros,
                           { monto: "", motivo: "", autorizadoPor: "" },
                         ])
                       }
-                      className="bg-green-500 text-white p-2"
+                      className="bg-green-500 text-white p-2 disabled:bg-gray-400"
                     >
                       <FaPlus />
                     </button>
 
                     <button
+                      disabled={controlesBloqueados}
                       onClick={() =>
                         setRetiros(retiros.filter((_, index) => index !== i))
                       }
-                      className="text-white bg-red-600 p-2"
+                      className="text-white bg-red-600 p-2 disabled:bg-gray-400"
                     >
                       <FaTimes />
                     </button>
@@ -946,7 +1044,7 @@ export default function MovimientoCaja() {
         <div className="flex flex-col justify-end h-full">
           <button
             onClick={cerrarCaja}
-            disabled={loading || estadoLoading || !!cierreActual}
+            disabled={controlesBloqueados || denominacionesLoading}
             className="bg-blue-600 text-white px-6 py-2 self-end disabled:bg-gray-400"
           >
             {loading ? "Cerrando..." : "Cerrar Caja"}

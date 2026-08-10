@@ -32,6 +32,36 @@ const INTERVIEW_STATUSES = [
 const SELECTED_INTERVIEW_STATUSES = ["SELECCIONADO", "NO_ASISTIO_CAP"];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
+const PERFORMANCE_RECOMMENDATIONS = [
+  "APROBADO",
+  "APROBADO_CON_OBSERVACIONES",
+  "NO_APROBADO",
+];
+const PERFORMANCE_CRITERIA = {
+  quiere_hacer: [
+    "iniciativa_actitud",
+    "ganas_aprender",
+    "proactividad",
+    "cumplimiento_metas",
+    "disposicion_venta",
+    "volanteo_comunicacion",
+  ],
+  sabe_hacer: [
+    "proceso_venta",
+    "uso_herramientas",
+    "argumentacion_beneficios",
+    "manejo_objeciones",
+    "registro_informacion",
+  ],
+  disciplinada: [
+    "horarios_normas",
+    "constancia",
+    "organizacion_tiempo",
+    "cumplimiento_tareas",
+    "orden_actitud",
+  ],
+};
+const PERFORMANCE_CRITERION_IDS = Object.values(PERFORMANCE_CRITERIA).flat();
 const GUAYAQUIL_OFFSET_MS = 5 * 60 * 60 * 1000;
 const MAX_TXT_CONTENT_BYTES = 75 * 1024;
 
@@ -48,6 +78,175 @@ const clean = (obj = {}) =>
   );
 
 const tieneDatos = (obj = {}) => Object.values(obj).some((value) => !isEmptyValue(value));
+
+const normalizeLimitedText = (value, maxLength, fieldName) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value !== "string") {
+    const error = new Error(`${fieldName} debe ser texto.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalized = value.trim();
+  if (normalized.length > maxLength) {
+    const error = new Error(`${fieldName} no puede superar ${maxLength} caracteres.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
+};
+
+const normalizeOptionalDate = (value, fieldName) => {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const error = new Error(`${fieldName} debe tener el formato AAAA-MM-DD.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    const error = new Error(`${fieldName} no es una fecha valida.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return value;
+};
+
+const buildPerformanceEvaluation = (payload = {}, existing = {}, user = {}) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    const error = new Error("La evaluacion enviada no es valida.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const periodoDesde = normalizeOptionalDate(payload.periodoDesde, "El inicio del periodo");
+  const periodoHasta = normalizeOptionalDate(payload.periodoHasta, "El fin del periodo");
+  const fechaEvaluacion = normalizeOptionalDate(payload.fechaEvaluacion, "La fecha de evaluacion");
+
+  if (periodoDesde && periodoHasta && periodoDesde > periodoHasta) {
+    const error = new Error("El inicio del periodo no puede ser posterior a su fecha final.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const rawRatings = payload.calificaciones || {};
+  if (typeof rawRatings !== "object" || Array.isArray(rawRatings)) {
+    const error = new Error("Las calificaciones deben enviarse por criterio.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const calificaciones = {};
+  for (const criterionId of PERFORMANCE_CRITERION_IDS) {
+    const value = rawRatings[criterionId];
+    if (value === "" || value === null || value === undefined) continue;
+
+    const rating = Number(value);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      const error = new Error("Cada calificacion debe ser un entero entre 1 y 5.");
+      error.statusCode = 400;
+      throw error;
+    }
+    calificaciones[criterionId] = rating;
+  }
+
+  const rawObservations = payload.observaciones || {};
+  if (typeof rawObservations !== "object" || Array.isArray(rawObservations)) {
+    const error = new Error("Las observaciones de aspectos no son validas.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const observaciones = Object.fromEntries(
+    Object.keys(PERFORMANCE_CRITERIA).map((aspectId) => [
+      aspectId,
+      normalizeLimitedText(
+        rawObservations[aspectId],
+        1500,
+        "La observacion del aspecto",
+      ),
+    ]),
+  );
+
+  if (!Array.isArray(payload.ventas) || payload.ventas.length !== 6) {
+    const error = new Error("Debe registrar las ventas de los 6 dias de capacitacion.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const ventas = payload.ventas.map((value) => {
+    const saleCount = value === "" || value === null ? 0 : Number(value);
+    if (!Number.isInteger(saleCount) || saleCount < 0 || saleCount > 999) {
+      const error = new Error("Las ventas diarias deben ser enteros entre 0 y 999.");
+      error.statusCode = 400;
+      throw error;
+    }
+    return saleCount;
+  });
+
+  const recomendacion = normalizeLimitedText(
+    payload.recomendacion,
+    40,
+    "La recomendacion",
+  );
+  if (recomendacion && !PERFORMANCE_RECOMMENDATIONS.includes(recomendacion)) {
+    const error = new Error("La recomendacion seleccionada no es valida.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const puntajeAspectos = Number(
+    Object.values(PERFORMANCE_CRITERIA)
+      .reduce((total, criteria) => {
+        const sum = criteria.reduce(
+          (aspectTotal, criterionId) =>
+            aspectTotal + (calificaciones[criterionId] || 0),
+          0,
+        );
+        return total + (sum / criteria.length) * 5;
+      }, 0)
+      .toFixed(2),
+  );
+  const totalVentas = ventas.reduce((total, value) => total + value, 0);
+  const puntajeVentas = Math.min(totalVentas * 5, 25);
+  const puntajeTotal = Number((puntajeAspectos + puntajeVentas).toFixed(2));
+  const now = new Date().toISOString();
+
+  return {
+    version: "evaluacion-desempeno-v1",
+    periodoDesde,
+    periodoHasta,
+    evaluador: normalizeLimitedText(payload.evaluador, 120, "El evaluador"),
+    fechaEvaluacion,
+    calificaciones,
+    observaciones,
+    ventas,
+    totalVentas,
+    metaCumplida: totalVentas >= 4,
+    puntajeAspectos,
+    puntajeVentas,
+    puntajeTotal,
+    cumpleAprobacion: puntajeTotal >= 60 && totalVentas >= 4,
+    comentariosGenerales: normalizeLimitedText(
+      payload.comentariosGenerales,
+      3000,
+      "Los comentarios generales",
+    ),
+    recomendacion,
+    firmaEvaluador: normalizeLimitedText(
+      payload.firmaEvaluador,
+      120,
+      "La firma del evaluador",
+    ),
+    creadoAt: existing.creadoAt || now,
+    actualizadoAt: now,
+    actualizadoPor: {
+      id: user.id || null,
+      nombre: user.nombre || user.email || "Usuario ABS",
+    },
+  };
+};
 
 const normalizeArray = (value) => (Array.isArray(value) ? value.map(clean).filter(tieneDatos) : []);
 
@@ -1041,6 +1240,129 @@ router.get("/", auth, async (req, res) => {
       ok: false,
       message: "Error al obtener postulaciones",
       error: error.message,
+    });
+  }
+});
+
+router.get("/:id/evaluacion-desempeno", auth, async (req, res) => {
+  try {
+    const id = parsePositiveInt(req.params.id, null);
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        message: "El id de la postulacion no es valido.",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada.",
+      });
+    }
+
+    if (
+      !postulacion.pasaEntrevista ||
+      postulacion.descartada ||
+      !SELECTED_INTERVIEW_STATUSES.includes(postulacion.estadoEntrevista)
+    ) {
+      return res.status(409).json({
+        ok: false,
+        message: "La evaluacion solo esta disponible para postulantes seleccionados.",
+      });
+    }
+
+    const [postulacionConIncorporacion] = await agregarDatosIncorporacion([
+      postulacion,
+    ]);
+
+    return res.json({
+      ok: true,
+      data: {
+        postulacion: postulacionConIncorporacion,
+        evaluacion:
+          postulacionConIncorporacion.formulario?.evaluacion_desempeno || null,
+      },
+    });
+  } catch (error) {
+    console.error("Error obteniendo evaluacion de desempeno:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener la evaluacion de desempeno.",
+      error: error.message,
+    });
+  }
+});
+
+router.put("/:id/evaluacion-desempeno", auth, async (req, res) => {
+  try {
+    const id = parsePositiveInt(req.params.id, null);
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        message: "El id de la postulacion no es valido.",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada.",
+      });
+    }
+
+    if (
+      !postulacion.pasaEntrevista ||
+      postulacion.descartada ||
+      !SELECTED_INTERVIEW_STATUSES.includes(postulacion.estadoEntrevista)
+    ) {
+      return res.status(409).json({
+        ok: false,
+        message: "La evaluacion solo puede guardarse para postulantes seleccionados.",
+      });
+    }
+
+    const formulario = postulacion.formulario || {};
+    const evaluacion = buildPerformanceEvaluation(
+      req.body,
+      formulario.evaluacion_desempeno || {},
+      req.user || {},
+    );
+
+    postulacion.formulario = {
+      ...formulario,
+      evaluacion_desempeno: evaluacion,
+      metadata: {
+        ...(formulario.metadata || {}),
+        ultima_evaluacion_desempeno: evaluacion.actualizadoAt,
+      },
+    };
+    postulacion.changed("formulario", true);
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: "Evaluacion de desempeno guardada.",
+      data: evaluacion,
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error("Error guardando evaluacion de desempeno:", error);
+
+    return res.status(status).json({
+      ok: false,
+      message:
+        status === 500
+          ? "Error al guardar la evaluacion de desempeno."
+          : error.message,
+      ...(status === 500 ? { error: error.message } : {}),
     });
   }
 });

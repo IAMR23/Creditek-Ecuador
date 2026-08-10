@@ -80,6 +80,21 @@ const parsePositiveInt = (value, fallback, max = 100) => {
   return Math.min(parsed, max);
 };
 
+const esFechaISOValida = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const fecha = new Date(year, month - 1, day);
+  return (
+    fecha.getFullYear() === year &&
+    fecha.getMonth() === month - 1 &&
+    fecha.getDate() === day
+  );
+};
+
 const buildWhereListadoTareas = ({ estado, fechaInicio, fechaFin }) => {
   const where = {};
   const estadoNormalizado = normalizarEstado(estado);
@@ -159,6 +174,61 @@ exports.listarTareas = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "No se pudieron obtener las tareas",
+    });
+  }
+};
+
+exports.listarTareasCalendario = async (req, res) => {
+  try {
+    const fechaInicio = String(req.query.fechaInicio || "").trim();
+    const fechaFin = String(req.query.fechaFin || "").trim();
+
+    if (!esFechaISOValida(fechaInicio) || !esFechaISOValida(fechaFin)) {
+      return res.status(400).json({
+        ok: false,
+        message: "Las fechas de inicio y fin deben tener formato YYYY-MM-DD",
+      });
+    }
+
+    if (fechaInicio > fechaFin) {
+      return res.status(400).json({
+        ok: false,
+        message: "La fecha de inicio no puede ser mayor que la fecha fin",
+      });
+    }
+
+    const tareas = await SistemaTarea.findAll({
+      where: {
+        [Op.and]: [
+          { fechaInicio: { [Op.lte]: fechaFin } },
+          {
+            [Op.or]: [
+              { fechaFin: { [Op.gte]: fechaInicio } },
+              {
+                fechaFin: null,
+                fechaInicio: { [Op.gte]: fechaInicio },
+              },
+            ],
+          },
+        ],
+      },
+      include: includeUsuarios,
+      order: [
+        ["fechaInicio", "ASC"],
+        ["estado", "ASC"],
+        ["createdAt", "ASC"],
+      ],
+    });
+
+    return res.json({
+      ok: true,
+      tareas: tareas.map(serializarTarea),
+    });
+  } catch (error) {
+    console.error("Error listando calendario de tareas de sistemas:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo obtener el calendario de tareas",
     });
   }
 };

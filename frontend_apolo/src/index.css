@@ -22,3 +22,51 @@
     background: rgb(var(--abs-bg));
   }
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 7mm;
+  }
+
+  body {
+    background: white;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body aside,
+  .abs-no-print {
+    display: none !important;
+  }
+
+  body main {
+    margin-left: 0 !important;
+  }
+
+  body main > div {
+    padding: 0 !important;
+  }
+
+  .performance-evaluation,
+  .evaluation-print-sheet {
+    max-width: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .evaluation-desktop-table {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .evaluation-mobile {
+    display: none !important;
+  }
+
+  .evaluation-print-sheet input,
+  .evaluation-print-sheet textarea {
+    box-shadow: none !important;
+  }
+}

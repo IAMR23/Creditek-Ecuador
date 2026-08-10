@@ -4,6 +4,7 @@ import Usuarios from "./pages/Admin/Usuarios.jsx";
 import ControlAsistencia from "./pages/DesarrolloOrganizacional/ControlAsistencia.jsx";
 import Dashboard from "./pages/DesarrolloOrganizacional/Dashboard.jsx";
 import Entrevistas from "./pages/DesarrolloOrganizacional/Entrevistas.jsx";
+import EvaluacionDesempeno from "./pages/DesarrolloOrganizacional/EvaluacionDesempeno.jsx";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones.jsx";
 import Agencias from "./pages/Admin/Agencias.jsx";
 import Roles from "./pages/Admin/Roles.jsx";
@@ -51,6 +52,10 @@ export default function App() {
                     <Route
                       path="/seleccionados"
                       element={<Entrevistas key="seleccionados" modo="seleccionado" />}
+                    />
+                    <Route
+                      path="/seleccionados/:id/evaluacion-desempeno"
+                      element={<EvaluacionDesempeno />}
                     />
                     <Route
                       path="/descartados"

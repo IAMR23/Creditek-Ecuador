@@ -20,6 +20,11 @@ const {
 } = require("./DenominacionCajaTemp");
 
 const ESTADOS_CIERRE_ACTIVOS = ["CERRADO", "REABIERTO"];
+const FORMAS_PAGO_MOVIMIENTO = new Set([
+  "EFECTIVO",
+  "TRANSFERENCIA",
+  "PENDIENTE",
+]);
 
 const conciliarEntradasSinBloquearCierre = async ({
   fecha,
@@ -38,6 +43,30 @@ const conciliarEntradasSinBloquearCierre = async ({
       cargasProcesadas: 0,
       error: true,
     };
+  }
+};
+
+const crearEstadoConciliacionPendiente = (fecha) => ({
+  fecha,
+  cargasProcesadas: 0,
+  conciliaciones: [],
+  pendiente: true,
+  estado: "PENDIENTE",
+});
+
+const programarConciliacionEntradas = ({ fecha, origen, usuarioId }) => {
+  setImmediate(() => {
+    void conciliarEntradasSinBloquearCierre({ fecha, origen, usuarioId });
+  });
+};
+
+const revertirTransaccionSinOcultarError = async (transaction) => {
+  if (!transaction || transaction.finished) return;
+
+  try {
+    await transaction.rollback();
+  } catch (rollbackError) {
+    console.error("No se pudo revertir la transaccion de cierre de caja:", rollbackError);
   }
 };
 
@@ -150,6 +179,23 @@ const normalizarMovimiento = (m = {}) => ({
       : null,
   observacion: normalizarTexto(m.observacion),
 });
+
+const validarSnapshotMovimientos = (movimientos = []) => {
+  const normalizados = movimientos.map(normalizarMovimiento);
+  const indiceInvalido = normalizados.findIndex(
+    (movimiento) =>
+      !esMovimientoValido(movimiento) ||
+      !FORMAS_PAGO_MOVIMIENTO.has(movimiento.formaPago),
+  );
+
+  if (indiceInvalido >= 0) {
+    return {
+      error: `El movimiento ${indiceInvalido + 1} del snapshot no tiene detalle, valor o forma de pago valida`,
+    };
+  }
+
+  return { data: normalizados };
+};
 
 const crearKeyMovimiento = (m) =>
   [
@@ -370,8 +416,14 @@ const crearSnapshotCierre = (detalle) => ({
 const obtenerMovimientosParaCierre = async ({
   usuarioAgenciaId,
   movimientosPendientes,
+  movimientosSnapshot,
+  usarSnapshotMovimientos,
   transaction,
 }) => {
+  if (usarSnapshotMovimientos) {
+    return movimientosSnapshot;
+  }
+
   const movimientosTemp = await MovimientoCajaTemp.findAll({
     where: { usuarioAgenciaId, estado: "ACTIVO" },
     transaction,
@@ -414,24 +466,53 @@ const manejarErrorCierreUnico = (error, res) => {
 };
 
 const cerrarCaja = async (req, res) => {
-  const t = await sequelize.transaction();
+  let t = null;
 
   try {
+    t = await sequelize.transaction();
+
     const { usuarioAgenciaId, agenciaId } = await resolverRelacionUsuarioAgencia(req, t);
     const usuarioId = req.user.id;
     const ahora = new Date();
-    const { cierre = {}, denominaciones = [], retiros = [], movimientosPendientes = [] } = req.body;
+    const body = req.body || {};
+    const {
+      cierre = {},
+      denominaciones = [],
+      retiros = [],
+      movimientosPendientes = [],
+      movimientos: movimientosSnapshot,
+    } = body;
     const tieneDenominacionesEnPayload = Object.prototype.hasOwnProperty.call(
-      req.body,
+      body,
       "denominaciones",
+    );
+    const tieneSnapshotMovimientos = Object.prototype.hasOwnProperty.call(
+      body,
+      "movimientos",
     );
     const fechaCierre = resolverFechaCierre(cierre);
 
     if (!usuarioAgenciaId || !agenciaId) {
-      await t.rollback();
+      await revertirTransaccionSinOcultarError(t);
       return res.status(400).json({
         message: "Usuario sin relacion activa usuario-agencia/agencia para cerrar caja",
       });
+    }
+
+    if (tieneSnapshotMovimientos && !Array.isArray(movimientosSnapshot)) {
+      await revertirTransaccionSinOcultarError(t);
+      return res.status(400).json({
+        message: "El snapshot de movimientos debe enviarse como arreglo",
+      });
+    }
+
+    const snapshotValidado = tieneSnapshotMovimientos
+      ? validarSnapshotMovimientos(movimientosSnapshot)
+      : null;
+
+    if (snapshotValidado?.error) {
+      await revertirTransaccionSinOcultarError(t);
+      return res.status(400).json({ message: snapshotValidado.error });
     }
 
     const cierreExistente = await CierreCaja.findOne({
@@ -445,7 +526,7 @@ const cerrarCaja = async (req, res) => {
     });
 
     if (cierreExistente) {
-      await t.rollback();
+      await revertirTransaccionSinOcultarError(t);
       return res.status(409).json({
         message: "Ya existe un cierre de caja para este usuario en la fecha actual",
         cierre: cierreExistente,
@@ -455,11 +536,13 @@ const cerrarCaja = async (req, res) => {
     const movimientosUnificados = await obtenerMovimientosParaCierre({
       usuarioAgenciaId,
       movimientosPendientes,
+      movimientosSnapshot: snapshotValidado?.data,
+      usarSnapshotMovimientos: tieneSnapshotMovimientos,
       transaction: t,
     });
 
     if (!movimientosUnificados.length) {
-      await t.rollback();
+      await revertirTransaccionSinOcultarError(t);
       return res.status(400).json({
         message: "No existen movimientos validos para cerrar caja",
       });
@@ -556,20 +639,25 @@ const cerrarCaja = async (req, res) => {
     });
 
     await t.commit();
-    const conciliacionEntradas = await conciliarEntradasSinBloquearCierre({
-      fecha: fechaCierre,
-      origen: "CIERRE",
-      usuarioId,
-    });
+    t = null;
+    const conciliacionEntradas = crearEstadoConciliacionPendiente(fechaCierre);
 
-    return res.status(200).json({
+    const response = res.status(200).json({
       message: "Caja cerrada correctamente",
       cierre: cierreCreado,
       totalMovimientos: movimientosUnificados.length,
       conciliacionEntradas,
     });
+
+    programarConciliacionEntradas({
+      fecha: fechaCierre,
+      origen: "CIERRE",
+      usuarioId,
+    });
+
+    return response;
   } catch (error) {
-    await t.rollback();
+    await revertirTransaccionSinOcultarError(t);
     console.error(error);
 
     const handled = manejarErrorCierreUnico(error, res);

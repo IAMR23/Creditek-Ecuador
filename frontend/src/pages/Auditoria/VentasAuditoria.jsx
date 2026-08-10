@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable react/prop-types */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
@@ -11,6 +12,7 @@ import {
   FileText,
   FileSpreadsheet,
   Pencil,
+  Power,
   RefreshCw,
   RotateCcw,
   Save,
@@ -27,6 +29,7 @@ const getHoyLocal = () => new Date().toLocaleDateString("en-CA");
 
 const TABLE_COLUMNS = [
   "ID Venta",
+  "Contrato",
   "Fecha",
   "Fecha PDF",
   "Cedula",
@@ -125,9 +128,6 @@ const escaparHtml = (value) =>
 const obtenerNombreSeleccionado = (items, id) =>
   items.find((item) => String(item.id) === String(id))?.nombre || "Todos";
 
-const getDiferenciaCreditoTone = (value) =>
-  Number(value || 0) === 0 ? "green" : "red";
-
 const formatearDiferenciaPrecio = (value) => {
   const diferencia = Number(value);
   if (!Number.isFinite(diferencia) || diferencia === 0) return "-";
@@ -203,6 +203,7 @@ const mapVentaAuditoria = (venta) => {
     id: venta.id,
     detalleVentaId: venta.detalleVentaId,
     "ID Venta": venta.id ?? "",
+    Contrato: venta.contrato ?? "",
     modeloId: venta.modeloId ?? "",
     Fecha: venta.fecha ?? "",
     "Fecha PDF": venta.fechaPdf ?? "",
@@ -268,11 +269,13 @@ export default function VentasAuditoria() {
     filtrosGuardados.cierreCaja || "",
   );
   const [estado, setEstado] = useState(filtrosGuardados.estado || "");
+  const [modoPdfActivo, setModoPdfActivo] = useState(false);
   const [pdfTipo, setPdfTipo] = useState("TV");
   const [pdfFiles, setPdfFiles] = useState([]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfResumen, setPdfResumen] = useState(null);
   const [auditoriaPrecargada, setAuditoriaPrecargada] = useState(null);
+  const [fuenteResultados, setFuenteResultados] = useState("normal");
   const pdfInputRef = useRef(null);
   const [vistaResultados, setVistaResultados] = useState("todos");
   const [busquedaCliente, setBusquedaCliente] = useState("");
@@ -416,8 +419,8 @@ export default function VentasAuditoria() {
     estado,
   ]);
 
-  const obtenerAuditoriaPrecargada = async () => {
-    if (!fechaInicio || !fechaFin) return null;
+  const obtenerAuditoriaPrecargada = useCallback(async () => {
+    if (!modoPdfActivo || !fechaInicio || !fechaFin) return null;
 
     try {
       const { data } = await axios.get(
@@ -436,9 +439,9 @@ export default function VentasAuditoria() {
       console.error("Error cargando auditoria PDF precargada:", error);
       return null;
     }
-  };
+  }, [fechaFin, fechaInicio, modoPdfActivo, pdfTipo]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       return;
@@ -467,27 +470,20 @@ export default function VentasAuditoria() {
       const url = `${API_URL}/auditoria/ventas?${params.toString()}`;
       const [{ data }, precarga] = await Promise.all([
         axios.get(url),
-        obtenerAuditoriaPrecargada(),
+        modoPdfActivo
+          ? obtenerAuditoriaPrecargada()
+          : Promise.resolve(null),
       ]);
 
       if (!data.ok) return;
 
-      const usarResultadosPrecargados = Boolean(
-        precarga && Array.isArray(precarga.ventas) && precarga.ventas.length,
-      );
-      const ventas = usarResultadosPrecargados
-        ? precarga.ventas || []
-        : data.ventas || [];
-      const resultado = ventas.map(mapVentaAuditoria);
+      const resultado = (data.ventas || []).map(mapVentaAuditoria);
 
       setFilas(resultado);
-      setAuditoriaPrecargada(precarga);
-      setPdfResumen(usarResultadosPrecargados ? precarga.resumen || null : null);
-      setVistaResultados(
-        usarResultadosPrecargados && precarga.resumen?.erroresDetectados > 0
-          ? "errores"
-          : "todos",
-      );
+      setFuenteResultados("normal");
+      setAuditoriaPrecargada(modoPdfActivo ? precarga : null);
+      setPdfResumen(null);
+      setVistaResultados("todos");
       setFilaEditandoId("");
       setEdicionFila({});
     } catch (error) {
@@ -495,7 +491,19 @@ export default function VentasAuditoria() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    agenciaId,
+    cierreCaja,
+    dispositivoId,
+    estado,
+    fechaFin,
+    fechaInicio,
+    modeloId,
+    modoPdfActivo,
+    obtenerAuditoriaPrecargada,
+    origenId,
+    vendedorId,
+  ]);
 
   const limpiarFiltros = () => {
     const hoy = getHoyLocal();
@@ -513,6 +521,7 @@ export default function VentasAuditoria() {
     setVistaResultados("todos");
     setPdfResumen(null);
     setAuditoriaPrecargada(null);
+    setFuenteResultados("normal");
     setFilaEditandoId("");
     setEdicionFila({});
   };
@@ -521,19 +530,17 @@ export default function VentasAuditoria() {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
-  }, [
-    fechaInicio,
-    fechaFin,
-    agenciaId,
-    vendedorId,
-    modeloId,
-    cierreCaja,
-    origenId,
-    dispositivoId,
-    estado,
-    pdfTipo,
-    usuarioInfo,
-  ]);
+  }, [fechaFin, fechaInicio, fetchData, usuarioInfo?.id]);
+
+  const cambiarModoAuditoriaPdf = () => {
+    setModoPdfActivo((activo) => !activo);
+    setPdfFiles([]);
+    setPdfResumen(null);
+    setAuditoriaPrecargada(null);
+    setFuenteResultados("normal");
+    setVistaResultados("todos");
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+  };
 
   const handlePdfFiles = (event) => {
     setPdfFiles(Array.from(event.target.files || []));
@@ -542,6 +549,14 @@ export default function VentasAuditoria() {
 
   const auditarPdfs = async (event) => {
     event.preventDefault();
+
+    if (!modoPdfActivo) {
+      return Swal.fire(
+        "Auditoria PDF desactivada",
+        "Activa el modo de auditoria PDF antes de procesar archivos.",
+        "warning",
+      );
+    }
 
     if (!pdfFiles.length && !auditoriaPrecargada) {
       return Swal.fire("Atencion", "Selecciona al menos un PDF", "warning");
@@ -602,6 +617,7 @@ export default function VentasAuditoria() {
       if (!data.ok) return;
 
       setFilas((data.ventas || []).map(mapVentaAuditoria));
+      setFuenteResultados("pdf");
       setPdfResumen(data.resumen || null);
       setVistaResultados(data.resumen?.erroresDetectados > 0 ? "errores" : "todos");
       setFilaEditandoId("");
@@ -1275,14 +1291,45 @@ export default function VentasAuditoria() {
         onSubmit={auditarPdfs}
         className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
       >
-        <div className="mb-3 flex items-center gap-2">
-          <AlertTriangle size={18} className="text-amber-600" />
-          <h2 className="text-sm font-bold text-gray-900">
-            Auditoria desde PDFs
-          </h2>
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={18} className="text-amber-600" />
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">
+                Auditoria desde PDFs
+              </h2>
+              <p className="text-xs text-gray-500">
+                Funciona de forma separada a los filtros normales de ventas.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={cambiarModoAuditoriaPdf}
+            disabled={pdfLoading}
+            aria-pressed={modoPdfActivo}
+            className={`inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
+              modoPdfActivo
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+          >
+            <Power size={16} />
+            {modoPdfActivo
+              ? "Desactivar auditoria PDF"
+              : "Activar auditoria PDF"}
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr_auto] lg:items-end">
+        {!modoPdfActivo ? (
+          <div className="rounded border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+            La auditoria PDF esta desactivada. Los resultados mostrados usan
+            exclusivamente los filtros normales de Ventas Auditoria.
+          </div>
+        ) : (
+          <>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_1fr_auto] lg:items-end">
           <label className="block">
             <span className="block text-sm font-medium text-gray-700">
               Tipo PDF
@@ -1395,6 +1442,8 @@ export default function VentasAuditoria() {
             <MiniStat label="Extraccion" value={pdfResumen.erroresExtraccion} tone="amber" />
           </div>
         )}
+          </>
+        )}
       </form>
 
       {error && <p className="mb-3 font-semibold text-red-500">{error}</p>}
@@ -1407,7 +1456,20 @@ export default function VentasAuditoria() {
         <section className="max-w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-sm font-bold text-gray-900">Resultados</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-bold text-gray-900">Resultados</h2>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+                    fuenteResultados === "pdf"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {fuenteResultados === "pdf"
+                    ? "Auditoria PDF"
+                    : "Filtros normales"}
+                </span>
+              </div>
               <span className="text-xs text-gray-500">
                 {filasVisibles.length} de {filasFiltradasPorCliente.length} registros
                 {busquedaCliente.trim() ? ` (${filas.length} total)` : ""}

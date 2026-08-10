@@ -686,6 +686,7 @@ export default function PautasMarketing() {
   const [contenidoEditando, setContenidoEditando] = useState(null);
   const [guardandoContenidoEditando, setGuardandoContenidoEditando] =
     useState(false);
+  const [contenidoEliminando, setContenidoEliminando] = useState("");
 
   const cargarPautas = useCallback(async () => {
     try {
@@ -954,6 +955,54 @@ export default function PautasMarketing() {
       );
     } finally {
       setGuardandoContenidoEditando(false);
+    }
+  };
+
+  const eliminarContenido = async (pauta, contenido) => {
+    const indice = contenido.indiceOriginal;
+    const descripcion =
+      contenido.producto || contenido.tipoContenido || `Contenido ${indice + 1}`;
+    const confirmacion = await Swal.fire({
+      icon: "warning",
+      title: "¿Eliminar este contenido?",
+      text: `${descripcion} se eliminará de ${pauta.nombrePagina}.`,
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    const clave = `${pauta.id}-${indice}`;
+    try {
+      setContenidoEliminando(clave);
+      const { data } = await api.delete(
+        `/api/marketing/pautas/${pauta.id}/contenidos/${indice}`,
+      );
+      setPautas((actuales) =>
+        actuales.map((item) => (item.id === pauta.id ? data.pauta : item)),
+      );
+      if (
+        contenidoEditando?.pautaId === pauta.id &&
+        contenidoEditando?.indice === indice
+      ) {
+        setContenidoEditando(null);
+      }
+      await Swal.fire({
+        icon: "success",
+        title: "Contenido eliminado",
+        timer: 1300,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire(
+        "No se pudo eliminar",
+        getErrorMessage(error, "Intenta nuevamente"),
+        "error",
+      );
+    } finally {
+      setContenidoEliminando("");
     }
   };
 
@@ -1434,7 +1483,8 @@ export default function PautasMarketing() {
                 (guardandoContenidoRapido &&
                   contenidoRapido?.pautaId === pauta.id) ||
                 (guardandoContenidoEditando &&
-                  contenidoEditando?.pautaId === pauta.id);
+                  contenidoEditando?.pautaId === pauta.id) ||
+                contenidoEliminando.startsWith(`${pauta.id}-`);
 
               return (
                 <article
@@ -1518,6 +1568,7 @@ export default function PautasMarketing() {
                           disabled={
                             guardandoContenidoRapido ||
                             guardandoContenidoEditando ||
+                            Boolean(contenidoEliminando) ||
                             contenidoRapido?.pautaId === pauta.id
                           }
                           className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1576,21 +1627,38 @@ export default function PautasMarketing() {
                                   {contenido.tipoContenido || "Sin tipo"} · {formatearFecha(contenido.fecha)}
                                  </p>
                                </div>
-                               <button
-                                 type="button"
-                                 onClick={() =>
-                                   abrirEdicionContenido(pauta, contenido)
-                                 }
-                                 disabled={
-                                   guardandoContenidoRapido ||
-                                   guardandoContenidoEditando
-                                 }
-                                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 shadow-sm transition hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                 aria-label={`Editar contenido ${contenido.indiceOriginal + 1}`}
-                                 title="Editar contenido"
-                               >
-                                 <Pencil size={13} />
-                               </button>
+                               <div className="flex shrink-0 gap-1">
+                                 <button
+                                   type="button"
+                                   onClick={() =>
+                                     abrirEdicionContenido(pauta, contenido)
+                                   }
+                                   disabled={
+                                     guardandoContenidoRapido ||
+                                     guardandoContenidoEditando ||
+                                     Boolean(contenidoEliminando)
+                                   }
+                                   className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-400 shadow-sm transition hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                   aria-label={`Editar contenido ${contenido.indiceOriginal + 1}`}
+                                   title="Editar contenido"
+                                 >
+                                   <Pencil size={13} />
+                                 </button>
+                                 <button
+                                   type="button"
+                                   onClick={() => eliminarContenido(pauta, contenido)}
+                                   disabled={
+                                     guardandoContenidoRapido ||
+                                     guardandoContenidoEditando ||
+                                     Boolean(contenidoEliminando)
+                                   }
+                                   className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-slate-400 shadow-sm transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                   aria-label={`Eliminar contenido ${contenido.indiceOriginal + 1}`}
+                                   title="Eliminar contenido"
+                                 >
+                                   <Trash2 size={13} />
+                                 </button>
+                               </div>
                              </div>
 
                             <div className="mt-2 grid grid-cols-3 gap-1 border-t border-slate-200 pt-2">

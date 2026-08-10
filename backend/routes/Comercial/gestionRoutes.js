@@ -7,6 +7,8 @@ const Dispositivo = require("../../models/Dispositivo");
 const Usuario = require("../../models/Usuario");
 const Agencia = require("../../models/Agencia");
 const { Op } = require("sequelize");
+const { sequelize } = require("../../config/db");
+const { registrarPersona } = require("../../services/personasService");
 
 // Crear gestión comercial
 router.post("/", async (req, res) => {
@@ -41,14 +43,28 @@ router.post("/", async (req, res) => {
       solicitudNormalizada = valor;
     }
 
-    const nuevaGestion = await GestionComercial.create({
-      usuarioAgenciaId,
-      celularGestionado: celularGestionado || null,
-      cedulaGestionado: cedulaGestionado || null,
-      dispositivoId: dispositivoId || null,
-      solicitud: solicitudNormalizada,
-      origen: origen || null,
-      observacion: observacion || null,
+    const nuevaGestion = await sequelize.transaction(async (transaction) => {
+      const persona = await registrarPersona(
+        {
+          telefono: celularGestionado,
+          cedula: cedulaGestionado,
+        },
+        { transaction },
+      );
+
+      return GestionComercial.create(
+        {
+          usuarioAgenciaId,
+          clienteId: persona.id,
+          celularGestionado: celularGestionado || null,
+          cedulaGestionado: cedulaGestionado || null,
+          dispositivoId: dispositivoId || null,
+          solicitud: solicitudNormalizada,
+          origen: origen || null,
+          observacion: observacion || null,
+        },
+        { transaction },
+      );
     });
 
     return res.status(201).json(nuevaGestion);
@@ -308,24 +324,41 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    await gestion.update({
-      usuarioAgenciaId:
-        usuarioAgenciaId !== undefined
-          ? usuarioAgenciaId
-          : gestion.usuarioAgenciaId,
-      celularGestionado:
-        celularGestionado !== undefined
-          ? celularGestionado
-          : gestion.celularGestionado,
-      cedulaGestionado:
-        cedulaGestionado !== undefined
-          ? cedulaGestionado
-          : gestion.cedulaGestionado,
-      dispositivoId:
-        dispositivoId !== undefined ? dispositivoId : gestion.dispositivoId,
-      solicitud: solicitudNormalizada,
-      origen: origen !== undefined ? origen : gestion.origen,
-      observacion: observacion !== undefined ? observacion : gestion.observacion,
+    const telefonoPersona =
+      celularGestionado !== undefined
+        ? celularGestionado
+        : gestion.celularGestionado;
+    const cedulaPersona =
+      cedulaGestionado !== undefined
+        ? cedulaGestionado
+        : gestion.cedulaGestionado;
+    await sequelize.transaction(async (transaction) => {
+      const persona = await registrarPersona(
+        {
+          telefono: telefonoPersona,
+          cedula: cedulaPersona,
+        },
+        { transaction },
+      );
+
+      await gestion.update(
+        {
+          usuarioAgenciaId:
+            usuarioAgenciaId !== undefined
+              ? usuarioAgenciaId
+              : gestion.usuarioAgenciaId,
+          clienteId: persona.id,
+          celularGestionado: telefonoPersona,
+          cedulaGestionado: cedulaPersona,
+          dispositivoId:
+            dispositivoId !== undefined ? dispositivoId : gestion.dispositivoId,
+          solicitud: solicitudNormalizada,
+          origen: origen !== undefined ? origen : gestion.origen,
+          observacion:
+            observacion !== undefined ? observacion : gestion.observacion,
+        },
+        { transaction },
+      );
     });
 
     return res.json(gestion);

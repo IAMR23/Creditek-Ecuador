@@ -82,6 +82,7 @@ import TasksPage from "./pages/Tareas/TaskPage";
 import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
 import MapaComercial from "./pages/Sistemas/MapaComercial";
 import Inventarios from "./pages/Sistemas/Inventarios";
+import Personas from "./pages/Sistemas/Personas";
 import { initSWWithToken, registerSW } from "./utils/serviceWorker";
 import { initAppVersionWatcher } from "./utils/appVersion";
 
@@ -482,6 +483,10 @@ function App() {
                 <Route
                   path="sistemas/inventarios"
                   element={protect(<Inventarios />, "/sistemas/inventarios")}
+                />
+                <Route
+                  path="sistemas/personas"
+                  element={protect(<Personas />, "/sistemas/personas")}
                 />
               </Route>
 

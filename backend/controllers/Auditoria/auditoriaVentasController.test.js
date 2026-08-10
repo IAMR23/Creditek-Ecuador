@@ -2,6 +2,10 @@ jest.mock("../../models/ConciliacionModeloTv", () => ({
   findOne: jest.fn(),
 }));
 
+jest.mock("../../models/ConciliacionModeloCelular", () => ({
+  findOne: jest.fn(),
+}));
+
 jest.mock("../../models/DetalleVenta", () => ({
   update: jest.fn(),
 }));
@@ -22,6 +26,7 @@ jest.mock("../../services/controlFinancieroAuditoriaService", () => ({
 }));
 
 const ConciliacionModeloTv = require("../../models/ConciliacionModeloTv");
+const ConciliacionModeloCelular = require("../../models/ConciliacionModeloCelular");
 const DetalleVenta = require("../../models/DetalleVenta");
 const Task = require("../../models/Task");
 const Usuario = require("../../models/Usuario");
@@ -39,7 +44,7 @@ const {
 } = require("../../services/controlFinancieroAuditoriaService");
 const controller = require("./auditoriaVentasController");
 
-const crearVentaTv = ({ ventaId, detalleId }) => ({
+const crearVentaTv = ({ ventaId, detalleId, contrato = "CONTRATO" }) => ({
   id: ventaId,
   fecha: "2026-07-16",
   activo: true,
@@ -68,7 +73,7 @@ const crearVentaTv = ({ ventaId, detalleId }) => ({
       precioVendedor: 100,
       entrada: 10,
       cierreCaja: "CREDITV",
-      contrato: "CONTRATO",
+      contrato,
       referenciaPdf: "",
     },
   ],
@@ -111,6 +116,10 @@ describe("auditarRegistrosPdf", () => {
       modeloRveId: 71,
       modeloRveNombre: "TV 32 PULG",
     });
+    ConciliacionModeloCelular.findOne.mockResolvedValue({
+      modeloRveId: 72,
+      modeloRveNombre: "CELULAR PRUEBA",
+    });
     DetalleVenta.update.mockResolvedValue([1]);
   });
 
@@ -142,14 +151,63 @@ describe("auditarRegistrosPdf", () => {
     ]);
     expect(DetalleVenta.update).toHaveBeenNthCalledWith(
       1,
-      { referenciaPdf: "LA32ZEC" },
+      { referenciaPdf: "LA32ZEC", contrato: "PDF-1" },
       { where: { id: 3675 } },
     );
     expect(DetalleVenta.update).toHaveBeenNthCalledWith(
       2,
-      { referenciaPdf: "LA32ZEC" },
+      { referenciaPdf: "LA32ZEC", contrato: "PDF-2" },
       { where: { id: 3676 } },
     );
+    expect(auditoria.resultados.map((fila) => fila.contrato)).toEqual([
+      "PDF-1",
+      "PDF-2",
+    ]);
+  });
+
+  it("usa el contrato para asociar cada PDF con su detalle correcto", async () => {
+    const ventas = [
+      crearVentaTv({
+        ventaId: 3799,
+        detalleId: 3675,
+        contrato: "TV-001",
+      }),
+      crearVentaTv({
+        ventaId: 3800,
+        detalleId: 3676,
+        contrato: "TV-002",
+      }),
+    ];
+    const registrosPdf = [
+      crearRegistroPdfTv({ factura: "TV-002", fecha: "7/16/26 8:02 PM" }),
+      crearRegistroPdfTv({ factura: "TV-001", fecha: "7/16/26 8:21 PM" }),
+    ];
+
+    const auditoria = await controller.auditarRegistrosPdf({
+      tipo: "TV",
+      registrosPdf,
+      ventas,
+    });
+
+    expect(DetalleVenta.update).toHaveBeenNthCalledWith(
+      1,
+      { referenciaPdf: "LA32ZEC", contrato: "TV-002" },
+      { where: { id: 3676 } },
+    );
+    expect(DetalleVenta.update).toHaveBeenNthCalledWith(
+      2,
+      { referenciaPdf: "LA32ZEC", contrato: "TV-001" },
+      { where: { id: 3675 } },
+    );
+    expect(
+      auditoria.resultados.map((fila) => [
+        fila.detalleVentaId,
+        fila.contrato,
+      ]),
+    ).toEqual([
+      [3675, "TV-001"],
+      [3676, "TV-002"],
+    ]);
   });
 
   it("no marca celulares como faltantes al auditar un PDF de TV", async () => {
@@ -169,6 +227,46 @@ describe("auditarRegistrosPdf", () => {
     expect(auditoria.resultados).toHaveLength(1);
     expect(auditoria.resultados[0]).toEqual(
       expect.objectContaining({ detalleVentaId: 3675, observacionError: "OK" }),
+    );
+  });
+
+  it("asocia el contrato y el IMEI del PDF de celular con la venta", async () => {
+    const ventaCelular = crearVentaCelular();
+    ventaCelular.detalleVenta[0].contrato = "";
+
+    const auditoria = await controller.auditarRegistrosPdf({
+      tipo: "CELULAR",
+      registrosPdf: [
+        {
+          factura: "CEL-9001",
+          fecha: "7/16/26 8:02 PM",
+          cliente: "MISMO CLIENTE",
+          codigo_pdf: "CELULAR PRUEBA",
+          modelo_normalizado: "CELULAR PRUEBA",
+          imei: "123456789012345",
+          valor_ventas: 100,
+          valor_ventas_detectado: true,
+          precio_vendedor_detectado: true,
+          entrada: 10,
+          entrada_detectada: true,
+        },
+      ],
+      ventas: [ventaCelular],
+    });
+
+    expect(DetalleVenta.update).toHaveBeenCalledWith(
+      {
+        referenciaPdf: "123456789012345",
+        contrato: "CEL-9001",
+      },
+      { where: { id: 3677 } },
+    );
+    expect(auditoria.resultados[0]).toEqual(
+      expect.objectContaining({
+        detalleVentaId: 3677,
+        contrato: "CEL-9001",
+        referenciaPdf: "123456789012345",
+      }),
     );
   });
 });

@@ -91,10 +91,15 @@ const getCargosPagoLabel = (row) =>
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
+const VALOR_DESCUENTO_INPUT_REGEX = /^\d+(?:\.\d{0,2})?$/;
+const esFormatoValorDescuentoInputValido = (value) => {
+  const texto = String(value ?? "");
+  return texto === "" || VALOR_DESCUENTO_INPUT_REGEX.test(texto);
+};
 const parseValorDescuentoInput = (value) => {
-  const normalizado = String(value ?? "").trim().replace(",", ".");
-  if (!normalizado) return null;
-  const numero = Number(normalizado);
+  const texto = String(value ?? "").trim();
+  if (!texto || !VALOR_DESCUENTO_INPUT_REGEX.test(texto)) return null;
+  const numero = Number(texto);
   return Number.isFinite(numero) && numero >= 0 && numero <= 9999999999.99
     ? numero
     : null;
@@ -179,9 +184,61 @@ const getVendedorParaSeccion = (vendedor, seccion) => {
     return vendedor;
   }
 
+  const vistaPersonal = vendedor.ventasPersonalesVendedor;
+  const semanas = Object.fromEntries(
+    Object.entries(vistaPersonal.semanas || {}).map(([semanaInicio, values]) => {
+      const valuesPagoPrincipal = vendedor.semanas?.[semanaInicio] || {};
+      return [
+        semanaInicio,
+        {
+          ...values,
+          noCumpleMetas:
+            valuesPagoPrincipal.noCumpleMetas ?? values.noCumpleMetas,
+          valorMultaCalculado:
+            valuesPagoPrincipal.valorMultaCalculado ??
+            values.valorMultaCalculado,
+          valorDescontar:
+            valuesPagoPrincipal.valorDescontar ?? values.valorDescontar,
+          multaOmitida:
+            valuesPagoPrincipal.multaOmitida ?? values.multaOmitida,
+          descuentoModificado:
+            valuesPagoPrincipal.descuentoModificado ??
+            values.descuentoModificado,
+          valorDescontarPersistido:
+            valuesPagoPrincipal.valorDescontarPersistido,
+          vistaPreviaDescuento:
+            valuesPagoPrincipal.vistaPreviaDescuento,
+        },
+      ];
+    }),
+  );
+  const totalValorDescontar = Number(
+    vendedor.resumenMensual?.totalValorDescontar ??
+      vistaPersonal.resumenMensual?.totalValorDescontar ??
+      0,
+  );
+
   return {
     ...vendedor,
-    ...vendedor.ventasPersonalesVendedor,
+    ...vistaPersonal,
+    semanas,
+    total: {
+      ...(vistaPersonal.total || {}),
+      noCumpleMetas:
+        vendedor.total?.noCumpleMetas ??
+        vistaPersonal.total?.noCumpleMetas ??
+        0,
+      valorDescontar: totalValorDescontar,
+    },
+    resumenMensual: {
+      ...(vistaPersonal.resumenMensual || {}),
+      totalNoCumpleMetas:
+        vendedor.resumenMensual?.totalNoCumpleMetas ??
+        vistaPersonal.resumenMensual?.totalNoCumpleMetas ??
+        0,
+      totalValorDescontar,
+      totalPagar: roundMoney(-totalValorDescontar),
+    },
     esJefeComercial: false,
     esSupervisorComercial: false,
     vendedoresJunior: [],
@@ -253,6 +310,7 @@ export default function PagosComisiones() {
   const [juniorId, setJuniorId] = useState("");
   const [jefeComercialId, setJefeComercialId] = useState("");
   const [guardandoJefe, setGuardandoJefe] = useState(false);
+  const [guardandoEquipoSemanal, setGuardandoEquipoSemanal] = useState("");
   const [juniorSupervisorId, setJuniorSupervisorId] = useState("");
   const [supervisorComercialId, setSupervisorComercialId] = useState("");
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
@@ -397,21 +455,27 @@ export default function PagosComisiones() {
     [vendedores],
   );
 
-  const juniorsPiso = useMemo(
-    () => vendedores.filter((vendedor) => {
-      const cargo = String(vendedor.cargo || "").toUpperCase();
-      return cargo.includes("VENDEDOR") && cargo.includes("PISO") && !cargo.includes("JEFE");
-    }),
-    [vendedores],
-  );
+  const vendedoresElegiblesEquipo = useMemo(() => {
+    const disponibles = report?.vendedoresDisponiblesEquipo;
+    const candidatos = Array.isArray(disponibles)
+      ? disponibles
+      : vendedores.filter(
+          (vendedor) =>
+            String(vendedor.rol || "").toUpperCase().includes("VENDEDOR") ||
+            getCargosComerciales(vendedor).some(
+              (cargo) =>
+                cargo.includes("VENDEDOR") &&
+                !cargo.includes("JEFE") &&
+                !cargo.includes("SUPERVISOR"),
+            ),
+        );
+    return [...candidatos].sort((a, b) =>
+      String(a.nombre || "").localeCompare(String(b.nombre || ""), "es"),
+    );
+  }, [report, vendedores]);
 
   const supervisoresComerciales = useMemo(
     () => vendedores.filter((vendedor) => getSeccionCargo(vendedor) === "SUPERVISORES"),
-    [vendedores],
-  );
-
-  const juniorsComerciales = useMemo(
-    () => vendedores.filter((vendedor) => getSeccionCargo(vendedor) === "VENDEDORES"),
     [vendedores],
   );
 
@@ -738,6 +802,33 @@ export default function PagosComisiones() {
       }
       return siguientes;
     });
+  };
+
+  const guardarEquipoSemanal = async ({ jefe, week, vendedorIds }) => {
+    const key = `${jefe.usuarioId}-${week.startDate}`;
+    const tipoLider = jefe.esSupervisorComercial ? "supervisores" : "jefes";
+    setGuardandoEquipoSemanal(key);
+    try {
+      await api.put(
+        `${ENDPOINT}/${tipoLider}/${jefe.usuarioId}/equipos-semanales/${week.startDate}`,
+        { vendedorIds },
+      );
+      await fetchReport();
+      Swal.fire({
+        icon: "success",
+        title: "Equipo semanal guardado",
+        showConfirmButton: false,
+        timer: 1400,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo guardar el equipo semanal",
+        "error",
+      );
+    } finally {
+      setGuardandoEquipoSemanal("");
+    }
   };
 
   const restaurarValorDescuento = ({ vendedor, week, values }) => {
@@ -1091,9 +1182,9 @@ export default function PagosComisiones() {
         {seccionActiva === "JEFES" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <h2 className="font-semibold text-slate-900">Jefe comercial de piso</h2>
+            <h2 className="font-semibold text-slate-900">Asignacion general de respaldo</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Asigne manualmente el jefe responsable de cada vendedor junior de piso.
+              Esta asignacion se usa solamente cuando el equipo de una semana aun no ha sido configurado.
             </p>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
@@ -1105,9 +1196,9 @@ export default function PagosComisiones() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               >
                 <option value="">Seleccione un vendedor</option>
-                {juniorsPiso.map((vendedor) => (
+                {vendedoresElegiblesEquipo.map((vendedor) => (
                   <option key={vendedor.usuarioId} value={vendedor.usuarioId}>
-                    {vendedor.nombre}
+                    {vendedor.nombre} - {vendedor.cargoComision || vendedor.cargo || vendedor.rol || "Vendedor"}
                   </option>
                 ))}
               </select>
@@ -1143,9 +1234,9 @@ export default function PagosComisiones() {
         {seccionActiva === "SUPERVISORES" ? (
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div>
-              <h2 className="font-semibold text-slate-900">Juniors por supervisor</h2>
+              <h2 className="font-semibold text-slate-900">Asignacion general de respaldo</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Asigne manualmente los vendedores que forman parte del equipo de cada supervisor.
+                Esta asignacion se usa solamente cuando el equipo de una semana aun no ha sido configurado.
               </p>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
@@ -1157,9 +1248,9 @@ export default function PagosComisiones() {
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
                   <option value="">Seleccione un vendedor</option>
-                  {juniorsComerciales.map((vendedor) => (
+                  {vendedoresElegiblesEquipo.map((vendedor) => (
                     <option key={vendedor.usuarioId} value={vendedor.usuarioId}>
-                      {vendedor.nombre} - {vendedor.cargo}
+                      {vendedor.nombre} - {vendedor.cargoComision || vendedor.cargo || vendedor.rol || "Vendedor"}
                     </option>
                   ))}
                 </select>
@@ -1233,8 +1324,6 @@ export default function PagosComisiones() {
                   </tr>
                 ) : vendedoresFiltrados.length ? (
                   vendedoresFiltrados.map((vendedor, index) => {
-                    const personalNuevo = isPersonalNuevoEnReporte(vendedor, weeks);
-                    const fechaIngreso = getFechaIngresoVisible(vendedor);
                     const cargosPagoLabel = getCargosPagoLabel(vendedor);
                     return (
                       <tr
@@ -1257,9 +1346,6 @@ export default function PagosComisiones() {
                           ) : null}
                           {vendedor.tieneMultiplesCargos ? (
                             <>
-                              <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
-                                Doble cargo - Sin multa
-                              </span>
                               {cargosPagoLabel ? (
                                 <span className="block text-[10px] font-normal text-blue-700">
                                   {cargosPagoLabel}
@@ -1273,14 +1359,6 @@ export default function PagosComisiones() {
                                     }`}
                               </span>
                             </>
-                          ) : null}
-                          {personalNuevo ? (
-                            <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
-                              Personal nuevo
-                              {fechaIngreso
-                                ? ` · Ingreso: ${String(fechaIngreso).slice(0, 10)}`
-                                : ""}
-                            </span>
                           ) : null}
                           {vendedor.fechaSalida ? (
                             <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
@@ -1351,6 +1429,10 @@ export default function PagosComisiones() {
             rows={vendedoresFiltrados}
             weeks={weeks}
             loading={loading}
+            vendedoresDisponibles={vendedoresElegiblesEquipo}
+            onGuardarEquipoSemanal={guardarEquipoSemanal}
+            guardandoEquipoSemanal={guardandoEquipoSemanal}
+            periodoPagado={periodoPagado}
             sectionLabel={
               SECCIONES.find((seccion) => seccion.id === seccionActiva)?.label || ""
             }
@@ -1530,7 +1612,177 @@ export default function PagosComisiones() {
   );
 }
 
-function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
+function WeeklyLeaderTeamConfiguration({
+  leader,
+  weeks,
+  sellers,
+  onSave,
+  savingKey,
+  disabled,
+}) {
+  return (
+    <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">
+            Vendedores a cargo por semana
+          </h3>
+          <p className="text-xs text-slate-600">
+            La seleccion guardada se usa para dispositivos por vendedor y para el
+            calculo del promedio de esa semana.
+          </p>
+          {leader.tieneMultiplesCargos ? (
+            <p className="mt-1 text-xs font-medium text-blue-700">
+              Las ventas propias del jefe se incluyen automaticamente.
+            </p>
+          ) : null}
+        </div>
+        {disabled ? (
+          <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
+            <Lock size={13} /> Periodo pagado
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {weeks.map((week) => (
+          <WeeklyTeamCard
+            key={`${leader.usuarioId}-${week.startDate}`}
+            leader={leader}
+            week={week}
+            sellers={sellers}
+            onSave={onSave}
+            savingKey={savingKey}
+            disabled={disabled}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyTeamCard({
+  leader,
+  week,
+  sellers,
+  onSave,
+  savingKey,
+  disabled,
+}) {
+  const values = getWeekValues(leader, week);
+  const configured = Boolean(values.equipoSemanalConfigurado);
+  const savedIds = [...new Set(
+    (values.vendedorIdsSeleccionados || []).map((id) => String(id)),
+  )].sort((a, b) => Number(a) - Number(b));
+  const savedSignature = savedIds.join(",");
+  const [selectedIds, setSelectedIds] = useState(savedIds);
+
+  useEffect(() => {
+    setSelectedIds(savedSignature ? savedSignature.split(",") : []);
+  }, [savedSignature]);
+
+  const selectedSignature = [...selectedIds]
+    .sort((a, b) => Number(a) - Number(b))
+    .join(",");
+  const key = `${leader.usuarioId}-${week.startDate}`;
+  const isSaving = savingKey === key;
+  const isBusy = Boolean(savingKey);
+  const hasChanges = !configured || selectedSignature !== savedSignature;
+
+  const toggleSeller = (sellerId) => {
+    const id = String(sellerId);
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((currentId) => currentId !== id)
+        : [...current, id],
+    );
+  };
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-bold text-slate-800">{week.label}</h4>
+        <span
+          className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+            configured
+              ? "bg-emerald-100 text-emerald-800"
+              : "bg-amber-100 text-amber-800"
+          }`}
+        >
+          {configured ? "Configurado" : "Asignacion general"}
+        </span>
+      </div>
+
+      <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded border border-slate-200 p-2">
+        {sellers.length ? (
+          sellers.map((seller) => {
+            const id = String(seller.usuarioId);
+            const detalleCargo =
+              seller.cargoComision || seller.cargo || seller.rol || "Vendedor";
+            return (
+              <label
+                key={seller.usuarioId}
+                className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs text-slate-700 hover:bg-slate-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(id)}
+                  onChange={() => toggleSeller(id)}
+                  disabled={disabled || isBusy}
+                  className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed"
+                />
+                <span className="min-w-0">
+                  <span className="block font-medium text-slate-800">
+                    {seller.nombre}
+                  </span>
+                  <span className="block truncate text-[10px] text-slate-500">
+                    {detalleCargo}
+                  </span>
+                </span>
+              </label>
+            );
+          })
+        ) : (
+          <p className="py-2 text-center text-xs text-slate-500">
+            No hay vendedores de piso disponibles.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-xs text-slate-500">
+          {selectedIds.length} seleccionado{selectedIds.length === 1 ? "" : "s"}
+        </span>
+        <button
+          type="button"
+          onClick={() =>
+            onSave({
+              jefe: leader,
+              week,
+              vendedorIds: selectedIds.map(Number),
+            })
+          }
+          disabled={disabled || isBusy || !hasChanges}
+          className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Save size={13} />
+          {isSaving ? "Guardando..." : "Guardar semana"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function LeadershipCommissionTables({
+  rows,
+  weeks,
+  loading,
+  sectionLabel,
+  vendedoresDisponibles,
+  onGuardarEquipoSemanal,
+  guardandoEquipoSemanal,
+  periodoPagado,
+}) {
   if (loading) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
@@ -1569,9 +1821,6 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
               </h2>
               {row.tieneMultiplesCargos ? (
                 <div className="mt-1 text-center">
-                  <span className="inline-block rounded bg-blue-600 px-2 py-1 text-xs font-bold text-white">
-                    Doble cargo - Sin multa ni sanción
-                  </span>
                   {cargosPagoLabel ? (
                     <p className="mt-1 text-xs font-semibold text-blue-700">
                       {cargosPagoLabel}
@@ -1582,7 +1831,7 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
               {personalNuevo ? (
                 <p className="mt-1 text-center">
                   <span className="inline-block rounded bg-blue-600 px-2 py-1 text-xs font-bold text-white">
-                    Personal nuevo
+                    Personal nuevo · aplica multa
                     {fechaIngreso
                       ? ` · Fecha de ingreso: ${String(fechaIngreso).slice(0, 10)}`
                       : ""}
@@ -1637,6 +1886,18 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
                 </div>
               ) : null}
             </div>
+            {row.esJefeComercial || row.esSupervisorComercial ? (
+              <WeeklyLeaderTeamConfiguration
+                leader={row}
+                weeks={weeks}
+                sellers={vendedoresDisponibles.filter(
+                  (vendedor) => Number(vendedor.usuarioId) !== Number(row.usuarioId),
+                )}
+                onSave={onGuardarEquipoSemanal}
+                savingKey={guardandoEquipoSemanal}
+                disabled={periodoPagado}
+              />
+            ) : null}
             <div className="overflow-x-auto p-4">
               <table className="w-full min-w-[760px] border-collapse text-center text-sm text-slate-950">
                 <thead>
@@ -1709,7 +1970,7 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
                   {row.esSupervisorComercial ? (
                     <tr className="font-bold">
                       <td className="border border-slate-950 bg-blue-600 px-3 py-2 text-white">
-                        VENDEDORES ACTIVOS
+                        DISPOSITIVOS POR VENDEDOR
                       </td>
                       {weeks.map((week) => {
                         const values = getWeekValues(row, week);
@@ -1729,7 +1990,10 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
                                         key={vendedor.usuarioId}
                                         className="rounded bg-blue-100 px-2 py-1 text-xs font-semibold"
                                       >
-                                        {vendedor.nombre}
+                                        {vendedor.nombre}: {vendedor.venden || 0}
+                                        {vendedor.esLiderVendedor
+                                          ? " (doble cargo)"
+                                          : ""}
                                       </span>
                                     ))}
                                   </div>
@@ -1742,7 +2006,7 @@ function LeadershipCommissionTables({ rows, weeks, loading, sectionLabel }) {
                         colSpan={3}
                         className="border border-slate-950 bg-blue-50 px-3 py-2 text-xs text-blue-800"
                       >
-                        Equipo por semana completa
+                        Ventas individuales incluidas en el total del supervisor
                       </td>
                     </tr>
                   ) : null}
@@ -1820,8 +2084,6 @@ function WeekValues({
     week &&
     onCambiarDescuento &&
     !periodoPagado &&
-    !values.personalNuevo &&
-    !vendedor.tieneMultiplesCargos &&
     Number(values.valorMultaCalculado || 0) > 0;
   const valorInput = descuentoEditado
     ? descuentoEditado.valorDescontar
@@ -1843,9 +2105,7 @@ function WeekValues({
         {values.semanaFutura ||
         (!total &&
           (values.semanaLaborada === false ||
-            values.semanaCompletaParaDescuento === false ||
-            values.personalNuevo ||
-            vendedor?.tieneMultiplesCargos))
+            values.semanaCompletaParaDescuento === false))
           ? "-"
           : values.noCumpleMetas || 0}
       </td>
@@ -1854,19 +2114,7 @@ function WeekValues({
           ? "Pendiente"
           : !total && values.semanaLaborada === false
             ? "No laborada"
-            : !total && vendedor?.tieneMultiplesCargos
-              ? (
-                <span className="inline-block rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">
-                  Doble cargo - Sin sanción
-                </span>
-              )
-            : !total && values.personalNuevo
-              ? (
-                <span className="inline-block rounded bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">
-                  Personal nuevo
-                </span>
-              )
-              : !total && values.semanaCompletaParaDescuento === false
+            : !total && values.semanaCompletaParaDescuento === false
               ? "Semana parcial"
               : puedeGestionarMulta
                 ? (
@@ -1876,14 +2124,19 @@ function WeekValues({
                       inputMode="decimal"
                       value={valorInput}
                       disabled={guardando}
-                      onChange={(event) =>
+                      maxLength={13}
+                      pattern="\d+(\.\d{0,2})?"
+                      placeholder="0.00"
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (!esFormatoValorDescuentoInputValido(value)) return;
                         onCambiarDescuento({
                           vendedor,
                           week,
                           values,
-                          value: event.target.value,
-                        })
-                      }
+                          value,
+                        });
+                      }}
                       aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
                       className={`w-24 rounded border bg-white px-2 py-1 text-center text-xs font-semibold outline-none focus:ring-2 disabled:opacity-60 ${
                         !valorInputValido

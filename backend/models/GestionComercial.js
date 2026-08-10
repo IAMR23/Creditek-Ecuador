@@ -15,6 +15,17 @@ const GestionComercial = sequelize.define(
       allowNull: false,
     },
 
+    clienteId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "clientes",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+
     celularGestionado: {
       type: DataTypes.STRING,
       allowNull: true,

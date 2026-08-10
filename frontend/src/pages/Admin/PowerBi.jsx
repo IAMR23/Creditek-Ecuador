@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
+import { api } from "../../api/client";
 
 const STORAGE_KEY = "powerbi_filtros";
 const SEMANAS_POWERBI = 13;
 const DIAS_RANGO_POWERBI = SEMANAS_POWERBI * 7 - 1;
+const OBSERVACIONES_OPERATIVAS = ["Uphone", "Creditv"];
 
 const crearFechaLocal = (fecha) => {
   if (fecha instanceof Date) {
@@ -109,6 +111,8 @@ export default function Powerbi() {
 
   const [agencias, setAgencias] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
+  const [promotores, setPromotores] = useState([]);
+  const [promotoresError, setPromotoresError] = useState("");
   const [estadisticas, setEstadisticas] = useState(null);
 
   const [openAgencias, setOpenAgencias] = useState(false);
@@ -141,15 +145,18 @@ export default function Powerbi() {
     filtrosGuardados.observacion || ""
   );
 
-  const observaciones = useMemo(() => {
-    const items = new Set(Object.keys(estadisticas?.porObservacion || {}));
+  const opcionesPromotor = useMemo(() => {
+    const items = new Set([
+      ...OBSERVACIONES_OPERATIVAS,
+      ...promotores.map((promotor) => promotor.nombre),
+    ]);
 
     if (observacion) {
       items.add(observacion);
     }
 
     return Array.from(items).sort((a, b) => a.localeCompare(b, "es"));
-  }, [estadisticas?.porObservacion, observacion]);
+  }, [promotores, observacion]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -210,6 +217,39 @@ export default function Powerbi() {
     cargarUsuarios();
   }, []);
 
+  useEffect(() => {
+    const cargarPromotores = async () => {
+      try {
+        setPromotoresError("");
+        const { data } = await api.get("/usuarios", {
+          params: { rol: "promotor" },
+        });
+        const usuariosPromotores = Array.isArray(data) ? data : [];
+        const idsAgregados = new Set();
+        const promotoresActivos = usuariosPromotores
+          .filter((usuario) => usuario?.activo !== false && usuario?.nombre)
+          .filter((usuario) => {
+            if (idsAgregados.has(usuario.id)) return false;
+            idsAgregados.add(usuario.id);
+            return true;
+          })
+          .sort((a, b) =>
+            String(a.nombre).localeCompare(String(b.nombre), "es", {
+              sensitivity: "base",
+            }),
+          );
+
+        setPromotores(promotoresActivos);
+      } catch (error) {
+        console.error("Error cargando promotores:", error);
+        setPromotores([]);
+        setPromotoresError("No se pudieron cargar los promotores activos.");
+      }
+    };
+
+    cargarPromotores();
+  }, []);
+
   const toggleAgencia = (id) => {
     setAgenciaId((prev) => {
       if (prev.includes(id)) {
@@ -248,7 +288,7 @@ export default function Powerbi() {
     setFechaFin(formatearFechaLocal(fin));
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       Swal.fire(
@@ -306,12 +346,6 @@ export default function Powerbi() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (fechaInicio && fechaFin && usuarioInfo?.id) {
-      fetchData();
-    }
   }, [
     fechaInicio,
     fechaFin,
@@ -319,8 +353,13 @@ export default function Powerbi() {
     vendedorId,
     cierreCajaTipo,
     observacion,
-    usuarioInfo,
   ]);
+
+  useEffect(() => {
+    if (fechaInicio && fechaFin && usuarioInfo?.id) {
+      fetchData();
+    }
+  }, [fechaInicio, fechaFin, usuarioInfo?.id, fetchData]);
 
   return (
     <div className="p-4">
@@ -485,7 +524,7 @@ export default function Powerbi() {
 
           <div className="flex flex-col">
             <label className="mb-1.5 text-sm font-medium text-gray-700">
-              Observaciones
+              Promotor
             </label>
             <select
               className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
@@ -493,12 +532,17 @@ export default function Powerbi() {
               onChange={(e) => setObservacion(e.target.value)}
             >
               <option value="">Todos</option>
-              {observaciones.map((item) => (
+              {opcionesPromotor.map((item) => (
                 <option key={item} value={item}>
                   {item}
                 </option>
               ))}
             </select>
+            {promotoresError && (
+              <p className="mt-1 text-xs font-medium text-red-600">
+                {promotoresError}
+              </p>
+            )}
           </div>
         </div>
       </div>

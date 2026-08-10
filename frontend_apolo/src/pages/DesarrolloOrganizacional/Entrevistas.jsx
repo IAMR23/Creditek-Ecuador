@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { CalendarDays, List, Plus, RefreshCw } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
@@ -54,6 +55,7 @@ const getDownloadErrorMessage = async (error) => {
 };
 
 export default function Entrevistas({ modo = "entrevista" }) {
+  const navigate = useNavigate();
   const isSelectedMode = modo === "seleccionado";
   const [interviews, setInterviews] = useState([]);
   const [agencies, setAgencies] = useState([]);
@@ -780,6 +782,9 @@ export default function Entrevistas({ modo = "entrevista" }) {
             onDownloadContract={downloadTrainingAgreement}
             downloadingContractId={downloadingContractId}
             onCreateUser={openCreateUserModal}
+            onEvaluate={(interview) =>
+              navigate(`/seleccionados/${interview.id}/evaluacion-desempeno`)
+            }
             checkingUserCandidateId={checkingUserCandidateId}
             userExistsCandidateIds={userExistsCandidateIds}
             onStatusChange={changeStatus}

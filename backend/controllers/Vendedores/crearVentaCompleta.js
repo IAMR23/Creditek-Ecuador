@@ -1,4 +1,3 @@
-const Cliente = require("../../models/Cliente");
 const Venta = require("../../models/Venta");
 const DetalleVenta = require("../../models/DetalleVenta");
 const VentaObsequio = require("../../models/VentaObsequio");
@@ -16,6 +15,7 @@ const {
   crearClienteContifico,
 } = require("../Contifico/personaController");
 const { normalizarCorreo } = require("../../utils/normalizarCorreo");
+const { registrarPersona } = require("../../services/personasService");
 const CostoHistorico = require("../../models/CostoHistorico");
 const { Op } = require("sequelize");
 
@@ -89,32 +89,7 @@ const crearVentaCompleta = async (req, res) => {
       : null;
 
     // 1️⃣ Cliente
-    let clienteDB = await Cliente.findOne({
-      where: { cedula: cliente.cedula },
-      transaction: t,
-    });
-
-    if (!clienteDB) {
-      clienteDB = await Cliente.create(
-        {
-          cliente: cliente.cliente,
-          cedula: cliente.cedula,
-          telefono: cliente.telefono,
-          correo: cliente.correo,
-          direccion: cliente.direccion,
-        },
-        { transaction: t },
-      );
-    } else {
-      await clienteDB.update(
-        {
-          telefono: cliente.telefono,
-          correo: cliente.correo,
-          direccion: cliente.direccion,
-        },
-        { transaction: t },
-      );
-    }
+    const clienteDB = await registrarPersona(cliente, { transaction: t });
 
     // 2️⃣ Venta
     const ventaDB = await Venta.create(
@@ -231,7 +206,6 @@ const crearVentaCompleta = async (req, res) => {
         entrada: detalle.entrada,
         alcance: detalle.alcance,
         contrato: detalle.contrato,
-        identificadorAnuncio: detalle.identificadorAnuncio || null,
         observacionDetalle: detalle.observacionDetalle,
       },
       { transaction: t },

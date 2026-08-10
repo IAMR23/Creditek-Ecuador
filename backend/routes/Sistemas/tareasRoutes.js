@@ -9,6 +9,7 @@ const {
 const accesoSistemas = [authenticate, requirePermission("Sistemas", "Administracion")];
 
 router.get("/", accesoSistemas, tareasController.listarTareas);
+router.get("/calendario", accesoSistemas, tareasController.listarTareasCalendario);
 router.post("/", accesoSistemas, tareasController.crearTarea);
 router.put("/:id", accesoSistemas, tareasController.actualizarTarea);
 router.delete("/:id", accesoSistemas, tareasController.eliminarTarea);

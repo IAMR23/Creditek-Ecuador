@@ -8,6 +8,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye } from "lucide-react";
 import { FaPen } from "react-icons/fa";
 import { socket } from "../../socket/socket";
+import { api } from "../../api/client";
+import BusquedaClienteCedula from "../../components/clientes/BusquedaClienteCedula";
+
+const OBSERVACIONES_OPERATIVAS = ["Uphone", "Creditv"];
 
 const normalizeText = (value) =>
   String(value || "")
@@ -31,6 +35,8 @@ const CrearVentaCompleta = () => {
   const [loading, setLoading] = useState(false);
   const [origenes, setOrigenes] = useState([]);
   const [usuarioInfo, setUsuarioInfo] = useState(null);
+  const [promotores, setPromotores] = useState([]);
+  const [promotoresError, setPromotoresError] = useState("");
 
   const [dispositivoMarcas, setDispositivoMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
@@ -99,7 +105,6 @@ const CrearVentaCompleta = () => {
     dispositivoMarcaId: "",
     modeloId: "",
     contrato: "",
-    identificadorAnuncio: "",
     formaPagoId: "",
     entrada: "",
     alcance: "",
@@ -123,6 +128,39 @@ const CrearVentaCompleta = () => {
     };
 
     fetchSelects();
+  }, []);
+
+  useEffect(() => {
+    const cargarPromotores = async () => {
+      try {
+        setPromotoresError("");
+        const { data } = await api.get("/usuarios", {
+          params: { rol: "promotor" },
+        });
+        const usuarios = Array.isArray(data) ? data : [];
+        const idsAgregados = new Set();
+        const promotoresActivos = usuarios
+          .filter((usuario) => usuario?.activo !== false && usuario?.nombre)
+          .filter((usuario) => {
+            if (idsAgregados.has(usuario.id)) return false;
+            idsAgregados.add(usuario.id);
+            return true;
+          })
+          .sort((a, b) =>
+            String(a.nombre).localeCompare(String(b.nombre), "es", {
+              sensitivity: "base",
+            }),
+          );
+
+        setPromotores(promotoresActivos);
+      } catch (error) {
+        console.error("Error cargando promotores:", error);
+        setPromotores([]);
+        setPromotoresError("No se pudieron cargar los promotores activos.");
+      }
+    };
+
+    cargarPromotores();
   }, []);
 
   useEffect(() => {
@@ -712,30 +750,6 @@ Obsequios:
 ${textoObsequios}`;
   };
 
-  const observaciones = [
-    "Luis",
-    "Uphone",
-    "Creditv",
-    "Anais",
-    "Bryan",
-    "Andres",
-    "Damian",
-    "Elizeth",
-    "Oscar",
-    "Alejandra",
-    "Damaris",
-    "Mirka",
-    "Fernando",
-    "Mateo",
-    "Raul",
-    "Steeven Chavez",
-    "Jeje Alexis",
-    "Ing Gaby",
-    "Steeven Furgo",
-    "Javier",
-    "Joel",
-  ];
-
   return (
     <div className="max-w-3xl mx-auto shadow-sm p-4 m-4 bg-white rounded-lg border border-green-500">
       {usuarioInfo && (
@@ -760,6 +774,24 @@ ${textoObsequios}`;
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <BusquedaClienteCedula
+          cedula={cliente.cedula}
+          variante="verde"
+          onCedulaChange={(cedula) =>
+            setCliente((prev) => ({ ...prev, cedula }))
+          }
+          onClienteEncontrado={(datosCliente) => setCliente(datosCliente)}
+          onClienteNuevo={(cedula) =>
+            setCliente({
+              cliente: "",
+              cedula,
+              telefono: "",
+              correo: "",
+              direccion: "",
+            })
+          }
+        />
+
         <h4 className="font-bold">Datos del Cliente</h4>
 
         <button
@@ -938,12 +970,22 @@ ${textoObsequios}`;
            focus:ring-2 focus:ring-green-500 focus:border-green-500"
             >
               <option value="">Ninguna</option>
-              {observaciones.map((obs) => (
+              {OBSERVACIONES_OPERATIVAS.map((obs) => (
                 <option key={obs} value={obs}>
                   {obs}
                 </option>
               ))}
+              {promotores.map((promotor) => (
+                <option key={`promotor-${promotor.id}`} value={promotor.nombre}>
+                  {promotor.nombre}
+                </option>
+              ))}
             </select>
+            {promotoresError && (
+              <p className="mt-1 text-xs font-medium text-red-600">
+                {promotoresError}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1189,20 +1231,6 @@ ${textoObsequios}`;
             name="contrato"
             placeholder="Número de contrato"
             value={detalle.contrato}
-            onChange={handleChange}
-            className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Identificador anuncio
-          </label>
-          <input
-            type="text"
-            name="identificadorAnuncio"
-            placeholder="Identificador del anuncio"
-            value={detalle.identificadorAnuncio || ""}
             onChange={handleChange}
             className="w-full p-2 border border-green-500 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
           />

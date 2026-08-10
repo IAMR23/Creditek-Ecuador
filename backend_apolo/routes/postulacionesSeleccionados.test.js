@@ -57,10 +57,13 @@ beforeEach(() => {
   candidate = {
     id: 21,
     nombre: "Postulante de prueba",
+    cedula: "0102030405",
     pasaEntrevista: true,
     descartada: false,
     fechaEntrevista: new Date("2026-07-27T15:00:00.000Z"),
     estadoEntrevista: "REALIZADA",
+    formulario: {},
+    changed: () => {},
     save: async () => {
       saved += 1;
     },
@@ -194,4 +197,82 @@ test("el resumen separa los contadores de Entrevistas y Seleccionados", async ()
   assert.equal(response.status, 200);
   assert.equal(response.body.data.entrevistas, 5);
   assert.equal(response.body.data.seleccionados, 3);
+});
+
+test("obtiene la evaluacion de desempeno de un postulante seleccionado", async () => {
+  candidate.estadoEntrevista = "SELECCIONADO";
+  candidate.formulario.evaluacion_desempeno = {
+    version: "evaluacion-desempeno-v1",
+    puntajeTotal: 80,
+  };
+
+  const response = await request("/21/evaluacion-desempeno");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.postulacion.nombre, "Postulante de prueba");
+  assert.equal(response.body.data.evaluacion.puntajeTotal, 80);
+});
+
+test("guarda y calcula la evaluacion de desempeno sobre 100 puntos", async () => {
+  candidate.estadoEntrevista = "SELECCIONADO";
+  const criteria = [
+    "iniciativa_actitud",
+    "ganas_aprender",
+    "proactividad",
+    "cumplimiento_metas",
+    "disposicion_venta",
+    "volanteo_comunicacion",
+    "proceso_venta",
+    "uso_herramientas",
+    "argumentacion_beneficios",
+    "manejo_objeciones",
+    "registro_informacion",
+    "horarios_normas",
+    "constancia",
+    "organizacion_tiempo",
+    "cumplimiento_tareas",
+    "orden_actitud",
+  ];
+
+  const response = await request("/21/evaluacion-desempeno", {
+    method: "PUT",
+    body: {
+      periodoDesde: "2026-08-03",
+      periodoHasta: "2026-08-08",
+      evaluador: "Evaluador de prueba",
+      fechaEvaluacion: "2026-08-08",
+      calificaciones: Object.fromEntries(criteria.map((id) => [id, 5])),
+      observaciones: {
+        quiere_hacer: "Actitud positiva.",
+        sabe_hacer: "Aplica el proceso.",
+        disciplinada: "Cumple horarios.",
+      },
+      ventas: [1, 1, 1, 1, 0, 0],
+      comentariosGenerales: "Apto para continuar.",
+      recomendacion: "APROBADO",
+      firmaEvaluador: "Evaluador de prueba",
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.puntajeAspectos, 75);
+  assert.equal(response.body.data.puntajeVentas, 20);
+  assert.equal(response.body.data.puntajeTotal, 95);
+  assert.equal(response.body.data.metaCumplida, true);
+  assert.equal(response.body.data.cumpleAprobacion, true);
+  assert.equal(candidate.formulario.evaluacion_desempeno.puntajeTotal, 95);
+  assert.equal(saved, 1);
+});
+
+test("rechaza la evaluacion de un postulante que no esta seleccionado", async () => {
+  const response = await request("/21/evaluacion-desempeno", {
+    method: "PUT",
+    body: {
+      ventas: [0, 0, 0, 0, 0, 0],
+    },
+  });
+
+  assert.equal(response.status, 409);
+  assert.match(response.body.message, /seleccionados/i);
+  assert.equal(saved, 0);
 });

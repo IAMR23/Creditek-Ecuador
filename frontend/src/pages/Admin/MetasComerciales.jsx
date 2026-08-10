@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
@@ -9,8 +9,10 @@ import { DataGrid } from "@mui/x-data-grid";
 import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
 import { getHoyLocal } from "../../utils/dateUtils";
+import { api } from "../../api/client";
 
 const STORAGE_KEY = "metasComercialesFiltros";
+const OBSERVACIONES_OPERATIVAS = ["Uphone", "Creditv"];
 
 export default function MetasComerciales() {
   const [filas, setFilas] = useState([]);
@@ -22,28 +24,11 @@ export default function MetasComerciales() {
   const [agencias, setAgencias] = useState([]);
   const [agenciaId, setAgenciaId] = useState("");
   const [usuarios, setUsuarios] = useState([]);
+  const [promotores, setPromotores] = useState([]);
+  const [promotoresError, setPromotoresError] = useState("");
   const [vendedorId, setVendedorId] = useState("");
   const [observacion, setObservacion] = useState("");
   const [filtrosCargados, setFiltrosCargados] = useState(false);
-
-  const observaciones = [
-    "Luis",
-    "Uphone",
-    "Creditv",
-    "Anais",
-    "Bryan",
-    "Andres",
-    "Damian",
-    "Elizeth",
-    "Oscar",
-    "Alejandra",
-    "Damaris",
-    "Mirka",
-    "Fernando",
-    "Mateo",
-    "Raul",
-    "Steeven Furgo",
-  ];
 
   const cargarUsuarios = async () => {
     try {
@@ -54,6 +39,35 @@ export default function MetasComerciales() {
     } catch (error) {
       console.error("Error cargando usuarios:", error);
       setUsuarios([]);
+    }
+  };
+
+  const cargarPromotores = async () => {
+    try {
+      setPromotoresError("");
+      const { data } = await api.get("/usuarios", {
+        params: { rol: "promotor" },
+      });
+      const usuariosPromotores = Array.isArray(data) ? data : [];
+      const idsAgregados = new Set();
+      const promotoresActivos = usuariosPromotores
+        .filter((usuario) => usuario?.activo !== false && usuario?.nombre)
+        .filter((usuario) => {
+          if (idsAgregados.has(usuario.id)) return false;
+          idsAgregados.add(usuario.id);
+          return true;
+        })
+        .sort((a, b) =>
+          String(a.nombre).localeCompare(String(b.nombre), "es", {
+            sensitivity: "base",
+          }),
+        );
+
+      setPromotores(promotoresActivos);
+    } catch (error) {
+      console.error("Error cargando promotores:", error);
+      setPromotores([]);
+      setPromotoresError("No se pudieron cargar los promotores activos.");
     }
   };
 
@@ -77,6 +91,7 @@ export default function MetasComerciales() {
   useEffect(() => {
     cargarAgencias();
     cargarUsuarios();
+    cargarPromotores();
   }, []);
 
   useEffect(() => {
@@ -127,7 +142,7 @@ export default function MetasComerciales() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtros));
   }, [fechaInicio, fechaFin, agenciaId, vendedorId, observacion, filtrosCargados]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
       return;
@@ -187,7 +202,7 @@ export default function MetasComerciales() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fechaInicio, fechaFin, agenciaId, vendedorId, observacion]);
 
   const columnas = [
     {
@@ -215,7 +230,11 @@ export default function MetasComerciales() {
       return;
     }
 
-    const data = filas.map(({ id, ...rest }) => rest);
+    const data = filas.map((fila) => {
+      const filaSinId = { ...fila };
+      delete filaSinId.id;
+      return filaSinId;
+    });
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Metas Comerciales");
@@ -233,7 +252,7 @@ export default function MetasComerciales() {
     ) {
       fetchData();
     }
-  }, [filtrosCargados, fechaInicio, fechaFin, agenciaId, vendedorId, observacion, usuarioInfo]);
+  }, [filtrosCargados, fechaInicio, fechaFin, usuarioInfo?.id, fetchData]);
 
   const limpiarFiltros = () => {
     setFechaInicio(getHoyLocal());
@@ -303,19 +322,36 @@ export default function MetasComerciales() {
 
         <div>
           <label className="block text-sm font-medium">Promotor</label>
-          <input
-            type="text"
-            list="observaciones-list"
+          <select
             className="border px-2 py-1 rounded"
-            placeholder="Escriba o seleccione"
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
-          />
-          <datalist id="observaciones-list">
-            {observaciones.map((o) => (
-              <option key={o} value={o} />
+          >
+            <option value="">Todos</option>
+            {observacion &&
+              !OBSERVACIONES_OPERATIVAS.includes(observacion) &&
+              !promotores.some(
+                (promotor) => promotor.nombre === observacion,
+              ) && <option value={observacion}>{observacion}</option>}
+            {OBSERVACIONES_OPERATIVAS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
             ))}
-          </datalist>
+            {promotores.map((promotor) => (
+              <option
+                key={`promotor-${promotor.id}`}
+                value={promotor.nombre}
+              >
+                {promotor.nombre}
+              </option>
+            ))}
+          </select>
+          {promotoresError && (
+            <p className="mt-1 text-xs font-medium text-red-600">
+              {promotoresError}
+            </p>
+          )}
         </div>
 
         <button

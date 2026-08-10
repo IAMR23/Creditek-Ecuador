@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+/* eslint-disable react/prop-types */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
 import {
   ChevronLeft,
   ChevronRight,
+  CalendarDays,
   CheckCircle2,
   Filter,
+  ListTodo,
   Pencil,
   Play,
   Plus,
@@ -16,6 +19,13 @@ import {
   X,
 } from "lucide-react";
 import { API_URL } from "../../../config";
+import { api } from "../../api/client";
+import CalendarioTareas from "../../components/tareas/CalendarioTareas";
+import {
+  desplazarMes,
+  obtenerMesActual,
+  obtenerRangoMes,
+} from "../../utils/calendarioTareas";
 
 const ESTADOS = [
   { value: "pendiente", label: "Pendiente" },
@@ -93,8 +103,14 @@ const getEstadoLabel = (tarea) =>
   estadoLabels[normalizarEstado(tarea.status)] || tarea.estado || "-";
 
 export default function GestionTareas() {
+  const [vistaActiva, setVistaActiva] = useState("lista");
   const [tareas, setTareas] = useState([]);
+  const [tareasCalendario, setTareasCalendario] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingCalendario, setLoadingCalendario] = useState(false);
+  const [calendarioError, setCalendarioError] = useState("");
+  const [mesCalendario, setMesCalendario] = useState(obtenerMesActual);
+  const [calendarioRevision, setCalendarioRevision] = useState(0);
   const [guardando, setGuardando] = useState(false);
   const [accionId, setAccionId] = useState("");
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -127,7 +143,7 @@ export default function GestionTareas() {
     return { desde, hasta };
   }, [paginacion]);
 
-  const cargarTareas = async (paginaSolicitada = pagina) => {
+  const cargarTareas = useCallback(async (paginaSolicitada = pagina) => {
     if (
       filtros.fechaInicio &&
       filtros.fechaFin &&
@@ -184,11 +200,54 @@ export default function GestionTareas() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    pagina,
+    limite,
+    filtros.fechaInicio,
+    filtros.fechaFin,
+    filtros.estado,
+  ]);
 
   useEffect(() => {
     cargarTareas();
-  }, [pagina, limite, filtros.fechaInicio, filtros.fechaFin, filtros.estado]);
+  }, [cargarTareas]);
+
+  useEffect(() => {
+    if (vistaActiva !== "calendario") return undefined;
+
+    let cancelado = false;
+
+    const cargarCalendario = async () => {
+      try {
+        setLoadingCalendario(true);
+        setCalendarioError("");
+        const { data } = await api.get("/api/tareas/calendario", {
+          params: obtenerRangoMes(mesCalendario),
+        });
+
+        if (!cancelado) {
+          setTareasCalendario(data.tareas || []);
+        }
+      } catch (error) {
+        if (!cancelado) {
+          console.error("Error cargando calendario de tareas:", error);
+          setTareasCalendario([]);
+          setCalendarioError(
+            error.response?.data?.message ||
+              "No se pudo cargar el calendario de tareas",
+          );
+        }
+      } finally {
+        if (!cancelado) setLoadingCalendario(false);
+      }
+    };
+
+    cargarCalendario();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [vistaActiva, mesCalendario, calendarioRevision]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNow(Date.now()), 1000);
@@ -270,6 +329,7 @@ export default function GestionTareas() {
         setPagina(1);
       }
       await cargarTareas(tareaEditando ? pagina : 1);
+      setCalendarioRevision((prev) => prev + 1);
       cerrarModal();
       Swal.fire({
         icon: "success",
@@ -297,6 +357,7 @@ export default function GestionTareas() {
         { headers: getAuthHeaders() },
       );
       await cargarTareas(pagina);
+      setCalendarioRevision((prev) => prev + 1);
     } catch (error) {
       Swal.fire(
         "Error",
@@ -317,6 +378,7 @@ export default function GestionTareas() {
         { headers: getAuthHeaders() },
       );
       await cargarTareas(pagina);
+      setCalendarioRevision((prev) => prev + 1);
     } catch (error) {
       Swal.fire(
         "Error",
@@ -350,6 +412,7 @@ export default function GestionTareas() {
       } else {
         await cargarTareas(pagina);
       }
+      setCalendarioRevision((prev) => prev + 1);
     } catch (error) {
       Swal.fire(
         "Error",
@@ -427,7 +490,8 @@ export default function GestionTareas() {
         <Metric label="Finalizadas" value={resumen.finalizadas} tone="green" />
       </div>
 
-      <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      {vistaActiva === "lista" && (
+        <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
           <Filter size={16} />
           Filtros
@@ -512,18 +576,57 @@ export default function GestionTareas() {
             {filtroError}
           </div>
         )}
-      </section>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-sm font-bold text-gray-900">Listado de tareas</h2>
-          <span className="text-xs font-semibold text-gray-500">
-            Mostrando {rangoPaginacion.desde}-{rangoPaginacion.hasta} de{" "}
-            {paginacion.total}
-          </span>
+          <div
+            role="tablist"
+            aria-label="Vistas de gestión de tareas"
+            className="flex w-fit items-center gap-1 rounded-lg bg-gray-100 p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={vistaActiva === "lista"}
+              onClick={() => setVistaActiva("lista")}
+              className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition ${
+                vistaActiva === "lista"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              <ListTodo size={16} />
+              Listado de tareas
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={vistaActiva === "calendario"}
+              onClick={() => setVistaActiva("calendario")}
+              className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition ${
+                vistaActiva === "calendario"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              <CalendarDays size={16} />
+              Calendario
+            </button>
+          </div>
+
+          {vistaActiva === "lista" && (
+            <span className="text-xs font-semibold text-gray-500">
+              Mostrando {rangoPaginacion.desde}-{rangoPaginacion.hasta} de{" "}
+              {paginacion.total}
+            </span>
+          )}
         </div>
 
-        <div className="max-w-full overflow-x-auto">
+        {vistaActiva === "lista" ? (
+          <>
+            <div className="max-w-full overflow-x-auto">
           <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead className="bg-gray-100 text-left text-xs uppercase text-gray-600">
               <tr>
@@ -681,6 +784,23 @@ export default function GestionTareas() {
             </button>
           </div>
         </div>
+          </>
+        ) : (
+          <CalendarioTareas
+            mes={mesCalendario}
+            tareas={tareasCalendario}
+            loading={loadingCalendario}
+            error={calendarioError}
+            onMesAnterior={() =>
+              setMesCalendario((mes) => desplazarMes(mes, -1))
+            }
+            onMesSiguiente={() =>
+              setMesCalendario((mes) => desplazarMes(mes, 1))
+            }
+            onMesActual={() => setMesCalendario(obtenerMesActual())}
+            onEditarTarea={abrirEditarTarea}
+          />
+        )}
       </section>
 
       {modalAbierto && (

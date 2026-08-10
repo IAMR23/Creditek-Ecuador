@@ -280,6 +280,11 @@ export default function Sidebar({ auth }) {
             path: "/sistemas/inventarios",
           },
           {
+            label: "Personas",
+            icon: <Users size={20} />,
+            path: "/sistemas/personas",
+          },
+          {
             label: "Normalizacion dispositivos",
             icon: <ClipboardList size={20} />,
             path: "/conciliacion-facturas",

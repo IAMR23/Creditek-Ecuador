@@ -8,6 +8,9 @@ router.post("/", clienteController.crearCliente);
 // Listar todos los clientes
 router.get("/", clienteController.listarClientes);
 
+// Buscar cliente por cedula. Debe declararse antes de la ruta dinamica por ID.
+router.get("/cedula/:cedula", clienteController.buscarClientePorCedula);
+
 // Obtener cliente por ID
 router.get("/:id", clienteController.obtenerCliente);
 

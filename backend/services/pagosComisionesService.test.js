@@ -3,6 +3,7 @@ const {
   buildPersonalSellerView,
   getCommissionablePaidPosition,
   hasCommissionablePaidPosition,
+  isSellerEligibleForTeam,
   getLeaderCommissionMembers,
   getLeaderBonusTeam,
   getUsuarioPayload,
@@ -24,7 +25,12 @@ const {
   getCommissionTeamProductionForWeek,
   selectHighestPaidPosition,
   getDistinctPaidPositions,
+  normalizeWeeklySellerIds,
+  buildWeeklyTeamsMap,
+  getLeaderMembersForWeek,
   resolveSalesSanctionConfig,
+  resolvePersonalSellerSanctionConfig,
+  applyPersonalSellerPenaltiesToPrimaryView,
 } = require("./pagosComisionesService");
 
 describe("pagosComisionesService", () => {
@@ -54,6 +60,24 @@ describe("pagosComisionesService", () => {
         nivel: "OPERATIVO",
       }),
     ).toBe(true);
+  });
+
+  test("permite seleccionar cualquier usuario con rol o cargo de vendedor", () => {
+    expect(
+      isSellerEligibleForTeam({ rol: "Vendedor", posicionesPago: [] }),
+    ).toBe(true);
+    expect(
+      isSellerEligibleForTeam({
+        rol: "Administracion",
+        posicionesPago: [{ cargo: "Vendedor de Call Center" }],
+      }),
+    ).toBe(true);
+    expect(
+      isSellerEligibleForTeam({
+        rol: "Administracion",
+        posicionesPago: [{ cargo: "Supervisor de Piso" }],
+      }),
+    ).toBe(false);
   });
 
   test("incluye al jefe comercial para calcular la produccion de sus juniors", () => {
@@ -204,7 +228,7 @@ describe("pagosComisionesService", () => {
     });
   });
 
-  test("toda persona con dos cargos queda exenta de sancion por meta", () => {
+  test("doble cargo conserva la sancion del cargo vendedor", () => {
     const sancionVendedor = { minimoUnidades: 9, valorMultaUnidad: 8 };
     const sanctionsByRole = {
       byRole: { 2: sancionVendedor },
@@ -216,11 +240,13 @@ describe("pagosComisionesService", () => {
         {
           rolPagoId: 2,
           cargo: "VENDEDOR DE PISO",
+          rolPagoComisionId: 2,
+          cargoComision: "VENDEDOR DE PISO",
           tieneMultiplesCargos: true,
         },
         sanctionsByRole,
       ),
-    ).toBeNull();
+    ).toBe(sancionVendedor);
     expect(
       resolveSalesSanctionConfig(
         { rolPagoId: 15, cargo: "JEFE COMERCIAL DE PISO" },
@@ -230,6 +256,17 @@ describe("pagosComisionesService", () => {
     expect(
       resolveSalesSanctionConfig(
         { rolPagoId: 2, cargo: "VENDEDOR DE PISO" },
+        sanctionsByRole,
+      ),
+    ).toBe(sancionVendedor);
+    expect(
+      resolvePersonalSellerSanctionConfig(
+        {
+          posicionesPago: [
+            { rolPagoId: 15, cargo: "JEFE COMERCIAL DE PISO" },
+            { rolPagoId: 2, cargo: "VENDEDOR DE PISO" },
+          ],
+        },
         sanctionsByRole,
       ),
     ).toBe(sancionVendedor);
@@ -599,17 +636,158 @@ describe("pagosComisionesService", () => {
     });
   });
 
-  test("vista de vendedores muestra solo ventas personales del doble cargo", () => {
+  test("la seleccion semanal reemplaza la asignacion general del jefe", () => {
+    const leader = {
+      usuarioId: 10,
+      nombre: "Jefe comercial",
+      tieneMultiplesCargos: false,
+    };
+    const sellerOne = { usuarioId: 11, nombre: "Vendedor uno" };
+    const sellerTwo = { usuarioId: 12, nombre: "Vendedor dos" };
+    const sellersById = new Map([
+      [11, sellerOne],
+      [12, sellerTwo],
+    ]);
+
+    const configured = getLeaderMembersForWeek({
+      leader,
+      defaultJuniors: [sellerOne],
+      weeklyTeam: { vendedorIds: [12] },
+      sellersById,
+    });
+    const emptyConfigured = getLeaderMembersForWeek({
+      leader,
+      defaultJuniors: [sellerOne],
+      weeklyTeam: { vendedorIds: [] },
+      sellersById,
+    });
+    const fallback = getLeaderMembersForWeek({
+      leader,
+      defaultJuniors: [sellerOne],
+      weeklyTeam: null,
+      sellersById,
+    });
+
+    expect(configured).toMatchObject({
+      configured: true,
+      selectedSellerIds: [12],
+      members: [sellerTwo],
+    });
+    expect(emptyConfigured).toMatchObject({
+      configured: true,
+      selectedSellerIds: [],
+      members: [],
+    });
+    expect(fallback).toMatchObject({
+      configured: false,
+      selectedSellerIds: [11],
+      members: [sellerOne],
+    });
+  });
+
+  test("el supervisor calcula produccion y promedio con su seleccion de cada semana", () => {
+    const weeks = [
+      { startDate: "2026-07-02", endDate: "2026-07-08" },
+      { startDate: "2026-07-09", endDate: "2026-07-15" },
+    ];
+    const leader = {
+      usuarioId: 10,
+      nombre: "Supervisor",
+      tieneMultiplesCargos: false,
+    };
+    const sellerOne = {
+      usuarioId: 11,
+      nombre: "Vendedor uno",
+      fechaIngreso: "2025-01-01",
+      semanas: {
+        "2026-07-02": { venden: 4, valorVendido: 400 },
+        "2026-07-09": { venden: 10, valorVendido: 1000 },
+      },
+    };
+    const sellerTwo = {
+      usuarioId: 12,
+      nombre: "Vendedor dos",
+      fechaIngreso: "2025-01-01",
+      semanas: {
+        "2026-07-02": { venden: 6, valorVendido: 600 },
+        "2026-07-09": { venden: 8, valorVendido: 800 },
+      },
+    };
+    const sellersById = new Map([
+      [11, sellerOne],
+      [12, sellerTwo],
+    ]);
+    const firstTeam = getLeaderMembersForWeek({
+      leader,
+      defaultJuniors: [],
+      weeklyTeam: { vendedorIds: [11, 12] },
+      sellersById,
+    });
+    const secondTeam = getLeaderMembersForWeek({
+      leader,
+      defaultJuniors: [],
+      weeklyTeam: { vendedorIds: [12] },
+      sellersById,
+    });
+    const firstProduction = getCommissionTeamProductionForWeek({
+      members: firstTeam.members,
+      week: weeks[0],
+      esSupervisor: true,
+    });
+    const secondProduction = getCommissionTeamProductionForWeek({
+      members: secondTeam.members,
+      week: weeks[1],
+      esSupervisor: true,
+    });
+
+    expect(firstProduction.venden).toBe(10);
+    expect(firstProduction.integrantes).toHaveLength(2);
+    expect(secondProduction.venden).toBe(8);
+    expect(secondProduction.integrantes).toHaveLength(1);
+    expect(
+      calculateLeaderAverage({
+        totalDispositivos: firstProduction.venden + secondProduction.venden,
+        totalVendedoresSemanas:
+          firstProduction.integrantes.length + secondProduction.integrantes.length,
+      }),
+    ).toBe(6);
+  });
+
+  test("normaliza las configuraciones semanales persistidas", () => {
+    const map = buildWeeklyTeamsMap([
+      {
+        id: 1,
+        jefeComercialId: 10,
+        semanaInicio: "2026-07-09",
+        vendedorIds: [12, "11", 12, "invalido"],
+      },
+    ]);
+
+    expect(normalizeWeeklySellerIds([12, "11", 12, "invalido"])).toEqual([
+      12,
+      11,
+    ]);
+    expect(map.get("10:2026-07-09")).toEqual({
+      id: 1,
+      jefeComercialId: 10,
+      semanaInicio: "2026-07-09",
+      vendedorIds: [12, 11],
+    });
+  });
+
+  test("vista de vendedores mantiene ventas personales y aplica multa al doble cargo", () => {
     const weeks = [
       { startDate: "2026-07-02", endDate: "2026-07-08" },
       { startDate: "2026-07-09", endDate: "2026-07-15" },
     ];
     const view = buildPersonalSellerView({
       vendedor: {
+        usuarioId: 10,
         fechaCreacionUsuario: "2026-01-01",
         fechaIngreso: "2026-01-01",
       },
       weeks,
+      sanctionConfig: { minimoUnidades: 9, valorMultaUnidad: 8 },
       semanasPersonales: {
         "2026-07-02": {
           venden: 2,
@@ -628,13 +806,64 @@ describe("pagosComisionesService", () => {
       venden: 6,
       valorVendido: 2142,
       totalComisiones: 0,
-      valorDescontar: 0,
+      noCumpleMetas: 12,
+      valorDescontar: 96,
     });
     expect(view.resumenMensual).toMatchObject({
       ventasTvCelulaMensual: 6,
       valorComisionSemanal: 0,
       valorComisionMensual: 0,
-      totalPagar: 0,
+      totalNoCumpleMetas: 12,
+      totalValorDescontar: 96,
+      totalPagar: -96,
+    });
+  });
+
+  test("descuenta una sola vez la multa personal del doble cargo en su pago principal", () => {
+    const weeks = [{ startDate: "2026-07-02", endDate: "2026-07-08" }];
+    const vendedor = {
+      semanas: {
+        "2026-07-02": {
+          noCumpleMetas: 0,
+          valorMultaCalculado: 0,
+          valorDescontar: 0,
+        },
+      },
+      total: { noCumpleMetas: 0, valorDescontar: 0 },
+      resumenMensual: {
+        totalComisionesSemanaMensual: 150,
+        totalNoCumpleMetas: 0,
+        totalValorDescontar: 0,
+        totalPagar: 150,
+      },
+    };
+    const personalSellerView = {
+      semanas: {
+        "2026-07-02": {
+          noCumpleMetas: 3,
+          valorMultaCalculado: 24,
+          valorDescontar: 24,
+          multaOmitida: false,
+          descuentoModificado: false,
+        },
+      },
+      total: { noCumpleMetas: 3, valorDescontar: 24 },
+    };
+
+    applyPersonalSellerPenaltiesToPrimaryView({
+      vendedor,
+      personalSellerView,
+      weeks,
+    });
+
+    expect(vendedor.semanas["2026-07-02"]).toMatchObject({
+      noCumpleMetas: 3,
+      valorMultaCalculado: 24,
+      valorDescontar: 24,
+    });
+    expect(vendedor.resumenMensual).toMatchObject({
+      totalValorDescontar: 24,
+      totalPagar: 126,
     });
   });
 
@@ -714,7 +943,7 @@ describe("pagosComisionesService", () => {
     ).toBe(false);
   });
 
-  test("personal nuevo no genera unidades incumplidas ni valor a descontar", () => {
+  test("personal nuevo genera multa desde su primera semana completa", () => {
     const personalNuevo = isNewPersonnelDuringWeek({
       fechaCreacionUsuario: "2026-07-01",
       week: { startDate: "2026-07-23", endDate: "2026-07-29" },
@@ -724,13 +953,13 @@ describe("pagosComisionesService", () => {
       calculateWeeklyPenalty({
         config: { minimoUnidades: 9, valorMultaUnidad: 8 },
         unidadesVendidas: 2,
-        aplicaDescuento: !personalNuevo,
+        aplicaDescuento: personalNuevo,
         multaOmitida: false,
       }),
     ).toEqual({
-      noCumpleMetas: 0,
-      valorMultaCalculado: 0,
-      valorDescontar: 0,
+      noCumpleMetas: 7,
+      valorMultaCalculado: 56,
+      valorDescontar: 56,
       multaOmitida: false,
       descuentoModificado: false,
     });

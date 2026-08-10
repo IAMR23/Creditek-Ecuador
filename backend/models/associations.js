@@ -54,6 +54,7 @@ const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
+const PagoComisionEquipoSemanal = require('./PagoComisionEquipoSemanal');
 const ConfiguracionMesComision = require('./ConfiguracionMesComision');
 const PagoComisionPeriodo = require('./PagoComisionPeriodo');
 const MetaMinimaMultaConfiguracion = require('./MetaMinimaMultaConfiguracion');
@@ -68,6 +69,8 @@ const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Usuario, { foreignKey: 'rolId', as: 'usuarios' });
+Cliente.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
+Rol.hasMany(Cliente, { foreignKey: 'rolId', as: 'personas' });
 Usuario.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
 RolPago.hasMany(Usuario, { foreignKey: "rolPagoId", as: "usuariosCargoPago" });
 Usuario.belongsTo(Usuario, { foreignKey: "jefeComercialId", as: "jefeComercial" });
@@ -564,6 +567,22 @@ PagoComisionMultaAjuste.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
 });
+Usuario.hasMany(PagoComisionEquipoSemanal, {
+  foreignKey: "jefeComercialId",
+  as: "equiposComisionesSemanales",
+});
+PagoComisionEquipoSemanal.belongsTo(Usuario, {
+  foreignKey: "jefeComercialId",
+  as: "jefeComercial",
+});
+Usuario.hasMany(PagoComisionEquipoSemanal, {
+  foreignKey: "actualizadoPorId",
+  as: "equiposComisionesSemanalesActualizados",
+});
+PagoComisionEquipoSemanal.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
 Usuario.hasMany(ConfiguracionMesComision, {
   foreignKey: "creadoPorId",
   as: "configuracionesMesesComisionesCreadas",
@@ -627,6 +646,16 @@ Dispositivo.hasMany(GestionComercial, {
 GestionComercial.belongsTo(Dispositivo, {
   foreignKey: "dispositivoId",
   as: "dispositivo",
+});
+
+Cliente.hasMany(GestionComercial, {
+  foreignKey: "clienteId",
+  as: "gestionesComerciales",
+});
+
+GestionComercial.belongsTo(Cliente, {
+  foreignKey: "clienteId",
+  as: "persona",
 });
 
 /* MARKETING */

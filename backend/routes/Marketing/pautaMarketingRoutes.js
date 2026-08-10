@@ -16,6 +16,7 @@ router.get("/", controller.listar);
 router.post("/", procesarImagenMarketing, controller.crear);
 router.post("/:id/contenidos", controller.agregarContenido);
 router.put("/:id/contenidos/:indice", controller.actualizarContenido);
+router.delete("/:id/contenidos/:indice", controller.eliminarContenido);
 router.put("/:id", procesarImagenMarketing, controller.actualizar);
 router.patch(
   "/:id/contenidos/:indice/cumplimiento",

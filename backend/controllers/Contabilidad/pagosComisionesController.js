@@ -189,6 +189,36 @@ const actualizarValoresMultas = async (req, res) => {
   }
 };
 
+const guardarEquipoSemanalJefeComercial = async (req, res) => {
+  try {
+    const resultado =
+      await pagosComisionesService.guardarEquipoSemanalJefeComercial({
+        jefeComercialId: req.params.jefeComercialId,
+        semanaInicio: req.params.semanaInicio,
+        vendedorIds: req.body.vendedorIds,
+        actualizadoPorId: req.user.id,
+      });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
+const guardarEquipoSemanalSupervisorComercial = async (req, res) => {
+  try {
+    const resultado =
+      await pagosComisionesService.guardarEquipoSemanalSupervisorComercial({
+        supervisorComercialId: req.params.supervisorComercialId,
+        semanaInicio: req.params.semanaInicio,
+        vendedorIds: req.body.vendedorIds,
+        actualizadoPorId: req.user.id,
+      });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
 module.exports = {
   obtenerReporte,
   listarConfiguracionMeses,
@@ -198,6 +228,8 @@ module.exports = {
   marcarPeriodoPagado,
   actualizarJefeComercial,
   actualizarSupervisorComercial,
+  guardarEquipoSemanalJefeComercial,
+  guardarEquipoSemanalSupervisorComercial,
   actualizarOmisionMulta,
   actualizarValoresMultas,
 };

@@ -11,6 +11,7 @@ const NominaEmpleado = require("../models/NominaEmpleado");
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
 const SancionConfiguracion = require("../models/SancionConfiguracion");
 const PagoComisionMultaAjuste = require("../models/PagoComisionMultaAjuste");
+const PagoComisionEquipoSemanal = require("../models/PagoComisionEquipoSemanal");
 const ConfiguracionMesComision = require("../models/ConfiguracionMesComision");
 const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
 const {
@@ -160,7 +161,13 @@ const buildEmptyWeeks = (weeks) =>
     return acc;
   }, {});
 
-const buildPersonalSellerView = ({ vendedor, weeks, semanasPersonales }) => {
+const buildPersonalSellerView = ({
+  vendedor,
+  weeks,
+  semanasPersonales,
+  sanctionConfig = null,
+  penaltyAdjustments = new Map(),
+}) => {
   const semanas = buildEmptyWeeks(weeks);
   const total = emptyWeekValues();
 
@@ -170,10 +177,6 @@ const buildPersonalSellerView = ({ vendedor, weeks, semanasPersonales }) => {
     values.venden = toNumber(source.venden);
     values.valorVendido = round(source.valorVendido, 2);
     values.totalComisiones = 0;
-    values.noCumpleMetas = 0;
-    values.valorMultaCalculado = 0;
-    values.valorDescontar = 0;
-    values.multaOmitida = false;
     values.personalNuevo = isNewPersonnelDuringWeek({
       fechaCreacionUsuario: vendedor.fechaCreacionUsuario,
       week,
@@ -189,20 +192,91 @@ const buildPersonalSellerView = ({ vendedor, weeks, semanasPersonales }) => {
       week,
     });
     values.semanaFutura = isFutureCommercialWeek(week);
+    const penaltyAdjustment = penaltyAdjustments.get(
+      getPenaltyAdjustmentKey(vendedor.usuarioId, week.startDate),
+    );
+    const penalty = calculateWeeklyPenalty({
+      config: sanctionConfig,
+      unidadesVendidas: values.venden,
+      aplicaDescuento:
+        Boolean(sanctionConfig) &&
+        values.semanaCompletaParaDescuento &&
+        !values.semanaFutura,
+      multaOmitida: penaltyAdjustment?.multaOmitida,
+      valorDescontarAjustado: penaltyAdjustment?.valorDescontarAjustado,
+    });
+    values.noCumpleMetas = penalty.noCumpleMetas;
+    values.valorMultaCalculado = penalty.valorMultaCalculado;
+    values.valorDescontar = penalty.valorDescontar;
+    values.multaOmitida = penalty.multaOmitida;
+    values.descuentoModificado = penalty.descuentoModificado;
 
     total.venden += values.venden;
     total.valorVendido += values.valorVendido;
+    total.noCumpleMetas += values.noCumpleMetas;
+    total.valorDescontar += values.valorDescontar;
   });
 
   total.valorVendido = round(total.valorVendido, 2);
+  total.valorDescontar = round(total.valorDescontar, 2);
   return {
     semanas,
     total,
     resumenMensual: {
       ...emptyMonthlyValues(),
       ventasTvCelulaMensual: total.venden,
+      totalNoCumpleMetas: total.noCumpleMetas,
+      totalValorDescontar: total.valorDescontar,
+      totalPagar: round(-total.valorDescontar, 2),
     },
   };
+};
+
+const applyPersonalSellerPenaltiesToPrimaryView = ({
+  vendedor,
+  personalSellerView,
+  weeks,
+}) => {
+  if (!personalSellerView) return;
+
+  weeks.forEach((week) => {
+    const primaryValues = vendedor.semanas[week.startDate];
+    const personalValues = personalSellerView.semanas[week.startDate];
+    if (!primaryValues || !personalValues) return;
+
+    primaryValues.noCumpleMetas =
+      toNumber(primaryValues.noCumpleMetas) +
+      toNumber(personalValues.noCumpleMetas);
+    primaryValues.valorMultaCalculado = round(
+      toNumber(primaryValues.valorMultaCalculado) +
+        toNumber(personalValues.valorMultaCalculado),
+      2,
+    );
+    primaryValues.valorDescontar = round(
+      toNumber(primaryValues.valorDescontar) +
+        toNumber(personalValues.valorDescontar),
+      2,
+    );
+    primaryValues.multaOmitida = Boolean(
+      primaryValues.multaOmitida || personalValues.multaOmitida,
+    );
+    primaryValues.descuentoModificado = Boolean(
+      primaryValues.descuentoModificado || personalValues.descuentoModificado,
+    );
+  });
+
+  vendedor.total.noCumpleMetas += personalSellerView.total.noCumpleMetas;
+  vendedor.total.valorDescontar = round(
+    vendedor.total.valorDescontar + personalSellerView.total.valorDescontar,
+    2,
+  );
+  vendedor.resumenMensual.totalNoCumpleMetas = vendedor.total.noCumpleMetas;
+  vendedor.resumenMensual.totalValorDescontar = vendedor.total.valorDescontar;
+  vendedor.resumenMensual.totalPagar = round(
+    vendedor.resumenMensual.totalComisionesSemanaMensual -
+      vendedor.resumenMensual.totalValorDescontar,
+    2,
+  );
 };
 
 const getDetalleValue = (detalle) => {
@@ -437,6 +511,47 @@ const getLeaderCommissionMembers = ({ leader, juniors }) => {
   }
 
   return [...membersByUser.values()];
+};
+
+const normalizeWeeklySellerIds = (sellerIds = []) =>
+  [...new Set((Array.isArray(sellerIds) ? sellerIds : []).map(Number))].filter(
+    (id) => Number.isInteger(id) && id > 0,
+  );
+
+const getWeeklyTeamKey = (leaderId, weekStart) =>
+  `${Number(leaderId)}:${String(weekStart).slice(0, 10)}`;
+
+const buildWeeklyTeamsMap = (rows = []) =>
+  rows.reduce((map, row) => {
+    const item = row?.get ? row.get({ plain: true }) : row;
+    map.set(getWeeklyTeamKey(item.jefeComercialId, item.semanaInicio), {
+      id: item.id,
+      jefeComercialId: Number(item.jefeComercialId),
+      semanaInicio: String(item.semanaInicio).slice(0, 10),
+      vendedorIds: normalizeWeeklySellerIds(item.vendedorIds),
+    });
+    return map;
+  }, new Map());
+
+const getLeaderMembersForWeek = ({
+  leader,
+  defaultJuniors,
+  weeklyTeam,
+  sellersById,
+}) => {
+  const selectedSellerIds = weeklyTeam
+    ? normalizeWeeklySellerIds(weeklyTeam.vendedorIds)
+    : defaultJuniors.map((seller) => Number(seller.usuarioId));
+  const juniors = selectedSellerIds
+    .filter((sellerId) => sellerId !== Number(leader.usuarioId))
+    .map((sellerId) => sellersById.get(sellerId))
+    .filter(Boolean);
+
+  return {
+    configured: Boolean(weeklyTeam),
+    selectedSellerIds,
+    members: getLeaderCommissionMembers({ leader, juniors }),
+  };
 };
 
 const getLeaderBonusExclusionReasons = ({ member, weeks }) => {
@@ -710,16 +825,41 @@ const buildSanctionsByRole = (configs) => {
 };
 
 const resolveSalesSanctionConfig = (vendedor, sanctionsByRole) => {
-  if (vendedor.tieneMultiplesCargos) return null;
-
-  const cargo = normalizeText(vendedor.cargo);
+  const cargo = normalizeText(vendedor.cargoComision || vendedor.cargo);
   const esLiderComercial =
     cargo.includes("JEFE COMERCIAL") || cargo.includes("SUPERVISOR");
   if (esLiderComercial) return null;
 
   return (
-    sanctionsByRole.byRole[Number(vendedor.rolPagoId)] ||
+    sanctionsByRole.byRole[
+      Number(vendedor.rolPagoComisionId || vendedor.rolPagoId)
+    ] ||
     sanctionsByRole.byCargo[cargo] ||
+    null
+  );
+};
+
+const isSellerEligibleForTeam = (person = {}) =>
+  normalizeText(person.rol).includes("VENDEDOR") ||
+  (person.posicionesPago || person.cargosPago || []).some(
+    isIndividualSellerPosition,
+  );
+
+const resolvePersonalSellerSanctionConfig = (vendedor, sanctionsByRole) => {
+  const posicionesVendedor = (vendedor.posicionesPago || [])
+    .filter(isIndividualSellerPosition)
+    .filter((position) =>
+      Boolean(
+        sanctionsByRole.byRole[Number(position.rolPagoId)] ||
+          sanctionsByRole.byCargo[normalizeText(position.cargo)],
+      ),
+    );
+  const position = selectHighestPaidPosition(posicionesVendedor);
+  if (!position) return null;
+
+  return (
+    sanctionsByRole.byRole[Number(position.rolPagoId)] ||
+    sanctionsByRole.byCargo[normalizeText(position.cargo)] ||
     null
   );
 };
@@ -1128,9 +1268,16 @@ const guardarConfiguracionAnualComision = async ({ year, meses, usuarioId }) => 
 const mergeAgencias = (current = [], incoming = []) =>
   [...new Set([...current, ...incoming].filter(Boolean))].sort();
 
-const ensureVendedor = (map, usuarioPayload, weeks) => {
+const ensureVendedor = (
+  map,
+  usuarioPayload,
+  weeks,
+  { requireCommissionable = true } = {},
+) => {
   if (!usuarioPayload.usuarioId) return null;
-  if (!hasCommissionablePaidPosition(usuarioPayload)) return null;
+  if (requireCommissionable && !hasCommissionablePaidPosition(usuarioPayload)) {
+    return null;
+  }
 
   if (!map.has(usuarioPayload.usuarioId)) {
     const vendedor = {
@@ -1412,7 +1559,9 @@ const finalizarVendedor = (
       config: sanctionConfig,
       unidadesVendidas: values.venden,
       aplicaDescuento:
-        semanaCompletaParaDescuento && !semanaFutura && !personalNuevo,
+        Boolean(sanctionConfig) &&
+        semanaCompletaParaDescuento &&
+        !semanaFutura,
       multaOmitida: penaltyAdjustment?.multaOmitida,
       valorDescontarAjustado: penaltyAdjustment?.valorDescontarAjustado,
     });
@@ -1513,7 +1662,14 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   const fechaInicio = weeks[0].startDate;
   const fechaFin = weeks[weeks.length - 1].endDate;
 
-  const [relaciones, ventas, configs, sanciones, penaltyAdjustmentsRows] = await Promise.all([
+  const [
+    relaciones,
+    ventas,
+    configs,
+    sanciones,
+    penaltyAdjustmentsRows,
+    weeklyTeamsRows,
+  ] = await Promise.all([
     obtenerRelacionesVendedores(),
     obtenerVentasRango({ fechaInicio, fechaFin }),
     ComisionConfiguracion.findAll({
@@ -1527,6 +1683,12 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       },
       attributes: ["usuarioId", "semanaInicio", "omitida", "valorDescontar"],
     }),
+    PagoComisionEquipoSemanal.findAll({
+      where: {
+        semanaInicio: { [Op.between]: [fechaInicio, fechaFin] },
+      },
+      attributes: ["id", "jefeComercialId", "semanaInicio", "vendedorIds"],
+    }),
   ]);
 
   const weeklyRulesByGroup = buildWeeklyRulesByGroup(configs);
@@ -1537,20 +1699,27 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   );
   const sanctionsByRole = buildSanctionsByRole(sanciones);
   const penaltyAdjustments = buildPenaltyAdjustmentsMap(penaltyAdjustmentsRows);
+  const weeklyTeams = buildWeeklyTeamsMap(weeklyTeamsRows);
   const vendedoresMap = new Map();
+  const vendedoresEquipoMap = new Map();
 
   relaciones.forEach((relacion) => {
     const usuarioPayload = getUsuarioPayload(relacion);
-    if (
-      hasCommissionablePaidPosition(usuarioPayload) &&
-      isActiveDuringPeriod({
-        fechaIngreso:
-          usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
-        fechaSalida: usuarioPayload.fechaSalida,
-        fechaInicio,
-        fechaFin,
-      })
-    ) {
+    const activoEnPeriodo = isActiveDuringPeriod({
+      fechaIngreso:
+        usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
+      fechaSalida: usuarioPayload.fechaSalida,
+      fechaInicio,
+      fechaFin,
+    });
+    if (!activoEnPeriodo) return;
+
+    if (isSellerEligibleForTeam(usuarioPayload)) {
+      ensureVendedor(vendedoresEquipoMap, usuarioPayload, weeks, {
+        requireCommissionable: false,
+      });
+    }
+    if (hasCommissionablePaidPosition(usuarioPayload)) {
       ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     }
   });
@@ -1560,7 +1729,6 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     if (!weekKeys.has(weekKey)) return;
 
     const usuarioPayload = getUsuarioPayload(venta.usuarioAgencia);
-    if (!hasCommissionablePaidPosition(usuarioPayload)) return;
     if (
       !isActiveDuringPeriod({
         fechaIngreso:
@@ -1571,15 +1739,31 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       })
     ) return;
 
+    const totals = getSaleTotals(venta);
+    if (isSellerEligibleForTeam(usuarioPayload)) {
+      const vendedorEquipo = ensureVendedor(
+        vendedoresEquipoMap,
+        usuarioPayload,
+        weeks,
+        { requireCommissionable: false },
+      );
+      if (vendedorEquipo) {
+        vendedorEquipo.semanas[weekKey].venden += totals.venden;
+        vendedorEquipo.semanas[weekKey].valorVendido += totals.valorVendido;
+      }
+    }
+
+    if (!hasCommissionablePaidPosition(usuarioPayload)) return;
+
     const vendedor = ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     if (!vendedor) return;
 
-    const totals = getSaleTotals(venta);
     vendedor.semanas[weekKey].venden += totals.venden;
     vendedor.semanas[weekKey].valorVendido += totals.valorVendido;
   });
 
   const vendedoresBase = [...vendedoresMap.values()];
+  const vendedoresEquipoBase = [...vendedoresEquipoMap.values()];
   const vendedoresProduccion = vendedoresBase.map((vendedor) => ({
     ...vendedor,
     semanas: Object.fromEntries(
@@ -1589,6 +1773,21 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       ]),
     ),
   }));
+  const vendedoresEquipoProduccion = vendedoresEquipoBase.map((vendedor) => ({
+    ...vendedor,
+    semanas: Object.fromEntries(
+      weeks.map((week) => [
+        week.startDate,
+        { ...(vendedor.semanas[week.startDate] || emptyWeekValues()) },
+      ]),
+    ),
+  }));
+  const vendedoresProduccionPorId = new Map(
+    vendedoresEquipoProduccion.map((vendedor) => [
+      Number(vendedor.usuarioId),
+      vendedor,
+    ]),
+  );
   vendedoresBase.forEach((jefe) => {
     const cargo = normalizeText(jefe.cargoComision || jefe.cargo);
     const esJefe = cargo.includes("JEFE COMERCIAL");
@@ -1598,18 +1797,35 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     const jefeProduccion = vendedoresProduccion.find(
       (vendedor) => Number(vendedor.usuarioId) === Number(jefe.usuarioId),
     );
-    const juniors = vendedoresProduccion.filter(
+    const juniorsPredeterminados = vendedoresEquipoProduccion.filter(
       (vendedor) => Number(
         esJefe ? vendedor.jefeComercialId : vendedor.supervisorComercialId,
       ) === Number(jefe.usuarioId),
     );
-    const integrantesEquipo = getLeaderCommissionMembers({
-      leader: jefeProduccion,
-      juniors,
+    const equiposPorSemana = new Map();
+    const integrantesPorId = new Map();
+    weeks.forEach((week) => {
+      const weeklyTeam = esJefe || esSupervisor
+        ? weeklyTeams.get(getWeeklyTeamKey(jefe.usuarioId, week.startDate))
+        : null;
+      const equipoSemana = getLeaderMembersForWeek({
+        leader: jefeProduccion,
+        defaultJuniors: juniorsPredeterminados,
+        weeklyTeam,
+        sellersById: vendedoresProduccionPorId,
+      });
+      equiposPorSemana.set(week.startDate, equipoSemana);
+      equipoSemana.members.forEach((member) => {
+        integrantesPorId.set(Number(member.usuarioId), member);
+      });
     });
+    const integrantesEquipo = [...integrantesPorId.values()];
     const equipoBono = esJefe
       ? getLeaderBonusTeam({ members: integrantesEquipo, weeks })
       : { included: integrantesEquipo, excluded: [] };
+    const vendedoresBonoIds = new Set(
+      equipoBono.included.map((member) => Number(member.usuarioId)),
+    );
     jefe.esJefeComercial = esJefe;
     jefe.esSupervisorComercial = esSupervisor;
     jefe.vendedoresJunior = integrantesEquipo.map(
@@ -1630,13 +1846,18 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     jefe.total = emptyWeekValues();
 
     weeks.forEach((week) => {
+      const equipoSemana = equiposPorSemana.get(week.startDate);
+      const integrantesSemana = equipoSemana?.members || [];
+      const integrantesBonoSemana = integrantesSemana.filter((member) =>
+        vendedoresBonoIds.has(Number(member.usuarioId)),
+      );
       const produccion = getCommissionTeamProductionForWeek({
-        members: integrantesEquipo,
+        members: integrantesSemana,
         week,
         esSupervisor,
       });
       const produccionBono = getCommissionTeamProductionForWeek({
-        members: equipoBono.included,
+        members: integrantesBonoSemana,
         week,
         esSupervisor,
       });
@@ -1645,6 +1866,11 @@ const construirReportePagosComisiones = async ({ year, month }) => {
         integrantesProduccion.length;
       jefe.semanas[week.startDate].vendedoresActivos =
         produccion.dispositivosPorVendedor;
+      jefe.semanas[week.startDate].equipoSemanalConfigurado = Boolean(
+        equipoSemana?.configured,
+      );
+      jefe.semanas[week.startDate].vendedorIdsSeleccionados =
+        equipoSemana?.selectedSellerIds || [];
       jefe.semanas[week.startDate].venden = produccion.venden;
       jefe.semanas[week.startDate].valorVendido = produccion.valorVendido;
       jefe.semanas[week.startDate].cantidadVendedoresBono =
@@ -1670,6 +1896,16 @@ const construirReportePagosComisiones = async ({ year, month }) => {
           vendedor,
           weeks,
           semanasPersonales: vendedor.semanasPersonalesVendedor,
+          sanctionConfig: resolvePersonalSellerSanctionConfig(
+            vendedor,
+            sanctionsByRole,
+          ),
+          penaltyAdjustments,
+        });
+        applyPersonalSellerPenaltiesToPrimaryView({
+          vendedor,
+          personalSellerView: vendedor.ventasPersonalesVendedor,
+          weeks,
         });
         delete vendedor.semanasPersonalesVendedor;
       }
@@ -1681,6 +1917,19 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       delete vendedor.posicionesPago;
       return vendedor;
     });
+  const vendedoresDisponiblesEquipo = vendedoresEquipoBase
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+    .map((vendedor) => ({
+      usuarioId: vendedor.usuarioId,
+      nombre: vendedor.nombre,
+      rol: vendedor.rol,
+      cargo: vendedor.cargo,
+      cargoComision: vendedor.cargoComision,
+      tieneMultiplesCargos: vendedor.tieneMultiplesCargos,
+      cargosPago: (vendedor.posicionesPago || []).map(
+        ({ rolPagoId, cargo, nivel }) => ({ rolPagoId, cargo, nivel }),
+      ),
+    }));
 
   const total = {
     semanas: buildEmptyWeeks(weeks),
@@ -1758,6 +2007,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     },
     weeks,
     vendedores,
+    vendedoresDisponiblesEquipo,
     total,
   };
 };
@@ -1872,6 +2122,154 @@ const parseCommercialWeek = async (semanaInicio) => {
   };
 };
 
+const getReportPaidPositions = (person = {}) => [
+  ...(person.cargosPago || []),
+  {
+    rolPagoId: person.rolPagoComisionId || person.rolPagoId,
+    cargo: person.cargoComision || person.cargo,
+  },
+].filter((position) => position?.cargo);
+
+const isCommercialLeaderInReport = (person) =>
+  getReportPaidPositions(person).some((position) =>
+    normalizeText(position.cargo).includes("JEFE COMERCIAL"),
+  );
+
+const isCommercialSupervisorInReport = (person) =>
+  getReportPaidPositions(person).some((position) =>
+    normalizeText(position.cargo).includes("SUPERVISOR"),
+  );
+
+const guardarEquipoSemanalLiderComercial = async ({
+  liderComercialId,
+  tipoLider,
+  semanaInicio,
+  vendedorIds,
+  actualizadoPorId,
+}) => {
+  const esSupervisor = tipoLider === "SUPERVISOR";
+  const nombreLider = esSupervisor ? "supervisor comercial" : "jefe comercial";
+  const numericLeaderId = Number(liderComercialId);
+  if (!Number.isInteger(numericLeaderId) || numericLeaderId <= 0) {
+    throw createHttpError(`El ${nombreLider} no es valido`, 400);
+  }
+  if (!Array.isArray(vendedorIds)) {
+    throw createHttpError("vendedorIds debe ser una lista", 400);
+  }
+
+  const normalizedSellerIds = normalizeWeeklySellerIds(vendedorIds);
+  if (normalizedSellerIds.length !== vendedorIds.length) {
+    throw createHttpError("La lista de vendedores contiene valores invalidos o repetidos", 400);
+  }
+  if (normalizedSellerIds.length > 100) {
+    throw createHttpError("Solo se pueden seleccionar hasta 100 vendedores", 400);
+  }
+  if (normalizedSellerIds.includes(numericLeaderId)) {
+    throw createHttpError(
+      `El ${nombreLider} que tambien vende se incluye automaticamente; no debe seleccionarse a si mismo`,
+      400,
+    );
+  }
+
+  const { year, month, week } = await parseCommercialWeek(semanaInicio);
+  if (await getPeriodoPagado(year, month)) {
+    throw createHttpError(
+      "No se puede cambiar el equipo semanal de un periodo pagado",
+      400,
+    );
+  }
+
+  const reporte = await construirReportePagosComisiones({ year, month });
+  const personasPorId = new Map(
+    [
+      ...(reporte.vendedoresDisponiblesEquipo || []),
+      ...reporte.vendedores,
+    ].map((person) => [Number(person.usuarioId), person]),
+  );
+  const leader = personasPorId.get(numericLeaderId);
+  const leaderIsValid = esSupervisor
+    ? isCommercialSupervisorInReport(leader)
+    : isCommercialLeaderInReport(leader);
+  if (!leader || !leaderIsValid) {
+    throw createHttpError(`Debe seleccionar un ${nombreLider} del reporte`, 400);
+  }
+
+  const invalidSellerId = normalizedSellerIds.find((sellerId) => {
+    const seller = personasPorId.get(sellerId);
+    return !seller || !isSellerEligibleForTeam(seller);
+  });
+  if (invalidSellerId) {
+    throw createHttpError(
+      `El usuario ${invalidSellerId} no es un vendedor valido para este periodo`,
+      400,
+    );
+  }
+
+  const otherTeams = await PagoComisionEquipoSemanal.findAll({
+    where: {
+      semanaInicio: week.startDate,
+      jefeComercialId: { [Op.ne]: numericLeaderId },
+    },
+    attributes: ["jefeComercialId", "vendedorIds"],
+  });
+  const conflictingSellerId = normalizedSellerIds.find((sellerId) =>
+    otherTeams.some((team) => {
+      const item = team?.get ? team.get({ plain: true }) : team;
+      const otherLeader = personasPorId.get(Number(item.jefeComercialId));
+      const sameLeaderType = esSupervisor
+        ? isCommercialSupervisorInReport(otherLeader)
+        : isCommercialLeaderInReport(otherLeader);
+      return (
+        sameLeaderType &&
+        normalizeWeeklySellerIds(item.vendedorIds).includes(sellerId)
+      );
+    }),
+  );
+  if (conflictingSellerId) {
+    const sellerName = personasPorId.get(conflictingSellerId)?.nombre;
+    throw createHttpError(
+      `${sellerName || `El vendedor ${conflictingSellerId}`} ya esta asignado a otro lider comercial en esta semana`,
+      409,
+    );
+  }
+
+  const payload = {
+    jefeComercialId: numericLeaderId,
+    semanaInicio: week.startDate,
+    vendedorIds: normalizedSellerIds,
+    actualizadoPorId: actualizadoPorId || null,
+  };
+  const [team] = await PagoComisionEquipoSemanal.findOrCreate({
+    where: {
+      jefeComercialId: numericLeaderId,
+      semanaInicio: week.startDate,
+    },
+    defaults: payload,
+  });
+  await team.update(payload);
+
+  return {
+    message: "Equipo semanal guardado correctamente",
+    jefeComercialId: numericLeaderId,
+    semanaInicio: week.startDate,
+    vendedorIds: normalizedSellerIds,
+  };
+};
+
+const guardarEquipoSemanalJefeComercial = (params) =>
+  guardarEquipoSemanalLiderComercial({
+    ...params,
+    liderComercialId: params.jefeComercialId,
+    tipoLider: "JEFE",
+  });
+
+const guardarEquipoSemanalSupervisorComercial = (params) =>
+  guardarEquipoSemanalLiderComercial({
+    ...params,
+    liderComercialId: params.supervisorComercialId,
+    tipoLider: "SUPERVISOR",
+  });
+
 const normalizarValorDescontar = (valorDescontar) => {
   if (valorDescontar === null || valorDescontar === undefined || valorDescontar === "") {
     throw createHttpError("El valor a descontar es obligatorio", 400);
@@ -1894,12 +2292,6 @@ const normalizarValorDescontar = (valorDescontar) => {
 const validarMultaEditable = (values) => {
   if (!values || values.semanaFutura) {
     throw createHttpError("No se puede modificar una multa de una semana futura", 400);
-  }
-  if (values.personalNuevo) {
-    throw createHttpError(
-      "El personal nuevo no genera multa durante sus primeros 30 dias",
-      400,
-    );
   }
   if (!values.semanaCompletaParaDescuento) {
     throw createHttpError("La semana parcial o no laborada no genera multa", 400);
@@ -2082,6 +2474,7 @@ module.exports = {
   getCommissionablePaidPosition,
   hasCommissionablePaidPosition,
   isIndividualSellerPosition,
+  isSellerEligibleForTeam,
   getLeaderCommissionMembers,
   getLeaderBonusExclusionReasons,
   getLeaderBonusTeam,
@@ -2098,7 +2491,12 @@ module.exports = {
   getCommissionTeamProductionForWeek,
   selectHighestPaidPosition,
   getDistinctPaidPositions,
+  normalizeWeeklySellerIds,
+  buildWeeklyTeamsMap,
+  getLeaderMembersForWeek,
   resolveSalesSanctionConfig,
+  resolvePersonalSellerSanctionConfig,
+  applyPersonalSellerPenaltiesToPrimaryView,
   isActiveDuringWeek,
   isActiveFullWeek,
   getNewPersonnelPenaltyStartDate,
@@ -2112,6 +2510,8 @@ module.exports = {
   guardarConfiguracionAnualComision,
   obtenerReportePagosComisiones,
   marcarPeriodoPagosComisionesPagado,
+  guardarEquipoSemanalJefeComercial,
+  guardarEquipoSemanalSupervisorComercial,
   actualizarOmisionMulta,
   actualizarValoresMultas,
 };

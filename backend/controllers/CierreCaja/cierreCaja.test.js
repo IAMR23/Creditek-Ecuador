@@ -52,6 +52,12 @@ jest.mock("../../services/conciliacionEntradasService", () => ({
   conciliarCargasPorFecha: jest.fn(),
 }));
 
+jest.mock("./DenominacionCajaTemp", () => ({
+  crearHistorialDenominaciones: jest.fn(),
+  limpiarDenominacionesTemp: jest.fn(),
+  obtenerDenominacionesTempParaCierre: jest.fn(),
+}));
+
 const { sequelize } = require("../../config/db");
 const CierreCaja = require("../../models/CierreCaja/CierreCaja");
 const MovimientoCaja = require("../../models/CierreCaja/MovimientoCaja");
@@ -63,6 +69,11 @@ const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const {
   conciliarCargasPorFecha,
 } = require("../../services/conciliacionEntradasService");
+const {
+  crearHistorialDenominaciones,
+  limpiarDenominacionesTemp,
+  obtenerDenominacionesTempParaCierre,
+} = require("./DenominacionCajaTemp");
 const {
   cerrarCaja,
   obtenerTodosLosCierresCaja,
@@ -80,6 +91,9 @@ const crearTransaccion = () => ({
   rollback: jest.fn(),
   LOCK: { UPDATE: "UPDATE" },
 });
+
+const esperarTareasEnSegundoPlano = () =>
+  new Promise((resolve) => setImmediate(resolve));
 
 const crearCierre = (overrides = {}) => ({
   id: 1,
@@ -104,11 +118,18 @@ describe("cierreCaja controller", () => {
     MovimientoCaja.findAll.mockResolvedValue([]);
     ReaperturaCierreCaja.findAll.mockResolvedValue([]);
     UsuarioAgencia.findOne.mockResolvedValue({ id: 11, agenciaId: 3 });
+    crearHistorialDenominaciones.mockResolvedValue(undefined);
+    limpiarDenominacionesTemp.mockResolvedValue(undefined);
+    obtenerDenominacionesTempParaCierre.mockResolvedValue([]);
     conciliarCargasPorFecha.mockResolvedValue({
       fecha: "2026-06-12",
       cargasProcesadas: 0,
       conciliaciones: [],
     });
+  });
+
+  afterEach(async () => {
+    await esperarTareasEnSegundoPlano();
   });
 
   test("crea un cierre exitoso y limpia temporales del usuario-agencia", async () => {
@@ -140,6 +161,7 @@ describe("cierreCaja controller", () => {
     const res = crearRes();
 
     await cerrarCaja(req, res);
+    await esperarTareasEnSegundoPlano();
 
     expect(CierreCaja.findOne).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -171,6 +193,266 @@ describe("cierreCaja controller", () => {
       expect.objectContaining({ origen: "CIERRE", usuarioId: 7 }),
     );
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conciliacionEntradas: expect.objectContaining({
+          fecha: expect.any(String),
+          pendiente: true,
+          estado: "PENDIENTE",
+        }),
+      }),
+    );
+  });
+
+  test("usa el snapshot completo como fuente autoritativa sin mezclar temporales", async () => {
+    CierreCaja.findOne.mockResolvedValue(null);
+    MovimientoCajaTemp.findAll.mockResolvedValue([
+      {
+        responsable: "Temporal",
+        detalle: "CUOTA",
+        valor: "99.00",
+        formaPago: "EFECTIVO",
+      },
+    ]);
+    CierreCaja.create.mockResolvedValue({ id: 120 });
+    MovimientoCaja.bulkCreate.mockResolvedValue([]);
+    MovimientoCajaTemp.destroy.mockResolvedValue(1);
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: {
+        movimientos: [
+          {
+            responsable: "Ana",
+            detalle: "CUOTA",
+            valor: "10.15",
+            formaPago: "efectivo",
+          },
+          {
+            responsable: "Luis",
+            detalle: "ENTRADA",
+            valor: 20,
+            formaPago: "TRANSFERENCIA",
+          },
+        ],
+        movimientosPendientes: [
+          {
+            responsable: "Pendiente antiguo",
+            detalle: "CONTADO",
+            valor: 50,
+            formaPago: "EFECTIVO",
+          },
+        ],
+        denominaciones: [],
+        retiros: [],
+      },
+    };
+    const res = crearRes();
+
+    await cerrarCaja(req, res);
+
+    expect(MovimientoCajaTemp.findAll).not.toHaveBeenCalled();
+    expect(MovimientoCaja.bulkCreate).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          cierreId: 120,
+          responsable: "Ana",
+          detalle: "CUOTA",
+          valor: 10.15,
+          formaPago: "EFECTIVO",
+        }),
+        expect.objectContaining({
+          cierreId: 120,
+          responsable: "Luis",
+          detalle: "ENTRADA",
+          valor: 20,
+          formaPago: "TRANSFERENCIA",
+        }),
+      ],
+      { transaction },
+    );
+    expect(CierreCaja.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalEfectivo: 10.15,
+        totalTransferencia: 20,
+        totalSistema: 30.15,
+      }),
+      { transaction },
+    );
+    expect(MovimientoCajaTemp.destroy).toHaveBeenCalledWith({
+      where: { usuarioAgenciaId: 11, estado: "ACTIVO" },
+      transaction,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ totalMovimientos: 2 }),
+    );
+  });
+
+  test("un snapshot vacio no recurre a movimientos temporales", async () => {
+    CierreCaja.findOne.mockResolvedValue(null);
+    MovimientoCajaTemp.findAll.mockResolvedValue([
+      {
+        responsable: "Temporal",
+        detalle: "CUOTA",
+        valor: "10.00",
+        formaPago: "EFECTIVO",
+      },
+    ]);
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: { movimientos: [], denominaciones: [], retiros: [] },
+    };
+    const res = crearRes();
+
+    await cerrarCaja(req, res);
+
+    expect(MovimientoCajaTemp.findAll).not.toHaveBeenCalled();
+    expect(CierreCaja.create).not.toHaveBeenCalled();
+    expect(MovimientoCajaTemp.destroy).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "No existen movimientos validos para cerrar caja",
+    });
+  });
+
+  test("rechaza el snapshot completo si contiene un movimiento invalido", async () => {
+    MovimientoCajaTemp.findAll.mockResolvedValue([
+      {
+        responsable: "Temporal conservado",
+        detalle: "CUOTA",
+        valor: "10.00",
+        formaPago: "EFECTIVO",
+      },
+    ]);
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: {
+        movimientos: [
+          {
+            responsable: "Ana",
+            detalle: "CUOTA",
+            valor: 10,
+            formaPago: "CHEQUE",
+          },
+        ],
+      },
+    };
+    const res = crearRes();
+
+    await cerrarCaja(req, res);
+
+    expect(MovimientoCajaTemp.findAll).not.toHaveBeenCalled();
+    expect(CierreCaja.findOne).not.toHaveBeenCalled();
+    expect(CierreCaja.create).not.toHaveBeenCalled();
+    expect(MovimientoCajaTemp.destroy).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "El movimiento 1 del snapshot no tiene detalle, valor o forma de pago valida",
+    });
+  });
+
+  test("responde el cierre sin esperar que termine la conciliacion", async () => {
+    let resolverConciliacion;
+    const conciliacionPendiente = new Promise((resolve) => {
+      resolverConciliacion = resolve;
+    });
+    conciliarCargasPorFecha.mockReturnValue(conciliacionPendiente);
+    CierreCaja.findOne.mockResolvedValue(null);
+    CierreCaja.create.mockResolvedValue({ id: 121 });
+    MovimientoCaja.bulkCreate.mockResolvedValue([]);
+    MovimientoCajaTemp.destroy.mockResolvedValue(0);
+
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: {
+        movimientos: [
+          {
+            responsable: "Ana",
+            detalle: "CUOTA",
+            valor: 10,
+            formaPago: "EFECTIVO",
+          },
+        ],
+      },
+    };
+    const res = crearRes();
+
+    await cerrarCaja(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conciliacionEntradas: {
+          fecha: expect.any(String),
+          cargasProcesadas: 0,
+          conciliaciones: [],
+          pendiente: true,
+          estado: "PENDIENTE",
+        },
+      }),
+    );
+    expect(conciliarCargasPorFecha).not.toHaveBeenCalled();
+
+    await esperarTareasEnSegundoPlano();
+
+    expect(conciliarCargasPorFecha).toHaveBeenCalledTimes(1);
+    resolverConciliacion({
+      fecha: "2026-06-12",
+      cargasProcesadas: 0,
+      conciliaciones: [],
+    });
+    await Promise.resolve();
+  });
+
+  test("responde un error controlado si no puede iniciar la transaccion", async () => {
+    const errorTransaccion = new Error("No hay conexion disponible");
+    sequelize.transaction.mockRejectedValueOnce(errorTransaccion);
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: { movimientos: [] },
+    };
+    const res = crearRes();
+
+    await expect(cerrarCaja(req, res)).resolves.toBe(res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Error al cerrar caja",
+      error: "No hay conexion disponible",
+    });
+    expect(consoleError).toHaveBeenCalledWith(errorTransaccion);
+    consoleError.mockRestore();
+  });
+
+  test("conserva la respuesta original aunque falle el rollback", async () => {
+    const errorRollback = new Error("Conexion perdida durante rollback");
+    transaction.rollback.mockRejectedValueOnce(errorRollback);
+    UsuarioAgencia.findOne.mockResolvedValue(null);
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+    const req = {
+      user: { id: 7, usuarioAgenciaId: 11, agenciaId: 3 },
+      body: { movimientos: [] },
+    };
+    const res = crearRes();
+
+    await expect(cerrarCaja(req, res)).resolves.toBe(res);
+
+    expect(transaction.rollback).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      "No se pudo revertir la transaccion de cierre de caja:",
+      errorRollback,
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      message: "Usuario sin relacion activa usuario-agencia/agencia para cerrar caja",
+    });
+    consoleError.mockRestore();
   });
 
   test("rechaza un segundo cierre activo del mismo usuario en la fecha actual", async () => {
