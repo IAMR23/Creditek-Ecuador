@@ -13,6 +13,11 @@ const Agencia = require("../../models/Agencia");
 const {
   conciliarCargasPorFecha,
 } = require("../../services/conciliacionEntradasService");
+const {
+  crearHistorialDenominaciones,
+  limpiarDenominacionesTemp,
+  obtenerDenominacionesTempParaCierre,
+} = require("./DenominacionCajaTemp");
 
 const ESTADOS_CIERRE_ACTIVOS = ["CERRADO", "REABIERTO"];
 
@@ -416,6 +421,10 @@ const cerrarCaja = async (req, res) => {
     const usuarioId = req.user.id;
     const ahora = new Date();
     const { cierre = {}, denominaciones = [], retiros = [], movimientosPendientes = [] } = req.body;
+    const tieneDenominacionesEnPayload = Object.prototype.hasOwnProperty.call(
+      req.body,
+      "denominaciones",
+    );
     const fechaCierre = resolverFechaCierre(cierre);
 
     if (!usuarioAgenciaId || !agenciaId) {
@@ -456,7 +465,13 @@ const cerrarCaja = async (req, res) => {
       });
     }
 
-    const denominacionesLimpias = normalizarDenominaciones(denominaciones);
+    const denominacionesPersistidas = await obtenerDenominacionesTempParaCierre({
+      usuarioAgenciaId,
+      transaction: t,
+    });
+    const denominacionesLimpias = normalizarDenominaciones(
+      tieneDenominacionesEnPayload ? denominaciones : denominacionesPersistidas,
+    );
     const retirosLimpios = normalizarRetiros(retiros);
     const totales = calcularTotales({
       movimientos: movimientosUnificados,
@@ -492,6 +507,16 @@ const cerrarCaja = async (req, res) => {
         })),
         { transaction: t },
       );
+
+      await crearHistorialDenominaciones({
+        denominaciones: denominacionesLimpias,
+        relacion: { id: usuarioAgenciaId, agenciaId },
+        usuarioId,
+        accion: "CIERRE",
+        cierreId,
+        fechaSnapshot: ahora,
+        transaction: t,
+      });
     }
 
     if (retirosLimpios.length) {
@@ -522,6 +547,11 @@ const cerrarCaja = async (req, res) => {
 
     await MovimientoCajaTemp.destroy({
       where: { usuarioAgenciaId, estado: "ACTIVO" },
+      transaction: t,
+    });
+
+    await limpiarDenominacionesTemp({
+      usuarioAgenciaId,
       transaction: t,
     });
 

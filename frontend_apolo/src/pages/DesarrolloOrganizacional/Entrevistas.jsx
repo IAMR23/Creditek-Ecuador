@@ -468,24 +468,38 @@ export default function Entrevistas({ modo = "entrevista" }) {
     }
   };
 
-  const discardCandidate = async (interview) => {
-    const result = await Swal.fire({
-      icon: "warning",
-      title: "Descartar postulante",
-      text: `Indica por qué ${getCandidateName(interview)} será enviado a Descartados.`,
-      input: "textarea",
-      inputLabel: "Motivo del descarte",
-      inputPlaceholder: "Escribe el motivo del descarte",
-      inputAttributes: { maxlength: "1000" },
-      inputValidator: (value) =>
-        value?.trim() ? undefined : "Debe ingresar el motivo del descarte",
-      showCancelButton: true,
-      confirmButtonText: "Sí, descartar",
-      cancelButtonText: "Cancelar",
-      confirmButtonColor: "#dc2626",
-    });
+  const discardCandidate = async (interview, presetReason = "") => {
+    const normalizedPresetReason = String(presetReason || "").trim();
+    const result = await Swal.fire(
+      normalizedPresetReason
+        ? {
+            icon: "warning",
+            title: normalizedPresetReason,
+            text: `Deseas enviar a ${getCandidateName(interview)} a Descartados?`,
+            showCancelButton: true,
+            confirmButtonText: "Si, enviar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#dc2626",
+          }
+        : {
+            icon: "warning",
+            title: "Descartar postulante",
+            text: `Indica por qué ${getCandidateName(interview)} será enviado a Descartados.`,
+            input: "textarea",
+            inputLabel: "Motivo del descarte",
+            inputPlaceholder: "Escribe el motivo del descarte",
+            inputAttributes: { maxlength: "1000" },
+            inputValidator: (value) =>
+              value?.trim() ? undefined : "Debe ingresar el motivo del descarte",
+            showCancelButton: true,
+            confirmButtonText: "Sí, descartar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#dc2626",
+          },
+    );
     if (!result.isConfirmed) return;
-    const motivoDescarte = String(result.value || "").trim();
+    const motivoDescarte =
+      normalizedPresetReason || String(result.value || "").trim();
 
     try {
       const response = await api.patch(`/api/postulaciones/${interview.id}/descartada`, {

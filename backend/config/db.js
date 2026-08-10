@@ -187,6 +187,33 @@ const ensureMovimientoCajaSchema = async (queryInterface, tables) => {
   }
 };
 
+const ensureDenominacionesCajaSchema = async (tables) => {
+  if (tables.includes("denominaciones_caja_temp")) {
+    await sequelize.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS denominaciones_caja_temp_activa_unique
+      ON denominaciones_caja_temp ("usuarioAgenciaId", valor)
+      WHERE estado = 'ACTIVO';
+    `);
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS denominaciones_caja_temp_usuario_agencia_idx
+      ON denominaciones_caja_temp ("usuarioAgenciaId", estado);
+    `);
+  }
+
+  if (tables.includes("denominaciones_caja_historial")) {
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS denominaciones_caja_historial_usuario_agencia_idx
+      ON denominaciones_caja_historial ("usuarioAgenciaId", "fechaSnapshot");
+    `);
+
+    await sequelize.query(`
+      CREATE INDEX IF NOT EXISTS denominaciones_caja_historial_cierre_idx
+      ON denominaciones_caja_historial ("cierreId");
+    `);
+  }
+};
+
 const ensureMarketingSchema = async (queryInterface, tables) => {
   if (tables.includes("presupuesto_marketing")) {
     const columnasPresupuestoMarketing =
@@ -771,6 +798,7 @@ const connectDB = async () => {
 
     await ensureCierreCajaSchema(queryInterface, tables);
     await ensureMovimientoCajaSchema(queryInterface, tables);
+    await ensureDenominacionesCajaSchema(tables);
     await ensureMarketingSchema(queryInterface, tables);
     await ensureSistemasTareasSchema(queryInterface, tables);
     await ensureInventarioSistemasSchema(queryInterface, tables);

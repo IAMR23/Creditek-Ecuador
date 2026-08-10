@@ -28,6 +28,8 @@ const Gestion = require('./Gestion');
 const CierreCaja = require('./CierreCaja/CierreCaja');
 const MovimientoCaja = require('./CierreCaja/MovimientoCaja');
 const Denominacion = require('./CierreCaja/Denominacion');
+const DenominacionCajaTemp = require('./CierreCaja/DenominacionCajaTemp');
+const DenominacionCajaHistorial = require('./CierreCaja/DenominacionCajaHistorial');
 const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const ReaperturaCierreCaja = require('./CierreCaja/ReaperturaCierreCaja');
 const Task = require('./Task');
@@ -339,6 +341,36 @@ CierreCaja.hasMany(Denominacion, {
 });
 
 Denominacion.belongsTo(CierreCaja, {
+  foreignKey: "cierreId",
+  as: "cierre",
+});
+
+UsuarioAgencia.hasMany(DenominacionCajaTemp, {
+  foreignKey: "usuarioAgenciaId",
+  as: "denominacionesCajaTemp",
+});
+
+DenominacionCajaTemp.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+UsuarioAgencia.hasMany(DenominacionCajaHistorial, {
+  foreignKey: "usuarioAgenciaId",
+  as: "denominacionesCajaHistorial",
+});
+
+DenominacionCajaHistorial.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaId",
+  as: "usuarioAgencia",
+});
+
+CierreCaja.hasMany(DenominacionCajaHistorial, {
+  foreignKey: "cierreId",
+  as: "historialDenominaciones",
+});
+
+DenominacionCajaHistorial.belongsTo(CierreCaja, {
   foreignKey: "cierreId",
   as: "cierre",
 });

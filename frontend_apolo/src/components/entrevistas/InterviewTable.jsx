@@ -298,6 +298,16 @@ function InterviewActions({
               No asistio a la capacitacion
             </button>
           )}
+          {!selectedMode && (
+            <button type="button" onClick={() => onDiscard(interview, "Entrevistado no seleccionado")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
+              Entrevistado no seleccionado
+            </button>
+          )}
+          {selectedMode && (
+            <button type="button" onClick={() => onDiscard(interview, "No aprobo referencias")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
+              No aprobo referencias
+            </button>
+          )}
           {scheduled && (
             <button type="button" onClick={() => onStatusChange(interview, "NO_ASISTIO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
               Registrar que no asistió

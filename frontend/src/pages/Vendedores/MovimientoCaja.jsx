@@ -50,29 +50,30 @@ const tieneValorNoNegativo = (value) => {
 const convertirNumeroDosDecimales = (value) =>
   Number((Number(normalizarNumeroPositivoTexto(value)) || 0).toFixed(2));
 
+const crearDenominacionesBase = () => [
+  { denominacion: 100, cantidad: "", total: 0 },
+  { denominacion: 50, cantidad: "", total: 0 },
+  { denominacion: 20, cantidad: "", total: 0 },
+  { denominacion: 10, cantidad: "", total: 0 },
+  { denominacion: 5, cantidad: "", total: 0 },
+  { denominacion: 1, cantidad: "", total: 0 },
+  { denominacion: 0.5, cantidad: "", total: 0 },
+  { denominacion: 0.25, cantidad: "", total: 0 },
+  { denominacion: 0.1, cantidad: "", total: 0 },
+  { denominacion: 0.05, cantidad: "", total: 0 },
+  { denominacion: 0.01, cantidad: "", total: 0 },
+];
+
 export default function MovimientoCaja() {
   const [rows, setRows] = useState([{ ...filaVacia }]);
   const [loading, setLoading] = useState(false);
   const [estadoLoading, setEstadoLoading] = useState(true);
+  const [denominacionesLoading, setDenominacionesLoading] = useState(true);
+  const [denominacionesSaving, setDenominacionesSaving] = useState(false);
   const [cierreActual, setCierreActual] = useState(null);
   const [fechaCaja, setFechaCaja] = useState(getHoyLocal());
-  const denominacionesBase = [
-    { denominacion: 100, cantidad: "", total: 0 },
-    { denominacion: 50, cantidad: "", total: 0 },
-    { denominacion: 20, cantidad: "", total: 0 },
-    { denominacion: 10, cantidad: "", total: 0 },
-    { denominacion: 5, cantidad: "", total: 0 },
-    { denominacion: 1, cantidad: "", total: 0 },
-    { denominacion: 0.5, cantidad: "", total: 0 },
-    { denominacion: 0.25, cantidad: "", total: 0 },
-    { denominacion: 0.1, cantidad: "", total: 0 },
-        { denominacion: 0.05, cantidad: "", total: 0 },
-    { denominacion: 0.01, cantidad: "", total: 0 },
-  ];
 
-  const [detalles, setDetalles] = useState(denominacionesBase);
-
-  let guardado = false;
+  const [detalles, setDetalles] = useState(() => crearDenominacionesBase());
 
   const handleCantidadChange = (index, cantidad) => {
     const newDetalles = [...detalles];
@@ -130,6 +131,11 @@ export default function MovimientoCaja() {
       if (!isConfirmed) return;
 
       setLoading(true);
+
+      const denominacionesGuardadas = await guardarDenominaciones({
+        mostrarExito: false,
+      });
+      if (!denominacionesGuardadas) return;
 
       await Promise.all(
         rows
@@ -192,7 +198,7 @@ export default function MovimientoCaja() {
 
       setRows([{ ...filaVacia }]);
       setRetiros([{ monto: "", motivo: "", autorizadoPor: "" }]);
-      setDetalles(denominacionesBase);
+      setDetalles(crearDenominacionesBase());
     } catch (error) {
       console.error(error?.response?.data || error);
       if (error?.response?.status === 409) {
@@ -239,6 +245,83 @@ export default function MovimientoCaja() {
     }
   }, []);
 
+  const mapearDenominaciones = useCallback((data = []) => {
+    const existentes = new Map(
+      data.map((item) => [
+        Number(item.valor ?? item.denominacion),
+        Number(item.cantidad) || 0,
+      ]),
+    );
+
+    return crearDenominacionesBase().map((item) => {
+      const cantidad = existentes.get(Number(item.denominacion)) || 0;
+      return {
+        ...item,
+        cantidad: cantidad > 0 ? String(cantidad) : "",
+        total: Number((Number(item.denominacion) * cantidad).toFixed(2)),
+      };
+    });
+  }, []);
+
+  const cargarDenominaciones = useCallback(async () => {
+    try {
+      setDenominacionesLoading(true);
+      const res = await api.get("/api/denominaciones-caja", {
+        params: { fecha: fechaCaja },
+      });
+
+      setDetalles(mapearDenominaciones(res.data?.data || []));
+    } catch (error) {
+      console.error(error?.response?.data || error);
+      alert(error?.response?.data?.message || "Error al cargar denominaciones");
+    } finally {
+      setDenominacionesLoading(false);
+    }
+  }, [fechaCaja, mapearDenominaciones]);
+
+  const construirPayloadDenominaciones = () =>
+    detalles.map((d) => ({
+      denominacion: d.denominacion,
+      cantidad: Number(d.cantidad) || 0,
+    }));
+
+  const guardarDenominaciones = async ({ mostrarExito = true } = {}) => {
+    try {
+      if (cierreActual) {
+        alert(`La caja del ${formatearFechaLocal(fechaCaja)} ya fue cerrada para este usuario.`);
+        return false;
+      }
+
+      setDenominacionesSaving(true);
+      const res = await api.put("/api/denominaciones-caja", {
+        fecha: fechaCaja,
+        denominaciones: construirPayloadDenominaciones(),
+      });
+
+      setDetalles(mapearDenominaciones(res.data?.data || []));
+
+      if (mostrarExito) {
+        Swal.fire({
+          icon: "success",
+          title: "Denominaciones guardadas",
+          timer: 900,
+          showConfirmButton: false,
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error(error?.response?.data || error);
+      if (error?.response?.status === 409) {
+        setCierreActual({ fecha: fechaCaja });
+      }
+      alert(error?.response?.data?.message || "Error al guardar denominaciones");
+      return false;
+    } finally {
+      setDenominacionesSaving(false);
+    }
+  };
+
   const handleChange = (index, field, value) => {
     setRows((prev) => {
       const newRows = [...prev];
@@ -253,7 +336,8 @@ export default function MovimientoCaja() {
 
   useEffect(() => {
     cargarEstadoCierre(fechaCaja);
-  }, [fechaCaja]);
+    cargarDenominaciones();
+  }, [cargarDenominaciones, fechaCaja]);
 
   const handleFilaKeyDown = (event, index, row) => {
     if (event.key !== "Enter") return;
@@ -481,9 +565,32 @@ export default function MovimientoCaja() {
           </h2>
         </div>
 
-        <h3 className="font-bold ">
-          Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
-        </h3>
+        <div className="flex items-center justify-between gap-2 px-2">
+          <h3 className="font-bold ">
+            Conteo de Efectivo (${totalDenominaciones.toFixed(2)})
+          </h3>
+          <button
+            type="button"
+            onClick={() => guardarDenominaciones()}
+            disabled={
+              loading ||
+              estadoLoading ||
+              denominacionesLoading ||
+              denominacionesSaving ||
+              !!cierreActual
+            }
+            className="inline-flex items-center gap-2 bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
+            title="Guardar denominaciones"
+          >
+            <FaSave />
+            {denominacionesSaving ? "Guardando..." : "Guardar"}
+          </button>
+        </div>
+        {denominacionesLoading && (
+          <div className="mx-2 mt-2 border border-blue-200 bg-blue-50 p-2 text-sm text-blue-700">
+            Cargando denominaciones guardadas...
+          </div>
+        )}
 
         <div className="border rounded-lg shadow-lg overflow-hidden m-2">
           <table className="w-full text-sm">
@@ -506,6 +613,7 @@ export default function MovimientoCaja() {
                       inputMode="numeric"
                       className="border p-1 w-full"
                       value={d.cantidad}
+                      disabled={estadoLoading || denominacionesLoading || !!cierreActual}
                       onChange={(e) => handleCantidadChange(i, e.target.value)}
                     />
                   </td>

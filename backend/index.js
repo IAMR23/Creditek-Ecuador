@@ -238,6 +238,7 @@ connectDB()
     app.use("/api/usuarios-abs", require("./routes/usuariosAbsRoutes"));
     app.use("/tasks", require("./routes/taskRoutes"));
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
+    app.use("/api/denominaciones-caja", require("./routes/Contabilidad/denominacionesCajaTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
     app.use("/api/meta", require("./routes/metaRoutes"));
