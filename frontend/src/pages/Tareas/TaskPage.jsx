@@ -4,8 +4,6 @@ import Swal from "sweetalert2";
 import { jwtDecode } from "jwt-decode";
 import { FaPlus, FaCheck, FaClock, FaSpinner } from "react-icons/fa";
 import { API_URL } from "../../../config";
-import TaskList from "./TaskList";
-import SelectUsuarios from "../../components/common/SelectUsuarios";
 
 const TasksPage = () => {
   const [tasks, setTasks] = useState([]);
@@ -17,9 +15,6 @@ const TasksPage = () => {
     description: "",
     assignedTo: "",
     priority: "media",
-    repeat: "none",
-    repeatInterval: 1,
-    reminderTime: "",
   });
 
   const token = localStorage.getItem("token");
@@ -34,7 +29,7 @@ const TasksPage = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       setTasks(res.data);
-    } catch (error) {
+    } catch {
       Swal.fire("Error", "No se pudieron cargar las tareas", "error");
     } finally {
       setLoading(false);
@@ -71,13 +66,10 @@ const TasksPage = () => {
         description: "",
         assignedTo: "",
         priority: "media",
-        repeat: "none",
-        repeatInterval: 1,
-        reminderTime: "",
       });
 
       fetchTasks();
-    } catch (error) {
+    } catch {
       Swal.fire("Error", "No se pudo crear", "error");
     }
   };
@@ -96,7 +88,7 @@ const TasksPage = () => {
       );
 
       fetchTasks();
-    } catch (error) {
+    } catch {
       Swal.fire("Error", "No se pudo completar", "error");
     }
   };
@@ -212,7 +204,7 @@ const TasksPage = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                <div>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-slate-700">
                       Prioridad
@@ -230,55 +222,7 @@ const TasksPage = () => {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-700">
-                      Repetición
-                    </label>
-                    <select
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                      value={form.repeat}
-                      onChange={(e) =>
-                        setForm({ ...form, repeat: e.target.value })
-                      }
-                    >
-                      <option value="none">No repetir</option>
-                      <option value="daily">Diario</option>
-                    </select>
-                  </div>
                 </div>
-
-                {form.repeat === "daily" && (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        Intervalo
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="Cada X días"
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                        value={form.repeatInterval}
-                        onChange={(e) =>
-                          setForm({ ...form, repeatInterval: e.target.value })
-                        }
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-slate-700">
-                        Recordatorio
-                      </label>
-                      <input
-                        type="time"
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                        value={form.reminderTime}
-                        onChange={(e) =>
-                          setForm({ ...form, reminderTime: e.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-                )}
 
                 <button
                   onClick={handleCreate}
@@ -353,9 +297,6 @@ const TasksPage = () => {
                           <div className="flex flex-wrap gap-2">
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
                               Prioridad: {task.priority}
-                            </span>
-                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                              Repetición: {task.repeat}
                             </span>
                           </div>
                         </div>

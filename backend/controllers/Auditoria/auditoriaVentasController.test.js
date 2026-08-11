@@ -30,6 +30,7 @@ const ConciliacionModeloCelular = require("../../models/ConciliacionModeloCelula
 const DetalleVenta = require("../../models/DetalleVenta");
 const Task = require("../../models/Task");
 const Usuario = require("../../models/Usuario");
+const Venta = require("../../models/Venta");
 const {
   auditarVentasDesdeDirectorio,
   auditarVentasDesdeRegistros,
@@ -521,5 +522,88 @@ describe("notificarDiferenciasPrecioAuditoria", () => {
 
     expect(findOne).toHaveBeenCalledTimes(2);
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("comentario de auditoria de ventas", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("incluye el comentario persistido al formatear el reporte", () => {
+    const venta = crearVentaTv({ ventaId: 3802, detalleId: 3678 });
+    venta.comentarioAuditoria = "Validado contra el contrato";
+
+    const [fila] = controller.formatearReporte([venta]);
+
+    expect(fila.comentarioAuditoria).toBe("Validado contra el contrato");
+  });
+
+  test("guarda un comentario normalizado para la venta", async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    jest.spyOn(Venta, "findByPk").mockResolvedValue({ id: 3802, update });
+    const req = {
+      params: { ventaId: "3802" },
+      body: { comentarioAuditoria: "  Revisado por auditoria  " },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await controller.actualizarComentarioAuditoriaVenta(req, res);
+
+    expect(Venta.findByPk).toHaveBeenCalledWith(3802);
+    expect(update).toHaveBeenCalledWith({
+      comentarioAuditoria: "Revisado por auditoria",
+    });
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        venta: {
+          id: 3802,
+          comentarioAuditoria: "Revisado por auditoria",
+        },
+      }),
+    );
+  });
+
+  test("permite limpiar el comentario persistido", async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    jest.spyOn(Venta, "findByPk").mockResolvedValue({ id: 3802, update });
+    const req = {
+      params: { ventaId: "3802" },
+      body: { comentarioAuditoria: "   " },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await controller.actualizarComentarioAuditoriaVenta(req, res);
+
+    expect(update).toHaveBeenCalledWith({ comentarioAuditoria: null });
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        venta: { id: 3802, comentarioAuditoria: "" },
+      }),
+    );
+  });
+
+  test("rechaza comentarios mayores a 2000 caracteres", async () => {
+    const findByPk = jest.spyOn(Venta, "findByPk");
+    const req = {
+      params: { ventaId: "3802" },
+      body: { comentarioAuditoria: "a".repeat(2001) },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await controller.actualizarComentarioAuditoriaVenta(req, res);
+
+    expect(findByPk).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 });

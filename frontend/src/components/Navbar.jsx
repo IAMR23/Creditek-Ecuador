@@ -1,10 +1,8 @@
 /* eslint-disable react/prop-types */
 import { Link, useNavigate } from "react-router-dom";
-import { FaBell, FaSignOutAlt, FaUserClock } from "react-icons/fa";
-import NotificacionesModal from "./NotificacionesModal";
+import { FaSignOutAlt, FaUserClock } from "react-icons/fa";
 import AlertasPersonalModal from "./AlertasPersonalModal";
 import { socket } from "../socket/socket";
-import { useTaskNotifications } from "../context/TaskNotificationContext";
 import { useCallback, useEffect, useState } from "react";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
 import api, { logoutSession } from "../api/client";
@@ -18,7 +16,6 @@ const PERMISOS_ALERTAS_PERSONAL = [
 
 function Navbar({ auth, setAuth }) {
   const navigate = useNavigate();
-  const [openNotificaciones, setOpenNotificaciones] = useState(false);
   const [openAlertasPersonal, setOpenAlertasPersonal] = useState(false);
   const [alertasPersonal, setAlertasPersonal] = useState([]);
   const [totalAlertasPersonal, setTotalAlertasPersonal] = useState(0);
@@ -28,9 +25,6 @@ function Navbar({ auth, setAuth }) {
   const [cargandoMasAlertasPersonal, setCargandoMasAlertasPersonal] =
     useState(false);
   const [errorAlertasPersonal, setErrorAlertasPersonal] = useState("");
-
-  const { pendingCount, pendingTasks, clearNotifications } =
-    useTaskNotifications();
 
   const puedeVerAlertasPersonal =
     auth.isAuthenticated &&
@@ -190,7 +184,6 @@ function Navbar({ auth, setAuth }) {
       token: null,
     });
 
-    clearNotifications();
     navigate("/login");
   };
 
@@ -215,27 +208,6 @@ function Navbar({ auth, setAuth }) {
 
           {/* Acciones */}
           <div className="absolute right-0 flex items-center gap-2 sm:gap-4 md:static">
-            <button
-              onClick={() => setOpenNotificaciones(true)}
-              type="button"
-              aria-label="Abrir notificaciones de tareas"
-              title="Notificaciones de tareas"
-              className="relative flex flex-col items-center text-green-200 hover:text-green-400 transition shrink-0"
-            >
-              <div className="relative">
-                <FaBell size={20} />
-                {pendingCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                    {pendingCount}
-                  </span>
-                )}
-              </div>
-
-              {/*        <span className="text-[10px] sm:text-xs text-gray-400 text-center leading-tight max-w-[70px] sm:max-w-none">
-            {connected ? "Tiempo real activo" : "Sin conexión"}
-          </span> */}
-            </button>
-
             {puedeVerAlertasPersonal && (
               <button
                 onClick={() => setOpenAlertasPersonal(true)}
@@ -277,13 +249,6 @@ function Navbar({ auth, setAuth }) {
           </div>
         </div>
       </div>
-
-      {openNotificaciones && (
-        <NotificacionesModal
-          tasks={pendingTasks}
-          onClose={() => setOpenNotificaciones(false)}
-        />
-      )}
 
       {openAlertasPersonal && (
         <AlertasPersonalModal

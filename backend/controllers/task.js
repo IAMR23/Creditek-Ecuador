@@ -18,7 +18,6 @@ exports.createTask = async (req, res) => {
       ...data,
       assignedTo: parseInt(data.assignedTo),
       createdBy: usuarioId,
-      reminderTime: data.reminderTime || null,
     });
 
     const fullTask = await Task.findByPk(task.id, {
@@ -36,20 +35,12 @@ exports.createTask = async (req, res) => {
       ],
     });
 
-    const io = req.app.get("io");
-
-    io.to(`user_${task.assignedTo}`).emit("task:sync", {
-      type: "created",
-      task: fullTask,
-    });
-
     res.status(201).json(fullTask);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear la tarea" });
   }
 };
-
 exports.getMyTasks = async (req, res) => {
   try {
     const usuarioId = req.user?.id;
@@ -94,7 +85,6 @@ exports.getMyTasks = async (req, res) => {
     });
   }
 };
-
 
 exports.getTasks = async (req, res) => {
   try {
@@ -247,13 +237,6 @@ exports.completeTask = async (req, res) => {
       ],
     });
 
-    const io = req.app.get("io");
-
-    io.to(`user_${task.assignedTo}`).emit("task:sync", {
-      type: "completed",
-      task: updatedTask,
-    });
-
     res.json({
       message: "Tarea completada",
       task: updatedTask,
@@ -261,48 +244,5 @@ exports.completeTask = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al completar tarea" });
-  }
-};
-
-
-// ✅ Obtener tareas pendientes con recordatorio activo
-exports.getTasksWithReminder = async (req, res) => {
-  try {
-    const now = new Date();
-
-    const tasks = await Task.findAll({
-      where: {
-        status: { [Op.ne]: "completada" },
-        reminderAt: { [Op.ne]: null }
-      }
-    });
-
-    res.json(tasks);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener recordatorios" });
-  }
-};
-
-
-// ✅ Marcar tarea como notificada (guarda la fecha del último recordatorio enviado)
-exports.notifyTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const task = await Task.findByPk(id);
-
-    if (!task) {
-      return res.status(404).json({ message: "Tarea no encontrada" });
-    }
-
-    await task.update({
-      lastReminderSent: new Date()
-    });
-
-    res.json({ ok: true, message: "Notificación registrada", task });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al registrar notificación" });
   }
 };

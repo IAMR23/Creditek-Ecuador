@@ -2,6 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
 
 const TIPOS_REGISTRO = ["CAJA", "VENTA_TV", "VENTA_CELULAR"];
+const ESTADOS_PAGO_ENTRADA = ["PENDIENTE", "PAGADO"];
 
 const ControlFinancieroRegistro = sequelize.define(
   "ControlFinancieroRegistro",
@@ -75,6 +76,28 @@ const ControlFinancieroRegistro = sequelize.define(
       allowNull: false,
       defaultValue: 0,
     },
+    estadoPagoEntrada: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "PENDIENTE",
+      validate: {
+        isIn: [ESTADOS_PAGO_ENTRADA],
+      },
+    },
+    responsablePagoEntradaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+    observacionPagoEntrada: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     producto: {
       type: DataTypes.STRING(40),
       allowNull: true,
@@ -108,6 +131,14 @@ const ControlFinancieroRegistro = sequelize.define(
         name: "control_financiero_registros_carga_archivo_hash_idx",
         fields: ["cargaId", "archivoHash"],
       },
+      {
+        name: "control_financiero_registros_estado_pago_entrada_idx",
+        fields: ["estadoPagoEntrada"],
+      },
+      {
+        name: "control_financiero_registros_responsable_pago_entrada_idx",
+        fields: ["responsablePagoEntradaId"],
+      },
     ],
     hooks: {
       beforeDestroy() {
@@ -121,5 +152,6 @@ const ControlFinancieroRegistro = sequelize.define(
 );
 
 ControlFinancieroRegistro.TIPOS_REGISTRO = TIPOS_REGISTRO;
+ControlFinancieroRegistro.ESTADOS_PAGO_ENTRADA = ESTADOS_PAGO_ENTRADA;
 
 module.exports = ControlFinancieroRegistro;

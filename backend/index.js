@@ -26,12 +26,10 @@ const VentaRoutes = require("./routes/ventasroutes");
 const DetalleVentaRoutes = require("./routes/detalleVentaRoutes");
 const precioDispositivoRoutes = require("./routes/precio");
 const postulacionesRouter = require("./routes/DesarrolloOrganizacional/postulacionesRouter");
-const { startTaskCron } = require("./services/taskCron");
 const {
   iniciarProcesadorNormalizaciones,
 } = require("./services/mapaComercialNormalizacionService");
 const path = require("path");
-const startTaskReminderJob = require("./jobs/taskReminder");
 
 const app = express();
 const server = http.createServer(app);
@@ -49,10 +47,6 @@ const parseCookies = (req, _res, next) => {
   next();
 };
  
-/* startTaskCron();
-startTaskReminderJob();
- */
-
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
   process.env.WEB_CORS,
@@ -222,6 +216,8 @@ connectDB()
     app.use("/api/contabilidad/sanciones-configuracion", require("./routes/Contabilidad/sancionesConfiguracionRoutes"));
     app.use("/api/contabilidad/sanciones-ventas", require("./routes/Contabilidad/sancionesVentasRoutes"));
     app.use("/api/contabilidad/pagos-comisiones", require("./routes/Contabilidad/pagosComisionesRoutes"));
+    app.use("/api/contabilidad/descuentos-decimos", require("./routes/Contabilidad/descuentosDecimosRoutes"));
+    app.use("/api/contabilidad/egresos-creditek", require("./routes/Contabilidad/egresosCreditekRoutes"));
     app.use("/api/contabilidad/metas-minimas-multas", require("./routes/Contabilidad/metaMinimaMultaRoutes"));
     app.use("/api/dashboard", require("./routes/dashboardMetaMinimaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));

@@ -1,7 +1,9 @@
 // controllers/dispositivoMarcaController.js
+const { sequelize } = require("../config/db");
 const Dispositivo = require("../models/Dispositivo");
 const DispositivoMarca = require("../models/DispositivoMarca");
 const Marca = require("../models/Marca");
+const Modelo = require("../models/Modelo");
 
 // Crear relación dispositivo-marca
 exports.crearDispositivoMarca = async (req, res) => {
@@ -78,13 +80,39 @@ exports.actualizarDispositivoMarca = async (req, res) => {
     const { id } = req.params;
     const { activo } = req.body;
 
-    const relacion = await DispositivoMarca.findByPk(id);
-    if (!relacion) return res.status(404).json({ message: "Relación no encontrada" });
+    const resultado = await sequelize.transaction(async (transaction) => {
+      const relacion = await DispositivoMarca.findByPk(id, { transaction });
+      if (!relacion) return null;
 
-    relacion.activo = activo ?? relacion.activo;
-    await relacion.save();
+      relacion.activo = activo ?? relacion.activo;
+      await relacion.save({ transaction });
 
-    res.json(relacion);
+      let modelosDesactivados = 0;
+      if (relacion.activo === false) {
+        [modelosDesactivados] = await Modelo.update(
+          { activo: false },
+          {
+            where: { dispositivoMarcaId: relacion.id, activo: true },
+            transaction,
+          },
+        );
+      }
+
+      return { relacion, modelosDesactivados };
+    });
+
+    if (!resultado) {
+      return res.status(404).json({ message: "Relación no encontrada" });
+    }
+
+    const relacionPayload =
+      typeof resultado.relacion.toJSON === "function"
+        ? resultado.relacion.toJSON()
+        : resultado.relacion;
+    res.json({
+      ...relacionPayload,
+      modelosDesactivados: resultado.modelosDesactivados,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al actualizar relación", error });

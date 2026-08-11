@@ -147,6 +147,12 @@ router.patch(
   auditoriaVentasController.actualizarDetalleVentaAuditoria,
 );
 
+router.patch(
+  "/ventas/:ventaId/comentario-auditoria",
+  accesoAuditoria,
+  auditoriaVentasController.actualizarComentarioAuditoriaVenta,
+);
+
 router.get("/entregas", async (req, res) => {
   try {
     const {

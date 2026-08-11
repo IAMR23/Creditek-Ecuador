@@ -6,6 +6,7 @@ const CostoHistorico = sequelize.define(
   {
     precioCarga: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
     precioContado: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+    precioTarjetaCredito: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
     costo: { type: DataTypes.FLOAT, allowNull: false },
     margen: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
     margenPorcentual: { type: DataTypes.DECIMAL(10, 2), allowNull: true },

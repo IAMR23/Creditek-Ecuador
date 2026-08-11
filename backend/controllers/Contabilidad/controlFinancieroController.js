@@ -21,8 +21,16 @@ const includeUsuarioAnulador = {
   attributes: ["id", "nombre"],
 };
 
+const includeResponsablePagoEntrada = {
+  model: Usuario,
+  as: "responsablePagoEntrada",
+  attributes: ["id", "nombre", "activo"],
+  required: false,
+};
+
 const ESTADOS_CARGA = ["ACTIVA", "ANULADA", "REEMPLAZADA"];
 const ESTADOS_FILTRO = [...ESTADOS_CARGA, "TODAS"];
+const ESTADOS_PAGO_ENTRADA = ["PENDIENTE", "PAGADO"];
 
 const parsePositiveInt = (value, fallback, max = 100) => {
   const parsed = Number.parseInt(value, 10);
@@ -175,6 +183,7 @@ exports.consolidarVentas = async (req, res) => {
             cargaId: { [Op.in]: cargaIds },
             tipoRegistro: { [Op.in]: ["VENTA_TV", "VENTA_CELULAR"] },
           },
+          include: [includeResponsablePagoEntrada],
           order: [["cargaId", "DESC"], ["id", "ASC"]],
         })
       : [];
@@ -234,6 +243,7 @@ exports.obtenerCarga = async (req, res) => {
 
     const registros = await ControlFinancieroRegistro.findAll({
       where: { cargaId: id },
+      include: [includeResponsablePagoEntrada],
       order: [["id", "ASC"]],
     });
     const agrupados = {
@@ -260,6 +270,159 @@ exports.obtenerCarga = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "No se pudo cargar el detalle de control financiero.",
+    });
+  }
+};
+
+exports.listarResponsablesPagoEntrada = async (_req, res) => {
+  try {
+    const usuarios = await Usuario.findAll({
+      where: { activo: true },
+      attributes: ["id", "nombre"],
+      order: [["nombre", "ASC"], ["id", "ASC"]],
+    });
+
+    return res.json({
+      ok: true,
+      usuarios: usuarios.map((usuario) =>
+        usuario.get ? usuario.get({ plain: true }) : usuario,
+      ),
+    });
+  } catch (error) {
+    console.error("Error listando responsables de entradas:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudieron cargar los usuarios responsables.",
+    });
+  }
+};
+
+exports.actualizarPagoEntrada = async (req, res) => {
+  try {
+    const registroId = Number(req.params.registroId);
+    const estadoPagoEntrada = String(req.body?.estado || "")
+      .trim()
+      .toUpperCase();
+    const responsablePagoEntradaId = Number(req.body?.responsableUsuarioId);
+    const observacionPagoEntrada = String(req.body?.observacion || "").trim();
+
+    if (!Number.isInteger(registroId) || registroId < 1) {
+      return res.status(400).json({
+        ok: false,
+        message: "El registro financiero no es valido.",
+      });
+    }
+    if (!ESTADOS_PAGO_ENTRADA.includes(estadoPagoEntrada)) {
+      return res.status(400).json({
+        ok: false,
+        message: "El estado debe ser PENDIENTE o PAGADO.",
+      });
+    }
+    if (
+      !Number.isInteger(responsablePagoEntradaId) ||
+      responsablePagoEntradaId < 1
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message: "Selecciona un usuario responsable del pago.",
+      });
+    }
+    if (observacionPagoEntrada.length > 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "La observacion no puede superar 1000 caracteres.",
+      });
+    }
+
+    const resultado = await sequelize.transaction(async (transaction) => {
+      const registro = await ControlFinancieroRegistro.findByPk(registroId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!registro) {
+        return { error: true, status: 404, message: "Registro no encontrado." };
+      }
+      if (!["VENTA_TV", "VENTA_CELULAR"].includes(registro.tipoRegistro)) {
+        return {
+          error: true,
+          status: 400,
+          message: "La gestion de pagos solo aplica a registros de ventas.",
+        };
+      }
+      if (Number(registro.entradas || 0) <= 0) {
+        return {
+          error: true,
+          status: 400,
+          message: "El registro no tiene un valor de entrada para gestionar.",
+        };
+      }
+
+      const carga = await ControlFinancieroCarga.findByPk(registro.cargaId, {
+        attributes: ["id", "estado"],
+        transaction,
+      });
+      if (!carga || carga.estado !== "ACTIVA") {
+        return {
+          error: true,
+          status: 409,
+          message: "Solo se pueden actualizar registros de cargas activas.",
+        };
+      }
+
+      const responsable = await Usuario.findOne({
+        where: { id: responsablePagoEntradaId, activo: true },
+        attributes: ["id", "nombre", "activo"],
+        transaction,
+      });
+      if (!responsable) {
+        return {
+          error: true,
+          status: 400,
+          message: "El usuario responsable no existe o se encuentra inactivo.",
+        };
+      }
+
+      await registro.update(
+        {
+          estadoPagoEntrada,
+          responsablePagoEntradaId,
+          observacionPagoEntrada: observacionPagoEntrada || null,
+        },
+        { transaction },
+      );
+
+      const registroPlano = registro.get
+        ? registro.get({ plain: true })
+        : registro;
+      const responsablePlano = responsable.get
+        ? responsable.get({ plain: true })
+        : responsable;
+
+      return {
+        registro: serializarRegistro({
+          ...registroPlano,
+          responsablePagoEntrada: responsablePlano,
+        }),
+      };
+    });
+
+    if (resultado.error) {
+      return res.status(resultado.status).json({
+        ok: false,
+        message: resultado.message,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "La gestion del pago fue guardada.",
+      registro: resultado.registro,
+    });
+  } catch (error) {
+    console.error("Error actualizando gestion de pago de entrada:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo guardar la gestion del pago.",
     });
   }
 };

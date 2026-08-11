@@ -12,10 +12,6 @@ router.put("/:id", authenticate, controller.updateTask);
 router.delete("/:id", authenticate, controller.deleteTask);
 
 
-router.put("/:id/notify", authenticate, controller.notifyTask);
-
 router.put("/:id/complete", authenticate, controller.completeTask);
-
-router.get("/reminders/all", authenticate  , controller.getTasksWithReminder);
 
 module.exports = router;

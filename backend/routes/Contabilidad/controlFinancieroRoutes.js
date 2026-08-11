@@ -11,6 +11,11 @@ router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
 
 router.get("/cargas", controller.listarCargas);
 router.get("/cargas/consolidado-ventas", controller.consolidarVentas);
+router.get("/responsables-pago", controller.listarResponsablesPagoEntrada);
+router.patch(
+  "/registros/:registroId/pago-entrada",
+  controller.actualizarPagoEntrada,
+);
 router.get(
   "/cargas/:cargaId/conciliacion-entradas",
   controller.obtenerConciliacionEntradas,

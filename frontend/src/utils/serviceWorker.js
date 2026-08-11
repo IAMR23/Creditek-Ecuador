@@ -1,5 +1,3 @@
-const API_URL = import.meta.env.VITE_API_URL;
-
 let swRefreshing = false;
 let controllerChangeBound = false;
 let shouldReloadOnControllerChange = false;
@@ -15,7 +13,6 @@ const bindControllerChangeReload = () => {
     window.location.reload();
   });
 };
-
 export const registerSW = async () => {
   if (!("serviceWorker" in navigator)) return null;
 
@@ -50,37 +47,4 @@ export const registerSW = async () => {
     console.error("Error al registrar SW:", err);
     return null;
   }
-};
-
-export const initSWWithToken = async () => {
-  if (!("serviceWorker" in navigator)) {
-    console.warn("Service Worker no soportado");
-    return;
-  }
-
-  const token = localStorage.getItem("token");
-  if (!token) {
-    return;
-  }
-
-  const permission = await Notification.requestPermission();
-
-  if (permission !== "granted") {
-    console.warn("Permiso denegado");
-    return;
-  }
-
-  const reg = await navigator.serviceWorker.ready;
-
-  if (!reg.active) {
-    console.warn("SW activo es null, reintentando en 1s...");
-    setTimeout(() => initSWWithToken(), 1000);
-    return;
-  }
-
-  reg.active.postMessage({
-    type: "SET_TOKEN",
-    token,
-    apiUrl: API_URL,
-  });
 };

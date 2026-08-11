@@ -65,6 +65,8 @@ const ControlFinancieroConciliacionEntrada = require('./ControlFinancieroConcili
 const NotificacionPersonal = require('./NotificacionPersonal');
 const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
+const DescuentoDecimo = require('./DescuentoDecimo');
+const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -77,6 +79,39 @@ Usuario.belongsTo(Usuario, { foreignKey: "jefeComercialId", as: "jefeComercial" 
 Usuario.hasMany(Usuario, { foreignKey: "jefeComercialId", as: "vendedoresJunior" });
 Usuario.belongsTo(Usuario, { foreignKey: "supervisorComercialId", as: "supervisorComercial" });
 Usuario.hasMany(Usuario, { foreignKey: "supervisorComercialId", as: "juniorsSupervisados" });
+Usuario.hasMany(DescuentoDecimo, {
+  foreignKey: "usuarioId",
+  as: "descuentosDecimos",
+});
+DescuentoDecimo.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
+DescuentoDecimo.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(EgresoCreditekEntrada, {
+  foreignKey: "usuarioId",
+  as: "entradasEgresosCreditek",
+});
+EgresoCreditekEntrada.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+Usuario.hasMany(EgresoCreditekEntrada, {
+  foreignKey: "registradoPorId",
+  as: "entradasEgresosCreditekRegistradas",
+});
+EgresoCreditekEntrada.belongsTo(Usuario, {
+  foreignKey: "registradoPorId",
+  as: "registradoPor",
+});
+Usuario.hasMany(EgresoCreditekEntrada, {
+  foreignKey: "actualizadoPorId",
+  as: "entradasEgresosCreditekActualizadas",
+});
+EgresoCreditekEntrada.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
 
 // Agencia ↔ Usuario (muchos a muchos)
 Usuario.belongsToMany(Agencia, {
@@ -772,6 +807,16 @@ ControlFinancieroCarga.hasMany(ControlFinancieroRegistro, {
 ControlFinancieroRegistro.belongsTo(ControlFinancieroCarga, {
   foreignKey: "cargaId",
   as: "carga",
+});
+
+Usuario.hasMany(ControlFinancieroRegistro, {
+  foreignKey: "responsablePagoEntradaId",
+  as: "registrosControlFinancieroResponsables",
+});
+
+ControlFinancieroRegistro.belongsTo(Usuario, {
+  foreignKey: "responsablePagoEntradaId",
+  as: "responsablePagoEntrada",
 });
 
 Usuario.hasMany(ControlFinancieroCarga, {

@@ -111,6 +111,9 @@ const crearHojaVentas = ({
         "IMEI",
         "VENTAS",
         "ENTRADAS",
+        "ESTADO",
+        "RESPONSABLE DEL PAGO",
+        "OBSERVACION",
       ]
     : [
         "CONTRATO",
@@ -120,6 +123,9 @@ const crearHojaVentas = ({
         "MODELO",
         "VENTAS",
         "ENTRADAS",
+        "ESTADO",
+        "RESPONSABLE DEL PAGO",
+        "OBSERVACION",
       ];
   aplicarTitulo(worksheet, titulo, contexto, encabezados.length);
   const encabezado = worksheet.addRow(encabezados);
@@ -127,6 +133,7 @@ const crearHojaVentas = ({
   const primeraFila = worksheet.rowCount + 1;
 
   registros.forEach((registro, index) => {
+    const tieneEntrada = numero(registro.entradas) > 0;
     const valores = [
       texto(registro.contrato),
       texto(registro.fecha),
@@ -136,6 +143,9 @@ const crearHojaVentas = ({
       ...(celular ? [texto(registro.imei)] : []),
       numero(registro.ventas),
       numero(registro.entradas),
+      tieneEntrada ? texto(registro.estadoPagoEntrada || "PENDIENTE") : "",
+      tieneEntrada ? texto(registro.responsablePagoEntrada?.nombre) : "",
+      tieneEntrada ? texto(registro.observacionPagoEntrada) : "",
     ];
     const row = worksheet.addRow(valores);
     if (index % 2 === 1) {
@@ -171,8 +181,8 @@ const crearHojaVentas = ({
   );
 
   const widths = celular
-    ? [18, 22, 22, 36, 28, 22, 16, 16]
-    : [18, 22, 22, 36, 28, 16, 16];
+    ? [18, 22, 22, 36, 28, 22, 16, 16, 16, 28, 38]
+    : [18, 22, 22, 36, 28, 16, 16, 16, 28, 38];
   worksheet.columns.forEach((column, index) => {
     column.width = widths[index];
     column.alignment = { vertical: "middle", wrapText: true };

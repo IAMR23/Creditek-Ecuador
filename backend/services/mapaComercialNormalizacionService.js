@@ -25,6 +25,15 @@ const TIEMPO_ATASCADO_MS = Math.max(
 let procesadorActivo = false;
 let temporizadorProcesador = null;
 
+const esTablaNormalizacionInexistente = (error) => {
+  const code = error?.original?.code || error?.parent?.code || error?.code;
+  const detail = `${error?.message || ""} ${error?.sql || ""}`.toLowerCase();
+  return (
+    code === "42P01" &&
+    detail.includes("mapa_ubicaciones_normalizadas")
+  );
+};
+
 const limitar = (value, fallback, maximo) => {
   const numero = Number(value);
   if (!Number.isFinite(numero)) return fallback;
@@ -281,8 +290,16 @@ const procesarColaNormalizaciones = async ({
         procesados += 1;
       }
     }
-
     return { procesando: false, procesados };
+  } catch (error) {
+    if (!esTablaNormalizacionInexistente(error)) throw error;
+
+    await MapaUbicacionNormalizada.sync();
+    return {
+      procesando: false,
+      procesados: 0,
+      esquemaRecuperado: true,
+    };
   } finally {
     procesadorActivo = false;
   }

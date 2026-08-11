@@ -32,6 +32,10 @@ const {
   calcularIndicadoresCostoHistorico,
 } = require("../../utils/calcularIndicadoresCostoHistorico");
 const {
+  obtenerEtiquetaTipoPrecio,
+  seleccionarPrecioCostoHistorico,
+} = require("../../utils/seleccionarPrecioCostoHistorico");
+const {
   auditarVentasDesdeDirectorio,
   auditarVentasDesdeRegistros,
 } = require("../../services/auditoriaVentasPdfService");
@@ -114,7 +118,14 @@ exports.obtenerReporteAuditoria = async ({
 
   return await Venta.findAll({
     where: whereVenta,
-    attributes: ["id", "fecha", "validada", "observacion", "activo"],
+    attributes: [
+      "id",
+      "fecha",
+      "validada",
+      "observacion",
+      "comentarioAuditoria",
+      "activo",
+    ],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -264,7 +275,14 @@ exports.obtenerReporte = async ({
   =============================== */
   return await Venta.findAll({
     where: whereVenta,
-    attributes: ["id", "fecha", "validada", "observacion", "activo"],
+    attributes: [
+      "id",
+      "fecha",
+      "validada",
+      "observacion",
+      "comentarioAuditoria",
+      "activo",
+    ],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -483,7 +501,15 @@ exports.obtenerReporteGerencia = async ({
 
   return await Venta.findAll({
     where: whereVenta,
-    attributes: ["id", "fecha", "validada", "observacion", "activo", "semana"],
+    attributes: [
+      "id",
+      "fecha",
+      "validada",
+      "observacion",
+      "comentarioAuditoria",
+      "activo",
+      "semana",
+    ],
     order: [["fecha", "ASC"]],
     include: [
       includeUsuarioAgencia,
@@ -1185,7 +1211,7 @@ const getReferenciaDiferenciaPrecio = (fila = {}) => {
   return null;
 };
 
-const crearTareaDiferenciaPrecio = async ({ app, admin, grupo, creadorId }) => {
+const crearTareaDiferenciaPrecio = async ({ admin, grupo, creadorId }) => {
   const inicioDia = new Date();
   inicioDia.setHours(0, 0, 0, 0);
 
@@ -1242,14 +1268,6 @@ const crearTareaDiferenciaPrecio = async ({ app, admin, grupo, creadorId }) => {
     ],
   });
 
-  const io = app?.get?.("io");
-  if (io) {
-    io.to(`user_${admin.id}`).emit("task:sync", {
-      type: "created",
-      task: fullTask || task,
-    });
-  }
-
   return fullTask || task;
 };
 
@@ -1264,14 +1282,12 @@ exports.notificarDiferenciasPrecioAuditoria = async (contexto, filas = []) => {
     if (!administradores.length) return [];
 
     const usuarioId = contexto?.usuarioId ?? contexto?.user?.id;
-    const app = contexto?.app;
     const creadorId = usuarioId || administradores[0].id;
     const tareas = [];
 
     for (const admin of administradores) {
       for (const grupo of grupos) {
         const tarea = await crearTareaDiferenciaPrecio({
-          app,
           admin,
           grupo,
           creadorId,
@@ -1523,6 +1539,7 @@ const crearFilaPdfSinMatch = ({ record, tipo, mapeo, observacionError }) => ({
   entrada: "",
   alcance: "",
   observaciones: "",
+  comentarioAuditoria: "",
   contrato: record.factura || "",
   referenciaPdf: tipo === "TV" ? record.codigo_pdf || "" : record.imei || "",
   clientePdf: record.cliente || "",
@@ -1925,6 +1942,7 @@ exports.formatearReporte = (ventas) => {
         alcance: detalle.alcance || "0",
 
         observaciones: venta.observacion || "",
+        comentarioAuditoria: venta.comentarioAuditoria || "",
         contrato: detalle.contrato || "",
         validada: venta.validada || "",
       });
@@ -2446,19 +2464,12 @@ exports.actualizarDetalleVentaAuditoria = async (req, res) => {
       throw new Error("Forma de pago no existe");
     }
 
-    const usarPrecioCarga = esFormaPagoCredito({
-      formaPagoId: formaPagoDB.id,
-      formaPago: formaPagoDB.nombre,
-    });
-    const precioHistorico = usarPrecioCarga
-      ? Number(costoDB.precioCarga)
-      : Number(costoDB.precioContado);
+    const { precio: precioHistorico, tipoPrecioSolicitado } =
+      seleccionarPrecioCostoHistorico(costoDB, formaPagoDB);
 
     if (!Number.isFinite(precioHistorico) || precioHistorico <= 0) {
       throw new Error(
-        usarPrecioCarga
-          ? "No existe precio carga para este modelo en costo historico"
-          : "No existe precio contado para este modelo en costo historico",
+        `No existe ${obtenerEtiquetaTipoPrecio(tipoPrecioSolicitado)} para este modelo en costo historico`,
       );
     }
 
@@ -2537,6 +2548,63 @@ exports.actualizarDetalleVentaAuditoria = async (req, res) => {
     return res.status(400).json({
       ok: false,
       message: error.message || "No se pudo actualizar el detalle",
+    });
+  }
+};
+
+exports.actualizarComentarioAuditoriaVenta = async (req, res) => {
+  const ventaId = Number(req.params.ventaId);
+  const { comentarioAuditoria } = req.body || {};
+
+  if (!Number.isInteger(ventaId) || ventaId <= 0) {
+    return res.status(400).json({
+      ok: false,
+      message: "ID de venta no valido",
+    });
+  }
+
+  if (typeof comentarioAuditoria !== "string") {
+    return res.status(400).json({
+      ok: false,
+      message: "El comentario de auditoria debe ser texto",
+    });
+  }
+
+  const comentarioNormalizado = comentarioAuditoria.trim();
+  if (comentarioNormalizado.length > 2000) {
+    return res.status(400).json({
+      ok: false,
+      message: "El comentario de auditoria no puede superar 2000 caracteres",
+    });
+  }
+
+  try {
+    const venta = await Venta.findByPk(ventaId);
+
+    if (!venta) {
+      return res.status(404).json({
+        ok: false,
+        message: "Venta no encontrada",
+      });
+    }
+
+    await venta.update({
+      comentarioAuditoria: comentarioNormalizado || null,
+    });
+
+    return res.json({
+      ok: true,
+      message: "Comentario de auditoria actualizado",
+      venta: {
+        id: venta.id,
+        comentarioAuditoria: comentarioNormalizado,
+      },
+    });
+  } catch (error) {
+    console.error("Error actualizando comentario de auditoria:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo actualizar el comentario de auditoria",
     });
   }
 };

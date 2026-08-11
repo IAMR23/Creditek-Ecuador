@@ -38,42 +38,9 @@ const Task = sequelize.define("Task", {
     allowNull: true
   },
 
-  reminderAt: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-
-  notified: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-
   priority: {
     type: DataTypes.ENUM("baja", "media", "alta"),
     defaultValue: "media"
-  },
-
-  // 🔁 Tipo de repetición
-  repeat: {
-    type: DataTypes.ENUM("none", "daily"),
-    defaultValue: "none"
-  },
-
-  // 🔁 Intervalo de repetición (en días)
-  repeatInterval: {
-    type: DataTypes.INTEGER,
-    defaultValue: 1
-  },
-
-  reminderTime: {
-  type: DataTypes.TIME, // "14:30:00"
-  allowNull: true
-},
-
-  // 🔁 Último recordatorio enviado 
-  lastReminderSent: {
-    type: DataTypes.DATE,
-    allowNull: true
   }
 
 }, {
@@ -81,9 +48,7 @@ const Task = sequelize.define("Task", {
   timestamps: true,
   paranoid: true,
   indexes: [
-    { fields: ["assignedTo"] },
-    { fields: ["reminderAt"] },
-    { fields: ["repeat"] }
+    { fields: ["assignedTo"] }
   ]
 });
 

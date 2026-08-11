@@ -58,7 +58,13 @@ function VendedorPanel() {
           icon: <MdAnalytics />,
           path: "/mis-ventas",
         },
-          {
+        {
+          title: "Lista de precios",
+          desc: "Consulta los precios vigentes",
+          icon: <MdPointOfSale />,
+          path: "/lista-precios",
+        },
+        {
           title: "Registrar Prospectos",
           desc: "Crea nuevas gestiones",
           icon: <MdSupportAgent />,

@@ -2,10 +2,13 @@ const { Op } = require("sequelize");
 const { sequelize } = require("../config/db");
 const Venta = require("../models/Venta");
 const DetalleVenta = require("../models/DetalleVenta");
+const Entrega = require("../models/Entrega");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
+const UsuarioAgenciaEntrega = require("../models/UsuarioAgenciaEntrega");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
 const Rol = require("../models/Rol");
+require("../models/UsuarioRol");
 const RolPago = require("../models/RolPago");
 const NominaEmpleado = require("../models/NominaEmpleado");
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
@@ -320,11 +323,17 @@ const getUsuarioPayload = (usuarioAgencia) => {
   ]);
   const cargoPrincipal = selectHighestPaidPosition(posicionesPago);
   const rol = usuario.rol || null;
+  const roles = [...new Set(
+    [rol, ...(usuario.roles || [])]
+      .map((item) => item?.nombre)
+      .filter(Boolean),
+  )];
   const agencia = usuarioAgencia?.agencia || null;
 
   return {
     usuarioId: usuario.id,
     nombre: usuario.nombre || "Sin vendedor",
+    activo: Boolean(usuario.activo),
     rolPagoId: cargoPrincipal?.rolPagoId || null,
     cargo: cargoPrincipal?.cargo || "",
     nivel: cargoPrincipal?.nivel || "",
@@ -333,6 +342,7 @@ const getUsuarioPayload = (usuarioAgencia) => {
     posicionesPago,
     tieneMultiplesCargos: posicionesPago.length > 1,
     rol: rol?.nombre || "",
+    roles,
     agencias: agencia?.nombre ? [agencia.nombre] : [],
     fechaIngreso: usuario.fechaIngreso || null,
     fechaSalida: usuario.fechaSalida || null,
@@ -482,6 +492,19 @@ const getCommissionablePaidPosition = (usuarioPayload) =>
 const hasCommissionablePaidPosition = (usuarioPayload) =>
   Boolean(getCommissionablePaidPosition(usuarioPayload));
 
+const hasCommercialLeadershipPosition = (usuarioPayload = {}) =>
+  (usuarioPayload.posicionesPago?.length
+    ? usuarioPayload.posicionesPago
+    : [usuarioPayload]
+  ).some((position) => {
+    const cargo = normalizeText(position?.cargo);
+    return cargo.includes("JEFE COMERCIAL") || cargo.includes("SUPERVISOR");
+  });
+
+const isInactiveCommercialLeader = (usuarioPayload = {}) =>
+  usuarioPayload.activo === false &&
+  hasCommercialLeadershipPosition(usuarioPayload);
+
 const isIndividualSellerPosition = (position) => {
   const cargo = normalizeText(position?.cargo);
   return (
@@ -552,6 +575,123 @@ const getLeaderMembersForWeek = ({
     selectedSellerIds,
     members: getLeaderCommissionMembers({ leader, juniors }),
   };
+};
+
+const getLogisticsProfile = (usuarioPayload = {}) => {
+  const positions = usuarioPayload.posicionesPago?.length
+    ? usuarioPayload.posicionesPago
+    : [usuarioPayload];
+  const managerPosition = positions.find((position) => {
+    const cargo = normalizeText(position?.cargo);
+    return cargo.includes("ENCARGADO") && cargo.includes("LOGISTICA");
+  });
+  if (managerPosition) {
+    return {
+      tipo: "ENCARGADO",
+      cargo: managerPosition.cargo || "ENCARGADO DE LOGISTICA",
+      tarifaPorEntrega: 1,
+    };
+  }
+
+  const driverPosition = positions.find((position) =>
+    normalizeText(position?.cargo).includes("CHOFER"),
+  );
+  const roles = [usuarioPayload.rol, ...(usuarioPayload.roles || [])]
+    .map(normalizeText);
+  if (!driverPosition && !roles.includes("REPARTIDOR")) return null;
+
+  return {
+    tipo: "JUNIOR",
+    cargo: driverPosition?.cargo || "REPARTIDOR",
+    tarifaPorEntrega: 0.5,
+  };
+};
+
+const buildLogisticsCommissionRows = ({ usuarios = [], asignaciones = [], weeks = [] }) => {
+  const personasPorId = new Map();
+
+  usuarios.forEach((usuario) => {
+    if (!usuario?.usuarioId || usuario.activo !== true) return;
+    const current = personasPorId.get(Number(usuario.usuarioId));
+    const merged = current
+      ? {
+          ...current,
+          agencias: mergeAgencias(current.agencias, usuario.agencias),
+          roles: [...new Set([...(current.roles || []), ...(usuario.roles || [])])],
+          posicionesPago: getDistinctPaidPositions([
+            ...(current.posicionesPago || []),
+            ...(usuario.posicionesPago || []),
+          ]),
+        }
+      : { ...usuario };
+    const profile = getLogisticsProfile(merged);
+    if (!profile) {
+      personasPorId.delete(Number(usuario.usuarioId));
+      return;
+    }
+
+    personasPorId.set(Number(usuario.usuarioId), {
+      ...merged,
+      ...profile,
+      esEncargadoLogistica: profile.tipo === "ENCARGADO",
+      semanas: Object.fromEntries(
+        weeks.map((week) => [
+          week.startDate,
+          {
+            entregas: 0,
+            totalComisiones: 0,
+            semanaFutura: isFutureCommercialWeek(week),
+          },
+        ]),
+      ),
+    });
+  });
+
+  const asignacionesContadas = new Set();
+  asignaciones.forEach((asignacion) => {
+    const usuarioId = Number(asignacion?.usuarioId);
+    const entregaId = Number(asignacion?.entregaId);
+    const persona = personasPorId.get(usuarioId);
+    if (!persona || !Number.isInteger(entregaId) || entregaId <= 0) return;
+
+    const weekKey = getCommercialWeekKey(asignacion.fecha);
+    const values = persona.semanas[weekKey];
+    const uniqueKey = `${usuarioId}:${entregaId}`;
+    if (!values || asignacionesContadas.has(uniqueKey)) return;
+
+    asignacionesContadas.add(uniqueKey);
+    values.entregas += 1;
+    values.totalComisiones = round(
+      values.entregas * persona.tarifaPorEntrega,
+      2,
+    );
+  });
+
+  return [...personasPorId.values()]
+    .map((persona) => {
+      const totalEntregas = weeks.reduce(
+        (total, week) => total + persona.semanas[week.startDate].entregas,
+        0,
+      );
+      const totalPagar = round(totalEntregas * persona.tarifaPorEntrega, 2);
+      return {
+        ...persona,
+        total: {
+          entregas: totalEntregas,
+          totalComisiones: totalPagar,
+        },
+        resumenMensual: {
+          totalEntregas,
+          totalPagar,
+        },
+      };
+    })
+    .sort(
+      (left, right) =>
+        Number(right.esEncargadoLogistica) -
+          Number(left.esEncargadoLogistica) ||
+        left.nombre.localeCompare(right.nombre, "es"),
+    );
 };
 
 const getLeaderBonusExclusionReasons = ({ member, weeks }) => {
@@ -1406,6 +1546,12 @@ const obtenerRelacionesVendedores = async () =>
             through: { attributes: [] },
           },
           { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+          {
+            model: Rol,
+            as: "roles",
+            attributes: ["id", "nombre"],
+            through: { attributes: [] },
+          },
         ],
       },
       { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
@@ -1450,6 +1596,31 @@ const obtenerVentasRango = async ({ fechaInicio, fechaFin }) => {
 
   return ventas.map((venta) => ({ ...venta.toJSON(), origenReporte: "Venta" }));
 };
+
+const obtenerEntregasLogisticaRango = ({ fechaInicio, fechaFin }) =>
+  UsuarioAgenciaEntrega.findAll({
+    where: { activo: true },
+    attributes: ["id", "usuario_agencia_id", "entrega_id"],
+    include: [
+      {
+        model: Entrega,
+        as: "entrega",
+        required: true,
+        attributes: ["id", "fecha"],
+        where: {
+          activo: true,
+          estado: "Entregado",
+          fecha: { [Op.between]: [fechaInicio, fechaFin] },
+        },
+      },
+      {
+        model: UsuarioAgencia,
+        as: "usuarioAgencia",
+        required: true,
+        attributes: ["id", "usuarioId"],
+      },
+    ],
+  });
 
 const getPenaltyAdjustmentKey = (usuarioId, semanaInicio) =>
   `${Number(usuarioId)}:${String(semanaInicio).slice(0, 10)}`;
@@ -1665,6 +1836,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   const [
     relaciones,
     ventas,
+    entregasLogisticaRows,
     configs,
     sanciones,
     penaltyAdjustmentsRows,
@@ -1672,6 +1844,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   ] = await Promise.all([
     obtenerRelacionesVendedores(),
     obtenerVentasRango({ fechaInicio, fechaFin }),
+    obtenerEntregasLogisticaRango({ fechaInicio, fechaFin }),
     ComisionConfiguracion.findAll({
       where: { activo: true },
       order: [["orden", "ASC"]],
@@ -1705,6 +1878,8 @@ const construirReportePagosComisiones = async ({ year, month }) => {
 
   relaciones.forEach((relacion) => {
     const usuarioPayload = getUsuarioPayload(relacion);
+    if (isInactiveCommercialLeader(usuarioPayload)) return;
+
     const activoEnPeriodo = isActiveDuringPeriod({
       fechaIngreso:
         usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
@@ -1729,6 +1904,8 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     if (!weekKeys.has(weekKey)) return;
 
     const usuarioPayload = getUsuarioPayload(venta.usuarioAgencia);
+    if (isInactiveCommercialLeader(usuarioPayload)) return;
+
     if (
       !isActiveDuringPeriod({
         fechaIngreso:
@@ -1760,6 +1937,32 @@ const construirReportePagosComisiones = async ({ year, month }) => {
 
     vendedor.semanas[weekKey].venden += totals.venden;
     vendedor.semanas[weekKey].valorVendido += totals.valorVendido;
+  });
+
+  const usuariosLogistica = relaciones
+    .map((relacion) => getUsuarioPayload(relacion))
+    .filter(
+      (usuario) =>
+        usuario.activo === true &&
+        isActiveDuringPeriod({
+          fechaIngreso: usuario.fechaIngreso || usuario.fechaCreacionUsuario,
+          fechaSalida: usuario.fechaSalida,
+          fechaInicio,
+          fechaFin,
+        }),
+    );
+  const asignacionesLogistica = entregasLogisticaRows.map((row) => {
+    const item = row?.get ? row.get({ plain: true }) : row;
+    return {
+      usuarioId: item.usuarioAgencia?.usuarioId,
+      entregaId: item.entrega_id,
+      fecha: item.entrega?.fecha,
+    };
+  });
+  const logistica = buildLogisticsCommissionRows({
+    usuarios: usuariosLogistica,
+    asignaciones: asignacionesLogistica,
+    weeks,
   });
 
   const vendedoresBase = [...vendedoresMap.values()];
@@ -2008,6 +2211,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     weeks,
     vendedores,
     vendedoresDisponiblesEquipo,
+    logistica,
     total,
   };
 };
@@ -2473,12 +2677,16 @@ module.exports = {
   buildPersonalSellerView,
   getCommissionablePaidPosition,
   hasCommissionablePaidPosition,
+  hasCommercialLeadershipPosition,
+  isInactiveCommercialLeader,
   isIndividualSellerPosition,
   isSellerEligibleForTeam,
   getLeaderCommissionMembers,
   getLeaderBonusExclusionReasons,
   getLeaderBonusTeam,
   getUsuarioPayload,
+  getLogisticsProfile,
+  buildLogisticsCommissionRows,
   buildWeeklyRulesByGroup,
   buildMonthlyRulesByGroup,
   calculateCommission,

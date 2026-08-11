@@ -13,6 +13,7 @@ import {
   Lock,
   RefreshCw,
   Save,
+  Truck,
   X,
 } from "lucide-react";
 import { api } from "../../api/client";
@@ -91,6 +92,11 @@ const getCargosPagoLabel = (row) =>
 
 const formatMoney = (value) => moneyFormatter.format(Number(value || 0));
 const formatCommission = (value) => commissionFormatter.format(Number(value || 0));
+const formatCurrency = (value) =>
+  `$${Number(value || 0).toLocaleString("es-EC", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 const VALOR_DESCUENTO_INPUT_REGEX = /^\d+(?:\.\d{0,2})?$/;
 const esFormatoValorDescuentoInputValido = (value) => {
   const texto = String(value ?? "");
@@ -174,10 +180,18 @@ const getSeccionPorCargo = (cargoValue) => {
 const getSeccionCargo = (vendedor) =>
   getSeccionPorCargo(vendedor.cargoComision || vendedor.cargo);
 
-const perteneceASeccion = (vendedor, seccion) =>
-  getCargosComerciales(vendedor).some(
+const perteneceASeccion = (vendedor, seccion) => {
+  if (
+    (seccion === "JEFES" || seccion === "SUPERVISORES") &&
+    vendedor.activo === false
+  ) {
+    return false;
+  }
+
+  return getCargosComerciales(vendedor).some(
     (cargo) => getSeccionPorCargo(cargo) === seccion,
   );
+};
 
 const getVendedorParaSeccion = (vendedor, seccion) => {
   if (seccion !== "VENDEDORES" || !vendedor.ventasPersonalesVendedor) {
@@ -250,13 +264,15 @@ const SECCIONES = [
   { id: "VENDEDORES", label: "Vendedores" },
   { id: "JEFES", label: "Jefes comerciales" },
   { id: "SUPERVISORES", label: "Supervisores" },
+  { id: "LOGISTICA", label: "Logistica" },
 ];
 
 const EXPORT_OPTIONS = [
-  { value: "TODAS", label: "Las 3 secciones" },
+  { value: "TODAS", label: "Las 4 secciones" },
   { value: "VENDEDORES", label: "Vendedores" },
   { value: "JEFES", label: "Jefes comerciales" },
   { value: "SUPERVISORES", label: "Supervisores" },
+  { value: "LOGISTICA", label: "Logistica" },
 ];
 
 const getRowsForSection = (vendedores, seccion) =>
@@ -301,6 +317,32 @@ const buildExcelRows = ({ rows, weeks, sectionLabel }) =>
     };
   });
 
+const buildLogisticsExcelRows = ({ rows, weeks }) =>
+  rows.map((row, index) => {
+    const base = {
+      "#": index + 1,
+      Seccion: "Logistica",
+      Colaborador: row.nombre || "",
+      Jerarquia: row.esEncargadoLogistica ? "Encargado" : "Junior",
+      "Cargo o rol": row.cargo || "",
+      Agencias: (row.agencias || []).join(", "),
+      "Tarifa por entrega": Number(row.tarifaPorEntrega || 0),
+    };
+
+    weeks.forEach((week, weekIndex) => {
+      const values = row.semanas?.[week.startDate] || {};
+      const prefix = `S${weekIndex + 1} ${week.label}`;
+      base[`${prefix} entregas`] = Number(values.entregas || 0);
+      base[`${prefix} valor`] = Number(values.totalComisiones || 0);
+    });
+
+    return {
+      ...base,
+      "Total entregas": Number(row.resumenMensual?.totalEntregas || 0),
+      "Total a pagar": Number(row.resumenMensual?.totalPagar || 0),
+    };
+  });
+
 export default function PagosComisiones() {
   const [filters, setFilters] = useState(initialFilters);
   const [report, setReport] = useState(null);
@@ -341,6 +383,7 @@ export default function PagosComisiones() {
     MONTHS.find((month) => Number(month.value) === Number(filters.month))?.label ||
     "";
   const vendedoresBase = useMemo(() => report?.vendedores || [], [report]);
+  const logistica = useMemo(() => report?.logistica || [], [report]);
   const vendedores = useMemo(() => {
     if (!Object.keys(descuentosEditados).length) return vendedoresBase;
 
@@ -449,8 +492,10 @@ export default function PagosComisiones() {
   );
 
   const jefesComerciales = useMemo(
-    () => vendedores.filter((vendedor) =>
-      String(vendedor.cargo || "").toUpperCase().includes("JEFE COMERCIAL"),
+    () => vendedores.filter(
+      (vendedor) =>
+        vendedor.activo !== false &&
+        String(vendedor.cargo || "").toUpperCase().includes("JEFE COMERCIAL"),
     ),
     [vendedores],
   );
@@ -475,7 +520,11 @@ export default function PagosComisiones() {
   }, [report, vendedores]);
 
   const supervisoresComerciales = useMemo(
-    () => vendedores.filter((vendedor) => getSeccionCargo(vendedor) === "SUPERVISORES"),
+    () => vendedores.filter(
+      (vendedor) =>
+        vendedor.activo !== false &&
+        getSeccionCargo(vendedor) === "SUPERVISORES",
+    ),
     [vendedores],
   );
 
@@ -503,6 +552,22 @@ export default function PagosComisiones() {
     });
     return resumen;
   }, [vendedoresFiltrados, weeks]);
+
+  const totalLogistica = useMemo(
+    () =>
+      logistica.reduce(
+        (total, persona) => ({
+          entregas:
+            total.entregas +
+            Number(persona.resumenMensual?.totalEntregas || 0),
+          totalPagar:
+            total.totalPagar +
+            Number(persona.resumenMensual?.totalPagar || 0),
+        }),
+        { entregas: 0, totalPagar: 0 },
+      ),
+    [logistica],
+  );
 
   const cambiarSeccion = (seccion) => {
     setSeccionActiva(seccion);
@@ -644,12 +709,14 @@ export default function PagosComisiones() {
 
       scopes.forEach((scope) => {
         const section = SECCIONES.find((item) => item.id === scope);
-        const rows = getRowsForSection(vendedores, scope);
-        const excelRows = buildExcelRows({
-          rows,
-          weeks,
-          sectionLabel: section?.label || scope,
-        });
+        const excelRows =
+          scope === "LOGISTICA"
+            ? buildLogisticsExcelRows({ rows: logistica, weeks })
+            : buildExcelRows({
+                rows: getRowsForSection(vendedores, scope),
+                weeks,
+                sectionLabel: section?.label || scope,
+              });
         const worksheet = XLSX.utils.json_to_sheet(excelRows);
         worksheet["!cols"] = Object.keys(excelRows[0] || { Colaborador: "" }).map(
           (key) => ({ wch: Math.min(Math.max(String(key).length + 2, 12), 34) }),
@@ -1026,9 +1093,12 @@ export default function PagosComisiones() {
 
         <nav className="flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
           {SECCIONES.map((seccion) => {
-            const cantidad = vendedores.filter(
-              (vendedor) => getSeccionCargo(vendedor) === seccion.id,
-            ).length;
+            const cantidad =
+              seccion.id === "LOGISTICA"
+                ? logistica.length
+                : vendedores.filter((vendedor) =>
+                    perteneceASeccion(vendedor, seccion.id),
+                  ).length;
             return (
               <button
                 type="button"
@@ -1053,18 +1123,43 @@ export default function PagosComisiones() {
             value={weeks.length}
           />
           <Metric
-            icon={<FileSpreadsheet size={18} />}
+            icon={
+              seccionActiva === "LOGISTICA" ? (
+                <Truck size={18} />
+              ) : (
+                <FileSpreadsheet size={18} />
+              )
+            }
             label={SECCIONES.find((seccion) => seccion.id === seccionActiva)?.label}
-            value={vendedoresFiltrados.length}
+            value={
+              seccionActiva === "LOGISTICA"
+                ? logistica.length
+                : vendedoresFiltrados.length
+            }
           />
-          <Metric label="Unidades vendidas" value={totalVisible.general.venden || 0} />
+          <Metric
+            label={
+              seccionActiva === "LOGISTICA"
+                ? "Entregas realizadas"
+                : "Unidades vendidas"
+            }
+            value={
+              seccionActiva === "LOGISTICA"
+                ? totalLogistica.entregas
+                : totalVisible.general.venden || 0
+            }
+          />
           <Metric
             label={
               cantidadDescuentosEditados
                 ? "Total a pagar (vista previa)"
                 : "Total a pagar"
             }
-            value={formatMoney(totalVisible.resumenMensual.totalPagar)}
+            value={
+              seccionActiva === "LOGISTICA"
+                ? formatCurrency(totalLogistica.totalPagar)
+                : formatMoney(totalVisible.resumenMensual.totalPagar)
+            }
           />
         </div>
 
@@ -1087,7 +1182,7 @@ export default function PagosComisiones() {
                 <p className="text-sm text-slate-600">
                   {periodoPagado
                     ? `Pagado${estadoPago?.pagadoAt ? ` el ${formatDate(estadoPago.pagadoAt)}` : ""}. El reporte esta congelado.`
-                    : "Abierto. El reporte se recalcula con ventas, semanas y configuraciones actuales."}
+                    : "Abierto. El reporte se recalcula con ventas, entregas, semanas y configuraciones actuales."}
                 </p>
                 {cantidadDescuentosEditados ? (
                   <p className="mt-1 text-xs font-semibold text-amber-700">
@@ -1424,6 +1519,12 @@ export default function PagosComisiones() {
             </table>
           </div>
         </section>
+        ) : seccionActiva === "LOGISTICA" ? (
+          <LogisticsCommissionTable
+            rows={logistica}
+            weeks={weeks}
+            loading={loading}
+          />
         ) : (
           <LeadershipCommissionTables
             rows={vendedoresFiltrados}
@@ -1770,6 +1871,173 @@ function WeeklyTeamCard({
         </button>
       </div>
     </article>
+  );
+}
+
+function LogisticsCommissionTable({ rows, weeks, loading }) {
+  if (loading) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+        Cargando reporte...
+      </section>
+    );
+  }
+
+  if (!rows.length) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+        No hay personal activo de logistica para el mes seleccionado.
+      </section>
+    );
+  }
+
+  const weekTotals = Object.fromEntries(
+    weeks.map((week) => [
+      week.startDate,
+      rows.reduce(
+        (total, row) => ({
+          entregas:
+            total.entregas +
+            Number(row.semanas?.[week.startDate]?.entregas || 0),
+          totalComisiones:
+            total.totalComisiones +
+            Number(row.semanas?.[week.startDate]?.totalComisiones || 0),
+        }),
+        { entregas: 0, totalComisiones: 0 },
+      ),
+    ]),
+  );
+  const totalEntregas = rows.reduce(
+    (total, row) => total + Number(row.resumenMensual?.totalEntregas || 0),
+    0,
+  );
+  const totalPagar = rows.reduce(
+    (total, row) => total + Number(row.resumenMensual?.totalPagar || 0),
+    0,
+  );
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[980px] border-collapse text-center text-sm text-slate-950">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="sticky left-0 z-20 min-w-[240px] border border-slate-300 bg-slate-100 px-3 py-3 text-left font-black">
+                COLABORADOR
+              </th>
+              <th className="min-w-[150px] border border-slate-300 px-3 py-3 font-black">
+                CARGO / ROL
+              </th>
+              <th className="min-w-[120px] border border-slate-300 px-3 py-3 font-black">
+                TARIFA
+              </th>
+              {weeks.map((week, index) => (
+                <th
+                  key={week.startDate}
+                  className={`min-w-[145px] border border-slate-300 px-3 py-3 font-black ${blockColors[index % blockColors.length]}`}
+                >
+                  {week.label}
+                </th>
+              ))}
+              <th className="min-w-[120px] border border-slate-300 bg-amber-100 px-3 py-3 font-black">
+                ENTREGAS
+              </th>
+              <th className="min-w-[130px] border border-slate-300 bg-emerald-700 px-3 py-3 font-black text-white">
+                A RECIBIR
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr
+                key={row.usuarioId}
+                className={
+                  row.esEncargadoLogistica
+                    ? "bg-emerald-50"
+                    : index % 2 === 0
+                      ? "bg-white"
+                      : "bg-slate-50"
+                }
+              >
+                <td className="sticky left-0 z-10 border border-slate-300 bg-inherit px-3 py-3 text-left">
+                  <span className="block font-bold text-slate-900">
+                    {row.nombre}
+                  </span>
+                  <span className="block text-xs font-medium text-slate-500">
+                    {row.esEncargadoLogistica ? "Encargado" : "Junior"}
+                    {row.agencias?.length
+                      ? ` · ${row.agencias.join(", ")}`
+                      : ""}
+                  </span>
+                </td>
+                <td className="border border-slate-300 px-3 py-3 font-semibold">
+                  {row.cargo}
+                </td>
+                <td className="border border-slate-300 px-3 py-3 font-black text-emerald-700">
+                  {formatCurrency(row.tarifaPorEntrega)}
+                </td>
+                {weeks.map((week) => {
+                  const values = row.semanas?.[week.startDate] || {};
+                  return (
+                    <td
+                      key={`${row.usuarioId}-${week.startDate}`}
+                      className="border border-slate-300 px-3 py-2"
+                    >
+                      {values.semanaFutura ? (
+                        "-"
+                      ) : (
+                        <>
+                          <span className="block text-lg font-black">
+                            {values.entregas || 0}
+                          </span>
+                          <span className="block text-xs font-semibold text-emerald-700">
+                            {formatCurrency(values.totalComisiones)}
+                          </span>
+                        </>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="border border-slate-300 bg-amber-50 px-3 py-3 text-lg font-black">
+                  {row.resumenMensual?.totalEntregas || 0}
+                </td>
+                <td className="border border-slate-300 bg-emerald-700 px-3 py-3 text-lg font-black text-white">
+                  {formatCurrency(row.resumenMensual?.totalPagar)}
+                </td>
+              </tr>
+            ))}
+            <tr className="bg-slate-900 font-black text-white">
+              <td className="sticky left-0 z-10 border border-slate-700 bg-slate-900 px-3 py-3 text-left">
+                TOTAL
+              </td>
+              <td className="border border-slate-700 px-3 py-3" />
+              <td className="border border-slate-700 px-3 py-3" />
+              {weeks.map((week) => (
+                <td
+                  key={`logistica-total-${week.startDate}`}
+                  className="border border-slate-700 px-3 py-2"
+                >
+                  <span className="block text-lg">
+                    {weekTotals[week.startDate]?.entregas || 0}
+                  </span>
+                  <span className="block text-xs text-emerald-300">
+                    {formatCurrency(
+                      weekTotals[week.startDate]?.totalComisiones,
+                    )}
+                  </span>
+                </td>
+              ))}
+              <td className="border border-slate-700 px-3 py-3 text-lg">
+                {totalEntregas}
+              </td>
+              <td className="border border-slate-700 bg-emerald-700 px-3 py-3 text-lg">
+                {formatCurrency(totalPagar)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

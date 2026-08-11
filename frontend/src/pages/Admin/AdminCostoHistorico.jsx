@@ -8,6 +8,7 @@ const emptyForm = {
   modeloId: "",
   precioCarga: "",
   precioContado: "",
+  precioTarjetaCredito: "",
   costo: "",
   fechaCompra: "",
   nota: "",
@@ -68,6 +69,7 @@ const calcularIndicadores = ({ precioCarga, costo }) => {
 const hasExtraValues = (registro) =>
   registro?.precioCarga != null ||
   registro?.precioContado != null ||
+  registro?.precioTarjetaCredito != null ||
   registro?.margen != null ||
   registro?.margenPorcentual != null ||
   registro?.utilidadSobreCosto != null ||
@@ -93,6 +95,9 @@ const renderCostoDetalle = (registro) => {
     <div className="space-y-0.5 text-right leading-tight">
       <div>Precio Carga: {formatCurrency(registro.precioCarga)}</div>
       <div>Precio Contado: {formatCurrency(registro.precioContado)}</div>
+      <div>
+        Precio Tarjeta Credito: {formatCurrency(registro.precioTarjetaCredito)}
+      </div>
       <div>Costo: {formatCurrency(registro.costo)}</div>
       <div>Margen: {formatCurrency(margen)}</div>
       <div>Margen sobre la venta: {formatPercent(margenPorcentual)}</div>
@@ -231,6 +236,7 @@ export default function CostosHistoricosCRUD() {
       modeloId: costo.modeloId || "",
       precioCarga: costo.precioCarga ?? "",
       precioContado: costo.precioContado ?? "",
+      precioTarjetaCredito: costo.precioTarjetaCredito ?? costo.precioContado ?? "",
       costo: costo.costo ?? "",
       fechaCompra,
       nota: costo.nota || "",
@@ -265,6 +271,7 @@ export default function CostosHistoricosCRUD() {
         modeloId: form.modeloId,
         precioCarga: form.precioCarga,
         precioContado: form.precioContado,
+        precioTarjetaCredito: form.precioTarjetaCredito,
         costo: form.costo,
         fechaCompra: form.fechaCompra,
         nota: form.nota,
@@ -456,6 +463,22 @@ export default function CostosHistoricosCRUD() {
                     type="number"
                     name="precioContado"
                     value={form.precioContado}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded border p-2"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-gray-700">
+                    Precio Tarjeta Credito
+                  </span>
+                  <input
+                    type="number"
+                    name="precioTarjetaCredito"
+                    value={form.precioTarjetaCredito}
                     onChange={handleChange}
                     placeholder="0.00"
                     min="0"

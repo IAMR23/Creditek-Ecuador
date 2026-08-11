@@ -19,6 +19,10 @@ jest.mock("../../controllers/Contabilidad/controlFinancieroController", () => ({
   consolidarVentas: (_req, res) => res.json({ accion: "consolidar" }),
   obtenerCarga: (_req, res) => res.json({ accion: "detalle" }),
   anularCarga: (_req, res) => res.json({ accion: "anular" }),
+  listarResponsablesPagoEntrada: (_req, res) =>
+    res.json({ accion: "responsables" }),
+  actualizarPagoEntrada: (req, res) =>
+    res.json({ accion: "actualizar-pago", registroId: req.params.registroId }),
   obtenerConciliacionEntradas: (req, res) =>
     res.json({ accion: "obtener-conciliacion", cargaId: req.params.cargaId }),
   reconciliarEntradas: (req, res) =>
@@ -89,6 +93,25 @@ describe("controlFinancieroRoutes conciliacion de entradas", () => {
       accion: "confirmar",
       cargaId: "25",
       resultadoId: "resultado-1",
+    });
+  });
+
+  test("expone responsables y actualizacion de pago protegidos", async () => {
+    const app = crearApp();
+    const responsables = await request(app)
+      .get("/api/contabilidad/control-financiero/responsables-pago")
+      .expect(200);
+    const actualizar = await request(app)
+      .patch(
+        "/api/contabilidad/control-financiero/registros/21/pago-entrada",
+      )
+      .send({ estado: "PAGADO", responsableUsuarioId: 8 })
+      .expect(200);
+
+    expect(responsables.body).toEqual({ accion: "responsables" });
+    expect(actualizar.body).toEqual({
+      accion: "actualizar-pago",
+      registroId: "21",
     });
   });
 });

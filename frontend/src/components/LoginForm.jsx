@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { loginUser } from "../services/userServices";
 import { jwtDecode } from "jwt-decode";
 import { AiFillEye, AiFillEyeInvisible } from "react-icons/ai";
-import { useTaskNotifications } from "../context/TaskNotificationContext";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
 import { setAccessToken } from "../api/client";
 
@@ -20,7 +19,6 @@ function LoginForm({ setAuth }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const { reloadPendingTasks } = useTaskNotifications();
   const handleChange = (e) => {
     const { name, value } = e.target;
     setCredentials((prev) => ({ ...prev, [name]: value }));
@@ -51,7 +49,6 @@ function LoginForm({ setAuth }) {
       }
 
       setAccessToken(token);
-      reloadPendingTasks();
       const decodedToken = jwtDecode(token);
 
       const permisos = decodedToken.usuario?.permisosAsignados || [];

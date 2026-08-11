@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Monitor,
   RefreshCw,
+  Save,
   Search,
   Smartphone,
 } from "lucide-react";
@@ -35,6 +36,42 @@ const filtrosIniciales = {
   fechaInicio: "",
   fechaFin: "",
   estado: "ACTIVA",
+};
+
+const PERIODOS_RAPIDOS = [
+  { id: "HOY", label: "Hoy" },
+  { id: "SEMANA", label: "Esta semana" },
+  { id: "MES", label: "Este mes" },
+  { id: "SIETE_DIAS", label: "Ultimos 7 dias" },
+  { id: "ANIO", label: "Este año" },
+];
+
+const fechaLocalIso = (fecha) => {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+};
+
+const obtenerRangoPeriodo = (periodo, ahora = new Date()) => {
+  const fin = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  const inicio = new Date(fin);
+
+  if (periodo === "SEMANA") {
+    const diasDesdeLunes = (fin.getDay() + 6) % 7;
+    inicio.setDate(fin.getDate() - diasDesdeLunes);
+  } else if (periodo === "MES") {
+    inicio.setDate(1);
+  } else if (periodo === "SIETE_DIAS") {
+    inicio.setDate(fin.getDate() - 6);
+  } else if (periodo === "ANIO") {
+    inicio.setMonth(0, 1);
+  }
+
+  return {
+    fechaInicio: fechaLocalIso(inicio),
+    fechaFin: fechaLocalIso(fin),
+  };
 };
 
 const registrosIniciales = {
@@ -160,7 +197,7 @@ function StatCard({ label, value, icon, tone = "green" }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {label}
           </p>
-          <p className="mt-1 text-xl font-bold text-slate-900">{value}</p>
+          <p className="mt-1 text-xl font-bold ">{value}</p>
         </div>
         <div className={`rounded-lg p-2.5 ${tones[tone] || tones.green}`}>
           {icon}
@@ -227,7 +264,7 @@ function VistaConciliacionEntradas({
     return (
       <div className="p-10 text-center">
         <ClipboardCheck className="mx-auto text-slate-400" size={36} />
-        <h3 className="mt-3 font-semibold text-slate-900">
+        <h3 className="mt-3 font-semibold ">
           Conciliación aún no ejecutada
         </h3>
         <p className="mx-auto mt-1 max-w-xl text-sm text-slate-500">
@@ -259,7 +296,7 @@ function VistaConciliacionEntradas({
     <div className="space-y-5 p-4">
       <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-slate-900">
+          <p className="text-sm font-semibold ">
             Última ejecución: {formatFechaHora(conciliacion.createdAt)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
@@ -335,7 +372,7 @@ function VistaConciliacionEntradas({
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
+          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide ">
             <tr>
               <th className="min-w-52 px-3 py-3 font-semibold">
                 Cliente de caja
@@ -375,7 +412,7 @@ function VistaConciliacionEntradas({
                     key={resultado.id}
                     className="border-t border-slate-100 align-top hover:bg-slate-50"
                   >
-                    <td className="px-3 py-3 font-medium text-slate-900">
+                    <td className="px-3 py-3 font-medium ">
                       {resultado.clienteCaja || "-"}
                     </td>
                     <td className="px-3 py-3 text-slate-700">
@@ -386,10 +423,10 @@ function VistaConciliacionEntradas({
                     <td className="px-3 py-3 text-slate-700">
                       {(resultado.contratos || []).join(", ") || "-"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-900">
+                    <td className="whitespace-nowrap px-3 py-3 text-right font-medium ">
                       {money.format(Number(resultado.entradaCaja || 0))}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-900">
+                    <td className="whitespace-nowrap px-3 py-3 text-right font-medium ">
                       {money.format(Number(resultado.entradaReal || 0))}
                     </td>
                     <td
@@ -452,18 +489,18 @@ function TablaResumenCaja({
           Selecciona una agencia para filtrar sus cuotas
         </span>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
+      <div className="w-full">
+        <table className="w-full table-fixed text-xs sm:text-sm">
+          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide ">
             <tr>
-              <th className="whitespace-nowrap px-4 py-3 font-semibold">Agencia</th>
-              <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">
+              <th className="w-[34%] px-2 py-2 font-semibold sm:px-3">Agencia</th>
+              <th className="w-[22%] px-1 py-2 text-right font-semibold sm:px-3">
                 Uphone
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">
+              <th className="w-[22%] px-1 py-2 text-right font-semibold sm:px-3">
                 CrediTV
               </th>
-              <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">
+              <th className="w-[22%] px-1 py-2 text-right font-semibold sm:px-3">
                 Total
               </th>
             </tr>
@@ -492,26 +529,32 @@ function TablaResumenCaja({
                       : "border-slate-100 hover:bg-green-50"
                   }`}
                 >
-                  <td className="px-4 py-3 font-medium text-slate-900">
+                  <td className="break-words px-2 py-2 font-medium  sm:px-3">
                     {fila.agencia}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-700">
+                  <td className="break-all px-1 py-2 text-right text-slate-700 sm:px-3">
                     {money.format(fila.uphone)}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-700">
+                  <td className="break-all px-1 py-2 text-right text-slate-700 sm:px-3">
                     {money.format(fila.creditv)}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                  <td className="break-all px-1 py-2 text-right font-semibold  sm:px-3">
                     {money.format(fila.total)}
                   </td>
                 </tr>
               );
             })}
-            <tr className="border-t-2 border-slate-300 bg-green-50 font-bold text-slate-900">
-              <td className="px-4 py-3">{total.agencia}</td>
-              <td className="px-4 py-3 text-right">{money.format(total.uphone)}</td>
-              <td className="px-4 py-3 text-right">{money.format(total.creditv)}</td>
-              <td className="px-4 py-3 text-right">{money.format(total.total)}</td>
+            <tr className="border-t-2 border-slate-300 bg-green-50 font-bold ">
+              <td className="px-2 py-2 sm:px-3">{total.agencia}</td>
+              <td className="break-all px-1 py-2 text-right sm:px-3">
+                {money.format(total.uphone)}
+              </td>
+              <td className="break-all px-1 py-2 text-right sm:px-3">
+                {money.format(total.creditv)}
+              </td>
+              <td className="break-all px-1 py-2 text-right sm:px-3">
+                {money.format(total.total)}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -533,81 +576,74 @@ function TablaCuotasCaja({ producto, registros }) {
       <div className="bg-green-600 px-4 py-2 text-sm font-bold uppercase text-white">
         {producto}
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-700 text-left text-xs uppercase tracking-wide text-white">
-            <tr>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">Contrato</th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">Fecha</th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">Vendedor</th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">
-                Usuario cobrador
-              </th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">Cliente</th>
-              <th className="whitespace-nowrap px-3 py-3 text-right font-semibold">
-                Pagos cuotas
-              </th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">
-                Nro. cuotas
-              </th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">Agencia</th>
-              <th className="whitespace-nowrap px-3 py-3 font-semibold">Archivo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {registros.length ? (
-              registros.map((registro) => (
-                <tr
-                  key={registro.id}
-                  className="border-t border-slate-100 hover:bg-slate-50"
-                >
-                  <td className="whitespace-nowrap px-3 py-3 font-medium text-slate-900">
-                    {registro.contrato || "-"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                    {registro.fecha || "-"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                    {registro.vendedor || "-"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                    {registro.usuarioCobrador || "-"}
-                  </td>
-                  <td className="min-w-64 px-3 py-3 text-slate-700">
-                    {registro.cliente || "-"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-right font-medium text-slate-900">
-                    {money.format(Number(registro.pagosCuotas || 0))}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                    {registro.numeroCuotas || "-"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                    {registro.agencia || "-"}
-                  </td>
-                  <td className="min-w-72 px-3 py-3 text-slate-600">
-                    {registro.archivoOrigen || "-"}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
-                  No existen cuotas de {producto} para esta carga.
-                </td>
-              </tr>
-            )}
-            <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-900">
-              <td colSpan={5} className="px-3 py-3 text-right">
-                TOTAL
-              </td>
-              <td className="whitespace-nowrap px-3 py-3 text-right">
-                {money.format(total)}
-              </td>
-              <td colSpan={3} />
-            </tr>
-          </tbody>
-        </table>
+      <div className="divide-y divide-slate-100">
+        <div className="hidden bg-slate-700 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-white xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1.15fr)] xl:gap-3">
+          <span>Operacion</span>
+          <span>Cliente y vendedor</span>
+          <span>Cobro</span>
+          <span className="text-right">Valor y archivo</span>
+        </div>
+        {registros.length ? (
+          registros.map((registro) => (
+            <article
+              key={registro.id}
+              className="grid min-w-0 gap-3 px-3 py-3 text-xs hover:bg-slate-50 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,1.15fr)]"
+            >
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+                  Operacion
+                </p>
+                <p className="break-words font-semibold ">
+                  {registro.contrato || "-"}
+                </p>
+                <p className="mt-1 break-words ">
+                  {registro.fecha || "-"} · {registro.agencia || "-"}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+                  Cliente y vendedor
+                </p>
+                <p className="break-words font-medium text-slate-800">
+                  {registro.cliente || "-"}
+                </p>
+                <p className="mt-1 break-words ">
+                  {registro.vendedor || "-"}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+                  Cobro
+                </p>
+                <p className="break-words text-slate-700">
+                  {registro.usuarioCobrador || "-"}
+                </p>
+                <p className="mt-1 break-words text-slate-500">
+                  Cuotas: {registro.numeroCuotas || "-"}
+                </p>
+              </div>
+              <div className="min-w-0 sm:text-right">
+                <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+                  Valor y archivo
+                </p>
+                <p className="font-semibold ">
+                  {money.format(Number(registro.pagosCuotas || 0))}
+                </p>
+                <p className="mt-1 break-all text-[11px] text-slate-500">
+                  {registro.archivoOrigen || "-"}
+                </p>
+              </div>
+            </article>
+          ))
+        ) : (
+          <p className="px-3 py-6 text-center text-sm text-slate-500">
+            No existen cuotas de {producto} para esta carga.
+          </p>
+        )}
+        <div className="flex items-center justify-end gap-3 border-t-2 border-slate-300 bg-slate-50 px-3 py-3 text-sm font-bold ">
+          <span>TOTAL</span>
+          <span>{money.format(total)}</span>
+        </div>
       </div>
     </section>
   );
@@ -662,33 +698,232 @@ function VistaCaja({ resumen, registros }) {
   );
 }
 
-function TablaRegistros({ tipo, registros }) {
-  const configuracion = {
-    ventasTv: {
-      columnas: [
-        ["Contrato", "contrato"],
-        ["Fecha", "fecha"],
-        ["Vendedor", "vendedor"],
-        ["Cliente", "cliente"],
-        ["Modelo", "modelo"],
-        ["Ventas", "ventas", true],
-        ["Entradas", "entradas", true],
-      ],
-    },
-    ventasCelular: {
-      columnas: [
-        ["Contrato", "contrato"],
-        ["Fecha", "fecha"],
-        ["Vendedor", "vendedor"],
-        ["Cliente", "cliente"],
-        ["Modelo", "modelo"],
-        ["IMEI", "imei"],
-        ["Ventas", "ventas", true],
-        ["Entradas", "entradas", true],
-      ],
-    },
-  }[tipo];
+function FilaRegistroVenta({
+  editable,
+  guardando,
+  onGuardar,
+  registro,
+  tipo,
+  usuariosResponsables,
+}) {
+  const [estado, setEstado] = useState(
+    registro.estadoPagoEntrada || "PENDIENTE",
+  );
+  const [responsableId, setResponsableId] = useState(
+    registro.responsablePagoEntradaId
+      ? String(registro.responsablePagoEntradaId)
+      : "",
+  );
+  const [observacion, setObservacion] = useState(
+    registro.observacionPagoEntrada || "",
+  );
+  const [guardado, setGuardado] = useState(false);
+  const tieneEntrada = Number(registro.entradas || 0) > 0;
+  const esCelular = tipo === "ventasCelular";
+  const responsableActual = registro.responsablePagoEntrada;
+  const responsables =
+    responsableActual &&
+    !usuariosResponsables.some(
+      (usuario) => Number(usuario.id) === Number(responsableActual.id),
+    )
+      ? [responsableActual, ...usuariosResponsables]
+      : usuariosResponsables;
+  const cambioPendiente =
+    estado !== (registro.estadoPagoEntrada || "PENDIENTE") ||
+    responsableId !==
+      (registro.responsablePagoEntradaId
+        ? String(registro.responsablePagoEntradaId)
+        : "") ||
+    observacion !== (registro.observacionPagoEntrada || "");
 
+  useEffect(() => {
+    setEstado(registro.estadoPagoEntrada || "PENDIENTE");
+    setResponsableId(
+      registro.responsablePagoEntradaId
+        ? String(registro.responsablePagoEntradaId)
+        : "",
+    );
+    setObservacion(registro.observacionPagoEntrada || "");
+  }, [registro]);
+
+  const guardar = async () => {
+    if (!responsableId || !cambioPendiente || guardando) return;
+    setGuardado(false);
+    try {
+      await onGuardar(registro.id, {
+        estado,
+        responsableUsuarioId: Number(responsableId),
+        observacion,
+      });
+      setGuardado(true);
+    } catch {
+      setGuardado(false);
+    }
+  };
+
+  return (
+    <article className="grid min-w-0 gap-3 px-3 py-3 text-xs hover:bg-slate-50 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_2.25rem] xl:items-start xl:gap-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+          Operacion
+        </p>
+        <p className="break-words font-semibold ">
+          {registro.contrato || "-"}
+        </p>
+        <p className="mt-1 break-words text-slate-500">
+          {registro.fecha || "-"}
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+          Cliente y vendedor
+        </p>
+        <p className="break-words font-medium text-slate-800">
+          {registro.cliente || "-"}
+        </p>
+        <p className="mt-1 break-words text-slate-500">
+          {registro.vendedor || "-"}
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+          Equipo
+        </p>
+        <p className="break-words text-slate-700">{registro.modelo || "-"}</p>
+        {esCelular && (
+          <p className="mt-1 break-all font-medium text-slate-500">
+            IMEI: {registro.imei || "-"}
+          </p>
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+          Valores
+        </p>
+        <p className="font-semibold ">
+          {money.format(Number(registro.ventas || 0))}
+        </p>
+        <p className="mt-1 font-medium text-green-700">
+          Entrada: {money.format(Number(registro.entradas || 0))}
+        </p>
+      </div>
+      {tieneEntrada ? (
+        <>
+          <div className="min-w-0">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+              Estado
+            </p>
+            <select
+              value={estado}
+              onChange={(event) => {
+                setEstado(event.target.value);
+                setGuardado(false);
+              }}
+              disabled={!editable || guardando}
+              className={`w-full min-w-0 rounded-md border px-2 py-1.5 text-[11px] font-semibold outline-none focus:border-green-400 disabled:cursor-not-allowed disabled:opacity-70 ${
+                estado === "PAGADO"
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-amber-200 bg-amber-50 text-amber-700"
+              }`}
+              aria-label={`Estado del pago del contrato ${registro.contrato || registro.id}`}
+            >
+              <option value="PENDIENTE">PENDIENTE</option>
+              <option value="PAGADO">PAGADO</option>
+            </select>
+          </div>
+          <div className="min-w-0">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+              Responsable
+            </p>
+            <select
+              value={responsableId}
+              onChange={(event) => {
+                setResponsableId(event.target.value);
+                setGuardado(false);
+              }}
+              disabled={!editable || guardando}
+              className="w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700 outline-none focus:border-green-400 disabled:cursor-not-allowed disabled:bg-slate-50"
+              aria-label={`Responsable del pago del contrato ${registro.contrato || registro.id}`}
+            >
+              <option value="">Seleccionar usuario</option>
+              {responsables.map((usuario) => (
+                <option
+                  key={usuario.id}
+                  value={usuario.id}
+                  disabled={usuario.activo === false}
+                >
+                  {usuario.nombre}
+                  {usuario.activo === false ? " (inactivo)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400 xl:hidden">
+              Observacion
+            </p>
+            <input
+              type="text"
+              value={observacion}
+              onChange={(event) => {
+                setObservacion(event.target.value);
+                setGuardado(false);
+              }}
+              disabled={!editable || guardando}
+              maxLength={1000}
+              placeholder="Observacion del pago"
+              className="w-full min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700 outline-none focus:border-green-400 disabled:cursor-not-allowed disabled:bg-slate-50"
+              aria-label={`Observacion del pago del contrato ${registro.contrato || registro.id}`}
+            />
+          </div>
+          <div className="flex min-w-0 items-end justify-end sm:col-span-2 xl:col-span-1">
+            <button
+              type="button"
+              onClick={guardar}
+              disabled={
+                !editable || guardando || !responsableId || !cambioPendiente
+              }
+              title={
+                !editable
+                  ? "La carga no esta activa"
+                  : !responsableId
+                    ? "Selecciona un responsable"
+                    : "Guardar gestion del pago"
+              }
+              aria-label="Guardar gestion del pago"
+              className={`inline-flex size-8 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                guardado && !cambioPendiente
+                  ? "border-green-200 bg-green-50 text-green-700"
+                  : "border-slate-200 bg-white  hover:border-green-300 hover:text-green-700"
+              }`}
+            >
+              {guardando ? (
+                <RefreshCw size={15} className="animate-spin" />
+              ) : guardado && !cambioPendiente ? (
+                <CheckCircle2 size={16} />
+              ) : (
+                <Save size={15} />
+              )}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="flex min-h-8 items-center text-slate-400 sm:col-span-2 xl:col-span-4">
+          Sin valor de entrada
+        </div>
+      )}
+    </article>
+  );
+}
+
+function TablaRegistros({
+  tipo,
+  registros,
+  usuariosResponsables,
+  onGuardarPago,
+  guardandoPagoId,
+  editable,
+}) {
   if (!registros.length) {
     return (
       <div className="p-10 text-center text-sm text-slate-500">
@@ -698,38 +933,28 @@ function TablaRegistros({ tipo, registros }) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
-          <tr>
-            {configuracion.columnas.map(([label]) => (
-              <th key={label} className="whitespace-nowrap px-3 py-3 font-semibold">
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {registros.map((registro) => (
-            <tr key={registro.id} className="border-t border-slate-100 hover:bg-slate-50">
-              {configuracion.columnas.map(([label, campo, monetario]) => (
-                <td
-                  key={label}
-                  className={`px-3 py-3 ${
-                    campo === "contrato" || campo === "imei"
-                      ? "whitespace-nowrap font-medium text-slate-900"
-                      : "text-slate-700"
-                  }`}
-                >
-                  {monetario
-                    ? money.format(Number(registro[campo] || 0))
-                    : registro[campo] || "-"}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="min-w-0 divide-y divide-slate-100">
+      <div className="hidden bg-slate-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide  xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.1fr)_minmax(0,1.2fr)_2.25rem] xl:gap-2">
+        <span>Operacion</span>
+        <span>Cliente y vendedor</span>
+        <span>Equipo</span>
+        <span>Valores</span>
+        <span>Estado</span>
+        <span>Responsable</span>
+        <span>Observacion</span>
+        <span />
+      </div>
+      {registros.map((registro) => (
+        <FilaRegistroVenta
+          key={registro.id}
+          editable={editable}
+          guardando={guardandoPagoId === registro.id}
+          onGuardar={onGuardarPago}
+          registro={registro}
+          tipo={tipo}
+          usuariosResponsables={usuariosResponsables}
+        />
+      ))}
     </div>
   );
 }
@@ -753,6 +978,8 @@ export default function ControlFinanciero() {
   const [anulandoCarga, setAnulandoCarga] = useState(false);
   const [consolidadoVentas, setConsolidadoVentas] = useState(null);
   const [exportandoExcel, setExportandoExcel] = useState(false);
+  const [usuariosResponsables, setUsuariosResponsables] = useState([]);
+  const [guardandoPagoId, setGuardandoPagoId] = useState(null);
   const [conciliacionEntradas, setConciliacionEntradas] = useState(null);
   const [errorConciliacion, setErrorConciliacion] = useState("");
   const [reconciliandoEntradas, setReconciliandoEntradas] = useState(false);
@@ -895,6 +1122,52 @@ export default function ControlFinanciero() {
   useEffect(() => {
     cargarCargas();
   }, [cargarCargas]);
+
+  useEffect(() => {
+    const cargarResponsables = async () => {
+      try {
+        const { data } = await api.get(
+          "/api/contabilidad/control-financiero/responsables-pago",
+        );
+        setUsuariosResponsables(data.usuarios || []);
+      } catch (error) {
+        console.error("Error cargando responsables de pago:", error);
+        setUsuariosResponsables([]);
+      }
+    };
+
+    cargarResponsables();
+  }, []);
+
+  const guardarPagoEntrada = async (registroId, payload) => {
+    try {
+      setGuardandoPagoId(registroId);
+      const { data } = await api.patch(
+        `/api/contabilidad/control-financiero/registros/${registroId}/pago-entrada`,
+        payload,
+      );
+      const registroActualizado = data.registro;
+      setRegistros((actuales) => ({
+        ...actuales,
+        ventasTv: actuales.ventasTv.map((registro) =>
+          registro.id === registroId ? registroActualizado : registro,
+        ),
+        ventasCelular: actuales.ventasCelular.map((registro) =>
+          registro.id === registroId ? registroActualizado : registro,
+        ),
+      }));
+      return registroActualizado;
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        getErrorMessage(error, "No se pudo guardar la gestion del pago."),
+        "error",
+      );
+      throw error;
+    } finally {
+      setGuardandoPagoId(null);
+    }
+  };
 
   const anularCarga = async () => {
     if (
@@ -1102,6 +1375,22 @@ export default function ControlFinanciero() {
     setFiltrosAplicados(filtros);
   };
 
+  const aplicarPeriodoRapido = (periodo) => {
+    const rango = obtenerRangoPeriodo(periodo);
+    const nuevosFiltros = { ...filtros, ...rango };
+    setFiltros(nuevosFiltros);
+    setPagina(1);
+    setFiltrosAplicados(nuevosFiltros);
+  };
+
+  const periodoRapidoActivo = PERIODOS_RAPIDOS.find(({ id }) => {
+    const rango = obtenerRangoPeriodo(id);
+    return (
+      rango.fechaInicio === filtros.fechaInicio &&
+      rango.fechaFin === filtros.fechaFin
+    );
+  })?.id;
+
   const resumenCaja = useMemo(
     () => crearResumenCaja(registros.caja || []),
     [registros.caja],
@@ -1174,6 +1463,9 @@ export default function ControlFinanciero() {
         registro.imei,
         registro.producto,
         registro.agencia,
+        registro.estadoPagoEntrada,
+        registro.responsablePagoEntrada?.nombre,
+        registro.observacionPagoEntrada,
       ].some((value) =>
         String(value || "")
           .toLocaleLowerCase("es")
@@ -1208,74 +1500,96 @@ export default function ControlFinanciero() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="mx-auto max-w-[1600px] space-y-5">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-green-700">
                 <BarChart3 size={18} /> Contabilidad
               </p>
-              <h1 className="mt-1 text-2xl font-bold text-slate-900">Control financiero</h1>
-              <p className="mt-1 text-sm text-slate-600">
+              <h1 className="mt-1 text-2xl font-bold ">Control financiero</h1>
+              <p className="mt-1 text-sm ">
                 Historial persistente de los reportes de caja y ventas procesados.
               </p>
             </div>
 
             <form
               onSubmit={aplicarFiltros}
-              className="grid gap-3 sm:grid-cols-[150px_150px_160px_auto] sm:items-end"
+              className="grid w-full gap-2 lg:w-auto"
             >
-              <label className="grid gap-1 text-xs font-semibold text-slate-600">
-                Reporte desde
-                <input
-                  type="date"
-                  value={filtros.fechaInicio}
-                  onChange={(event) =>
-                    setFiltros((actual) => ({
-                      ...actual,
-                      fechaInicio: event.target.value,
-                    }))
-                  }
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-600">
-                Reporte hasta
-                <input
-                  type="date"
-                  value={filtros.fechaFin}
-                  onChange={(event) =>
-                    setFiltros((actual) => ({
-                      ...actual,
-                      fechaFin: event.target.value,
-                    }))
-                  }
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-semibold text-slate-600">
-                Estado
-                <select
-                  value={filtros.estado}
-                  onChange={(event) =>
-                    setFiltros((actual) => ({
-                      ...actual,
-                      estado: event.target.value,
-                    }))
-                  }
-                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                >
-                  <option value="ACTIVA">Activas</option>
-                  <option value="ANULADA">Anuladas</option>
-                  <option value="TODAS">Todas</option>
-                </select>
-              </label>
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 text-sm font-semibold text-white hover:bg-slate-700"
+              <div
+                className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1"
+                aria-label="Periodos rapidos"
               >
-                <RefreshCw size={16} /> Consultar
-              </button>
+                {PERIODOS_RAPIDOS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => aplicarPeriodoRapido(id)}
+                    className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition sm:flex-none ${
+                      periodoRapidoActivo === id
+                        ? "bg-green-600 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
+                    aria-pressed={periodoRapidoActivo === id}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[150px_150px_160px_auto] sm:items-end">
+                <label className="grid gap-1 text-xs font-semibold ">
+                  Reporte desde
+                  <input
+                    type="date"
+                    value={filtros.fechaInicio}
+                    onChange={(event) =>
+                      setFiltros((actual) => ({
+                        ...actual,
+                        fechaInicio: event.target.value,
+                      }))
+                    }
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold ">
+                  Reporte hasta
+                  <input
+                    type="date"
+                    value={filtros.fechaFin}
+                    onChange={(event) =>
+                      setFiltros((actual) => ({
+                        ...actual,
+                        fechaFin: event.target.value,
+                      }))
+                    }
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold ">
+                  Estado
+                  <select
+                    value={filtros.estado}
+                    onChange={(event) =>
+                      setFiltros((actual) => ({
+                        ...actual,
+                        estado: event.target.value,
+                      }))
+                    }
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="ACTIVA">Activas</option>
+                    <option value="ANULADA">Anuladas</option>
+                    <option value="TODAS">Todas</option>
+                  </select>
+                </label>
+                <button
+                  type="submit"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 text-sm font-semibold text-white hover:bg-slate-700"
+                >
+                  <RefreshCw size={16} /> Consultar
+                </button>
+              </div>
             </form>
           </div>
         </section>
@@ -1283,7 +1597,7 @@ export default function ControlFinanciero() {
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 p-4">
             <div>
-              <h2 className="font-semibold text-slate-900">Cargas generadas</h2>
+              <h2 className="font-semibold ">Cargas generadas</h2>
               <p className="text-sm text-slate-500">{paginacion.total} cargas guardadas</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1306,19 +1620,19 @@ export default function ControlFinanciero() {
                 type="button"
                 disabled={pagina <= 1 || loadingCargas}
                 onClick={() => setPagina((actual) => Math.max(1, actual - 1))}
-                className="rounded-lg border border-slate-200 p-2 text-slate-600 disabled:opacity-40"
+                className="rounded-lg border border-slate-200 p-2  disabled:opacity-40"
                 aria-label="Página anterior"
               >
                 <ChevronLeft size={17} />
               </button>
-              <span className="text-sm text-slate-600">
+              <span className="text-sm ">
                 {pagina} / {paginacion.totalPaginas}
               </span>
               <button
                 type="button"
                 disabled={pagina >= paginacion.totalPaginas || loadingCargas}
                 onClick={() => setPagina((actual) => actual + 1)}
-                className="rounded-lg border border-slate-200 p-2 text-slate-600 disabled:opacity-40"
+                className="rounded-lg border border-slate-200 p-2  disabled:opacity-40"
                 aria-label="Página siguiente"
               >
                 <ChevronRight size={17} />
@@ -1333,7 +1647,7 @@ export default function ControlFinanciero() {
               Aún no existen cargas de control financiero para estos filtros.
             </p>
           ) : (
-            <div className="flex gap-3 overflow-x-auto p-4">
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {cargas.map((carga) => {
                 const activa = carga.id === cargaSeleccionada?.id;
                 return (
@@ -1341,13 +1655,13 @@ export default function ControlFinanciero() {
                     key={carga.id}
                     type="button"
                     onClick={() => cargarDetalle(carga.id)}
-                    className={`min-w-64 rounded-lg border p-4 text-left transition ${
+                    className={`min-w-0 rounded-lg border p-4 text-left transition ${
                       activa
                         ? "border-green-400 bg-green-50 ring-2 ring-green-100"
                         : "border-slate-200 hover:border-green-200 hover:bg-slate-50"
                     }`}
                   >
-                    <p className="truncate font-semibold text-slate-900">
+                    <p className="truncate font-semibold ">
                       Carga #{carga.id}
                     </p>
                     <div className="mt-2">
@@ -1359,7 +1673,7 @@ export default function ControlFinanciero() {
                     <p className="mt-1 text-xs text-slate-500">
                       Cargado: {formatFechaHora(carga.createdAt)}
                     </p>
-                    <p className="mt-2 text-sm text-slate-600">
+                    <p className="mt-2 text-sm ">
                       {carga.usuario?.nombre || "Usuario no disponible"}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -1466,7 +1780,7 @@ export default function ControlFinanciero() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet size={19} className="text-green-600" />
-                    <h2 className="truncate font-semibold text-slate-900">
+                    <h2 className="truncate font-semibold ">
                       {modoConsolidado
                         ? "Consolidado de todas las cargas activas"
                         : cargaSeleccionada.archivoGenerado}
@@ -1525,7 +1839,7 @@ export default function ControlFinanciero() {
                 </div>
               </div>
 
-              <div className="flex overflow-x-auto border-b border-slate-200 px-4">
+              <div className="flex flex-wrap border-b border-slate-200 px-2 sm:px-4">
                 {tabsVisibles.map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
@@ -1534,7 +1848,7 @@ export default function ControlFinanciero() {
                       setTabActivo(id);
                       setBusqueda("");
                     }}
-                    className={`inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold ${
+                    className={`inline-flex max-w-full items-center gap-2 border-b-2 px-3 py-3 text-left text-sm font-semibold ${
                       tabActivo === id
                         ? "border-green-500 text-green-700"
                         : "border-transparent text-slate-500 hover:text-slate-800"
@@ -1572,7 +1886,16 @@ export default function ControlFinanciero() {
                     registros={registrosVisibles}
                   />
                 ) : (
-                  <TablaRegistros tipo={tabActivo} registros={registrosVisibles} />
+                  <TablaRegistros
+                    tipo={tabActivo}
+                    registros={registrosVisibles}
+                    usuariosResponsables={usuariosResponsables}
+                    onGuardarPago={guardarPagoEntrada}
+                    guardandoPagoId={guardandoPagoId}
+                    editable={
+                      modoConsolidado || cargaSeleccionada?.estado === "ACTIVA"
+                    }
+                  />
                 )
               )}
             </section>

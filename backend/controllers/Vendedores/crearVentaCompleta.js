@@ -18,16 +18,10 @@ const { normalizarCorreo } = require("../../utils/normalizarCorreo");
 const { registrarPersona } = require("../../services/personasService");
 const CostoHistorico = require("../../models/CostoHistorico");
 const { Op } = require("sequelize");
-
-const normalizeText = (value) =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-
-const esFormaPagoCredito = (formaPago) =>
-  Number(formaPago?.id) === 1 || normalizeText(formaPago?.nombre).includes("credito");
+const {
+  obtenerEtiquetaTipoPrecio,
+  seleccionarPrecioCostoHistorico,
+} = require("../../utils/seleccionarPrecioCostoHistorico");
 
 const getErrorMessage = (error) =>
   error?.parent?.detail ||
@@ -169,16 +163,12 @@ const crearVentaCompleta = async (req, res) => {
       throw new Error("Forma de pago no existe");
     }
 
-    const usarPrecioCarga = esFormaPagoCredito(formaPagoDB);
-    const precioHistorico = usarPrecioCarga
-      ? Number(costoDB.precioCarga)
-      : Number(costoDB.precioContado);
+    const { precio: precioHistorico, tipoPrecioSolicitado } =
+      seleccionarPrecioCostoHistorico(costoDB, formaPagoDB);
 
     if (!Number.isFinite(precioHistorico) || precioHistorico <= 0) {
       throw new Error(
-        usarPrecioCarga
-          ? "No existe precio carga para este modelo en costo historico"
-          : "No existe precio contado para este modelo en costo historico",
+        `No existe ${obtenerEtiquetaTipoPrecio(tipoPrecioSolicitado)} para este modelo en costo historico`,
       );
     }
 

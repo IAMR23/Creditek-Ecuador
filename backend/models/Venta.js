@@ -31,6 +31,10 @@ const Venta = sequelize.define(
     observacion: {
       type: DataTypes.STRING,
     },
+    comentarioAuditoria: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     fecha: {
       type: DataTypes.DATEONLY,
       defaultValue: DataTypes.NOW,

@@ -78,6 +78,8 @@ export const ROUTE_PERMISSIONS = {
   "/contabilidad/metas-minimas-multas": ["Contabilidad", "Administracion"],
   "/contabilidad/meta-minima-sin-multa": ["Contabilidad", "Administracion"],
   "/contabilidad/pagos-comisiones": ["Contabilidad", "Administracion"],
+  "/contabilidad/descuentos-decimos": ["Contabilidad", "Administracion"],
+  "/contabilidad/egresos-creditek": ["Contabilidad", "Administracion"],
   "/contabilidad/sanciones-configuracion": ["Contabilidad", "Administracion"],
   "/contabilidad/sanciones-ventas": ["Contabilidad", "Administracion"],
   "/contabilidad/extraccion-reportes-caja": ["Contabilidad", "Administracion"],
@@ -85,6 +87,8 @@ export const ROUTE_PERMISSIONS = {
 
   "/entregas-auditoria": "Auditoria",
   "/ventas-auditoria": "Auditoria",
+  // La consulta es comun; el backend restringe por separado la edicion.
+  "/lista-precios": [],
 
   "/postulaciones": "Desarrollo Organizacional",
 

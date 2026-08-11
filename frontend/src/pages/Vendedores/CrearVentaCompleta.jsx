@@ -41,7 +41,7 @@ const CrearVentaCompleta = () => {
   const [dispositivoMarcas, setDispositivoMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [formasPago, setFormasPago] = useState([]);
-  const [precioVentaCatalogo, setPrecioVentaCatalogo] = useState(null);
+  const [preciosVersion, setPreciosVersion] = useState(0);
 
   const [foto, setFoto] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -188,48 +188,17 @@ const CrearVentaCompleta = () => {
     };
 
     fetchPrecio();
-  }, [detalle.modeloId, detalle.formaPagoId, venta.fecha]);
-
-  const fetchPrecioVentaModelo = async (modeloId) => {
-    if (!modeloId) {
-      setPrecioVentaCatalogo(null);
-      return;
-    }
-
-    try {
-      const res = await axios.get(`${API_URL}/precios-venta/modelo/${modeloId}`);
-      setPrecioVentaCatalogo(res.data);
-    } catch (err) {
-      console.error(err);
-      setPrecioVentaCatalogo(null);
-      setDetalle((prev) => {
-        if (isCreditoDirecto(formaPagoSeleccionada)) return prev;
-        return { ...prev, precioVenta: "" };
-      });
-    }
-  };
+  }, [detalle.modeloId, detalle.formaPagoId, venta.fecha, preciosVersion]);
 
   useEffect(() => {
-    fetchPrecioVentaModelo(detalle.modeloId);
-  }, [detalle.modeloId]);
+    const handlePreciosVentaUpdated = () => setPreciosVersion((prev) => prev + 1);
 
-  useEffect(() => {
-    if (!detalle.formaPagoId || !precioVentaCatalogo || !formaPagoSeleccionada) return;
-  }, [detalle.formaPagoId, formaPagoSeleccionada, precioVentaCatalogo]);
-
-  useEffect(() => {
-    const handlePreciosVentaUpdated = () => {
-      if (detalle.modeloId) {
-        fetchPrecioVentaModelo(detalle.modeloId);
-      }
-    };
-
-    socket.on("preciosVenta:updated", handlePreciosVentaUpdated);
+    socket.on("listaPrecios:updated", handlePreciosVentaUpdated);
 
     return () => {
-      socket.off("preciosVenta:updated", handlePreciosVentaUpdated);
+      socket.off("listaPrecios:updated", handlePreciosVentaUpdated);
     };
-  }, [detalle.modeloId]);
+  }, []);
 
   /* ===============================
      MODELOS

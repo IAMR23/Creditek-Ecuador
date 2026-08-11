@@ -3,6 +3,10 @@ const {
   buildPersonalSellerView,
   getCommissionablePaidPosition,
   hasCommissionablePaidPosition,
+  hasCommercialLeadershipPosition,
+  isInactiveCommercialLeader,
+  getLogisticsProfile,
+  buildLogisticsCommissionRows,
   isSellerEligibleForTeam,
   getLeaderCommissionMembers,
   getLeaderBonusTeam,
@@ -89,6 +93,113 @@ describe("pagosComisionesService", () => {
     ).toBe(true);
   });
 
+  test("excluye de pagos a jefes comerciales y supervisores inactivos", () => {
+    const jefeInactivo = {
+      activo: false,
+      posicionesPago: [{ cargo: "JEFE COMERCIAL DE PISO" }],
+    };
+    const supervisorInactivo = {
+      activo: false,
+      posicionesPago: [{ cargo: "SUPERVISOR CALL CENTER" }],
+    };
+
+    expect(hasCommercialLeadershipPosition(jefeInactivo)).toBe(true);
+    expect(isInactiveCommercialLeader(jefeInactivo)).toBe(true);
+    expect(isInactiveCommercialLeader(supervisorInactivo)).toBe(true);
+    expect(
+      isInactiveCommercialLeader({
+        activo: false,
+        posicionesPago: [{ cargo: "VENDEDOR DE PISO" }],
+      }),
+    ).toBe(false);
+    expect(
+      isInactiveCommercialLeader({
+        activo: true,
+        posicionesPago: [{ cargo: "JEFE COMERCIAL DE PISO" }],
+      }),
+    ).toBe(false);
+  });
+
+  test("calcula pagos de logistica por entregas realizadas", () => {
+    const weeks = [
+      { startDate: "2026-07-02", endDate: "2026-07-08" },
+      { startDate: "2026-07-09", endDate: "2026-07-15" },
+    ];
+    const usuarios = [
+      {
+        usuarioId: 1,
+        nombre: "Encargado",
+        activo: true,
+        agencias: ["Matriz"],
+        roles: [],
+        posicionesPago: [{ rolPagoId: 10, cargo: "ENCARGADO DE LOGISTICA" }],
+      },
+      {
+        usuarioId: 2,
+        nombre: "Chofer",
+        activo: true,
+        agencias: ["Matriz"],
+        roles: [],
+        posicionesPago: [{ rolPagoId: 11, cargo: "CHOFER" }],
+      },
+      {
+        usuarioId: 3,
+        nombre: "Repartidor",
+        activo: true,
+        agencias: ["Norte"],
+        roles: ["Repartidor"],
+        posicionesPago: [],
+      },
+      {
+        usuarioId: 4,
+        nombre: "Chofer inactivo",
+        activo: false,
+        posicionesPago: [{ rolPagoId: 11, cargo: "CHOFER" }],
+      },
+    ];
+    const asignaciones = [
+      { usuarioId: 1, entregaId: 10, fecha: "2026-07-03" },
+      { usuarioId: 1, entregaId: 11, fecha: "2026-07-10" },
+      { usuarioId: 2, entregaId: 20, fecha: "2026-07-03" },
+      { usuarioId: 2, entregaId: 20, fecha: "2026-07-03" },
+      { usuarioId: 2, entregaId: 21, fecha: "2026-07-10" },
+      { usuarioId: 3, entregaId: 30, fecha: "2026-07-10" },
+      { usuarioId: 4, entregaId: 40, fecha: "2026-07-10" },
+    ];
+
+    const rows = buildLogisticsCommissionRows({ usuarios, asignaciones, weeks });
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      usuarioId: 1,
+      esEncargadoLogistica: true,
+      tarifaPorEntrega: 1,
+      resumenMensual: { totalEntregas: 2, totalPagar: 2 },
+    });
+    expect(rows.find((row) => row.usuarioId === 2)).toMatchObject({
+      tarifaPorEntrega: 0.5,
+      resumenMensual: { totalEntregas: 2, totalPagar: 1 },
+    });
+    expect(rows.find((row) => row.usuarioId === 3)).toMatchObject({
+      cargo: "REPARTIDOR",
+      tarifaPorEntrega: 0.5,
+      resumenMensual: { totalEntregas: 1, totalPagar: 0.5 },
+    });
+  });
+
+  test("prioriza la tarifa del encargado aunque tambien tenga rol repartidor", () => {
+    expect(
+      getLogisticsProfile({
+        rol: "Repartidor",
+        posicionesPago: [{ cargo: "Encargado de Logistica" }],
+      }),
+    ).toEqual({
+      tipo: "ENCARGADO",
+      cargo: "Encargado de Logistica",
+      tarifaPorEntrega: 1,
+    });
+  });
+
   test("persona con dos cargos usa el cargo mejor pagado", () => {
     const cargoPrincipal = selectHighestPaidPosition([
       {
@@ -160,6 +271,7 @@ describe("pagosComisionesService", () => {
       usuario: {
         id: 40,
         nombre: "Persona con doble cargo",
+        activo: true,
         rolPago: {
           id: 2,
           nivel: "ASISTENTE",
@@ -192,6 +304,7 @@ describe("pagosComisionesService", () => {
     expect(payload).toMatchObject({
       rolPagoId: 15,
       cargo: "JEFE COMERCIAL DE PISO",
+      activo: true,
       tieneMultiplesCargos: true,
     });
     expect(payload.posicionesPago).toHaveLength(2);

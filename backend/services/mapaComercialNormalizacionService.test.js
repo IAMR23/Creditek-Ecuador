@@ -6,6 +6,7 @@ jest.mock("../models/MapaUbicacionNormalizada", () => ({
   bulkCreate: jest.fn(),
   count: jest.fn(),
   findAll: jest.fn(),
+  sync: jest.fn(),
   update: jest.fn(),
 }));
 
@@ -13,6 +14,7 @@ const axios = require("axios");
 const MapaUbicacionNormalizada = require("../models/MapaUbicacionNormalizada");
 const {
   encolarVentasParaNormalizar,
+  procesarColaNormalizaciones,
 } = require("./mapaComercialNormalizacionService");
 
 describe("mapaComercialNormalizacionService", () => {
@@ -77,5 +79,21 @@ describe("mapaComercialNormalizacionService", () => {
       }),
     );
     expect(axios.get).not.toHaveBeenCalled();
+  });
+
+  test("recupera el esquema si falta la tabla de normalizaciones", async () => {
+    MapaUbicacionNormalizada.update.mockRejectedValueOnce({
+      message: 'no existe la relacion "mapa_ubicaciones_normalizadas"',
+      original: { code: "42P01" },
+      sql: 'UPDATE "mapa_ubicaciones_normalizadas" SET ...',
+    });
+    MapaUbicacionNormalizada.sync.mockResolvedValue();
+
+    await expect(procesarColaNormalizaciones()).resolves.toEqual({
+      procesando: false,
+      procesados: 0,
+      esquemaRecuperado: true,
+    });
+    expect(MapaUbicacionNormalizada.sync).toHaveBeenCalledTimes(1);
   });
 });

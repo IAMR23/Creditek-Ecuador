@@ -6,9 +6,13 @@ jest.mock("../../models/ControlFinancieroCarga", () => ({
 
 jest.mock("../../models/ControlFinancieroRegistro", () => ({
   findAll: jest.fn(),
+  findByPk: jest.fn(),
 }));
 
-jest.mock("../../models/Usuario", () => ({}));
+jest.mock("../../models/Usuario", () => ({
+  findAll: jest.fn(),
+  findOne: jest.fn(),
+}));
 
 jest.mock("../../config/db", () => ({
   sequelize: {
@@ -24,6 +28,7 @@ jest.mock("../../services/conciliacionEntradasService", () => ({
 
 const ControlFinancieroCarga = require("../../models/ControlFinancieroCarga");
 const ControlFinancieroRegistro = require("../../models/ControlFinancieroRegistro");
+const Usuario = require("../../models/Usuario");
 const { Op } = require("sequelize");
 const { sequelize } = require("../../config/db");
 const {
@@ -219,6 +224,121 @@ describe("controlFinancieroController", () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(ControlFinancieroCarga.findByPk).not.toHaveBeenCalled();
+  });
+
+  test("lista solo usuarios activos como responsables de pago", async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 2, nombre: "Ana" }]);
+    const res = crearRes();
+
+    await controller.listarResponsablesPagoEntrada({}, res);
+
+    expect(Usuario.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { activo: true } }),
+    );
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      usuarios: [{ id: 2, nombre: "Ana" }],
+    });
+  });
+
+  test("guarda estado, responsable y observacion de una entrada", async () => {
+    const registro = {
+      id: 21,
+      cargaId: 5,
+      tipoRegistro: "VENTA_TV",
+      entradas: "50.00",
+      update: jest.fn().mockImplementation(async function actualizar(payload) {
+        Object.assign(this, payload);
+      }),
+    };
+    ControlFinancieroRegistro.findByPk.mockResolvedValue(registro);
+    ControlFinancieroCarga.findByPk.mockResolvedValue({ id: 5, estado: "ACTIVA" });
+    Usuario.findOne.mockResolvedValue({ id: 8, nombre: "Maria", activo: true });
+    const res = crearRes();
+
+    await controller.actualizarPagoEntrada(
+      {
+        params: { registroId: "21" },
+        body: {
+          estado: "pagado",
+          responsableUsuarioId: 8,
+          observacion: "Transferencia verificada",
+        },
+      },
+      res,
+    );
+
+    expect(ControlFinancieroRegistro.findByPk).toHaveBeenCalledWith(
+      21,
+      expect.objectContaining({ lock: "UPDATE" }),
+    );
+    expect(Usuario.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 8, activo: true } }),
+    );
+    expect(registro.update).toHaveBeenCalledWith(
+      {
+        estadoPagoEntrada: "PAGADO",
+        responsablePagoEntradaId: 8,
+        observacionPagoEntrada: "Transferencia verificada",
+      },
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        registro: expect.objectContaining({
+          id: 21,
+          estadoPagoEntrada: "PAGADO",
+          responsablePagoEntrada: expect.objectContaining({ id: 8 }),
+        }),
+      }),
+    );
+  });
+
+  test("no permite gestionar un registro sin valor de entrada", async () => {
+    ControlFinancieroRegistro.findByPk.mockResolvedValue({
+      id: 21,
+      cargaId: 5,
+      tipoRegistro: "VENTA_CELULAR",
+      entradas: "0.00",
+    });
+    const res = crearRes();
+
+    await controller.actualizarPagoEntrada(
+      {
+        params: { registroId: "21" },
+        body: { estado: "PENDIENTE", responsableUsuarioId: 8 },
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(Usuario.findOne).not.toHaveBeenCalled();
+  });
+
+  test("rechaza responsables inactivos", async () => {
+    ControlFinancieroRegistro.findByPk.mockResolvedValue({
+      id: 21,
+      cargaId: 5,
+      tipoRegistro: "VENTA_CELULAR",
+      entradas: "25.00",
+    });
+    ControlFinancieroCarga.findByPk.mockResolvedValue({ id: 5, estado: "ACTIVA" });
+    Usuario.findOne.mockResolvedValue(null);
+    const res = crearRes();
+
+    await controller.actualizarPagoEntrada(
+      {
+        params: { registroId: "21" },
+        body: { estado: "PENDIENTE", responsableUsuarioId: 8 },
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining("inactivo") }),
+    );
   });
 
   test("devuelve la ultima conciliacion historica de la carga", async () => {

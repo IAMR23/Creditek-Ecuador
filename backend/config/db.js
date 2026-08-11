@@ -981,6 +981,47 @@ const ensureControlFinancieroPreSyncSchema = async (queryInterface) => {
     );
   }
 
+  await addColumnIfMissing(
+    queryInterface,
+    "control_financiero_registros",
+    "estadoPagoEntrada",
+    {
+      type: Sequelize.STRING(20),
+      allowNull: false,
+      defaultValue: "PENDIENTE",
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "control_financiero_registros",
+    "responsablePagoEntradaId",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "control_financiero_registros",
+    "observacionPagoEntrada",
+    {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    },
+  );
+
+  await sequelize.query(`
+    UPDATE control_financiero_registros
+    SET "estadoPagoEntrada" = 'PENDIENTE'
+    WHERE "estadoPagoEntrada" IS NULL;
+  `);
+
   await sequelize.query(`
     UPDATE control_financiero_registros
     SET "archivoOrigen" = regexp_replace(
@@ -1040,6 +1081,73 @@ const connectDB = async () => {
 
     const tables = await queryInterface.showAllTables();
 
+    if (tables.includes("egresos_creditek_entradas")) {
+      await addColumnIfMissing(
+        queryInterface,
+        "egresos_creditek_entradas",
+        "observacion",
+        {
+          type: Sequelize.TEXT,
+          allowNull: true,
+        },
+      );
+      await addColumnIfMissing(
+        queryInterface,
+        "egresos_creditek_entradas",
+        "seccion",
+        {
+          type: Sequelize.STRING(30),
+          allowNull: false,
+          defaultValue: "ENTRADAS",
+        },
+      );
+      await addColumnIfMissing(
+        queryInterface,
+        "egresos_creditek_entradas",
+        "activo",
+        {
+          type: Sequelize.BOOLEAN,
+          allowNull: false,
+          defaultValue: true,
+        },
+      );
+      await addColumnIfMissing(
+        queryInterface,
+        "egresos_creditek_entradas",
+        "ultimaAccion",
+        {
+          type: Sequelize.STRING(20),
+          allowNull: false,
+          defaultValue: "CREADO",
+        },
+      );
+      await addColumnIfMissing(
+        queryInterface,
+        "egresos_creditek_entradas",
+        "actualizadoPorId",
+        {
+          type: Sequelize.INTEGER,
+          allowNull: true,
+          references: { model: "usuarios", key: "id" },
+          onUpdate: "CASCADE",
+          onDelete: "SET NULL",
+        },
+      );
+      await sequelize.query(`
+        UPDATE egresos_creditek_entradas
+        SET seccion = COALESCE(seccion, 'ENTRADAS'),
+            activo = COALESCE(activo, TRUE),
+            "ultimaAccion" = COALESCE("ultimaAccion", 'CREADO')
+        WHERE seccion IS NULL
+           OR activo IS NULL
+           OR "ultimaAccion" IS NULL;
+      `);
+      await sequelize.query(`
+        CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_seccion_idx
+        ON egresos_creditek_entradas (seccion);
+      `);
+    }
+
     await ensureCierreCajaSchema(queryInterface, tables);
     await ensureMovimientoCajaSchema(queryInterface, tables);
     await ensureDenominacionesCajaSchema(tables);
@@ -1079,6 +1187,13 @@ const connectDB = async () => {
         },
         onUpdate: "CASCADE",
         onDelete: "SET NULL",
+      });
+    }
+
+    if (tables.includes("ventas")) {
+      await addColumnIfMissing(queryInterface, "ventas", "comentarioAuditoria", {
+        type: Sequelize.TEXT,
+        allowNull: true,
       });
     }
 
@@ -1128,6 +1243,10 @@ const connectDB = async () => {
           type: Sequelize.DECIMAL(10, 2),
           allowNull: true,
         },
+        precioTarjetaCredito: {
+          type: Sequelize.DECIMAL(10, 2),
+          allowNull: true,
+        },
         margen: {
           type: Sequelize.DECIMAL(10, 2),
           allowNull: true,
@@ -1156,6 +1275,14 @@ const connectDB = async () => {
           definition
         );
       }
+
+      await sequelize.query(`
+        UPDATE costo_historicos
+        SET "precioTarjetaCredito" = "precioContado",
+            "updatedAt" = NOW()
+        WHERE "precioTarjetaCredito" IS NULL
+          AND "precioContado" IS NOT NULL;
+      `);
     }
 
     if (

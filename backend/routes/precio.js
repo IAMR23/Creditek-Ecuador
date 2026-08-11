@@ -3,16 +3,10 @@ const router = express.Router();
 const CostoHistorico = require("../models/CostoHistorico");
 const FormaPago = require("../models/FormaPago");
 const { Op } = require("sequelize");
-
-const normalizeText = (value) =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-
-const esCredito = (formaPago) =>
-  Number(formaPago?.id) === 1 || normalizeText(formaPago?.nombre).includes("credito");
+const {
+  obtenerEtiquetaTipoPrecio,
+  seleccionarPrecioCostoHistorico,
+} = require("../utils/seleccionarPrecioCostoHistorico");
 
 router.get("/:modeloId/:formaPagoId?", async (req, res) => {
   try {
@@ -48,24 +42,20 @@ router.get("/:modeloId/:formaPagoId?", async (req, res) => {
       return res.status(404).json({ message: "No se encontro costo historico para este modelo" });
     }
 
-    const usarPrecioCarga = esCredito(formaPago);
-    const precio = usarPrecioCarga
-      ? costoHistorico.precioCarga
-      : costoHistorico.precioContado;
+    const { precio, tipoPrecio, tipoPrecioSolicitado } =
+      seleccionarPrecioCostoHistorico(costoHistorico, formaPago);
 
-    if (precio === null || precio === undefined) {
+    if (!Number.isFinite(precio) || precio <= 0) {
       return res.status(404).json({
-        message: usarPrecioCarga
-          ? "No existe precio carga para este modelo"
-          : "No existe precio contado para este modelo",
+        message: `No existe ${obtenerEtiquetaTipoPrecio(tipoPrecioSolicitado)} para este modelo`,
       });
     }
 
     res.json({
       modeloId,
       formaPagoId: Number.isNaN(formaPagoId) ? null : formaPagoId,
-      tipoPrecio: usarPrecioCarga ? "precioCarga" : "precioContado",
-      precio: Number(precio),
+      tipoPrecio,
+      precio,
       costo: Number(costoHistorico.costo),
       costoHistoricoId: costoHistorico.id,
     });

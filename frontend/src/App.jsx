@@ -21,6 +21,7 @@ import MarcasAdmin from "./pages/Admin/MarcasAdmin";
 import ModelosAdmin from "./pages/Admin/ModelosAdmin";
 import AdminDispositivoMarca from "./pages/Admin/AdminDispositivoMarca";
 import AdminCostoHistorico from "./pages/Admin/AdminCostoHistorico";
+import ListaPrecios from "./pages/Admin/ListaPrecios";
 import FormasPago from "./pages/Admin/FormasPago";
 import OrigenAdmin from "./pages/Admin/OrigenAdmin";
 import AdminObsequios from "./pages/Admin/AdminObsequios";
@@ -83,10 +84,9 @@ import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
 import MapaComercial from "./pages/Sistemas/MapaComercial";
 import Inventarios from "./pages/Sistemas/Inventarios";
 import Personas from "./pages/Sistemas/Personas";
-import { initSWWithToken, registerSW } from "./utils/serviceWorker";
+import { registerSW } from "./utils/serviceWorker";
 import { initAppVersionWatcher } from "./utils/appVersion";
 
-import { TaskNotificationProvider } from "./context/TaskNotificationContext";
 import { socket } from "./socket/socket";
 import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
@@ -102,6 +102,8 @@ import Comisiones from "./pages/Contabilidad/Comisiones";
 import MetaMinimaMultaConfiguracion from "./pages/Contabilidad/MetaMinimaMultaConfiguracion";
 import MetaMinimaSinMulta from "./pages/Contabilidad/MetaMinimaSinMulta";
 import PagosComisiones from "./pages/Contabilidad/PagosComisiones";
+import DescuentosDecimos from "./pages/Contabilidad/DescuentosDecimos";
+import EgresosCreditek from "./pages/Contabilidad/EgresosCreditek";
 import SancionesConfiguracion from "./pages/Contabilidad/SancionesConfiguracion";
 import SancionesVentas from "./pages/Contabilidad/SancionesVentas";
 import ExtraccionReportesCaja from "./pages/Contabilidad/ExtraccionReportesCaja";
@@ -150,10 +152,6 @@ function App() {
   const [auth, setAuth] = useState(emptyAuth);
 
   const [authLoading, setAuthLoading] = useState(true);
-
-  if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission();
-  }
 
   useEffect(() => {
     const token = auth.token || getAccessToken();
@@ -239,7 +237,6 @@ function App() {
           socket.connect();
         }
 
-        initSWWithToken();
       } catch {
         clearAccessToken();
         resetAuth();
@@ -248,9 +245,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    registerSW().then(() => {
-      initSWWithToken();
-    });
+    registerSW();
     initAppVersionWatcher();
   }, []);
 
@@ -280,8 +275,7 @@ function App() {
   });
 
   return (
-    <TaskNotificationProvider>
-      <BrowserRouter>
+    <BrowserRouter>
         <div className="flex flex-col min-h-screen">
           <Navbar auth={auth} setAuth={setAuth} />
 
@@ -376,6 +370,10 @@ function App() {
                   path="costoHistorico"
                   element={protect(<AdminCostoHistorico />, "/costoHistorico")}
                 />
+                <Route
+                  path="lista-precios"
+                  element={protect(<ListaPrecios auth={auth} />, "/lista-precios")}
+                />
 
                 <Route path="formas-pago" element={protect(<FormasPago />, "/formas-pago")} />
                 <Route path="origen" element={protect(<OrigenAdmin />, "/origen")} />
@@ -454,6 +452,20 @@ function App() {
                 <Route
                   path="contabilidad/pagos-comisiones"
                   element={protect(<PagosComisiones />, "/contabilidad/pagos-comisiones")}
+                />
+                <Route
+                  path="contabilidad/descuentos-decimos"
+                  element={protect(
+                    <DescuentosDecimos />,
+                    "/contabilidad/descuentos-decimos",
+                  )}
+                />
+                <Route
+                  path="contabilidad/egresos-creditek"
+                  element={protect(
+                    <EgresosCreditek />,
+                    "/contabilidad/egresos-creditek",
+                  )}
                 />
                 <Route path="contabilidad/sanciones-configuracion" element={protect(<SancionesConfiguracion />, "/contabilidad/sanciones-configuracion")} />
                 <Route path="contabilidad/sanciones-ventas" element={protect(<SancionesVentas />, "/contabilidad/sanciones-ventas")} />
@@ -621,8 +633,7 @@ function App() {
 
           <Footer />
         </div>
-      </BrowserRouter>
-    </TaskNotificationProvider>
+    </BrowserRouter>
   );
 }
 

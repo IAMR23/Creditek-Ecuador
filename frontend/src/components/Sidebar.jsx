@@ -25,6 +25,8 @@ import {
   MapPinned,
   FileSpreadsheet,
   Megaphone,
+  UsersRound,
+  WalletCards,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
@@ -45,12 +47,19 @@ export default function Sidebar({ auth }) {
     ghl: false,
     Marketing: false,
     logistica: false,
-    contabilidad: false,
+    contabilidad:
+      location.pathname === "/contabilidad/pagos-comisiones" ||
+      location.pathname === "/contabilidad/descuentos-decimos" ||
+      location.pathname === "/contabilidad/egresos-creditek",
     Auditoria: false,
     DesarrolloOrganizacional: true,
     Sistemas: false,
     admin: false,
     catalogos: false,
+    rolesCreditek:
+      location.pathname === "/contabilidad/pagos-comisiones" ||
+      location.pathname === "/contabilidad/descuentos-decimos" ||
+      location.pathname === "/contabilidad/egresos-creditek",
   });
 
   const toggleSection = (key) => {
@@ -205,9 +214,26 @@ export default function Sidebar({ auth }) {
             path: "/contabilidad/meta-minima-sin-multa",
           },
           {
-            label: "Pagos comisiones",
-            icon: <FileSpreadsheet size={20} />,
-            path: "/contabilidad/pagos-comisiones",
+            key: "rolesCreditek",
+            label: "Roles Creditek",
+            icon: <UsersRound size={20} />,
+            items: [
+              {
+                label: "Pagos comisiones",
+                icon: <FileSpreadsheet size={18} />,
+                path: "/contabilidad/pagos-comisiones",
+              },
+              {
+                label: "Descuentos décimos",
+                icon: <LucideTicketPercent size={18} />,
+                path: "/contabilidad/descuentos-decimos",
+              },
+              {
+                label: "Egresos",
+                icon: <WalletCards size={18} />,
+                path: "/contabilidad/egresos-creditek",
+              },
+            ],
           },
           {
             label: "Cierres de Caja",
@@ -360,6 +386,11 @@ export default function Sidebar({ auth }) {
             icon: <ClipboardList size={20} />,
             path: "/costoHistorico",
           },
+          {
+            label: "Lista de precios",
+            icon: <DollarSign size={20} />,
+            path: "/lista-precios",
+          },
         ],
       },
     }),
@@ -390,14 +421,32 @@ export default function Sidebar({ auth }) {
           key,
           {
             ...section,
-            items: section.items.filter((item) =>
-              hasRouteAccess({
-                rol,
-                permisos,
-                path: item.path,
-                permission: ROUTE_PERMISSIONS[item.path],
-              }),
-            ),
+            items: section.items
+              .map((item) => {
+                if (!item.items) return item;
+
+                return {
+                  ...item,
+                  items: item.items.filter((child) =>
+                    hasRouteAccess({
+                      rol,
+                      permisos,
+                      path: child.path,
+                      permission: ROUTE_PERMISSIONS[child.path],
+                    }),
+                  ),
+                };
+              })
+              .filter((item) =>
+                item.items
+                  ? item.items.length > 0
+                  : hasRouteAccess({
+                      rol,
+                      permisos,
+                      path: item.path,
+                      permission: ROUTE_PERMISSIONS[item.path],
+                    }),
+              ),
           },
         ])
         .filter(([, section]) => section.items.length > 0),
@@ -437,11 +486,80 @@ export default function Sidebar({ auth }) {
           }`}
         >
           <ul className="flex flex-col gap-1">
-            {section.items.map((item, i) => {
+            {section.items.map((item) => {
+              if (item.items) {
+                const nestedOpen = open[item.key];
+                const nestedActive = item.items.some(
+                  (child) => location.pathname === child.path,
+                );
+
+                return (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(item.key)}
+                      className={`flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors ${
+                        nestedActive
+                          ? "bg-neutral-800 text-green-400"
+                          : "text-white hover:bg-neutral-800"
+                      }`}
+                    >
+                      <span className="shrink-0">{item.icon}</span>
+                      {!collapsed && (
+                        <>
+                          <span className="min-w-0 flex-1 text-sm font-semibold leading-tight">
+                            {item.label}
+                          </span>
+                          <ChevronDown
+                            size={16}
+                            className={`shrink-0 transition-transform duration-200 ${
+                              nestedOpen ? "rotate-180" : ""
+                            }`}
+                          />
+                        </>
+                      )}
+                    </button>
+
+                    <div
+                      className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                        nestedOpen
+                          ? "mt-1 max-h-60 opacity-100"
+                          : "max-h-0 opacity-0"
+                      }`}
+                    >
+                      <ul className="ml-5 flex flex-col gap-1 border-l border-neutral-700 pl-2">
+                        {item.items.map((child) => {
+                          const childActive = location.pathname === child.path;
+
+                          return (
+                            <li key={child.path}>
+                              <Link
+                                to={child.path}
+                                onClick={closeMobileSidebar}
+                                className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                                  childActive
+                                    ? "bg-green-600 text-black"
+                                    : "text-gray-200 hover:bg-neutral-800 hover:text-white"
+                                }`}
+                              >
+                                <span className="shrink-0">{child.icon}</span>
+                                <span className="leading-tight">
+                                  {child.label}
+                                </span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </li>
+                );
+              }
+
               const active = location.pathname === item.path;
 
               return (
-                <li key={i}>
+                <li key={item.path}>
                   <Link
                     to={item.path}
                     title={collapsed ? item.label : ""}

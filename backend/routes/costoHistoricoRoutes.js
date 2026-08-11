@@ -6,6 +6,11 @@ const Modelo = require("../models/Modelo");
 const {
   calcularIndicadoresCostoHistorico,
 } = require("../utils/calcularIndicadoresCostoHistorico");
+const listaPreciosController = require("../controllers/listaPreciosController");
+const {
+  authenticate,
+  requirePermission,
+} = require("../middleware/authMiddleware");
 
 const parseDecimalOpcional = (valor, campo, { permitirNegativo = false } = {}) => {
   if (valor === null || valor === undefined || valor === "") {
@@ -32,7 +37,14 @@ const parseDecimalOpcional = (valor, campo, { permitirNegativo = false } = {}) =
 };
 
 const validarCostoHistorico = async (
-  { modeloId, costo, fechaCompra, precioCarga, precioContado },
+  {
+    modeloId,
+    costo,
+    fechaCompra,
+    precioCarga,
+    precioContado,
+    precioTarjetaCredito,
+  },
   excludeId = null,
 ) => {
   if (!modeloId || !costo || !fechaCompra) {
@@ -70,6 +82,14 @@ const validarCostoHistorico = async (
   const precioContadoParsed = parseDecimalOpcional(precioContado, "Precio contado");
   if (precioContadoParsed.error) return { error: precioContadoParsed.error };
 
+  const precioTarjetaCreditoParsed = parseDecimalOpcional(
+    precioTarjetaCredito,
+    "Precio tarjeta credito",
+  );
+  if (precioTarjetaCreditoParsed.error) {
+    return { error: precioTarjetaCreditoParsed.error };
+  }
+
   const modelo = await Modelo.findByPk(modeloIdNum);
   if (!modelo) {
     return { error: "Modelo no existe", status: 404 };
@@ -100,6 +120,8 @@ const validarCostoHistorico = async (
       costo: Number(costoNum.toFixed(2)),
       precioCarga: precioCargaParsed.value,
       precioContado: precioContadoParsed.value,
+      precioTarjetaCredito:
+        precioTarjetaCreditoParsed.value ?? precioContadoParsed.value,
       margen: indicadores.margen,
       margenPorcentual: indicadores.margenPorcentual,
       utilidadSobreCosto: indicadores.utilidadSobreCosto,
@@ -138,6 +160,19 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: "Error interno del servidor", error: error.message });
   }
 });
+
+router.get(
+  "/lista-precios",
+  authenticate,
+  listaPreciosController.obtener,
+);
+
+router.put(
+  "/lista-precios",
+  authenticate,
+  requirePermission("Catalogos", "Administracion"),
+  listaPreciosController.guardar,
+);
 
 router.get("/:id", async (req, res) => {
   try {

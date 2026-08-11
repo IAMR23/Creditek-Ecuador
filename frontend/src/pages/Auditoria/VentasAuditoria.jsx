@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
+import { api } from "../../api/client";
 import { nombreCortoUsuario } from "../../utils/nombres";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
@@ -54,6 +55,7 @@ const TABLE_COLUMNS = [
   "Alcance",
   "Estado",
   "Observacion",
+  "Comentario Auditoria",
   "Observacion Error",
 ];
 
@@ -218,6 +220,7 @@ const mapVentaAuditoria = (venta) => {
     Vendedor: venta.vendedor ?? "",
     Origen: venta.origen ?? "",
     Observacion: venta.observaciones ?? "",
+    "Comentario Auditoria": venta.comentarioAuditoria ?? "",
     Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
     Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
     "Codigo / IMEI PDF": venta.referenciaPdf ?? "",
@@ -282,6 +285,8 @@ export default function VentasAuditoria() {
   const [filaEditandoId, setFilaEditandoId] = useState("");
   const [edicionFila, setEdicionFila] = useState({});
   const [guardandoFilaId, setGuardandoFilaId] = useState("");
+  const [comentariosEditados, setComentariosEditados] = useState({});
+  const [comentariosGuardando, setComentariosGuardando] = useState({});
 
   const filasFiltradasPorCliente = useMemo(
     () => filas.filter((fila) => coincideBusquedaCliente(fila, busquedaCliente)),
@@ -486,6 +491,7 @@ export default function VentasAuditoria() {
       setVistaResultados("todos");
       setFilaEditandoId("");
       setEdicionFila({});
+      setComentariosEditados({});
     } catch (error) {
       console.error(error);
     } finally {
@@ -619,6 +625,7 @@ export default function VentasAuditoria() {
       setFilas((data.ventas || []).map(mapVentaAuditoria));
       setFuenteResultados("pdf");
       setPdfResumen(data.resumen || null);
+      setComentariosEditados({});
       setVistaResultados(data.resumen?.erroresDetectados > 0 ? "errores" : "todos");
       setFilaEditandoId("");
       setEdicionFila({});
@@ -988,9 +995,123 @@ export default function VentasAuditoria() {
     }
   };
 
+  const actualizarComentarioAuditoria = (ventaId, value) => {
+    setComentariosEditados((prev) => ({
+      ...prev,
+      [String(ventaId)]: value,
+    }));
+  };
+
+  const guardarComentarioAuditoria = async (fila) => {
+    if (!fila.id) return;
+
+    const ventaKey = String(fila.id);
+    const comentarioActual = Object.prototype.hasOwnProperty.call(
+      comentariosEditados,
+      ventaKey,
+    )
+      ? comentariosEditados[ventaKey]
+      : fila["Comentario Auditoria"] || "";
+
+    setComentariosGuardando((prev) => ({ ...prev, [ventaKey]: true }));
+
+    try {
+      const { data } = await api.patch(
+        `/auditoria/ventas/${fila.id}/comentario-auditoria`,
+        { comentarioAuditoria: comentarioActual },
+      );
+
+      const comentarioGuardado = data.venta?.comentarioAuditoria || "";
+      setFilas((prev) =>
+        prev.map((item) =>
+          item.id === fila.id
+            ? { ...item, "Comentario Auditoria": comentarioGuardado }
+            : item,
+        ),
+      );
+      setComentariosEditados((prev) => {
+        const siguiente = { ...prev };
+        delete siguiente[ventaKey];
+        return siguiente;
+      });
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: "Comentario guardado",
+        showConfirmButton: false,
+        timer: 1400,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo guardar el comentario.",
+        "error",
+      );
+    } finally {
+      setComentariosGuardando((prev) => {
+        const siguiente = { ...prev };
+        delete siguiente[ventaKey];
+        return siguiente;
+      });
+    }
+  };
+
   const renderCell = (fila, key) => {
     const val = fila[key];
     const editando = filaEditandoId === getFilaEditableId(fila);
+
+    if (key === "Comentario Auditoria") {
+      if (!fila.id) return "-";
+
+      const ventaKey = String(fila.id);
+      const comentarioPersistido = String(val || "");
+      const tieneEdicion = Object.prototype.hasOwnProperty.call(
+        comentariosEditados,
+        ventaKey,
+      );
+      const comentarioActual = tieneEdicion
+        ? comentariosEditados[ventaKey]
+        : comentarioPersistido;
+      const guardando = Boolean(comentariosGuardando[ventaKey]);
+      const cambioPendiente = comentarioActual.trim() !== comentarioPersistido;
+
+      return (
+        <div className="flex min-w-72 items-center gap-1.5">
+          <input
+            type="text"
+            value={comentarioActual}
+            maxLength={2000}
+            disabled={guardando}
+            onChange={(event) =>
+              actualizarComentarioAuditoria(fila.id, event.target.value)
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && cambioPendiente && !guardando) {
+                guardarComentarioAuditoria(fila);
+              }
+            }}
+            placeholder="Agregar comentario"
+            aria-label={`Comentario de auditoria de la venta ${fila.id}`}
+            className="w-64 rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+          />
+          <button
+            type="button"
+            onClick={() => guardarComentarioAuditoria(fila)}
+            disabled={!cambioPendiente || guardando}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            title="Guardar comentario de auditoria"
+            aria-label={`Guardar comentario de auditoria de la venta ${fila.id}`}
+          >
+            {guardando ? (
+              <RefreshCw className="animate-spin" size={15} />
+            ) : (
+              <Save size={15} />
+            )}
+          </button>
+        </div>
+      );
+    }
 
     if (editando && key === "Modelo") {
       return (
@@ -1142,7 +1263,11 @@ export default function VentasAuditoria() {
       clase += " text-right tabular-nums";
     }
 
-    if (key === "Observacion" || key === "Observacion Error") {
+    if (
+      key === "Observacion" ||
+      key === "Comentario Auditoria" ||
+      key === "Observacion Error"
+    ) {
       clase += " max-w-64 whitespace-normal";
     } else {
       clase += " whitespace-nowrap";
@@ -1519,7 +1644,7 @@ export default function VentasAuditoria() {
           </div>
 
           <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[2100px] border-collapse text-xs">
+            <table className="w-full min-w-[2500px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-gray-100 text-left uppercase text-gray-600">
                 <tr>
                   <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-100 px-3 py-2 text-center">
