@@ -556,6 +556,66 @@ export default function Entrevistas({ modo = "entrevista" }) {
     );
   };
 
+  const addReference = async (interview, type, reference) => {
+    const collectionKey =
+      type === "familiar"
+        ? "personas_con_quien_vive"
+        : "historial_laboral";
+    const key = `${interview.id}-${type}-new`;
+
+    try {
+      setSavingReferenceKey(key);
+      const response = await api.post(
+        `/api/postulaciones/${interview.id}/referencias/${type}`,
+        reference,
+      );
+      const savedReference = response.data?.referencia;
+
+      if (!savedReference) {
+        throw new Error("El servidor no devolvió la referencia guardada.");
+      }
+
+      setInterviews((current) =>
+        current.map((item) => {
+          if (item.id !== interview.id) return item;
+
+          const formulario = item.formulario || {};
+          const references = Array.isArray(formulario[collectionKey])
+            ? [...formulario[collectionKey], savedReference]
+            : [savedReference];
+
+          return {
+            ...item,
+            formulario: {
+              ...formulario,
+              [collectionKey]: references,
+            },
+          };
+        }),
+      );
+
+      await Swal.fire({
+        icon: "success",
+        title: "Referencia agregada",
+        text: `La referencia ${type} se guardó correctamente.`,
+        timer: 1400,
+        showConfirmButton: false,
+      });
+      return true;
+    } catch (requestError) {
+      await Swal.fire(
+        "Error",
+        requestError.response?.data?.message ||
+          requestError.message ||
+          "No se pudo agregar la referencia.",
+        "error",
+      );
+      return false;
+    } finally {
+      setSavingReferenceKey("");
+    }
+  };
+
   const changeReferenceCalled = async (
     interview,
     type,
@@ -798,6 +858,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
             onObservationBlur={saveReferenceObservation}
             onGeneralObservationChange={changeGeneralReferenceObservation}
             onGeneralObservationBlur={saveGeneralReferenceObservation}
+            onAddReference={addReference}
             selectedMode={isSelectedMode}
           />
         ) : (

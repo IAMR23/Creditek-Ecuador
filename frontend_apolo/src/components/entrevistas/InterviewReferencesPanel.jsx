@@ -1,4 +1,73 @@
+import { useState } from "react";
+import { Plus, X } from "lucide-react";
+
 const dash = "-";
+const EMPTY_FAMILY_REFERENCE = {
+  nombre: "",
+  pariente: "",
+  telefono: "",
+  ocupacion: "",
+  tituloProfesion: "",
+  observacion: "",
+};
+const EMPTY_WORK_REFERENCE = {
+  empresaLugarTrabajo: "",
+  cargoActividadRealizada: "",
+  tiempoTrabajado: "",
+  motivoSalida: "",
+  jefeEncargado: "",
+  telefonoReferencia: "",
+  observacion: "",
+};
+const FAMILY_FIELDS = [
+  { key: "nombre", label: "Nombre completo", maxLength: 150, required: true },
+  { key: "pariente", label: "Parentesco", maxLength: 80, required: true },
+  { key: "telefono", label: "Teléfono", maxLength: 30, required: true },
+  { key: "ocupacion", label: "Ocupación", maxLength: 120 },
+  { key: "tituloProfesion", label: "Profesión", maxLength: 120 },
+  {
+    key: "observacion",
+    label: "Observación",
+    maxLength: 1000,
+    fullWidth: true,
+    multiline: true,
+  },
+];
+const WORK_FIELDS = [
+  {
+    key: "empresaLugarTrabajo",
+    label: "Empresa o lugar de trabajo",
+    maxLength: 150,
+    required: true,
+  },
+  { key: "cargoActividadRealizada", label: "Cargo", maxLength: 120 },
+  { key: "tiempoTrabajado", label: "Tiempo trabajado", maxLength: 80 },
+  {
+    key: "jefeEncargado",
+    label: "Jefe o encargado",
+    maxLength: 150,
+    required: true,
+  },
+  {
+    key: "telefonoReferencia",
+    label: "Teléfono de referencia",
+    maxLength: 30,
+    required: true,
+  },
+  {
+    key: "motivoSalida",
+    label: "Motivo de salida",
+    maxLength: 300,
+    fullWidth: true,
+  },
+  {
+    key: "observacion",
+    label: "Observación",
+    maxLength: 1000,
+    fullWidth: true,
+    multiline: true,
+  },
+];
 
 const getFamilyReferences = (interview) =>
   Array.isArray(interview?.formulario?.personas_con_quien_vive)
@@ -162,6 +231,110 @@ function EmptyReferences({ text }) {
   );
 }
 
+function AddReferenceForm({ type, saving, onCancel, onSubmit, onSaved }) {
+  const familyType = type === "familiar";
+  const fields = familyType ? FAMILY_FIELDS : WORK_FIELDS;
+  const emptyReference = familyType
+    ? EMPTY_FAMILY_REFERENCE
+    : EMPTY_WORK_REFERENCE;
+  const [form, setForm] = useState({ ...emptyReference });
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const saved = await onSubmit(form);
+
+    if (saved) {
+      setForm({ ...emptyReference });
+      onSaved();
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mb-3 rounded-xl border border-dashed border-orange-300 bg-orange-50/60 p-3"
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs font-extrabold text-slate-900">
+          Nueva referencia {familyType ? "familiar" : "laboral"}
+        </p>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white hover:text-slate-800 disabled:opacity-50"
+          aria-label="Cancelar nueva referencia"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields.map((field) => (
+          <label
+            key={field.key}
+            className={field.fullWidth ? "sm:col-span-2" : ""}
+          >
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              {field.label}{field.required ? " *" : ""}
+            </span>
+            {field.multiline ? (
+              <textarea
+                value={form[field.key]}
+                required={field.required}
+                maxLength={field.maxLength}
+                rows={3}
+                disabled={saving}
+                placeholder="Añade una observación sobre esta referencia"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    [field.key]: event.target.value,
+                  }))
+                }
+                className="mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:cursor-wait disabled:opacity-60"
+              />
+            ) : (
+              <input
+                type="text"
+                value={form[field.key]}
+                required={field.required}
+                maxLength={field.maxLength}
+                disabled={saving}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    [field.key]: event.target.value,
+                  }))
+                }
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:cursor-wait disabled:opacity-60"
+              />
+            )}
+          </label>
+        ))}
+      </div>
+
+      <div className="mt-3 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-lg px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-white disabled:opacity-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-extrabold text-white transition hover:bg-orange-600 disabled:cursor-wait disabled:opacity-60"
+        >
+          {saving ? "Guardando..." : "Guardar referencia"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function InterviewReferencesPanel({
   interview,
   savingReferenceKey,
@@ -170,7 +343,9 @@ export default function InterviewReferencesPanel({
   onObservationBlur,
   onGeneralObservationChange,
   onGeneralObservationBlur,
+  onAddReference,
 }) {
+  const [addingType, setAddingType] = useState(null);
   const familyReferences = getFamilyReferences(interview);
   const workReferences = getWorkReferences(interview);
   const generalObservation =
@@ -185,7 +360,7 @@ export default function InterviewReferencesPanel({
           Verificación de referencias
         </p>
         <p className="mt-1 text-sm text-slate-600">
-          Marca cada referencia después de realizar la llamada.
+          Agrega referencias y marca cada una después de realizar la llamada.
         </p>
       </div>
 
@@ -216,9 +391,34 @@ export default function InterviewReferencesPanel({
 
       <div className="grid gap-5 xl:grid-cols-2">
         <section>
-          <h4 className="mb-3 text-sm font-extrabold text-slate-900">
-            Referencias familiares ({familyReferences.length})
-          </h4>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h4 className="text-sm font-extrabold text-slate-900">
+              Referencias familiares ({familyReferences.length})
+            </h4>
+            <button
+              type="button"
+              onClick={() =>
+                setAddingType((current) =>
+                  current === "familiar" ? null : "familiar",
+                )
+              }
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-orange-200 bg-white px-2.5 py-1.5 text-xs font-extrabold text-orange-700 transition hover:bg-orange-50"
+              aria-expanded={addingType === "familiar"}
+            >
+              <Plus size={14} /> Agregar
+            </button>
+          </div>
+          {addingType === "familiar" && (
+            <AddReferenceForm
+              type="familiar"
+              saving={savingReferenceKey === `${interview.id}-familiar-new`}
+              onCancel={() => setAddingType(null)}
+              onSubmit={(reference) =>
+                onAddReference(interview, "familiar", reference)
+              }
+              onSaved={() => setAddingType(null)}
+            />
+          )}
           <div className="grid gap-3">
             {familyReferences.length ? (
               familyReferences.map((reference, index) => (
@@ -240,9 +440,34 @@ export default function InterviewReferencesPanel({
         </section>
 
         <section>
-          <h4 className="mb-3 text-sm font-extrabold text-slate-900">
-            Referencias laborales ({workReferences.length})
-          </h4>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h4 className="text-sm font-extrabold text-slate-900">
+              Referencias laborales ({workReferences.length})
+            </h4>
+            <button
+              type="button"
+              onClick={() =>
+                setAddingType((current) =>
+                  current === "laboral" ? null : "laboral",
+                )
+              }
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-orange-200 bg-white px-2.5 py-1.5 text-xs font-extrabold text-orange-700 transition hover:bg-orange-50"
+              aria-expanded={addingType === "laboral"}
+            >
+              <Plus size={14} /> Agregar
+            </button>
+          </div>
+          {addingType === "laboral" && (
+            <AddReferenceForm
+              type="laboral"
+              saving={savingReferenceKey === `${interview.id}-laboral-new`}
+              onCancel={() => setAddingType(null)}
+              onSubmit={(reference) =>
+                onAddReference(interview, "laboral", reference)
+              }
+              onSaved={() => setAddingType(null)}
+            />
+          )}
           <div className="grid gap-3">
             {workReferences.length ? (
               workReferences.map((reference, index) => (

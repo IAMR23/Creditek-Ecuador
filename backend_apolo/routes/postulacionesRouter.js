@@ -64,6 +64,43 @@ const PERFORMANCE_CRITERIA = {
 const PERFORMANCE_CRITERION_IDS = Object.values(PERFORMANCE_CRITERIA).flat();
 const GUAYAQUIL_OFFSET_MS = 5 * 60 * 60 * 1000;
 const MAX_TXT_CONTENT_BYTES = 75 * 1024;
+const REFERENCE_CONFIG = {
+  familiar: {
+    collectionKey: "personas_con_quien_vive",
+    fields: {
+      nombre: { label: "El nombre", maxLength: 150, required: true },
+      pariente: { label: "El parentesco", maxLength: 80, required: true },
+      telefono: { label: "El telefono", maxLength: 30, required: true },
+      ocupacion: { label: "La ocupacion", maxLength: 120 },
+      tituloProfesion: { label: "La profesion", maxLength: 120 },
+      observacion: { label: "La observacion", maxLength: 1000 },
+    },
+  },
+  laboral: {
+    collectionKey: "historial_laboral",
+    fields: {
+      empresaLugarTrabajo: {
+        label: "La empresa o lugar de trabajo",
+        maxLength: 150,
+        required: true,
+      },
+      cargoActividadRealizada: { label: "El cargo", maxLength: 120 },
+      tiempoTrabajado: { label: "El tiempo trabajado", maxLength: 80 },
+      motivoSalida: { label: "El motivo de salida", maxLength: 300 },
+      jefeEncargado: {
+        label: "El jefe o encargado",
+        maxLength: 150,
+        required: true,
+      },
+      telefonoReferencia: {
+        label: "El telefono de referencia",
+        maxLength: 30,
+        required: true,
+      },
+      observacion: { label: "La observacion", maxLength: 1000 },
+    },
+  },
+};
 
 const isEmptyValue = (value) => value === "" || value === null || value === undefined;
 
@@ -95,6 +132,29 @@ const normalizeLimitedText = (value, maxLength, fieldName) => {
   }
 
   return normalized;
+};
+
+const buildReference = (type, payload = {}) => {
+  const config = REFERENCE_CONFIG[type];
+  const reference = {};
+
+  for (const [field, rules] of Object.entries(config.fields)) {
+    const value = normalizeLimitedText(
+      payload[field],
+      rules.maxLength,
+      rules.label,
+    );
+
+    if (rules.required && !value) {
+      const error = new Error(`${rules.label} es obligatorio.`);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (value) reference[field] = value;
+  }
+
+  return { ...reference, llamado: false };
 };
 
 const normalizeOptionalDate = (value, fieldName) => {
@@ -1790,6 +1850,74 @@ router.patch(
     }
   },
 );
+
+router.post("/:id/referencias/:tipo", auth, async (req, res) => {
+  try {
+    const { id, tipo } = req.params;
+    const config = REFERENCE_CONFIG[tipo];
+
+    if (!config) {
+      return res.status(400).json({
+        ok: false,
+        message: "El tipo de referencia debe ser familiar o laboral",
+      });
+    }
+
+    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+      return res.status(400).json({
+        ok: false,
+        message: "La referencia enviada no es valida",
+      });
+    }
+
+    const reference = buildReference(tipo, req.body);
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada",
+      });
+    }
+
+    const formulario = postulacion.formulario || {};
+    const referencias = Array.isArray(formulario[config.collectionKey])
+      ? formulario[config.collectionKey].map((item) => ({ ...item }))
+      : [];
+    referencias.push(reference);
+
+    postulacion.formulario = {
+      ...formulario,
+      [config.collectionKey]: referencias,
+      metadata: {
+        ...(formulario.metadata || {}),
+        ultima_revision_referencias: new Date().toISOString(),
+      },
+    };
+    postulacion.changed?.("formulario", true);
+    await postulacion.save();
+
+    return res.status(201).json({
+      ok: true,
+      message: "Referencia agregada correctamente",
+      data: postulacion,
+      referencia: reference,
+      referenciaIndex: referencias.length - 1,
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status === 500) {
+      console.error("Error agregando referencia:", error);
+    }
+
+    return res.status(status).json({
+      ok: false,
+      message:
+        status === 500 ? "Error al agregar la referencia" : error.message,
+      ...(status === 500 ? { error: error.message } : {}),
+    });
+  }
+});
 
 router.patch(
   "/:id/referencias/:tipo/:referenciaIndex/llamado",

@@ -85,6 +85,44 @@ const patchObservacionGeneral = async (body) => {
   }
 };
 
+const postReferencia = async (tipo, body) => {
+  const app = express();
+  app.use(express.json());
+  app.use("/api/postulaciones", postulacionesRouter);
+
+  const server = await new Promise((resolve) => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+  });
+
+  try {
+    const address = server.address();
+    const token = jwt.sign(
+      { usuario: { id: 1 } },
+      process.env.JWT_SECRET || "apolo_secret",
+    );
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/postulaciones/21/referencias/${tipo}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    return {
+      status: response.status,
+      body: await response.json(),
+    };
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+};
+
 beforeEach(() => {
   guardados = 0;
   postulacion = {
@@ -123,6 +161,63 @@ test("guarda el check llamado en una referencia familiar", async () => {
   );
   assert.equal(response.body.referencia.llamado, true);
   assert.equal(guardados, 1);
+});
+
+test("agrega una referencia familiar conservando las existentes", async () => {
+  const response = await postReferencia("familiar", {
+    nombre: "Nueva referencia",
+    pariente: "Hermana",
+    telefono: "0987654321",
+    ocupacion: "Comerciante",
+    observacion: "Información confirmada durante la entrevista.",
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(postulacion.formulario.personas_con_quien_vive.length, 2);
+  assert.equal(
+    postulacion.formulario.personas_con_quien_vive[1].nombre,
+    "Nueva referencia",
+  );
+  assert.equal(response.body.referencia.llamado, false);
+  assert.equal(
+    response.body.referencia.observacion,
+    "Información confirmada durante la entrevista.",
+  );
+  assert.equal(response.body.referenciaIndex, 1);
+  assert.equal(guardados, 1);
+});
+
+test("agrega una referencia laboral conservando las existentes", async () => {
+  const response = await postReferencia("laboral", {
+    empresaLugarTrabajo: "Empresa nueva",
+    cargoActividadRealizada: "Asesor",
+    jefeEncargado: "Supervisora nueva",
+    telefonoReferencia: "022345678",
+    observacion: "Recomienda al postulante para el cargo.",
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(postulacion.formulario.historial_laboral.length, 2);
+  assert.equal(
+    postulacion.formulario.historial_laboral[1].empresaLugarTrabajo,
+    "Empresa nueva",
+  );
+  assert.equal(response.body.referencia.llamado, false);
+  assert.equal(
+    response.body.referencia.observacion,
+    "Recomienda al postulante para el cargo.",
+  );
+  assert.equal(guardados, 1);
+});
+
+test("rechaza una referencia familiar sin campos obligatorios", async () => {
+  const response = await postReferencia("familiar", {
+    nombre: "Referencia incompleta",
+  });
+
+  assert.equal(response.status, 400);
+  assert.match(response.body.message, /parentesco.*obligatorio/i);
+  assert.equal(guardados, 0);
 });
 
 test("guarda el check llamado en una referencia laboral", async () => {

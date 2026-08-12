@@ -253,23 +253,21 @@ function InterviewActions({
           </button>
         </>
       )}
-      {!selectedMode && (
-        <button
-          type="button"
-          onClick={() => onToggleReferences(interview)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100"
-          aria-expanded={referencesExpanded}
-          title={
-            referenceCount
-              ? "Ver referencias laborales y familiares"
-              : "Abrir observaciones de referencias"
-          }
-        >
-          <PhoneCall size={14} />
-          Referencias ({referenceCount})
-          {referencesExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => onToggleReferences(interview)}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-extrabold text-blue-700 transition hover:bg-blue-100"
+        aria-expanded={referencesExpanded}
+        title={
+          referenceCount
+            ? "Ver o agregar referencias laborales y familiares"
+            : "Agregar referencias laborales o familiares"
+        }
+      >
+        <PhoneCall size={14} />
+        Referencias ({referenceCount})
+        {referencesExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+      </button>
       <button
         type="button"
         onClick={() => onView(interview)}
@@ -396,18 +394,18 @@ function MobileCard(props) {
         )}
       </div>
       <InterviewActions {...props} />
-      {!props.selectedMode &&
-        props.expandedReferencesId === interview.id && (
-          <InterviewReferencesPanel
-            interview={interview}
-            savingReferenceKey={props.savingReferenceKey}
-            onCalledChange={props.onCalledChange}
-            onObservationChange={props.onObservationChange}
-            onObservationBlur={props.onObservationBlur}
-            onGeneralObservationChange={props.onGeneralObservationChange}
-            onGeneralObservationBlur={props.onGeneralObservationBlur}
-          />
-        )}
+      {props.expandedReferencesId === interview.id && (
+        <InterviewReferencesPanel
+          interview={interview}
+          savingReferenceKey={props.savingReferenceKey}
+          onCalledChange={props.onCalledChange}
+          onObservationChange={props.onObservationChange}
+          onObservationBlur={props.onObservationBlur}
+          onGeneralObservationChange={props.onGeneralObservationChange}
+          onGeneralObservationBlur={props.onGeneralObservationBlur}
+          onAddReference={props.onAddReference}
+        />
+      )}
     </article>
   );
 }
@@ -521,22 +519,22 @@ export default function InterviewTable({
                     />
                   </td>
                 </tr>
-                {!selectedMode &&
-                  actions.expandedReferencesId === interview.id && (
-                    <tr className="bg-slate-50/70">
-                      <td colSpan={8} className="px-5 py-4">
-                        <InterviewReferencesPanel
-                          interview={interview}
-                          savingReferenceKey={actions.savingReferenceKey}
-                          onCalledChange={actions.onCalledChange}
-                          onObservationChange={actions.onObservationChange}
-                          onObservationBlur={actions.onObservationBlur}
-                          onGeneralObservationChange={actions.onGeneralObservationChange}
-                          onGeneralObservationBlur={actions.onGeneralObservationBlur}
-                        />
-                      </td>
-                    </tr>
-                  )}
+                {actions.expandedReferencesId === interview.id && (
+                  <tr className="bg-slate-50/70">
+                    <td colSpan={8} className="px-5 py-4">
+                      <InterviewReferencesPanel
+                        interview={interview}
+                        savingReferenceKey={actions.savingReferenceKey}
+                        onCalledChange={actions.onCalledChange}
+                        onObservationChange={actions.onObservationChange}
+                        onObservationBlur={actions.onObservationBlur}
+                        onGeneralObservationChange={actions.onGeneralObservationChange}
+                        onGeneralObservationBlur={actions.onGeneralObservationBlur}
+                        onAddReference={actions.onAddReference}
+                      />
+                    </td>
+                  </tr>
+                )}
                 </Fragment>
               );
             })}
