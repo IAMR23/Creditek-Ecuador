@@ -17,6 +17,7 @@ jest.mock("../../middleware/authMiddleware", () => ({
 jest.mock("../../controllers/Contabilidad/controlFinancieroController", () => ({
   listarCargas: (_req, res) => res.json({ accion: "listar" }),
   consolidarVentas: (_req, res) => res.json({ accion: "consolidar" }),
+  obtenerCoberturaReportes: (_req, res) => res.json({ accion: "cobertura" }),
   obtenerCarga: (_req, res) => res.json({ accion: "detalle" }),
   anularCarga: (_req, res) => res.json({ accion: "anular" }),
   listarResponsablesPagoEntrada: (_req, res) =>
@@ -113,5 +114,15 @@ describe("controlFinancieroRoutes conciliacion de entradas", () => {
       accion: "actualizar-pago",
       registroId: "21",
     });
+  });
+
+  test("expone la cobertura de reportes antes de la ruta de detalle", async () => {
+    const response = await request(crearApp())
+      .get(
+        "/api/contabilidad/control-financiero/cargas/cobertura-reportes?fechaInicio=2026-08-01&fechaFin=2026-08-03",
+      )
+      .expect(200);
+
+    expect(response.body).toEqual({ accion: "cobertura" });
   });
 });

@@ -16,6 +16,7 @@ jest.mock("../../services/auditoriaVentasPdfService", () => ({
 }));
 
 jest.mock("../../services/auditoriaVentasPersistenciaService", () => ({
+  actualizarComentarioResultadoAuditoriaVentasPdf: jest.fn(),
   guardarAuditoriaVentasPdf: jest.fn(),
   obtenerAuditoriaVentasPdfPorId: jest.fn(),
   obtenerAuditoriaVentasPdfPrecargada: jest.fn(),
@@ -36,6 +37,7 @@ const {
   auditarVentasDesdeRegistros,
 } = require("../../services/auditoriaVentasPdfService");
 const {
+  actualizarComentarioResultadoAuditoriaVentasPdf,
   guardarAuditoriaVentasPdf,
   obtenerAuditoriaVentasPdfPorId,
   obtenerAuditoriaVentasPdfPrecargada,
@@ -605,5 +607,38 @@ describe("comentario de auditoria de ventas", () => {
 
     expect(findByPk).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test("guarda el comentario de una fila con error sin venta vinculada", async () => {
+    actualizarComentarioResultadoAuditoriaVentasPdf.mockResolvedValue({
+      auditoriaId: 70,
+      resultadoIndex: 3,
+      comentarioAuditoria: "Revisar datos del PDF",
+    });
+    const req = {
+      params: { auditoriaId: "70", resultadoIndex: "3" },
+      body: { comentarioAuditoria: "  Revisar datos del PDF  " },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await controller.actualizarComentarioAuditoriaResultadoPdf(req, res);
+
+    expect(actualizarComentarioResultadoAuditoriaVentasPdf).toHaveBeenCalledWith({
+      auditoriaId: 70,
+      resultadoIndex: 3,
+      comentarioAuditoria: "Revisar datos del PDF",
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      message: "Comentario de auditoria actualizado",
+      resultado: {
+        auditoriaId: 70,
+        resultadoIndex: 3,
+        comentarioAuditoria: "Revisar datos del PDF",
+      },
+    });
   });
 });

@@ -176,8 +176,9 @@ const auditarVentasDesdeRegistros = async ({
     errores: erroresProcesamiento,
   };
 
+  let auditoriaGuardada = null;
   if (persistirAuditoriaVentasPdf) {
-    await persistirAuditoriaVentasPdf({
+    auditoriaGuardada = await persistirAuditoriaVentasPdf({
       auditoriaId,
       tipo: tipoNormalizado,
       fechaInicio,
@@ -194,6 +195,11 @@ const auditarVentasDesdeRegistros = async ({
       usuarioId,
       controlFinancieroCargaId,
     });
+  }
+
+  resultadoAuditoria.auditoriaId = auditoriaGuardada?.id || auditoriaId || null;
+  if (Array.isArray(auditoriaGuardada?.resultados)) {
+    resultadoAuditoria.ventas = auditoriaGuardada.resultados;
   }
 
   return resultadoAuditoria;

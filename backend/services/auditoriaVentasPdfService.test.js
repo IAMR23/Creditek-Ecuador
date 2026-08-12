@@ -133,7 +133,16 @@ describe("auditarVentasDesdeDirectorios", () => {
 
 describe("auditarVentasDesdeRegistros", () => {
   test("persiste registros extraidos y resultados para poder reauditarlos", async () => {
-    const persistirAuditoriaVentasPdf = jest.fn();
+    const ventasPersistidas = [
+      {
+        detalleVentaId: 10,
+        observacionError: "PRECIO_DIFERENTE",
+        comentarioAuditoria: "Comentario conservado",
+      },
+    ];
+    const persistirAuditoriaVentasPdf = jest
+      .fn()
+      .mockResolvedValue({ id: 90, resultados: ventasPersistidas });
     const registrosPdf = [{ factura: "TV-1", codigo_pdf: "ABC" }];
     const ventasAuditadas = [
       { detalleVentaId: 10, observacionError: "PRECIO_DIFERENTE" },
@@ -160,6 +169,8 @@ describe("auditarVentasDesdeRegistros", () => {
     });
 
     expect(resultado.resumen.erroresDetectados).toBe(1);
+    expect(resultado.auditoriaId).toBe(90);
+    expect(resultado.ventas).toBe(ventasPersistidas);
     expect(persistirAuditoriaVentasPdf).toHaveBeenCalledWith(
       expect.objectContaining({
         tipo: "TV",

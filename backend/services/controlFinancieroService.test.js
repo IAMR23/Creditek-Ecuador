@@ -19,6 +19,7 @@ const { sequelize } = require("../config/db");
 const ControlFinancieroCarga = require("../models/ControlFinancieroCarga");
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const {
+  construirCoberturaReportes,
   extraerFechaIso,
   guardarCargaControlFinanciero,
   obtenerFechaReporte,
@@ -335,5 +336,49 @@ describe("controlFinancieroService", () => {
         { FECHA: "7/21/26 11:00 AM" },
       ]),
     ).toBe("2026-07-21");
+  });
+
+  test("identifica dias sin reportes de TV o celular", () => {
+    const cobertura = construirCoberturaReportes({
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-03",
+      cargas: [
+        {
+          estado: "ACTIVA",
+          fechaReporte: "2026-08-01",
+          registrosVentasTv: 2,
+          registrosVentasCelular: 3,
+        },
+        {
+          estado: "ACTIVA",
+          fechaReporte: "2026-08-02",
+          registrosVentasTv: 1,
+          registrosVentasCelular: 0,
+        },
+      ],
+    });
+
+    expect(cobertura.resumen).toEqual({
+      diasCompletos: 1,
+      diasFaltaTv: 1,
+      diasFaltaCelular: 2,
+      diasSinReportes: 1,
+      diasConPendientes: 2,
+    });
+    expect(cobertura.dias).toEqual([
+      expect.objectContaining({ fecha: "2026-08-01", estado: "COMPLETO" }),
+      expect.objectContaining({
+        fecha: "2026-08-02",
+        tv: true,
+        celular: false,
+        estado: "FALTA_CELULAR",
+      }),
+      expect.objectContaining({
+        fecha: "2026-08-03",
+        tv: false,
+        celular: false,
+        estado: "SIN_REPORTES",
+      }),
+    ]);
   });
 });

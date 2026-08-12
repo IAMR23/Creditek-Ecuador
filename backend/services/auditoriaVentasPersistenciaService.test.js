@@ -2,11 +2,15 @@ jest.mock("../models/AuditoriaVentaPdf", () => ({
   create: jest.fn(),
   findByPk: jest.fn(),
   findOne: jest.fn(),
+  sequelize: {
+    transaction: jest.fn(),
+  },
 }));
 
 const { Op } = require("sequelize");
 const AuditoriaVentaPdf = require("../models/AuditoriaVentaPdf");
 const {
+  actualizarComentarioResultadoAuditoriaVentasPdf,
   guardarAuditoriaVentasPdf,
   obtenerAuditoriaVentasPdfPrecargada,
 } = require("./auditoriaVentasPersistenciaService");
@@ -27,6 +31,9 @@ const payloadBase = {
 describe("auditoriaVentasPersistenciaService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    AuditoriaVentaPdf.sequelize.transaction.mockImplementation(async (callback) =>
+      callback({ LOCK: { UPDATE: "UPDATE" } }),
+    );
   });
 
   test("crea la precarga cuando la carga financiera aun no tiene auditoria", async () => {
@@ -94,5 +101,85 @@ describe("auditoriaVentasPersistenciaService", () => {
 
     const consulta = AuditoriaVentaPdf.findOne.mock.calls[0][0];
     expect(consulta.where.controlFinancieroCargaId[Op.in]).toEqual([33]);
+  });
+
+  test("guarda el comentario en una fila de auditoria sin venta", async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    AuditoriaVentaPdf.findByPk.mockResolvedValue({
+      id: 60,
+      resultados: [
+        { id: 10, comentarioAuditoria: "" },
+        { id: null, observacionError: "VENTA_NO_ENCONTRADA" },
+      ],
+      update,
+    });
+
+    const resultado = await actualizarComentarioResultadoAuditoriaVentasPdf({
+      auditoriaId: 60,
+      resultadoIndex: 1,
+      comentarioAuditoria: "Validar manualmente",
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      {
+        resultados: [
+          { id: 10, comentarioAuditoria: "" },
+          {
+            id: null,
+            observacionError: "VENTA_NO_ENCONTRADA",
+            comentarioAuditoria: "Validar manualmente",
+          },
+        ],
+      },
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    expect(resultado.comentarioAuditoria).toBe("Validar manualmente");
+  });
+
+  test("conserva comentarios de errores al reauditar la misma precarga", async () => {
+    const auditoriaExistente = {
+      id: 60,
+      resultados: [
+        {
+          id: null,
+          tipo: "TV",
+          contrato: "FAC-10",
+          referenciaPdf: "TV32",
+          fechaPdf: "2026-07-25",
+          clientePdf: "CLIENTE UNO",
+          comentarioAuditoria: "Pendiente de confirmar",
+        },
+      ],
+      update: jest.fn(),
+      get: jest.fn(() => ({ id: 60, ...payloadBase })),
+    };
+    AuditoriaVentaPdf.findOne.mockResolvedValue(auditoriaExistente);
+
+    await guardarAuditoriaVentasPdf({
+      ...payloadBase,
+      resultados: [
+        {
+          id: null,
+          tipo: "tv",
+          contrato: "FAC-10",
+          referenciaPdf: "tv32",
+          fechaPdf: "2026-07-25",
+          clientePdf: "Cliente Uno",
+          observacionError: "VENTA_NO_ENCONTRADA",
+          comentarioAuditoria: "",
+        },
+      ],
+    });
+
+    expect(auditoriaExistente.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resultados: [
+          expect.objectContaining({
+            observacionError: "VENTA_NO_ENCONTRADA",
+            comentarioAuditoria: "Pendiente de confirmar",
+          }),
+        ],
+      }),
+    );
   });
 });

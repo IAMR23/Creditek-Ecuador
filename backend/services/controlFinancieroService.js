@@ -64,6 +64,109 @@ const obtenerFechaReporte = (registros = []) => {
   return [...frecuencias.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 };
 
+const fechaUtcDesdeIso = (value) => {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  const [, anioTexto, mesTexto, diaTexto] = match;
+  const anio = Number(anioTexto);
+  const mes = Number(mesTexto);
+  const dia = Number(diaTexto);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+
+  return fecha.getUTCFullYear() === anio &&
+    fecha.getUTCMonth() === mes - 1 &&
+    fecha.getUTCDate() === dia
+    ? fecha
+    : null;
+};
+
+const obtenerFechaActualEcuadorIso = (ahora = new Date()) => {
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(ahora);
+  const obtenerParte = (tipo) =>
+    partes.find((parte) => parte.type === tipo)?.value || "";
+
+  return `${obtenerParte("year")}-${obtenerParte("month")}-${obtenerParte("day")}`;
+};
+
+const construirCoberturaReportes = ({ cargas = [], fechaInicio, fechaFin }) => {
+  const inicio = fechaUtcDesdeIso(fechaInicio);
+  const fin = fechaUtcDesdeIso(fechaFin);
+
+  if (!inicio || !fin || inicio > fin) {
+    throw new Error("El rango de cobertura no es valido.");
+  }
+
+  const cargasPorFecha = new Map();
+  cargas.forEach((registro) => {
+    const carga = registro?.get ? registro.get({ plain: true }) : registro;
+    if (!carga || carga.estado !== "ACTIVA" || !fechaUtcDesdeIso(carga.fechaReporte)) {
+      return;
+    }
+
+    const cobertura = cargasPorFecha.get(carga.fechaReporte) || {
+      tv: false,
+      celular: false,
+      registrosTv: 0,
+      registrosCelular: 0,
+    };
+    const registrosTv = Number(carga.registrosVentasTv || 0);
+    const registrosCelular = Number(carga.registrosVentasCelular || 0);
+
+    cobertura.tv = cobertura.tv || registrosTv > 0;
+    cobertura.celular = cobertura.celular || registrosCelular > 0;
+    cobertura.registrosTv += registrosTv;
+    cobertura.registrosCelular += registrosCelular;
+    cargasPorFecha.set(carga.fechaReporte, cobertura);
+  });
+
+  const dias = [];
+  for (
+    const fecha = new Date(inicio);
+    fecha <= fin;
+    fecha.setUTCDate(fecha.getUTCDate() + 1)
+  ) {
+    const fechaIso = fecha.toISOString().slice(0, 10);
+    const cobertura = cargasPorFecha.get(fechaIso) || {
+      tv: false,
+      celular: false,
+      registrosTv: 0,
+      registrosCelular: 0,
+    };
+    const estado =
+      cobertura.tv && cobertura.celular
+        ? "COMPLETO"
+        : cobertura.tv
+          ? "FALTA_CELULAR"
+          : cobertura.celular
+            ? "FALTA_TV"
+            : "SIN_REPORTES";
+
+    dias.push({ fecha: fechaIso, ...cobertura, estado });
+  }
+
+  return {
+    rango: {
+      fechaInicio,
+      fechaFin,
+      totalDias: dias.length,
+    },
+    resumen: {
+      diasCompletos: dias.filter((dia) => dia.estado === "COMPLETO").length,
+      diasFaltaTv: dias.filter((dia) => !dia.tv).length,
+      diasFaltaCelular: dias.filter((dia) => !dia.celular).length,
+      diasSinReportes: dias.filter((dia) => dia.estado === "SIN_REPORTES").length,
+      diasConPendientes: dias.filter((dia) => dia.estado !== "COMPLETO").length,
+    },
+    dias,
+  };
+};
+
 const normalizarCaja = (registro) => ({
   tipoRegistro: "CAJA",
   contrato: texto(registro.CONTRATO, 80),
@@ -391,11 +494,13 @@ const guardarCargaControlFinanciero = async ({
 module.exports = {
   MAX_REGISTROS_POR_CARGA,
   calcularTotales,
+  construirCoberturaReportes,
   extraerFechaIso,
   filtrarArchivosNuevos,
   guardarCargaControlFinanciero,
   normalizarCaja,
   normalizarVenta,
+  obtenerFechaActualEcuadorIso,
   obtenerFechaReporte,
   resumirRegistros,
 };

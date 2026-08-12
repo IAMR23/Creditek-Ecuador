@@ -40,6 +40,7 @@ const {
   auditarVentasDesdeRegistros,
 } = require("../../services/auditoriaVentasPdfService");
 const {
+  actualizarComentarioResultadoAuditoriaVentasPdf,
   guardarAuditoriaVentasPdf,
   obtenerAuditoriaVentasPdfPorId,
   obtenerAuditoriaVentasPdfPrecargada,
@@ -2605,6 +2606,64 @@ exports.actualizarComentarioAuditoriaVenta = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "No se pudo actualizar el comentario de auditoria",
+    });
+  }
+};
+
+exports.actualizarComentarioAuditoriaResultadoPdf = async (req, res) => {
+  const auditoriaId = Number(req.params.auditoriaId);
+  const resultadoIndex = Number(req.params.resultadoIndex);
+  const { comentarioAuditoria } = req.body || {};
+
+  if (!Number.isInteger(auditoriaId) || auditoriaId <= 0) {
+    return res.status(400).json({
+      ok: false,
+      message: "ID de auditoria no valido",
+    });
+  }
+
+  if (!Number.isInteger(resultadoIndex) || resultadoIndex < 0) {
+    return res.status(400).json({
+      ok: false,
+      message: "Indice de resultado no valido",
+    });
+  }
+
+  if (typeof comentarioAuditoria !== "string") {
+    return res.status(400).json({
+      ok: false,
+      message: "El comentario de auditoria debe ser texto",
+    });
+  }
+
+  const comentarioNormalizado = comentarioAuditoria.trim();
+  if (comentarioNormalizado.length > 2000) {
+    return res.status(400).json({
+      ok: false,
+      message: "El comentario de auditoria no puede superar 2000 caracteres",
+    });
+  }
+
+  try {
+    const resultado = await actualizarComentarioResultadoAuditoriaVentasPdf({
+      auditoriaId,
+      resultadoIndex,
+      comentarioAuditoria: comentarioNormalizado,
+    });
+
+    return res.json({
+      ok: true,
+      message: "Comentario de auditoria actualizado",
+      resultado,
+    });
+  } catch (error) {
+    console.error("Error actualizando comentario del resultado de auditoria:", error);
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      message:
+        error.statusCode === 404
+          ? error.message
+          : "No se pudo actualizar el comentario de auditoria",
     });
   }
 };

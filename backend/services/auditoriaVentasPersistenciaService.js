@@ -28,6 +28,54 @@ const validarFecha = (fecha, campo) => {
 const toPlain = (registro) =>
   registro?.get ? registro.get({ plain: true }) : registro;
 
+const normalizarClaveResultado = (valor) =>
+  String(valor ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+
+const obtenerClaveResultado = (resultado = {}) => {
+  if (resultado.detalleVentaId) {
+    return `DETALLE:${resultado.detalleVentaId}`;
+  }
+
+  return [
+    "SIN_VENTA",
+    resultado.tipo,
+    resultado.contrato,
+    resultado.referenciaPdf,
+    resultado.fechaPdf,
+    resultado.clientePdf,
+  ]
+    .map(normalizarClaveResultado)
+    .join("|");
+};
+
+const conservarComentariosResultados = (resultadosNuevos, resultadosAnteriores) => {
+  const comentariosPorClave = new Map();
+
+  resultadosAnteriores.forEach((resultado) => {
+    const comentario = String(resultado?.comentarioAuditoria || "").trim();
+    if (!comentario) return;
+
+    const clave = obtenerClaveResultado(resultado);
+    const comentarios = comentariosPorClave.get(clave) || [];
+    comentarios.push(comentario);
+    comentariosPorClave.set(clave, comentarios);
+  });
+
+  return resultadosNuevos.map((resultado) => {
+    if (String(resultado?.comentarioAuditoria || "").trim()) return resultado;
+
+    const comentarios = comentariosPorClave.get(obtenerClaveResultado(resultado));
+    const comentarioAnterior = comentarios?.shift();
+
+    return comentarioAnterior
+      ? { ...resultado, comentarioAuditoria: comentarioAnterior }
+      : resultado;
+  });
+};
+
 const guardarAuditoriaVentasPdf = async ({
   auditoriaId,
   tipo,
@@ -101,6 +149,10 @@ const guardarAuditoriaVentasPdf = async ({
   }
 
   if (auditoria) {
+    payload.resultados = conservarComentariosResultados(
+      payload.resultados,
+      Array.isArray(auditoria.resultados) ? auditoria.resultados : [],
+    );
     await auditoria.update(payload);
     return toPlain(auditoria);
   }
@@ -132,6 +184,47 @@ const obtenerAuditoriaVentasPdfPorId = async (auditoriaId) => {
   if (!auditoriaId) return null;
   return toPlain(await AuditoriaVentaPdf.findByPk(auditoriaId));
 };
+
+const actualizarComentarioResultadoAuditoriaVentasPdf = async ({
+  auditoriaId,
+  resultadoIndex,
+  comentarioAuditoria,
+}) =>
+  AuditoriaVentaPdf.sequelize.transaction(async (transaction) => {
+    const auditoria = await AuditoriaVentaPdf.findByPk(auditoriaId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!auditoria) {
+      const error = new Error("Auditoria PDF no encontrada");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const resultados = Array.isArray(auditoria.resultados)
+      ? auditoria.resultados.map((resultado) => ({ ...resultado }))
+      : [];
+
+    if (resultadoIndex < 0 || resultadoIndex >= resultados.length) {
+      const error = new Error("Resultado de auditoria no encontrado");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    resultados[resultadoIndex] = {
+      ...resultados[resultadoIndex],
+      comentarioAuditoria,
+    };
+
+    await auditoria.update({ resultados }, { transaction });
+
+    return {
+      auditoriaId: Number(auditoria.id),
+      resultadoIndex,
+      comentarioAuditoria,
+    };
+  });
 
 const obtenerAuditoriaVentasPdfPrecargada = async ({
   tipo,
@@ -165,6 +258,7 @@ const obtenerAuditoriaVentasPdfPrecargada = async ({
 };
 
 module.exports = {
+  actualizarComentarioResultadoAuditoriaVentasPdf,
   guardarAuditoriaVentasPdf,
   obtenerAuditoriaVentasPdfPorId,
   obtenerAuditoriaVentasPdfPrecargada,

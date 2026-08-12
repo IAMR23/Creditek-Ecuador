@@ -8,6 +8,10 @@ const {
   confirmarCoincidenciaManual,
   obtenerConciliacionCarga,
 } = require("../../services/conciliacionEntradasService");
+const {
+  construirCoberturaReportes,
+  obtenerFechaActualEcuadorIso,
+} = require("../../services/controlFinancieroService");
 
 const includeUsuario = {
   model: Usuario,
@@ -38,7 +42,22 @@ const parsePositiveInt = (value, fallback, max = 100) => {
   return Math.min(parsed, max);
 };
 
-const esFechaIso = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+const esFechaIso = (value) => {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const [, anioTexto, mesTexto, diaTexto] = match;
+  const anio = Number(anioTexto);
+  const mes = Number(mesTexto);
+  const dia = Number(diaTexto);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+
+  return (
+    fecha.getUTCFullYear() === anio &&
+    fecha.getUTCMonth() === mes - 1 &&
+    fecha.getUTCDate() === dia
+  );
+};
 
 const responderErrorConciliacion = (error, res, fallback) => {
   console.error(fallback, error);
@@ -136,6 +155,54 @@ exports.listarCargas = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "No se pudieron cargar los registros de control financiero.",
+    });
+  }
+};
+
+exports.obtenerCoberturaReportes = async (req, res) => {
+  try {
+    const hoy = obtenerFechaActualEcuadorIso();
+    const fechaFin = req.query.fechaFin || hoy;
+    const fechaInicio = req.query.fechaInicio || `${fechaFin.slice(0, 7)}-01`;
+
+    if (
+      !esFechaIso(fechaInicio) ||
+      !esFechaIso(fechaFin) ||
+      fechaInicio > fechaFin ||
+      fechaFin > hoy
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message: "El rango de cobertura debe ser valido y no puede superar hoy.",
+      });
+    }
+
+    const cargas = await ControlFinancieroCarga.findAll({
+      where: {
+        estado: "ACTIVA",
+        fechaReporte: { [Op.between]: [fechaInicio, fechaFin] },
+      },
+      attributes: [
+        "id",
+        "fechaReporte",
+        "estado",
+        "registrosVentasTv",
+        "registrosVentasCelular",
+      ],
+      order: [["fechaReporte", "ASC"], ["id", "ASC"]],
+    });
+    const cobertura = construirCoberturaReportes({
+      cargas,
+      fechaInicio,
+      fechaFin,
+    });
+
+    return res.json({ ok: true, cobertura });
+  } catch (error) {
+    console.error("Error obteniendo cobertura de reportes financieros:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo calcular la cobertura de reportes.",
     });
   }
 };

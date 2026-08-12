@@ -187,7 +187,10 @@ const coincideBusquedaCliente = (fila, busqueda) => {
   );
 };
 
-const mapVentaAuditoria = (venta) => {
+const mapVentaAuditoria = (
+  venta,
+  { auditoriaId = null, auditoriaResultadoIndex = null } = {},
+) => {
   const precioVenta = toMoney(venta.precioVenta);
   const precioVendedor = toMoney(venta.precioVendedor);
   const diferencia =
@@ -204,6 +207,8 @@ const mapVentaAuditoria = (venta) => {
   return {
     id: venta.id,
     detalleVentaId: venta.detalleVentaId,
+    auditoriaId,
+    auditoriaResultadoIndex,
     "ID Venta": venta.id ?? "",
     Contrato: venta.contrato ?? "",
     modeloId: venta.modeloId ?? "",
@@ -240,6 +245,20 @@ const mapVentaAuditoria = (venta) => {
     Estado: venta.id ? (venta.activo ? "Activo" : "Desactivada") : "Sin venta",
     "Observacion Error": observacionError,
   };
+};
+
+const getComentarioAuditoriaKey = (fila) => {
+  if (fila.id) return `venta:${fila.id}`;
+
+  const auditoriaId = Number(fila.auditoriaId);
+  const resultadoIndex = Number(fila.auditoriaResultadoIndex);
+
+  return Number.isInteger(auditoriaId) &&
+    auditoriaId > 0 &&
+    Number.isInteger(resultadoIndex) &&
+    resultadoIndex >= 0
+    ? `auditoria:${auditoriaId}:resultado:${resultadoIndex}`
+    : "";
 };
 
 export default function VentasAuditoria() {
@@ -482,7 +501,9 @@ export default function VentasAuditoria() {
 
       if (!data.ok) return;
 
-      const resultado = (data.ventas || []).map(mapVentaAuditoria);
+      const resultado = (data.ventas || []).map((venta) =>
+        mapVentaAuditoria(venta),
+      );
 
       setFilas(resultado);
       setFuenteResultados("normal");
@@ -622,7 +643,18 @@ export default function VentasAuditoria() {
 
       if (!data.ok) return;
 
-      setFilas((data.ventas || []).map(mapVentaAuditoria));
+      const precargaActualizada = await obtenerAuditoriaPrecargada();
+      const auditoriaId =
+        data.auditoriaId || precargaActualizada?.id || auditoriaPrecargada?.id || null;
+
+      setFilas(
+        (data.ventas || []).map((venta, auditoriaResultadoIndex) =>
+          mapVentaAuditoria(venta, {
+            auditoriaId,
+            auditoriaResultadoIndex,
+          }),
+        ),
+      );
       setFuenteResultados("pdf");
       setPdfResumen(data.resumen || null);
       setComentariosEditados({});
@@ -631,7 +663,6 @@ export default function VentasAuditoria() {
       setEdicionFila({});
       setPdfFiles([]);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
-      const precargaActualizada = await obtenerAuditoriaPrecargada();
       setAuditoriaPrecargada(precargaActualizada);
 
       Swal.fire(
@@ -995,43 +1026,53 @@ export default function VentasAuditoria() {
     }
   };
 
-  const actualizarComentarioAuditoria = (ventaId, value) => {
+  const actualizarComentarioAuditoria = (fila, value) => {
+    const comentarioKey = getComentarioAuditoriaKey(fila);
+    if (!comentarioKey) return;
+
     setComentariosEditados((prev) => ({
       ...prev,
-      [String(ventaId)]: value,
+      [comentarioKey]: value,
     }));
   };
 
   const guardarComentarioAuditoria = async (fila) => {
-    if (!fila.id) return;
+    const comentarioKey = getComentarioAuditoriaKey(fila);
+    if (!comentarioKey) return;
 
-    const ventaKey = String(fila.id);
     const comentarioActual = Object.prototype.hasOwnProperty.call(
       comentariosEditados,
-      ventaKey,
+      comentarioKey,
     )
-      ? comentariosEditados[ventaKey]
+      ? comentariosEditados[comentarioKey]
       : fila["Comentario Auditoria"] || "";
 
-    setComentariosGuardando((prev) => ({ ...prev, [ventaKey]: true }));
+    setComentariosGuardando((prev) => ({ ...prev, [comentarioKey]: true }));
 
     try {
-      const { data } = await api.patch(
-        `/auditoria/ventas/${fila.id}/comentario-auditoria`,
-        { comentarioAuditoria: comentarioActual },
-      );
+      const { data } = fila.id
+        ? await api.patch(`/auditoria/ventas/${fila.id}/comentario-auditoria`, {
+            comentarioAuditoria: comentarioActual,
+          })
+        : await api.patch(
+            `/auditoria/ventas/auditorias-pdf/${fila.auditoriaId}/resultados/${fila.auditoriaResultadoIndex}/comentario-auditoria`,
+            { comentarioAuditoria: comentarioActual },
+          );
 
-      const comentarioGuardado = data.venta?.comentarioAuditoria || "";
+      const comentarioGuardado =
+        data.venta?.comentarioAuditoria ??
+        data.resultado?.comentarioAuditoria ??
+        "";
       setFilas((prev) =>
         prev.map((item) =>
-          item.id === fila.id
+          getComentarioAuditoriaKey(item) === comentarioKey
             ? { ...item, "Comentario Auditoria": comentarioGuardado }
             : item,
         ),
       );
       setComentariosEditados((prev) => {
         const siguiente = { ...prev };
-        delete siguiente[ventaKey];
+        delete siguiente[comentarioKey];
         return siguiente;
       });
       Swal.fire({
@@ -1051,7 +1092,7 @@ export default function VentasAuditoria() {
     } finally {
       setComentariosGuardando((prev) => {
         const siguiente = { ...prev };
-        delete siguiente[ventaKey];
+        delete siguiente[comentarioKey];
         return siguiente;
       });
     }
@@ -1062,46 +1103,55 @@ export default function VentasAuditoria() {
     const editando = filaEditandoId === getFilaEditableId(fila);
 
     if (key === "Comentario Auditoria") {
-      if (!fila.id) return "-";
+      const comentarioKey = getComentarioAuditoriaKey(fila);
+      if (!comentarioKey) return "-";
 
-      const ventaKey = String(fila.id);
       const comentarioPersistido = String(val || "");
       const tieneEdicion = Object.prototype.hasOwnProperty.call(
         comentariosEditados,
-        ventaKey,
+        comentarioKey,
       );
       const comentarioActual = tieneEdicion
-        ? comentariosEditados[ventaKey]
+        ? comentariosEditados[comentarioKey]
         : comentarioPersistido;
-      const guardando = Boolean(comentariosGuardando[ventaKey]);
+      const guardando = Boolean(comentariosGuardando[comentarioKey]);
       const cambioPendiente = comentarioActual.trim() !== comentarioPersistido;
 
       return (
-        <div className="flex min-w-72 items-center gap-1.5">
+        <div className="flex w-64 min-w-64 items-center gap-1.5">
           <input
             type="text"
             value={comentarioActual}
             maxLength={2000}
             disabled={guardando}
             onChange={(event) =>
-              actualizarComentarioAuditoria(fila.id, event.target.value)
+              actualizarComentarioAuditoria(fila, event.target.value)
             }
             onKeyDown={(event) => {
-              if (event.key === "Enter" && cambioPendiente && !guardando) {
+              if (event.key === "Enter" && !guardando) {
+                event.preventDefault();
                 guardarComentarioAuditoria(fila);
               }
             }}
             placeholder="Agregar comentario"
-            aria-label={`Comentario de auditoria de la venta ${fila.id}`}
-            className="w-64 rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+            aria-label={`Comentario de auditoria de ${
+              fila.id ? `la venta ${fila.id}` : "la fila con error"
+            }`}
+            className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
           />
           <button
             type="button"
             onClick={() => guardarComentarioAuditoria(fila)}
-            disabled={!cambioPendiente || guardando}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            disabled={guardando}
+            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded transition disabled:cursor-wait disabled:bg-gray-300 ${
+              cambioPendiente
+                ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            }`}
             title="Guardar comentario de auditoria"
-            aria-label={`Guardar comentario de auditoria de la venta ${fila.id}`}
+            aria-label={`Guardar comentario de auditoria de ${
+              fila.id ? `la venta ${fila.id}` : "la fila con error"
+            }`}
           >
             {guardando ? (
               <RefreshCw className="animate-spin" size={15} />

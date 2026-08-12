@@ -86,6 +86,70 @@ describe("controlFinancieroController", () => {
     );
   });
 
+  test("calcula cobertura diaria usando solo cargas activas", async () => {
+    ControlFinancieroCarga.findAll.mockResolvedValue([
+      {
+        estado: "ACTIVA",
+        fechaReporte: "2026-08-01",
+        registrosVentasTv: 4,
+        registrosVentasCelular: 2,
+      },
+      {
+        estado: "ACTIVA",
+        fechaReporte: "2026-08-02",
+        registrosVentasTv: 0,
+        registrosVentasCelular: 3,
+      },
+    ]);
+    const res = crearRes();
+
+    await controller.obtenerCoberturaReportes(
+      { query: { fechaInicio: "2026-08-01", fechaFin: "2026-08-03" } },
+      res,
+    );
+
+    const consulta = ControlFinancieroCarga.findAll.mock.calls[0][0];
+    expect(consulta.where.estado).toBe("ACTIVA");
+    expect(consulta.where.fechaReporte[Op.between]).toEqual([
+      "2026-08-01",
+      "2026-08-03",
+    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      cobertura: expect.objectContaining({
+        resumen: {
+          diasCompletos: 1,
+          diasFaltaTv: 2,
+          diasFaltaCelular: 1,
+          diasSinReportes: 1,
+          diasConPendientes: 2,
+        },
+        dias: expect.arrayContaining([
+          expect.objectContaining({
+            fecha: "2026-08-02",
+            estado: "FALTA_TV",
+          }),
+          expect.objectContaining({
+            fecha: "2026-08-03",
+            estado: "SIN_REPORTES",
+          }),
+        ]),
+      }),
+    });
+  });
+
+  test("rechaza cobertura con fechas futuras", async () => {
+    const res = crearRes();
+
+    await controller.obtenerCoberturaReportes(
+      { query: { fechaInicio: "2099-01-01", fechaFin: "2099-01-02" } },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(ControlFinancieroCarga.findAll).not.toHaveBeenCalled();
+  });
+
   test("consolida TV y celular de todas las cargas activas sin incluir cuotas", async () => {
     ControlFinancieroCarga.findAll.mockResolvedValue([
       {

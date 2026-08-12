@@ -1542,6 +1542,7 @@ export default function ControlFinanciero() {
                   Reporte desde
                   <input
                     type="date"
+                    max={fechaLocalIso(new Date())}
                     value={filtros.fechaInicio}
                     onChange={(event) =>
                       setFiltros((actual) => ({
@@ -1556,6 +1557,7 @@ export default function ControlFinanciero() {
                   Reporte hasta
                   <input
                     type="date"
+                    max={fechaLocalIso(new Date())}
                     value={filtros.fechaFin}
                     onChange={(event) =>
                       setFiltros((actual) => ({
@@ -1682,6 +1684,30 @@ export default function ControlFinanciero() {
                         carga.registrosVentasCelular}{" "}
                       registros
                     </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          Number(carga.registrosVentasTv || 0) > 0
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        TV: {Number(carga.registrosVentasTv || 0) > 0
+                          ? `cargado (${carga.registrosVentasTv})`
+                          : "faltante"}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          Number(carga.registrosVentasCelular || 0) > 0
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        Celular: {Number(carga.registrosVentasCelular || 0) > 0
+                          ? `cargado (${carga.registrosVentasCelular})`
+                          : "faltante"}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
