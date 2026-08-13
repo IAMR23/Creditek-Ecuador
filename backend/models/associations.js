@@ -36,10 +36,14 @@ const Task = require('./Task');
 const SistemaTarea = require('./SistemaTarea');
 const PlanBatalla = require('./PlanBatalla');
 const SecretarioEjecutivoPlan = require('./SecretarioEjecutivoPlan');
+const ConsejoEjecutivoPlan = require('./ConsejoEjecutivoPlan');
+const ConsejoEjecutivoSala = require('./ConsejoEjecutivoSala');
+const ConsejoEjecutivoSalaParticipante = require('./ConsejoEjecutivoSalaParticipante');
 const NominaEmpleado = require('./NominaEmpleado');
 const { NominaBeneficio } = require('./NominaBeneficio');
 const RolPago = require('./RolPago');
 require('./UsuarioRolPago');
+require('./UsuarioRol');
 const GestionComercial = require('./GestionComercial');
 const PrecioVenta = require('./PrecioVenta');
 const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
@@ -531,6 +535,80 @@ Agencia.hasMany(SecretarioEjecutivoPlan, {
 SecretarioEjecutivoPlan.belongsTo(Agencia, {
   foreignKey: "agenciaId",
   as: "agencia",
+});
+
+Usuario.hasMany(ConsejoEjecutivoPlan, {
+  foreignKey: "creadoPorId",
+  as: "planesConsejoEjecutivoCreados",
+});
+
+ConsejoEjecutivoPlan.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+
+Usuario.hasMany(ConsejoEjecutivoPlan, {
+  foreignKey: "actualizadoPorId",
+  as: "planesConsejoEjecutivoActualizados",
+});
+
+ConsejoEjecutivoPlan.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+
+Usuario.hasMany(ConsejoEjecutivoSala, {
+  foreignKey: "creadoPorId",
+  as: "salasConsejoEjecutivoCreadas",
+});
+
+ConsejoEjecutivoSala.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+
+ConsejoEjecutivoSala.belongsToMany(Usuario, {
+  through: ConsejoEjecutivoSalaParticipante,
+  foreignKey: "salaId",
+  otherKey: "usuarioId",
+  as: "participantes",
+});
+
+Usuario.belongsToMany(ConsejoEjecutivoSala, {
+  through: ConsejoEjecutivoSalaParticipante,
+  foreignKey: "usuarioId",
+  otherKey: "salaId",
+  as: "salasConsejoEjecutivo",
+});
+
+ConsejoEjecutivoSala.hasMany(ConsejoEjecutivoSalaParticipante, {
+  foreignKey: "salaId",
+  as: "invitaciones",
+});
+
+ConsejoEjecutivoSalaParticipante.belongsTo(ConsejoEjecutivoSala, {
+  foreignKey: "salaId",
+  as: "sala",
+});
+
+ConsejoEjecutivoSalaParticipante.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "participante",
+});
+
+ConsejoEjecutivoSalaParticipante.belongsTo(Usuario, {
+  foreignKey: "invitadoPorId",
+  as: "invitadoPor",
+});
+
+ConsejoEjecutivoSala.hasMany(ConsejoEjecutivoPlan, {
+  foreignKey: "salaId",
+  as: "planes",
+});
+
+ConsejoEjecutivoPlan.belongsTo(ConsejoEjecutivoSala, {
+  foreignKey: "salaId",
+  as: "sala",
 });
 
 /* NOMINA */

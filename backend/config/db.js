@@ -1070,6 +1070,55 @@ const ensureControlFinancieroPreSyncSchema = async (queryInterface) => {
   `);
 };
 
+const ensureConsejoEjecutivoPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("consejo_ejecutivo_planes")) return;
+
+  // sequelize.sync() crea los indices declarados por el modelo incluso cuando
+  // la tabla ya existe. La columna debe estar presente antes de ese paso.
+  await addColumnIfMissing(
+    queryInterface,
+    "consejo_ejecutivo_planes",
+    "salaId",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+    },
+  );
+};
+
+const ensureConsejoEjecutivoSchema = async (tables) => {
+  if (
+    !tables.includes("consejo_ejecutivo_planes") ||
+    !tables.includes("consejo_ejecutivo_salas")
+  ) {
+    return;
+  }
+
+  await sequelize.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint AS constraint_info
+        JOIN LATERAL unnest(constraint_info.conkey) AS key_column(attnum)
+          ON TRUE
+        JOIN pg_attribute AS attribute_info
+          ON attribute_info.attrelid = constraint_info.conrelid
+         AND attribute_info.attnum = key_column.attnum
+        WHERE constraint_info.contype = 'f'
+          AND constraint_info.conrelid = 'consejo_ejecutivo_planes'::regclass
+          AND attribute_info.attname = 'salaId'
+      ) THEN
+        ALTER TABLE consejo_ejecutivo_planes
+          ADD CONSTRAINT consejo_ejecutivo_planes_sala_id_fkey
+          FOREIGN KEY ("salaId") REFERENCES consejo_ejecutivo_salas(id)
+          ON UPDATE CASCADE ON DELETE RESTRICT;
+      END IF;
+    END $$;
+  `);
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
@@ -1077,6 +1126,7 @@ const connectDB = async () => {
 
     const queryInterface = sequelize.getQueryInterface();
     await ensureControlFinancieroPreSyncSchema(queryInterface);
+    await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
     await sequelize.sync({});
 
     const tables = await queryInterface.showAllTables();
@@ -1157,6 +1207,7 @@ const connectDB = async () => {
     await ensurePersonasSchema(queryInterface, tables);
     await ensureSecretariosEjecutivosPlanesSchema(queryInterface, tables);
     await ensurePlanesBatallaSchema(queryInterface, tables);
+    await ensureConsejoEjecutivoSchema(tables);
     await ensureUsuariosSchema(queryInterface, tables);
     await ensureRolesPagoSchema(tables);
     await ensureComisionesConfiguracionSchema(queryInterface, tables);

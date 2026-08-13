@@ -72,7 +72,7 @@ export default function Sidebar({ auth }) {
     () => ({
       comercial: {
         title: "Gerencia",
-        permission: "Gerencia",
+        permission: ["Gerencia", "Administracion"],
         items: [
           {
             label: "Metas Comerciales",
@@ -103,6 +103,11 @@ export default function Sidebar({ auth }) {
             label: "Secretarios Ejecutivos",
             icon: <ClipboardList size={20} />,
             path: "/secretarios-ejecutivos",
+          },
+          {
+            label: "Consejo Ejecutivo",
+            icon: <UsersRound size={20} />,
+            path: "/consejo-ejecutivo",
           },
           {
             label: "Ver planes de batalla",

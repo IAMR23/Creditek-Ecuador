@@ -157,7 +157,6 @@ io.on("connection", (socket) => {
   // Room individual por usuario
   socket.join(`user_${userId}`);
 
-
   socket.on("disconnect", () => {
   });
 });
@@ -225,6 +224,7 @@ connectDB()
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
+    app.use("/api/gerencia/consejo-ejecutivo/planes", require("./routes/Gerencia/consejoEjecutivoPlanesRoutes"));
     app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));
     app.use("/api/tareas", require("./routes/Sistemas/tareasRoutes"));
     app.use("/api/sistemas/mapa-comercial", require("./routes/Sistemas/mapaComercialRoutes"));
