@@ -326,6 +326,114 @@ describe("controlFinancieroService", () => {
     ]);
   });
 
+  test("omite registros repetidos aunque vengan de archivos distintos", async () => {
+    const cargaExistente = {
+      id: 6,
+      registrosCaja: 0,
+      registrosVentasTv: 1,
+      registrosVentasCelular: 0,
+      totalPagosCaja: "0.00",
+      totalVentasTv: "350.00",
+      totalEntradasTv: "0.00",
+      totalVentasCelular: "0.00",
+      totalEntradasCelular: "0.00",
+      update: jest.fn(),
+    };
+    ControlFinancieroCarga.findOne.mockResolvedValue(cargaExistente);
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      {
+        tipoRegistro: "VENTA_TV",
+        contrato: "367819",
+        fecha: "8/6/26 7:56 PM",
+        vendedor: "ARI2026",
+        usuarioCobrador: null,
+        cliente: "JUNIOR XAVIER COROZO ESTUPI\u00d1AN",
+        modelo: "QLEDTV 50",
+        imei: null,
+        pagosCuotas: "0.00",
+        numeroCuotas: null,
+        ventas: "350.00",
+        entradas: "0.00",
+        producto: "CREDITV",
+        agencia: null,
+        archivoOrigen: "ventas-tv-anterior.pdf",
+        archivoHash: "f".repeat(64),
+      },
+    ]);
+
+    const resultado = await guardarCargaControlFinanciero({
+      usuarioId: 8,
+      archivoGenerado: "CIERRE_CAJA_20260806.xlsx",
+      datos: {
+        registrosCaja: [],
+        ventasTv: [
+          {
+            CONTRATO: "367819",
+            FECHA: "8/6/26 7:56 PM",
+            VENDEDOR: "ari2026",
+            CLIENTE: "JUNIOR XAVIER COROZO ESTUPINAN",
+            MODELO: "QLEDTV 50",
+            VENTAS: 350,
+            ENTRADAS: 0,
+            ARCHIVO: "ventas-tv-repetido.pdf",
+            ARCHIVO_HASH: "1".repeat(64),
+          },
+          {
+            CONTRATO: "367820",
+            FECHA: "8/6/26 8:10 PM",
+            VENDEDOR: "ARI2026",
+            CLIENTE: "CLIENTE NUEVO",
+            MODELO: "QLEDTV 50",
+            VENTAS: 319,
+            ENTRADAS: 0,
+            ARCHIVO: "ventas-tv-nuevo.pdf",
+            ARCHIVO_HASH: "2".repeat(64),
+          },
+          {
+            CONTRATO: "367820",
+            FECHA: "8/6/26 8:10 PM",
+            VENDEDOR: "ARI2026",
+            CLIENTE: "CLIENTE NUEVO",
+            MODELO: "QLEDTV 50",
+            VENTAS: "319.00",
+            ENTRADAS: "0.00",
+            ARCHIVO: "ventas-tv-nuevo-copia.pdf",
+            ARCHIVO_HASH: "3".repeat(64),
+          },
+        ],
+        ventasCelular: [],
+      },
+    });
+
+    expect(resultado).toEqual(
+      expect.objectContaining({
+        carga: cargaExistente,
+        esCargaNueva: false,
+        archivosAgregados: 1,
+        archivosOmitidos: 2,
+        registrosAgregados: 1,
+        registrosOmitidos: 2,
+      }),
+    );
+    expect(cargaExistente.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrosVentasTv: 2,
+        totalVentasTv: 669,
+        totalEntradasTv: 0,
+      }),
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    const agregados = ControlFinancieroRegistro.bulkCreate.mock.calls[0][0];
+    expect(agregados).toHaveLength(1);
+    expect(agregados[0]).toEqual(
+      expect.objectContaining({
+        tipoRegistro: "VENTA_TV",
+        contrato: "367820",
+        archivoOrigen: "ventas-tv-nuevo.pdf",
+      }),
+    );
+  });
+
   test("obtiene la fecha predominante del PDF en formatos mes/dia y dia/mes", () => {
     expect(extraerFechaIso("7/21/26 12:33 PM")).toBe("2026-07-21");
     expect(extraerFechaIso("22/07/26 10:00 AM")).toBe("2026-07-22");

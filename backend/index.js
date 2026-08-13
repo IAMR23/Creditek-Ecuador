@@ -81,6 +81,7 @@ const corsOptions = {
     "X-RVE-Control-Financiero-Carga-Nueva",
     "X-RVE-Archivos-Agregados",
     "X-RVE-Archivos-Omitidos",
+    "X-RVE-Registros-Omitidos",
     "X-RVE-Auditoria-Estado",
     "X-RVE-Auditoria-Inconsistencias",
     "X-RVE-Auditoria-TV-Registros",

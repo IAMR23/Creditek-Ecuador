@@ -364,6 +364,10 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
       "X-RVE-Archivos-Omitidos",
       String(persistencia.archivosOmitidos),
     );
+    res.setHeader(
+      "X-RVE-Registros-Omitidos",
+      String(persistencia.registrosOmitidos || 0),
+    );
     if (conciliacionEntradas?.id) {
       res.setHeader(
         "X-RVE-Conciliacion-Entradas",

@@ -203,6 +203,9 @@ export default function ExtraccionReportesCaja() {
       const archivosOmitidos = Number(
         response.headers["x-rve-archivos-omitidos"] || 0,
       );
+      const registrosOmitidos = Number(
+        response.headers["x-rve-registros-omitidos"] || 0,
+      );
       const auditoria = getResumenAuditoria(response.headers);
 
       setLastSummary({
@@ -216,6 +219,7 @@ export default function ExtraccionReportesCaja() {
         cargaNueva,
         archivosAgregados,
         archivosOmitidos,
+        registrosOmitidos,
         archivo: filename,
         auditoria,
       });
@@ -227,19 +231,29 @@ export default function ExtraccionReportesCaja() {
           mensajeAuditoria,
           "warning",
         );
-      } else if (!archivosAgregados && archivosOmitidos) {
+      } else if (!archivosAgregados && (archivosOmitidos || registrosOmitidos)) {
         Swal.fire(
-          "Archivos repetidos",
-          `El Excel fue generado, pero los archivos ya estaban guardados en la carga de ese dia. ${mensajeAuditoria}`,
+          "Registros repetidos",
+          `El Excel fue generado, pero los archivos o registros ya estaban guardados en la carga de ese dia. ${mensajeAuditoria}`,
           "info",
         );
       } else {
-        const detalleOmitidos = archivosOmitidos
-          ? ` Se omitieron ${archivosOmitidos} archivo(s) repetido(s).`
+        const detalleOmitidos = [
+          archivosOmitidos
+            ? `${archivosOmitidos} archivo(s) repetido(s)`
+            : "",
+          registrosOmitidos
+            ? `${registrosOmitidos} registro(s) repetido(s)`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" y ");
+        const mensajeOmitidos = detalleOmitidos
+          ? ` Se omitieron ${detalleOmitidos}.`
           : "";
         Swal.fire(
           "Listo",
-          `El Excel fue generado y se agregaron ${archivosAgregados} archivo(s) a Control financiero.${detalleOmitidos} ${mensajeAuditoria}`,
+          `El Excel fue generado y se agregaron ${archivosAgregados} archivo(s) a Control financiero.${mensajeOmitidos} ${mensajeAuditoria}`,
           "success",
         );
       }
@@ -488,6 +502,9 @@ export default function ExtraccionReportesCaja() {
                   Archivos agregados: {lastSummary.archivosAgregados} | Repetidos
                   omitidos: {lastSummary.archivosOmitidos}
                 </p>
+                {lastSummary.registrosOmitidos > 0 && (
+                  <p>Registros repetidos omitidos: {lastSummary.registrosOmitidos}</p>
+                )}
               </div>
             )}
             <div

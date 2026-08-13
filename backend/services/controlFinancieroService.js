@@ -27,6 +27,14 @@ const normalizarHash = (value) => {
   return /^[a-f0-9]{64}$/.test(hash) ? hash : null;
 };
 
+const textoClave = (value) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleUpperCase("es");
+
 const extraerFechaIso = (value) => {
   const match = String(value || "").match(
     /(?:^|\s)(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})(?:\s|$)/,
@@ -305,6 +313,24 @@ const claveRegistro = (registro) =>
     .map((value) => String(value ?? ""))
     .join("\u001f");
 
+const claveContenidoRegistro = (registro) =>
+  [
+    textoClave(registro.tipoRegistro),
+    textoClave(registro.contrato),
+    textoClave(registro.fecha),
+    textoClave(registro.vendedor),
+    textoClave(registro.usuarioCobrador),
+    textoClave(registro.cliente),
+    textoClave(registro.modelo),
+    textoClave(registro.imei),
+    numero(registro.pagosCuotas),
+    textoClave(registro.numeroCuotas),
+    numero(registro.ventas),
+    numero(registro.entradas),
+    textoClave(registro.producto),
+    textoClave(registro.agencia),
+  ].join("\u001f");
+
 const agruparRegistrosPorArchivo = (registros) => {
   const grupos = new Map();
 
@@ -347,18 +373,53 @@ const filtrarArchivosNuevos = (registros, existentes = []) => {
       .map(claveNombreArchivo)
       .filter(Boolean),
   );
+  const clavesContenidoExistentes = new Set(
+    existentesPlanos.map(claveContenidoRegistro).filter(Boolean),
+  );
+  const clavesContenidoEntrantes = new Set();
   const grupos = agruparRegistrosPorArchivo(registros);
-  const gruposNuevos = grupos.filter((grupo) => {
-    if (grupo.archivoHash && hashesExistentes.has(grupo.archivoHash)) return false;
+  const gruposNuevos = [];
+  let registrosOmitidos = 0;
+
+  grupos.forEach((grupo) => {
+    if (grupo.archivoHash && hashesExistentes.has(grupo.archivoHash)) {
+      registrosOmitidos += grupo.registros.size;
+      return;
+    }
+
     const nombresComparables = grupo.archivoHash
       ? nombresSinHash
       : nombresExistentes;
-    return ![...grupo.nombres].some((nombre) => nombresComparables.has(nombre));
+
+    if ([...grupo.nombres].some((nombre) => nombresComparables.has(nombre))) {
+      registrosOmitidos += grupo.registros.size;
+      return;
+    }
+
+    const registrosNuevos = new Map();
+    grupo.registros.forEach((registro, key) => {
+      const claveContenido = claveContenidoRegistro(registro);
+      if (
+        clavesContenidoExistentes.has(claveContenido) ||
+        clavesContenidoEntrantes.has(claveContenido)
+      ) {
+        registrosOmitidos += 1;
+        return;
+      }
+
+      clavesContenidoEntrantes.add(claveContenido);
+      registrosNuevos.set(key, registro);
+    });
+
+    if (registrosNuevos.size) {
+      gruposNuevos.push({ ...grupo, registros: registrosNuevos });
+    }
   });
 
   return {
     archivosAgregados: gruposNuevos.length,
     archivosOmitidos: grupos.length - gruposNuevos.length,
+    registrosOmitidos,
     registros: gruposNuevos.flatMap((grupo) => [...grupo.registros.values()]),
   };
 };
@@ -414,7 +475,24 @@ const guardarCargaControlFinanciero = async ({
     const registrosExistentes = carga
       ? await ControlFinancieroRegistro.findAll({
           where: { cargaId: carga.id },
-          attributes: ["tipoRegistro", "archivoOrigen", "archivoHash"],
+          attributes: [
+            "tipoRegistro",
+            "contrato",
+            "fecha",
+            "vendedor",
+            "usuarioCobrador",
+            "cliente",
+            "modelo",
+            "imei",
+            "pagosCuotas",
+            "numeroCuotas",
+            "ventas",
+            "entradas",
+            "producto",
+            "agencia",
+            "archivoOrigen",
+            "archivoHash",
+          ],
           transaction,
         })
       : [];
@@ -487,6 +565,7 @@ const guardarCargaControlFinanciero = async ({
       archivosAgregados: filtrados.archivosAgregados,
       archivosOmitidos: filtrados.archivosOmitidos,
       registrosAgregados: filtrados.registros.length,
+      registrosOmitidos: filtrados.registrosOmitidos,
     };
   });
 };
