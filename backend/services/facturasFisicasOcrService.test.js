@@ -89,6 +89,84 @@ describe("facturasFisicasOcrService", () => {
     );
   });
 
+  test("prioriza y conserva texto OCR completo separado del normalizado", () => {
+    const original = "CABECERA  CON  DOBLE ESPACIO\n\nPIE SIN CLASIFICAR";
+    const result = validarResultadoOcr(
+      resultadoOcr({
+        texto: "texto legado que no debe ganar",
+        ocr: {
+          textoCompleto: original,
+          textoNormalizado: "CABECERA CON DOBLE ESPACIO\nPIE SIN CLASIFICAR",
+          lineas: [
+            {
+              numero: 1,
+              pagina: 1,
+              texto: "CABECERA  CON  DOBLE ESPACIO",
+              bloque: 2,
+              left: 80,
+              top: 120,
+              width: 400,
+              height: 30,
+              confianza: 93,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(result.texto).toBe(original);
+    expect(result.metadata.textoNormalizado).toBe(
+      "CABECERA CON DOBLE ESPACIO\nPIE SIN CLASIFICAR",
+    );
+    expect(result.metadata.lineas[0]).toEqual(
+      expect.objectContaining({ texto: "CABECERA  CON  DOBLE ESPACIO", left: 80, confianza: 93 }),
+    );
+  });
+
+  test("conserva RAW y reconstruido en UTF-8 sin doble decodificación", () => {
+    const textoRaw = "Teléfono\nResolución\nEmisión\nDescripción\nCédula\nPichincha";
+    const textoReconstruido =
+      "Teléfono    022636903\nResolución No. 123\nEmisión normal\nDescripción\nCédula\nPichincha";
+    const result = validarResultadoOcr(
+      resultadoOcr({
+        ocr: {
+          textoRaw,
+          textoReconstruido,
+          textoCompleto: textoReconstruido,
+          lineas: [],
+        },
+      }),
+    );
+
+    expect(result.texto).toBe(textoReconstruido);
+    expect(result.metadata.textoRaw).toBe(textoRaw);
+    expect(result.metadata.textoReconstruido).toBe(textoReconstruido);
+    expect(JSON.stringify(result)).not.toContain("�");
+  });
+
+  test("valida campos ecuatorianos adicionales sin convertirlos en columnas", () => {
+    const result = validarResultadoOcr(
+      resultadoOcr({
+        campos: {
+          ...resultadoOcr().campos,
+          numeroAutorizacion: "1908202601179229159300120020110012778051234557811",
+          cliente: "CLIENTE DEMO",
+          identificacionCliente: "1721146080001",
+          horaEmision: "11:42:23",
+          datosAdicionales: { tarifaIva: 15, ahorroSubsidio: 2.87 },
+        },
+      }),
+    );
+    expect(result.campos).toEqual(
+      expect.objectContaining({
+        cliente: "CLIENTE DEMO",
+        identificacionCliente: "1721146080001",
+        horaEmision: "11:42:23",
+        datosAdicionales: { tarifaIva: 15, ahorroSubsidio: 2.87 },
+      }),
+    );
+  });
+
   test("procesa OCR sin sobrescribir campos manuales", async () => {
     const factura = crearFactura({ proveedor: "PROVEEDOR MANUAL" });
     FacturaFisica.findByPk.mockResolvedValue(factura);
@@ -162,7 +240,13 @@ describe("facturasFisicasOcrService", () => {
 
     const finalUpdate = FacturaFisica.update.mock.calls[1][0];
     expect(finalUpdate.ocrTexto).toBe(resultadoOcr().texto);
-    expect(finalUpdate.ocrHistorial).toHaveLength(3);
+    expect(finalUpdate.ocrHistorial).toHaveLength(4);
+    expect(finalUpdate.ocrHistorial[1]).toEqual(
+      expect.objectContaining({
+        tipo: "RESULTADO_OCR_VERSIONADO",
+        resultado: expect.objectContaining({ texto: "texto anterior" }),
+      }),
+    );
     expect(finalUpdate).not.toHaveProperty("proveedor");
   });
 
@@ -259,6 +343,36 @@ describe("facturasFisicasOcrService", () => {
     );
   });
 
+  test("un parser incompleto conserva texto y termina con advertencias", async () => {
+    const factura = crearFactura();
+    FacturaFisica.findByPk.mockResolvedValue(factura);
+    FacturaFisica.update.mockResolvedValueOnce([1]).mockResolvedValueOnce([1]);
+    facturasFisicasService.obtenerArchivoFactura.mockResolvedValue({
+      rutaAbsoluta: "C:\\storage\\factura.jpg",
+    });
+    facturasFisicasService.obtenerFactura.mockResolvedValue({ id: 7 });
+    const completeText = "LINEA OCR UNO\nLINEA OCR DOS\nPIE NO CLASIFICADO";
+
+    await procesarOcrFactura({
+      id: 7,
+      usuarioId: 9,
+      ejecutarProcesador: jest.fn().mockResolvedValue(
+        resultadoOcr({
+          texto: completeText,
+          campos: {},
+          advertencias: ["No se pudo determinar el proveedor con suficiente seguridad."],
+        }),
+      ),
+    });
+
+    expect(FacturaFisica.update.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        ocrEstado: "PROCESADO_CON_ADVERTENCIAS",
+        ocrTexto: completeText,
+      }),
+    );
+  });
+
   test("aplica solo las sugerencias seleccionadas", async () => {
     const factura = crearFactura({
       proveedor: "MANUAL",
@@ -315,5 +429,69 @@ describe("facturasFisicasOcrService", () => {
       "fechaEmision",
       "subtotal",
     ]);
+  });
+
+  test("fusiona datos OCR adicionales solo al seleccionarlos explicitamente", async () => {
+    const factura = crearFactura({
+      ocrEstado: "PROCESADO",
+      datosAdicionales: { referenciaManual: "ABC" },
+      ocrCampos: {
+        ...resultadoOcr().campos,
+        cliente: "CLIENTE OCR",
+        datosAdicionales: { tarifaIva: 15 },
+      },
+    });
+    FacturaFisica.findByPk.mockResolvedValue(factura);
+    facturasFisicasService.obtenerFactura.mockResolvedValue({ id: 7 });
+
+    const result = await aplicarSugerenciasOcr({
+      id: 7,
+      usuarioId: 9,
+      campos: ["cliente", "datosAdicionales"],
+    });
+
+    expect(factura.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datosAdicionales: {
+          referenciaManual: "ABC",
+          cliente: "CLIENTE OCR",
+          tarifaIva: 15,
+        },
+      }),
+    );
+    expect(result.camposAplicados).toEqual(["cliente", "datosAdicionales"]);
+  });
+
+  test("no reemplaza datos manuales en conflicto sin confirmacion explicita", async () => {
+    const factura = crearFactura({
+      ocrEstado: "PROCESADO",
+      datosAdicionales: { placa: "MANUAL123" },
+      ocrCampos: { ...resultadoOcr().campos, placa: "OCR456" },
+    });
+    FacturaFisica.findByPk.mockResolvedValue(factura);
+
+    await expect(
+      aplicarSugerenciasOcr({
+        id: 7,
+        usuarioId: 9,
+        campos: ["placa"],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      codigo: "OCR_ADDITIONAL_DATA_CONFLICT",
+      conflictos: ["placa"],
+    });
+    expect(factura.update).not.toHaveBeenCalled();
+
+    facturasFisicasService.obtenerFactura.mockResolvedValue({ id: 7 });
+    await aplicarSugerenciasOcr({
+      id: 7,
+      usuarioId: 9,
+      campos: ["placa"],
+      sobrescribirDatosAdicionales: true,
+    });
+    expect(factura.update).toHaveBeenCalledWith(
+      expect.objectContaining({ datosAdicionales: { placa: "OCR456" } }),
+    );
   });
 });

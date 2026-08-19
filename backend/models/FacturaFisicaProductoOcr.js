@@ -28,6 +28,10 @@ const FacturaFisicaProductoOcr = sequelize.define(
       type: DataTypes.DECIMAL(14, 2),
       allowNull: true,
     },
+    precioUnitarioExacto: {
+      type: DataTypes.DECIMAL(18, 6),
+      allowNull: true,
+    },
     descuento: {
       type: DataTypes.DECIMAL(14, 2),
       allowNull: true,
@@ -38,6 +42,10 @@ const FacturaFisicaProductoOcr = sequelize.define(
     },
     codigo: {
       type: DataTypes.STRING(80),
+      allowNull: true,
+    },
+    datosAdicionales: {
+      type: DataTypes.JSONB,
       allowNull: true,
     },
     advertencias: {

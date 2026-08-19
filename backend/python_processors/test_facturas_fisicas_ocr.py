@@ -10,7 +10,13 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from facturas_fisicas_ocr import (
+    OcrEmptyOutputError,
+    _evaluate_ocr_result,
     _prepare_image,
+    _reconstruct_tokens,
+    _select_best_ocr,
+    _serialize_result,
+    _tokens_from_tesseract_data,
     extraer_campos,
     extraer_productos,
     normalizar_monto,
@@ -19,6 +25,95 @@ from facturas_fisicas_ocr import (
 
 
 class FacturasFisicasOcrParserTest(unittest.TestCase):
+    @staticmethod
+    def _ocr_tokens(rows):
+        data = {
+            "text": [],
+            "conf": [],
+            "left": [],
+            "top": [],
+            "width": [],
+            "height": [],
+            "page_num": [],
+            "block_num": [],
+            "par_num": [],
+            "line_num": [],
+            "word_num": [],
+        }
+        for index, row in enumerate(rows, 1):
+            text, left, top, line = row[:4]
+            confidence = row[4] if len(row) > 4 else 90
+            data["text"].append(text)
+            data["conf"].append(str(confidence))
+            data["left"].append(left)
+            data["top"].append(top)
+            data["width"].append(max(8, len(text) * 8))
+            data["height"].append(18)
+            data["page_num"].append(1)
+            data["block_num"].append(1)
+            data["par_num"].append(1)
+            data["line_num"].append(line)
+            data["word_num"].append(index)
+        return _tokens_from_tesseract_data(data)
+
+    def test_serializa_utf8_sin_forzar_ascii_ni_reemplazos(self):
+        expected = "Teléfono Resolución Emisión Descripción Cédula Pichincha"
+        serialized = _serialize_result({"ok": True, "texto": expected})
+        self.assertIn(expected, serialized)
+        self.assertNotIn("\\u00e9", serialized)
+        self.assertNotIn("�", serialized)
+
+    def test_reconstruye_fila_de_producto_por_posicion_x(self):
+        tokens = self._ocr_tokens(
+            [
+                ("10.09", 450, 100, 1),
+                ("3.52", 220, 100, 1),
+                ("EXTRA", 90, 100, 1),
+                ("3.578", 10, 100, 1),
+                ("2.8191", 350, 100, 1),
+                ("0.70", 290, 100, 1),
+            ]
+        )
+        text, lines, _strategy = _reconstruct_tokens(tokens, "prueba")
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(text.split(), ["3.578", "EXTRA", "3.52", "0.70", "2.8191", "10.09"])
+        self.assertIn("  ", text)
+
+    def test_reconstruccion_geometrica_conserva_lineas_separadas(self):
+        tokens = self._ocr_tokens(
+            [
+                ("CLIENTE:", 10, 100, 0),
+                ("GARCIA", 100, 101, 0),
+                ("SALVADOR", 180, 99, 0),
+                ("GABRIELA", 280, 100, 0),
+                ("ELIZABETH", 10, 140, 0),
+            ]
+        )
+        text, lines, strategy = _reconstruct_tokens(tokens, "prueba")
+        self.assertEqual(strategy, "coordenadas_y")
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(text.splitlines()[0].split(), ["CLIENTE:", "GARCIA", "SALVADOR", "GABRIELA"])
+        self.assertEqual(text.splitlines()[1], "ELIZABETH")
+
+    def test_score_prefiere_factura_legible_sobre_mas_texto_con_ruido(self):
+        noisy_text = ("X � | ~ ^ ` " * 120) + "RUIDO"
+        useful_text = (
+            "RUC 1792291593001\nFACTURA 002-011-001277805\nFECHA 19/08/2026\n"
+            "CLIENTE GARCIA\nSUBTOTAL 10.09\nIVA 1.51\nTOTAL 11.60\nFORMA DE PAGO EFECTIVO"
+        )
+        little_text = "TOTAL 1"
+        noisy_tokens = self._ocr_tokens([("RUIDO", 10, 10, 1, 28)] * 80)
+        useful_tokens = self._ocr_tokens(
+            [(word, index * 70, (index // 4) * 25, (index // 4) + 1, 88) for index, word in enumerate(useful_text.split())]
+        )
+        little_tokens = self._ocr_tokens([("TOTAL", 10, 10, 1, 96), ("1", 80, 10, 1, 96)])
+        candidates = [
+            {"orden": 1, "metricas": _evaluate_ocr_result(noisy_text, noisy_tokens)},
+            {"orden": 2, "metricas": _evaluate_ocr_result(useful_text, useful_tokens)},
+            {"orden": 3, "metricas": _evaluate_ocr_result(little_text, little_tokens)},
+        ]
+        self.assertIs(_select_best_ocr(candidates), candidates[1])
+
     def test_extrae_campos_ecuatorianos_y_normaliza_montos(self):
         text = """
         Razon Social: EMPRESA XYZ S.A.
@@ -59,6 +154,101 @@ class FacturasFisicasOcrParserTest(unittest.TestCase):
         self.assertEqual(normalizar_monto("1,234.56"), 1234.56)
         self.assertEqual(normalizar_monto("1234,56"), 1234.56)
         self.assertEqual(normalizar_monto("$ 123.45"), 123.45)
+
+    def test_factura_combustible_distingue_emisor_cliente_y_conserva_precision(self):
+        access_key = "1908202601179229159300120020110012778051234557811"
+        text = f"""
+        AGRICOLA AGROTATI CIA. LTDA.
+        RUC: 1792291593001
+        FACTURA 002-011-001277805
+        Número de Autorización:
+        {access_key}
+        Clave Acceso SRI:
+        {access_key}
+        AMBIENTE: PRODUCCION
+        EMISION: NORMAL
+        FECHA: 19/08/2026 11:42:23
+        M.PAGO: CONTADO
+        CODIGO: 580520
+        CLIENTE: GARCIA SALVADOR GABRIELA ELIZABETH
+        RUC/CI: 1721146080001
+        PLACA: PDC5312
+        CANT. DESCRIPCION VALOR UNIT. VALOR
+        3.578 EXTRA 2.8191 10.09
+        Sub Total: 10.09
+        IVA 15.00%: 1.51
+        Total: 11.60
+        Valor total sin subsidio: 14.47
+        Ahorro por subsidio: 2.87
+        Forma de Pago:
+        Sin utilización del Sistema Financiero 11.60
+        """
+        fields, _warnings, _metadata = extraer_campos(text)
+        products, _warnings, _metadata = extraer_productos(text, fields)
+
+        self.assertEqual(fields["rucProveedor"], "1792291593001")
+        self.assertEqual(fields["identificacionCliente"], "1721146080001")
+        self.assertEqual(fields["numeroFactura"], "002-011-001277805")
+        self.assertEqual(fields["numeroAutorizacion"], access_key)
+        self.assertEqual(fields["claveAcceso"], access_key)
+        self.assertEqual(fields["fechaEmision"], "2026-08-19")
+        self.assertEqual(fields["horaEmision"], "11:42:23")
+        self.assertEqual(fields["placa"], "PDC5312")
+        self.assertEqual(fields["condicionPago"], "CONTADO")
+        self.assertEqual(
+            fields["formaPago"], "SIN UTILIZACIÓN DEL SISTEMA FINANCIERO"
+        )
+        self.assertEqual(fields["datosAdicionales"]["tarifaIva"], 15)
+        self.assertEqual(fields["datosAdicionales"]["valorTotalSinSubsidio"], 14.47)
+        self.assertEqual(fields["datosAdicionales"]["ahorroSubsidio"], 2.87)
+        self.assertEqual(products[0]["descripcion"], "EXTRA")
+        self.assertEqual(products[0]["cantidad"], 3.578)
+        self.assertEqual(products[0]["precioUnitario"], 2.8191)
+        self.assertEqual(products[0]["precioUnitarioExacto"], 2.8191)
+        self.assertEqual(products[0]["totalLinea"], 10.09)
+
+    def test_campos_ausentes_permanecen_nulos_y_no_se_inventan(self):
+        fields, _warnings, _metadata = extraer_campos(
+            "Razon Social: PROVEEDOR S.A.\nRUC: 1790012345001\nTOTAL 25.00"
+        )
+        for field in (
+            "numeroAutorizacion",
+            "claveAcceso",
+            "horaEmision",
+            "cliente",
+            "identificacionCliente",
+            "codigoCliente",
+            "placa",
+            "formaPago",
+        ):
+            self.assertIsNone(fields[field])
+        self.assertEqual(fields["datosAdicionales"], {})
+
+    def test_cliente_con_cedula_y_tarifa_iva_distinta(self):
+        fields, _warnings, _metadata = extraer_campos(
+            """
+            EMISOR DEMO
+            RUC: 1790012345001
+            FACTURA 001-001-000000321
+            CLIENTE: ANA PEREZ
+            CEDULA: 1721146080
+            SUBTOTAL 100.00
+            IVA 12% 12.00
+            TOTAL A PAGAR 112.00
+            """
+        )
+        self.assertEqual(fields["rucProveedor"], "1790012345001")
+        self.assertEqual(fields["identificacionCliente"], "1721146080")
+        self.assertEqual(fields["datosAdicionales"]["tarifaIva"], 12)
+        self.assertIsNone(fields["placa"])
+        self.assertIsNone(fields["horaEmision"])
+
+    def test_clave_sri_incompleta_se_conserva_como_candidato_y_advierte(self):
+        fields, warnings, _metadata = extraer_campos(
+            "CLAVE DE ACCESO: 19082026011792291593001200201100127780512"
+        )
+        self.assertEqual(fields["claveAcceso"], "19082026011792291593001200201100127780512")
+        self.assertTrue(any("49 digitos" in warning for warning in warnings))
 
     def test_extrae_tabla_clara_y_conserva_orden(self):
         products, warnings, metadata = extraer_productos(
@@ -244,6 +434,84 @@ class FacturasFisicasOcrParserTest(unittest.TestCase):
             self.assertTrue(output.exists())
             self.assertGreaterEqual(min(prepared.size), 1200)
             self.assertTrue(any("bajo contraste" in warning for warning in warnings))
+
+    def test_documento_largo_conserva_todas_las_lineas_aunque_no_se_clasifiquen(self):
+        known = [
+            "PROVEEDOR DEMO CIA LTDA",
+            "RUC: 1790012345001",
+            "FACTURA 001-002-000012345",
+            "FECHA: 19/08/2026",
+            "CANT DESCRIPCION PRECIO TOTAL",
+            "1 PRODUCTO DEMO 10.00 10.00",
+            "TOTAL 11.50",
+        ]
+        unknown = [f"LINEA LIBRE {index:02d} CONTENIDO SIN CLASIFICAR" for index in range(1, 64)]
+        complete_text = "\n".join(known + unknown)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "long.png"
+            Image.new("RGB", (1200, 1600), "white").save(source)
+            with patch(
+                "facturas_fisicas_ocr._ocr_image",
+                return_value=(complete_text, 88.0, [], "5.5.0"),
+            ):
+                result = procesar_documento(source, "image/png", "png")
+
+        self.assertEqual(len(complete_text.splitlines()), 70)
+        self.assertEqual(result["texto"].splitlines(), complete_text.splitlines())
+        self.assertEqual(result["ocr"]["textoCompleto"], complete_text)
+        self.assertEqual(result["metadata"]["totalLineas"], 70)
+        self.assertGreater(result["metadata"]["totalLineasNoClasificadas"], 0)
+        self.assertIn("LINEA LIBRE 63 CONTENIDO SIN CLASIFICAR", result["texto"])
+
+    def test_no_pierde_texto_operativo_aunque_el_parser_no_lo_use(self):
+        complete_text = (
+            "FACTURA 001-002-000012345\n"
+            "DESPACHADOR: JUAN\n"
+            "MANGUERA: 04\n"
+            "PIE SIN REGLA   CONSERVA ESPACIOS"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "operational.png"
+            Image.new("RGB", (1200, 1600), "white").save(source)
+            with patch(
+                "facturas_fisicas_ocr._ocr_image",
+                return_value=(complete_text, 80.0, [], "5.5.0"),
+            ):
+                result = procesar_documento(source, "image/png", "png")
+
+        self.assertIn("DESPACHADOR: JUAN", result["texto"])
+        self.assertIn("MANGUERA: 04", result["texto"])
+        self.assertIn("PIE SIN REGLA   CONSERVA ESPACIOS", result["texto"])
+
+    def test_fallo_del_parser_no_convierte_ocr_con_texto_en_error(self):
+        complete_text = "TEXTO COMPLETO RECONOCIDO\nLINEA QUE DEBE SOBREVIVIR"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "parser-failure.png"
+            Image.new("RGB", (1200, 1600), "white").save(source)
+            with patch(
+                "facturas_fisicas_ocr._ocr_image",
+                return_value=(complete_text, 75.0, [], "5.5.0"),
+            ), patch(
+                "facturas_fisicas_ocr.extraer_campos",
+                side_effect=RuntimeError("parser test"),
+            ):
+                result = procesar_documento(source, "image/png", "png")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["texto"], complete_text)
+        self.assertIsNone(result["campos"]["proveedor"])
+        self.assertTrue(any("se conservo completo" in warning for warning in result["advertencias"]))
+
+    def test_salida_ocr_vacia_es_error_tecnico(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "empty.png"
+            Image.new("RGB", (1200, 1600), "white").save(source)
+            with patch(
+                "facturas_fisicas_ocr._ocr_image",
+                return_value=(" \n ", None, [], "5.5.0"),
+            ):
+                with self.assertRaises(OcrEmptyOutputError):
+                    procesar_documento(source, "image/png", "png")
 
     def test_jpg_png_y_webp_usan_copia_temporal_sin_cambiar_original(self):
         sample_text = "RUC: 1790012345001\nFACTURA 001-002-000012345\nTOTAL 115.00"

@@ -73,6 +73,7 @@ const DescuentoDecimo = require('./DescuentoDecimo');
 const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
 const FacturaFisica = require('./FacturaFisica');
 const FacturaFisicaProductoOcr = require('./FacturaFisicaProductoOcr');
+const FacturaIaResultado = require('./FacturaIaResultado');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -197,6 +198,22 @@ Usuario.hasMany(FacturaFisicaProductoOcr, {
 FacturaFisicaProductoOcr.belongsTo(Usuario, {
   foreignKey: "descartadoPorId",
   as: "descartadoPor",
+});
+Usuario.hasMany(FacturaIaResultado, {
+  foreignKey: "creadoPorId",
+  as: "facturasIaCreadas",
+});
+FacturaIaResultado.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+Usuario.hasMany(FacturaIaResultado, {
+  foreignKey: "seleccionadoPorId",
+  as: "facturasIaSeleccionadas",
+});
+FacturaIaResultado.belongsTo(Usuario, {
+  foreignKey: "seleccionadoPorId",
+  as: "seleccionadoPor",
 });
 
 // Agencia ↔ Usuario (muchos a muchos)

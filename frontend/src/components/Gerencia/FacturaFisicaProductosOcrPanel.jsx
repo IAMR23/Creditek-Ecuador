@@ -41,6 +41,16 @@ const formatMoney = (value) => {
   return Number.isFinite(number) ? money.format(number) : "-";
 };
 
+const formatExactMoney = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "-";
+  return `$${new Intl.NumberFormat("es-EC", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  }).format(number)}`;
+};
+
 const formatQuantity = (value) => {
   if (value === null || value === undefined || value === "") return "-";
   return new Intl.NumberFormat("es-EC", { maximumFractionDigits: 3 }).format(
@@ -52,7 +62,10 @@ const toDraft = (product) =>
   EDITABLE_FIELDS.reduce(
     (draft, field) => ({
       ...draft,
-      [field]: product?.[field] ?? "",
+      [field]:
+        field === "precioUnitario"
+          ? product?.precioUnitarioExacto ?? product?.precioUnitario ?? ""
+          : product?.[field] ?? "",
     }),
     {},
   );
@@ -291,6 +304,14 @@ export default function FacturaFisicaProductosOcrPanel({ factura }) {
                               Corregido manualmente
                             </p>
                           )}
+                          {product.datosAdicionales &&
+                            Object.keys(product.datosAdicionales).length > 0 && (
+                              <p className="mt-1 text-[10px] text-slate-500">
+                                {Object.entries(product.datosAdicionales)
+                                  .map(([key, value]) => `${key}: ${String(value)}`)
+                                  .join(" · ")}
+                              </p>
+                            )}
                           {product.advertencias?.map((warning, index) => (
                             <p
                               key={`${product.id}-warning-${index}`}
@@ -305,7 +326,7 @@ export default function FacturaFisicaProductosOcrPanel({ factura }) {
                     </td>
                     {[
                       ["cantidad", formatQuantity],
-                      ["precioUnitario", formatMoney],
+                      ["precioUnitario", formatExactMoney],
                       ["descuento", formatMoney],
                       ["totalLinea", formatMoney],
                     ].map(([field, formatter]) => (
@@ -325,7 +346,11 @@ export default function FacturaFisicaProductosOcrPanel({ factura }) {
                           />
                         ) : (
                           <span className="font-semibold text-slate-700">
-                            {formatter(product[field])}
+                            {formatter(
+                              field === "precioUnitario"
+                                ? product.precioUnitarioExacto ?? product.precioUnitario
+                                : product[field],
+                            )}
                           </span>
                         )}
                       </td>

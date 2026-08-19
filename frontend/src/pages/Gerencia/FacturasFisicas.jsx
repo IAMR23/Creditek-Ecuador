@@ -19,6 +19,15 @@ import { api } from "../../api/client";
 import FacturaFisicaOcrPanel from "../../components/Gerencia/FacturaFisicaOcrPanel";
 
 const API_BASE = "/api/gerencia/facturas-fisicas";
+const CAMPOS_FORMALES_OCR = [
+  "proveedor",
+  "rucProveedor",
+  "numeroFactura",
+  "fechaEmision",
+  "subtotal",
+  "impuestos",
+  "total",
+];
 const ESTADOS = [
   "CARGADA",
   "PENDIENTE_REVISION",
@@ -400,13 +409,38 @@ export default function FacturasFisicas() {
     if (!detalle || aplicandoOcr || !campos?.length) return false;
     try {
       setAplicandoOcr(true);
-      const { data } = await api.patch(
-        `${API_BASE}/${detalle.id}/aplicar-ocr`,
-        { campos },
-      );
+      let response;
+      try {
+        response = await api.patch(`${API_BASE}/${detalle.id}/aplicar-ocr`, {
+          campos,
+        });
+      } catch (error) {
+        if (error.response?.data?.code !== "OCR_ADDITIONAL_DATA_CONFLICT") {
+          throw error;
+        }
+        const conflicts = error.response.data.conflictos || [];
+        const confirmation = await Swal.fire({
+          icon: "warning",
+          title: "Datos adicionales existentes",
+          text: `Ya existen valores distintos para: ${conflicts.join(", ")}. ¿Deseas reemplazarlos con la sugerencia OCR?`,
+          showCancelButton: true,
+          confirmButtonText: "Sí, reemplazar",
+          cancelButtonText: "Conservar actuales",
+          confirmButtonColor: "#b45309",
+        });
+        if (!confirmation.isConfirmed) return false;
+        response = await api.patch(`${API_BASE}/${detalle.id}/aplicar-ocr`, {
+          campos,
+          sobrescribirDatosAdicionales: true,
+        });
+      }
+      const { data } = response;
       setDetalle(data.factura);
+      setDatosAdicionales(
+        crearDatosAdicionalesArray(data.factura?.datosAdicionales),
+      );
       setForm((actual) =>
-        campos.reduce(
+        campos.filter((field) => CAMPOS_FORMALES_OCR.includes(field)).reduce(
           (next, field) => ({
             ...next,
             [field]: data.factura?.[field] ?? "",

@@ -92,6 +92,26 @@ describe("facturasFisicasProductosOcrService", () => {
     );
   });
 
+  test("conserva precio unitario exacto y datos variables del producto", () => {
+    const [product] = validarProductosProcesador([
+      {
+        descripcion: "EXTRA",
+        cantidad: 3.578,
+        precioUnitario: 2.8191,
+        totalLinea: 10.09,
+        datosAdicionales: { unidadMedida: "GAL", subsidioUnitario: 0.7 },
+      },
+    ]);
+
+    expect(product.precioUnitario).toBe(2.82);
+    expect(product.precioUnitarioExacto).toBe(2.8191);
+    expect(product.datosAdicionales).toEqual({
+      unidadMedida: "GAL",
+      subsidioUnitario: 0.7,
+    });
+    expect(product.advertencias).toEqual([]);
+  });
+
   test("reprocesa creando una version nueva y solo inactiva resultados automaticos", async () => {
     FacturaFisicaProductoOcr.count.mockResolvedValue(2);
     FacturaFisicaProductoOcr.update.mockResolvedValue([3]);
@@ -152,6 +172,27 @@ describe("facturasFisicasProductosOcrService", () => {
     );
     expect(result.cantidad).toBeNull();
     expect(result.precioUnitario).toBeNull();
+  });
+
+  test("una correccion humana de precio conserva hasta seis decimales", async () => {
+    const product = crearProducto();
+    FacturaFisicaProductoOcr.findOne.mockResolvedValue(product);
+
+    const result = await editarProducto({
+      facturaId: 7,
+      productoId: 11,
+      usuarioId: 9,
+      payload: { precioUnitario: "2.8191" },
+    });
+
+    expect(product.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        precioUnitario: 2.82,
+        precioUnitarioExacto: 2.8191,
+        editadoManualmente: true,
+      }),
+    );
+    expect(result.precioUnitarioExacto).toBe(2.8191);
   });
 
   test("confirma y descarta mediante cambios de estado, nunca eliminando", async () => {

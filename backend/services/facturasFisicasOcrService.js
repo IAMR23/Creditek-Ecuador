@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const path = require("path");
 const { spawn } = require("child_process");
+const { StringDecoder } = require("string_decoder");
 const { Op } = require("sequelize");
 
 const { sequelize } = require("../config/db");
@@ -15,7 +16,8 @@ const OCR_TIMEOUT_MS = Math.max(
 const OCR_LOCK_STALE_MS = Math.max(OCR_TIMEOUT_MS * 2, 300000);
 const MAX_STDOUT_BYTES = 6 * 1024 * 1024;
 const MAX_STDERR_BYTES = 128 * 1024;
-const CAMPOS_OCR = [
+const MAX_METADATA_BYTES = 1024 * 1024;
+const CAMPOS_FORMALES_OCR = [
   "proveedor",
   "rucProveedor",
   "numeroFactura",
@@ -24,6 +26,21 @@ const CAMPOS_OCR = [
   "impuestos",
   "total",
 ];
+const CAMPOS_ADICIONALES_OCR = [
+  "numeroAutorizacion",
+  "claveAcceso",
+  "horaEmision",
+  "cliente",
+  "identificacionCliente",
+  "codigoCliente",
+  "placa",
+  "condicionPago",
+  "formaPago",
+  "ambiente",
+  "tipoEmision",
+  "datosAdicionales",
+];
+const CAMPOS_OCR = [...CAMPOS_FORMALES_OCR, ...CAMPOS_ADICIONALES_OCR];
 
 const crearError = (message, statusCode = 400, extra = {}) => {
   const error = new Error(message);
@@ -85,6 +102,8 @@ const ejecutarProcesadorOcr = ({ archivo, mimeType, extension, facturaId }) =>
         env: {
           ...process.env,
           PYTHONDONTWRITEBYTECODE: "1",
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUTF8: "1",
         },
         windowsHide: true,
       },
@@ -95,6 +114,8 @@ const ejecutarProcesadorOcr = ({ archivo, mimeType, extension, facturaId }) =>
     let timedOut = false;
     let outputTooLarge = false;
     let settled = false;
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
 
     const finish = (callback) => {
       if (settled) return;
@@ -109,7 +130,9 @@ const ejecutarProcesadorOcr = ({ archivo, mimeType, extension, facturaId }) =>
     }, OCR_TIMEOUT_MS);
 
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
+      stdout += stdoutDecoder.write(
+        Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8"),
+      );
       if (Buffer.byteLength(stdout, "utf8") > MAX_STDOUT_BYTES) {
         outputTooLarge = true;
         terminarProceso(child);
@@ -117,7 +140,9 @@ const ejecutarProcesadorOcr = ({ archivo, mimeType, extension, facturaId }) =>
     });
     child.stderr.on("data", (chunk) => {
       if (Buffer.byteLength(stderr, "utf8") < MAX_STDERR_BYTES) {
-        stderr += chunk.toString("utf8");
+        stderr += stderrDecoder.write(
+          Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8"),
+        );
       }
     });
     child.on("error", () =>
@@ -131,6 +156,8 @@ const ejecutarProcesadorOcr = ({ archivo, mimeType, extension, facturaId }) =>
     );
     child.on("close", (code) => {
       finish(() => {
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
         if (timedOut) {
           return reject(
             crearError("El OCR excedio el tiempo maximo de procesamiento.", 504, {
@@ -175,6 +202,46 @@ const normalizarTextoOcr = (value, max) => {
   return text ? text.slice(0, max) : null;
 };
 
+const normalizarTextoCompletoOcr = (value) => {
+  if (value === null || value === undefined) return "";
+  const text = String(value).replaceAll("\u0000", "");
+  if (Buffer.byteLength(text, "utf8") > 5_000_000) {
+    throw crearError("El texto OCR completo supera el limite permitido.", 422, {
+      codigo: "OCR_TEXT_TOO_LARGE",
+    });
+  }
+  return text;
+};
+
+const normalizarNumeroMetadata = (value, { entero = false } = {}) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || (entero && !Number.isInteger(number))) return null;
+  return number;
+};
+
+const normalizarLineasOcr = (value) =>
+  Array.isArray(value)
+    ? value.slice(0, 120).map((line, index) => ({
+        numero: Number.isInteger(Number(line?.numero)) ? Number(line.numero) : index + 1,
+        pagina: Number.isInteger(Number(line?.pagina)) ? Number(line.pagina) : 1,
+        texto: normalizarTextoOcr(line?.texto, 1000) || "",
+        modo: normalizarTextoOcr(line?.modo, 40),
+        variante: normalizarTextoOcr(line?.variante, 40),
+        bloque: normalizarNumeroMetadata(line?.bloque, { entero: true }),
+        parrafo: normalizarNumeroMetadata(line?.parrafo, { entero: true }),
+        lineaOcr: normalizarNumeroMetadata(line?.lineaOcr, { entero: true }),
+        left: normalizarNumeroMetadata(line?.left),
+        top: normalizarNumeroMetadata(line?.top),
+        width: normalizarNumeroMetadata(line?.width),
+        height: normalizarNumeroMetadata(line?.height),
+        confianza: normalizarNumeroMetadata(line?.confianza),
+        clasificaciones: Array.isArray(line?.clasificaciones)
+          ? line.clasificaciones.map((item) => normalizarTextoOcr(item, 40)).filter(Boolean)
+          : [],
+      }))
+    : [];
+
 const normalizarFechaOcr = (value) => {
   const text = normalizarTextoOcr(value, 10);
   if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
@@ -189,6 +256,25 @@ const normalizarMontoOcr = (value) => {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0 || number > 9999999999.99) return null;
   return Number(number.toFixed(2));
+};
+
+const normalizarDatosAdicionalesOcr = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const normalized = {};
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, 50)) {
+    const key = normalizarTextoOcr(rawKey, 80);
+    if (!key || rawValue === undefined) continue;
+    if (typeof rawValue === "string") {
+      const text = normalizarTextoOcr(rawValue, 1000);
+      if (text !== null) normalized[key] = text;
+    } else if (rawValue === null || ["number", "boolean"].includes(typeof rawValue)) {
+      normalized[key] = rawValue;
+    }
+  }
+  if (Buffer.byteLength(JSON.stringify(normalized), "utf8") > 32 * 1024) {
+    throw crearError("Los datos adicionales OCR superan el limite permitido.", 502);
+  }
+  return normalized;
 };
 
 const validarResultadoOcr = (result) => {
@@ -210,10 +296,22 @@ const validarResultadoOcr = (result) => {
     proveedor: normalizarTextoOcr(rawFields.proveedor, 255),
     rucProveedor: normalizarTextoOcr(rawFields.rucProveedor, 30),
     numeroFactura: normalizarTextoOcr(rawFields.numeroFactura, 80),
+    numeroAutorizacion: normalizarTextoOcr(rawFields.numeroAutorizacion, 80),
+    claveAcceso: normalizarTextoOcr(rawFields.claveAcceso, 80),
     fechaEmision: normalizarFechaOcr(rawFields.fechaEmision),
+    horaEmision: normalizarTextoOcr(rawFields.horaEmision, 8),
+    cliente: normalizarTextoOcr(rawFields.cliente, 255),
+    identificacionCliente: normalizarTextoOcr(rawFields.identificacionCliente, 30),
+    codigoCliente: normalizarTextoOcr(rawFields.codigoCliente, 80),
+    placa: normalizarTextoOcr(rawFields.placa, 20),
+    condicionPago: normalizarTextoOcr(rawFields.condicionPago, 120),
+    formaPago: normalizarTextoOcr(rawFields.formaPago, 500),
+    ambiente: normalizarTextoOcr(rawFields.ambiente, 120),
+    tipoEmision: normalizarTextoOcr(rawFields.tipoEmision, 120),
     subtotal: normalizarMontoOcr(rawFields.subtotal),
     impuestos: normalizarMontoOcr(rawFields.impuestos),
     total: normalizarMontoOcr(rawFields.total),
+    datosAdicionales: normalizarDatosAdicionalesOcr(rawFields.datosAdicionales),
   };
   const advertencias = Array.isArray(result.advertencias)
     ? result.advertencias
@@ -221,15 +319,33 @@ const validarResultadoOcr = (result) => {
         .filter(Boolean)
         .slice(0, 100)
     : [];
-  const metadata = result.metadata && typeof result.metadata === "object"
-    ? result.metadata
-    : {};
-  if (Buffer.byteLength(JSON.stringify(metadata), "utf8") > 128 * 1024) {
+  const rawOcr = result.ocr && typeof result.ocr === "object" ? result.ocr : {};
+  const texto = normalizarTextoCompletoOcr(
+    rawOcr.textoReconstruido ?? rawOcr.textoCompleto ?? result.texto,
+  );
+  const textoRaw = normalizarTextoCompletoOcr(
+    rawOcr.textoRaw ?? result.metadata?.textoRaw ?? texto,
+  );
+  if (texto.replace(/[^\p{L}\p{N}]/gu, "").length < 3) {
+    throw crearError("El OCR no produjo texto utilizable.", 422, {
+      codigo: "OCR_EMPTY_OUTPUT",
+    });
+  }
+  const metadata = {
+    ...(result.metadata && typeof result.metadata === "object" ? result.metadata : {}),
+    textoRaw,
+    textoReconstruido: texto,
+    textoNormalizado: normalizarTextoCompletoOcr(
+      rawOcr.textoNormalizado ?? result.metadata?.textoNormalizado ?? texto,
+    ),
+    lineas: normalizarLineasOcr(rawOcr.lineas ?? result.metadata?.lineas),
+  };
+  if (Buffer.byteLength(JSON.stringify(metadata), "utf8") > MAX_METADATA_BYTES) {
     throw crearError("La metadata OCR supera el limite permitido.", 502);
   }
 
   return {
-    texto: normalizarTextoOcr(result.texto, 5_000_000) || "",
+    texto,
     campos,
     productos: facturasFisicasProductosOcrService.validarProductosProcesador(
       result.productos,
@@ -264,6 +380,29 @@ const historialConEvento = (historial, evento) => [
   evento,
 ];
 
+const versionarResultadoAnterior = (historial, factura, usuarioId, fecha) => {
+  if (!factura.ocrTexto || !["PROCESADO", "PROCESADO_CON_ADVERTENCIAS"].includes(factura.ocrEstado)) {
+    return Array.isArray(historial) ? historial : [];
+  }
+  return historialConEvento(historial, {
+    tipo: "RESULTADO_OCR_VERSIONADO",
+    fecha: fecha.toISOString(),
+    usuarioId,
+    resultado: {
+      estado: factura.ocrEstado,
+      texto: factura.ocrTexto,
+      campos: factura.ocrCampos || {},
+      advertencias: Array.isArray(factura.ocrAdvertencias)
+        ? factura.ocrAdvertencias
+        : [],
+      metadata: factura.ocrMetadata || {},
+      motor: factura.ocrMotor || null,
+      version: factura.ocrVersion || null,
+      procesadoEn: factura.ocrProcesadoEn || null,
+    },
+  });
+};
+
 const asegurarActualizacionPropia = (updatedRows) => {
   const count = Array.isArray(updatedRows) ? Number(updatedRows[0]) : Number(updatedRows);
   if (count !== 1) {
@@ -292,8 +431,14 @@ const procesarOcrFactura = async ({
   const token = crypto.randomUUID();
   const inicio = new Date();
   const staleBefore = new Date(inicio.getTime() - OCR_LOCK_STALE_MS);
-  const historialInicial = historialConEvento(
+  const historialVersionado = versionarResultadoAnterior(
     factura.ocrHistorial,
+    factura,
+    usuarioId,
+    inicio,
+  );
+  const historialInicial = historialConEvento(
+    historialVersionado,
     crearEvento({ tipo: "PROCESAMIENTO_INICIADO", usuarioId, estado: "PROCESANDO", fecha: inicio }),
   );
   const [locked] = await FacturaFisica.update(
@@ -419,7 +564,12 @@ const normalizarCamposSolicitados = (value) => {
   return unique;
 };
 
-const aplicarSugerenciasOcr = async ({ id: idValue, usuarioId: usuarioIdValue, campos }) => {
+const aplicarSugerenciasOcr = async ({
+  id: idValue,
+  usuarioId: usuarioIdValue,
+  campos,
+  sobrescribirDatosAdicionales = false,
+}) => {
   const id = normalizarId(idValue, "La factura");
   const usuarioId = normalizarId(usuarioIdValue, "El usuario");
   const requestedFields = normalizarCamposSolicitados(campos);
@@ -434,16 +584,60 @@ const aplicarSugerenciasOcr = async ({ id: idValue, usuarioId: usuarioIdValue, c
 
   const update = { actualizadoPorId: usuarioId };
   const appliedFields = [];
+  const additionalSuggestions = {};
   for (const field of requestedFields) {
     const value = factura.ocrCampos[field];
-    if (value === null || value === undefined || value === "") continue;
-    if (field === "fechaEmision") update[field] = normalizarFechaOcr(value);
+    if (
+      value === null ||
+      value === undefined ||
+      value === "" ||
+      (field === "datosAdicionales" && !Object.keys(value || {}).length)
+    ) continue;
+    if (field === "datosAdicionales") {
+      Object.assign(additionalSuggestions, normalizarDatosAdicionalesOcr(value));
+    } else if (CAMPOS_ADICIONALES_OCR.includes(field)) {
+      additionalSuggestions[field] = normalizarTextoOcr(
+        value,
+        ["cliente", "formaPago"].includes(field) ? 500 : 120,
+      );
+    } else if (field === "fechaEmision") update[field] = normalizarFechaOcr(value);
     else if (["subtotal", "impuestos", "total"].includes(field)) {
       update[field] = normalizarMontoOcr(value);
     } else {
       update[field] = normalizarTextoOcr(value, field === "proveedor" ? 255 : field === "numeroFactura" ? 80 : 30);
     }
-    if (update[field] !== null) appliedFields.push(field);
+    if (CAMPOS_FORMALES_OCR.includes(field) && update[field] !== null) {
+      appliedFields.push(field);
+    }
+  }
+  const existingAdditional =
+    factura.datosAdicionales && typeof factura.datosAdicionales === "object"
+      ? factura.datosAdicionales
+      : {};
+  const additionalEntries = Object.entries(additionalSuggestions).filter(
+    ([, value]) => value !== null && value !== undefined && value !== "",
+  );
+  const conflicts = additionalEntries
+    .filter(([key, value]) => (
+      Object.prototype.hasOwnProperty.call(existingAdditional, key) &&
+      JSON.stringify(existingAdditional[key]) !== JSON.stringify(value)
+    ))
+    .map(([key]) => key);
+  if (conflicts.length && !sobrescribirDatosAdicionales) {
+    throw crearError(
+      "Algunos datos adicionales ya tienen un valor diferente. Confirma si deseas reemplazarlos.",
+      409,
+      { codigo: "OCR_ADDITIONAL_DATA_CONFLICT", conflictos: conflicts },
+    );
+  }
+  if (additionalEntries.length) {
+    update.datosAdicionales = {
+      ...existingAdditional,
+      ...Object.fromEntries(additionalEntries),
+    };
+    appliedFields.push(
+      ...requestedFields.filter((field) => CAMPOS_ADICIONALES_OCR.includes(field)),
+    );
   }
   if (!appliedFields.length) {
     throw crearError("Los campos seleccionados no tienen sugerencias OCR aplicables");

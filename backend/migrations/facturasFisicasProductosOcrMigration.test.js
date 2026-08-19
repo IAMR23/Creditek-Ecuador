@@ -22,4 +22,18 @@ describe("migracion aditiva de productos OCR", () => {
   test("no contiene instrucciones destructivas", () => {
     expect(sql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE)\b/i);
   });
+
+  test("agrega precision exacta y JSON variable sin alterar columnas existentes", () => {
+    const additiveSql = fs.readFileSync(
+      path.join(
+        __dirname,
+        "202608190003-add-precision-and-additional-data-productos-ocr.sql",
+      ),
+      "utf8",
+    );
+    expect(additiveSql).toMatch(/ADD COLUMN IF NOT EXISTS "precioUnitarioExacto" NUMERIC\(18, 6\)/i);
+    expect(additiveSql).toMatch(/ADD COLUMN IF NOT EXISTS "datosAdicionales" JSONB/i);
+    expect(additiveSql).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE)\b/i);
+    expect(additiveSql).not.toMatch(/ALTER\s+COLUMN/i);
+  });
 });

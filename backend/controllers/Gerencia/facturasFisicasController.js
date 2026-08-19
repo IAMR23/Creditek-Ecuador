@@ -13,6 +13,7 @@ const responderError = (res, error) => {
     duplicado: Boolean(error.duplicado),
     message: error.message || "No se pudo procesar la factura fisica.",
     ...(error.codigo ? { code: error.codigo } : {}),
+    ...(Array.isArray(error.conflictos) ? { conflictos: error.conflictos } : {}),
     ...(error.facturaExistente
       ? { facturaExistente: error.facturaExistente }
       : {}),
@@ -130,6 +131,8 @@ const aplicarOcr = async (req, res) => {
       id: req.params.id,
       usuarioId: req.user.id,
       campos: req.body?.campos,
+      sobrescribirDatosAdicionales:
+        req.body?.sobrescribirDatosAdicionales === true,
     });
     return res.json({
       ok: true,

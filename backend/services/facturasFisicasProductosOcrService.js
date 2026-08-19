@@ -101,9 +101,34 @@ const normalizarAdvertencias = (value) =>
         .slice(0, 20)
     : [];
 
-const advertenciasCalculo = ({ cantidad, precioUnitario, descuento, totalLinea }) => {
-  if (cantidad === null || precioUnitario === null || totalLinea === null) return [];
-  const expected = cantidad * precioUnitario - (descuento || 0);
+const normalizarDatosAdicionales = (value) => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw crearError("Los datos adicionales del producto no son validos", 422);
+  }
+  const normalized = {};
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, 30)) {
+    const key = String(rawKey || "").trim().slice(0, 80);
+    if (!key || rawValue === undefined) continue;
+    if (
+      rawValue !== null &&
+      !["string", "number", "boolean"].includes(typeof rawValue)
+    ) {
+      continue;
+    }
+    normalized[key] =
+      typeof rawValue === "string" ? rawValue.trim().slice(0, 500) : rawValue;
+  }
+  if (Buffer.byteLength(JSON.stringify(normalized), "utf8") > 16 * 1024) {
+    throw crearError("Los datos adicionales del producto superan el limite permitido", 422);
+  }
+  return Object.keys(normalized).length ? normalized : null;
+};
+
+const advertenciasCalculo = ({ cantidad, precioUnitarioExacto, precioUnitario, descuento, totalLinea }) => {
+  const unitPrice = precioUnitarioExacto ?? precioUnitario;
+  if (cantidad === null || unitPrice === null || totalLinea === null) return [];
+  const expected = cantidad * unitPrice - (descuento || 0);
   return Math.abs(expected - totalLinea) > 0.02
     ? ["La cantidad por precio unitario no coincide con el total de linea."]
     : [];
@@ -119,21 +144,38 @@ const normalizarProductoDetectado = (value = {}, orden) => {
     max: 1000000,
     strictlyPositive: true,
   });
-  const precioUnitario = normalizarDecimal(value.precioUnitario, "El precio unitario");
+  const precioUnitarioExacto = normalizarDecimal(
+    value.precioUnitarioExacto ?? value.precioUnitario,
+    "El precio unitario",
+    { scale: 6, max: 9999999999.999999 },
+  );
+  const precioUnitario = precioUnitarioExacto === undefined
+    ? undefined
+    : precioUnitarioExacto === null
+      ? null
+      : Number(precioUnitarioExacto.toFixed(2));
   const descuento = normalizarDecimal(value.descuento, "El descuento");
   const totalLinea = normalizarDecimal(value.totalLinea, "El total de linea");
   const codigo = normalizarTexto(value.codigo, 80);
   const advertencias = [
     ...normalizarAdvertencias(value.advertencias),
-    ...advertenciasCalculo({ cantidad, precioUnitario, descuento, totalLinea }),
+    ...advertenciasCalculo({
+      cantidad,
+      precioUnitarioExacto,
+      precioUnitario,
+      descuento,
+      totalLinea,
+    }),
   ];
   return {
     descripcion,
     cantidad: cantidad ?? null,
     precioUnitario: precioUnitario ?? null,
+    precioUnitarioExacto: precioUnitarioExacto ?? null,
     descuento: descuento ?? null,
     totalLinea: totalLinea ?? null,
     codigo: codigo ?? null,
+    datosAdicionales: normalizarDatosAdicionales(value.datosAdicionales),
     advertencias: [...new Set(advertencias)],
     orden: Number.isInteger(Number(value.orden)) && Number(value.orden) > 0
       ? Number(value.orden)
@@ -157,6 +199,10 @@ const serializarProducto = (value) => {
     cantidad: product.cantidad === null ? null : Number(product.cantidad),
     precioUnitario:
       product.precioUnitario === null ? null : Number(product.precioUnitario),
+    precioUnitarioExacto:
+      product.precioUnitarioExacto === null || product.precioUnitarioExacto === undefined
+        ? null
+        : Number(product.precioUnitarioExacto),
     descuento: product.descuento === null ? null : Number(product.descuento),
     totalLinea: product.totalLinea === null ? null : Number(product.totalLinea),
   };
@@ -308,6 +354,13 @@ const editarProducto = async ({ facturaId: facturaValue, productoId: productValu
         max: 1000000,
         strictlyPositive: true,
       });
+    } else if (field === "precioUnitario") {
+      const exact = normalizarDecimal(payload[field], "El precio unitario", {
+        scale: 6,
+        max: 9999999999.999999,
+      });
+      update.precioUnitarioExacto = exact;
+      update.precioUnitario = exact === null ? null : Number(exact.toFixed(2));
     } else {
       update[field] = normalizarDecimal(payload[field], `El campo ${field}`);
     }
@@ -326,6 +379,14 @@ const editarProducto = async ({ facturaId: facturaValue, productoId: productValu
         : product.precioUnitario === null
           ? null
           : Number(product.precioUnitario),
+    precioUnitarioExacto:
+      update.precioUnitarioExacto !== undefined
+        ? update.precioUnitarioExacto
+        : product.precioUnitarioExacto === null || product.precioUnitarioExacto === undefined
+          ? product.precioUnitario === null
+            ? null
+            : Number(product.precioUnitario)
+          : Number(product.precioUnitarioExacto),
     descuento:
       update.descuento !== undefined
         ? update.descuento
