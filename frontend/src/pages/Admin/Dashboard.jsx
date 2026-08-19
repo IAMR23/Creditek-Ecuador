@@ -7,6 +7,7 @@ import MetasDiarias from "./MetasDiaras";
 import * as XLSX from "xlsx";
 import { FaFileExcel } from "react-icons/fa";
 import api from "../../api/client";
+import FiltroPeriodoRapido from "../../components/common/FiltroPeriodoRapido";
 
 const STORAGE_KEY = "dashboard_filtros";
 const TIPOS_VENDEDOR = [
@@ -14,6 +15,34 @@ const TIPOS_VENDEDOR = [
   { value: "CALL_CENTER", label: "Call Center" },
   { value: "PISO", label: "Piso" },
 ];
+const PERIODOS_DASHBOARD = [
+  { id: "HOY", label: "Hoy" },
+  { id: "SEMANA", label: "Esta semana" },
+  { id: "SIETE_DIAS", label: "7 días" },
+  { id: "MES_ATRAS", label: "Hace un mes" },
+];
+
+const normalizarOportunidadesPorEtapa = (matriz = {}) =>
+  (Array.isArray(matriz.columns) ? matriz.columns : [])
+    .map((column) => {
+      const id =
+        typeof column === "string"
+          ? column
+          : column.id || column.pipelineStageId || column.name;
+      const name =
+        typeof column === "string"
+          ? column
+          : column.name || column.label || column.id || "Sin etapa";
+
+      return {
+        name,
+        value: Number(
+          matriz.totals?.values?.[id] ?? matriz.totals?.stages?.[id] ?? 0,
+        ),
+      };
+    })
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value);
 
 const normalizarCargo = (cargo) =>
   String(cargo || "")
@@ -48,6 +77,23 @@ const perteneceATipoVendedor = (usuario, tipoVendedor) => {
   return true;
 };
 
+const participoEnPeriodo = (usuario, fechaInicio, fechaFin) => {
+  const ingreso = usuario?.fechaIngreso
+    ? String(usuario.fechaIngreso).slice(0, 10)
+    : null;
+  const salida = usuario?.fechaSalida
+    ? String(usuario.fechaSalida).slice(0, 10)
+    : null;
+
+  if (ingreso && fechaFin && ingreso > fechaFin) return false;
+  if (salida && fechaInicio && salida < fechaInicio) return false;
+
+  // Un usuario inactivo sin fecha de salida no tiene un periodo historico
+  // verificable. Los activos permanecen disponibles mientras no exista una
+  // fecha de salida anterior al rango seleccionado.
+  return usuario?.activo !== false || Boolean(salida);
+};
+
 export default function Dashboard() {
   // 🔥 Cargar filtros desde localStorage UNA SOLA VEZ
   const filtrosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
@@ -60,6 +106,9 @@ export default function Dashboard() {
   const [usuarios, setUsuarios] = useState([]);
   const [usuariosCargados, setUsuariosCargados] = useState(false);
   const [estadisticas, setEstadisticas] = useState(null);
+  const [oportunidadesPorEtapa, setOportunidadesPorEtapa] = useState([]);
+  const [loadingOportunidadesGhl, setLoadingOportunidadesGhl] = useState(false);
+  const [errorOportunidadesGhl, setErrorOportunidadesGhl] = useState("");
 
   // ✅ Estados persistentes
   const [fechaInicio, setFechaInicio] = useState(
@@ -138,7 +187,7 @@ export default function Dashboard() {
   const cargarUsuarios = async () => {
     try {
       const res = await api.get("/usuarios", {
-        params: { rol: "Vendedor" },
+        params: { rol: "Vendedor", incluirInactivos: true },
       });
       setUsuarios(res.data || []);
     } catch (error) {
@@ -164,12 +213,20 @@ export default function Dashboard() {
     cargarUsuarios();
   }, []);
 
-  const usuariosFiltrados = useMemo(
+  const usuariosDelPeriodo = useMemo(
     () =>
       usuarios.filter((usuario) =>
+        participoEnPeriodo(usuario, fechaInicio, fechaFin),
+      ),
+    [fechaFin, fechaInicio, usuarios],
+  );
+
+  const usuariosFiltrados = useMemo(
+    () =>
+      usuariosDelPeriodo.filter((usuario) =>
         perteneceATipoVendedor(usuario, tipoVendedor),
       ),
-    [tipoVendedor, usuarios],
+    [tipoVendedor, usuariosDelPeriodo],
   );
 
   const vendedoresIdsTipoParam = useMemo(
@@ -192,15 +249,15 @@ export default function Dashboard() {
 
   const cantidadesPorTipo = useMemo(
     () => ({
-      "": usuarios.length,
-      CALL_CENTER: usuarios.filter((usuario) =>
+      "": usuariosDelPeriodo.length,
+      CALL_CENTER: usuariosDelPeriodo.filter((usuario) =>
         perteneceATipoVendedor(usuario, "CALL_CENTER"),
       ).length,
-      PISO: usuarios.filter((usuario) =>
+      PISO: usuariosDelPeriodo.filter((usuario) =>
         perteneceATipoVendedor(usuario, "PISO"),
       ).length,
     }),
-    [usuarios],
+    [usuariosDelPeriodo],
   );
 
   const seleccionarTipoVendedor = (nuevoTipo) => {
@@ -208,7 +265,7 @@ export default function Dashboard() {
     setVendedorId((vendedorActual) => {
       if (!nuevoTipo || !vendedorActual) return vendedorActual;
 
-      const vendedorSeleccionado = usuarios.find(
+      const vendedorSeleccionado = usuariosDelPeriodo.find(
         (usuario) => String(usuario.id) === String(vendedorActual),
       );
 
@@ -243,6 +300,11 @@ export default function Dashboard() {
     setAgenciaId([]);
   };
 
+  const cambiarPeriodoRapido = ({ fechaInicio: inicio, fechaFin: fin }) => {
+    setFechaInicio(inicio);
+    setFechaFin(fin);
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -271,9 +333,9 @@ export default function Dashboard() {
       setFilas([]);
       setEstadisticas(null);
       setError(
-        `No hay vendedores activos de ${
+        `No hay vendedores de ${
           tipoVendedor === "CALL_CENTER" ? "Call Center" : "Piso"
-        }.`,
+        } en el periodo seleccionado.`,
       );
       return;
     }
@@ -342,12 +404,47 @@ export default function Dashboard() {
     vendedoresIdsTipoParam,
   ]);
 
+  const fetchOportunidadesGhl = useCallback(async () => {
+    if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) {
+      setOportunidadesPorEtapa([]);
+      return;
+    }
+
+    setLoadingOportunidadesGhl(true);
+    setErrorOportunidadesGhl("");
+
+    try {
+      const { data } = await api.get(
+        "/api/ghl/dashboard/oportunidades/matriz",
+        {
+          params: { fechaInicio, fechaFin },
+        },
+      );
+
+      setOportunidadesPorEtapa(normalizarOportunidadesPorEtapa(data));
+    } catch (error) {
+      setOportunidadesPorEtapa([]);
+      setErrorOportunidadesGhl(
+        error.response?.data?.message ||
+          "No se pudieron cargar las oportunidades de GHL",
+      );
+    } finally {
+      setLoadingOportunidadesGhl(false);
+    }
+  }, [fechaFin, fechaInicio]);
+
   // 🔥 Se ejecuta cuando cambian filtros
   useEffect(() => {
     if (fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchData();
     }
   }, [fetchData, fechaFin, fechaInicio, usuarioInfo?.id]);
+
+  useEffect(() => {
+    if (fechaInicio && fechaFin && usuarioInfo?.id) {
+      fetchOportunidadesGhl();
+    }
+  }, [fetchOportunidadesGhl, fechaFin, fechaInicio, usuarioInfo?.id]);
 
   const generarDataExcel = (porTipoModelo, costosHistoricos = {}) => {
     return Object.entries(porTipoModelo)
@@ -479,6 +576,24 @@ export default function Dashboard() {
               );
             })}
           </div>
+        </div>
+
+        <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Período rápido</p>
+            <p className="text-xs text-gray-500">
+              Selecciona un rango para actualizar todos los indicadores.
+            </p>
+          </div>
+          <FiltroPeriodoRapido
+            fechaInicio={fechaInicio}
+            fechaFin={fechaFin}
+            onChange={cambiarPeriodoRapido}
+            periodos={PERIODOS_DASHBOARD}
+            activeClassName="bg-green-600 text-white shadow-sm"
+            inactiveClassName="text-gray-600 hover:bg-white hover:text-gray-900"
+            ariaLabel="Períodos rápidos del dashboard"
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
@@ -661,7 +776,12 @@ export default function Dashboard() {
         <p>Cargando...</p>
       ) : (
         <>
-          <DashboardGraficas estadisticas={estadisticas} />
+          <DashboardGraficas
+            estadisticas={estadisticas}
+            oportunidadesPorEtapa={oportunidadesPorEtapa}
+            loadingOportunidadesGhl={loadingOportunidadesGhl}
+            errorOportunidadesGhl={errorOportunidadesGhl}
+          />
           <MetasDiarias data={estadisticas} />
         </>
       )}

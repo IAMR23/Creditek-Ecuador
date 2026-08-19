@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import {
   BarChart,
   Bar,
@@ -59,7 +60,18 @@ const tooltipStyle = {
   },
 };
 
-export default function DashboardGraficas({ estadisticas }) {
+const formatCurrency = (value) =>
+  `$${(Number(value) || 0).toLocaleString("es-EC", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+export default function DashboardGraficas({
+  estadisticas,
+  oportunidadesPorEtapa = [],
+  loadingOportunidadesGhl = false,
+  errorOportunidadesGhl = "",
+}) {
   if (!estadisticas) return null;
 
   const entregasPorVendedorEstados = toEntregasPorVendedorEstados(
@@ -83,6 +95,14 @@ export default function DashboardGraficas({ estadisticas }) {
     );
 
   const cards = [
+    {
+      title: "Cantidad de oportunidades por etapa",
+      type: "pie",
+      data: oportunidadesPorEtapa,
+      loading: loadingOportunidadesGhl,
+      emptyMessage:
+        errorOportunidadesGhl || "Sin oportunidades para el periodo seleccionado",
+    },
     {
       title: "Ventas por Agencia",
       type: "bar",
@@ -140,8 +160,12 @@ export default function DashboardGraficas({ estadisticas }) {
 
   return (
     <section className="mt-6 space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
+        <KpiCard
+          label="Precio vendedor promedio"
+          value={formatCurrency(estadisticas.precioVendedorPromedio)}
+        />
         <KpiCard
           label="Total entregas"
           value={totalEntregas}
@@ -200,9 +224,20 @@ function ChartCard({ title, children }) {
   );
 }
 
-function ChartRenderer({ type, data, color = COLORS[0], showXAxis = false }) {
+function ChartRenderer({
+  type,
+  data,
+  color = COLORS[0],
+  showXAxis = false,
+  loading = false,
+  emptyMessage = "Sin datos para mostrar",
+}) {
+  if (loading) {
+    return <EmptyState message="Cargando oportunidades..." />;
+  }
+
   if (!data.length) {
-    return <EmptyState />;
+    return <EmptyState message={emptyMessage} />;
   }
 
   if (type === "pie") {
@@ -288,10 +323,10 @@ function ChartRenderer({ type, data, color = COLORS[0], showXAxis = false }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ message = "Sin datos para mostrar" }) {
   return (
     <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm font-medium text-slate-500">
-      Sin datos para mostrar
+      {message}
     </div>
   );
 }

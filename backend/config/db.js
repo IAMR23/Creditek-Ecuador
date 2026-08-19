@@ -1087,6 +1087,58 @@ const ensureConsejoEjecutivoPreSyncSchema = async (queryInterface) => {
   );
 };
 
+const ensureFacturasFisicasOcrPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("facturas_fisicas")) return;
+
+  // FacturaFisica declara un indice OCR. Sus columnas deben existir antes de
+  // sequelize.sync() para que el arranque sea seguro aun si la migracion se
+  // aplica durante el despliegue y no antes de iniciar el proceso Node.
+  const columns = [
+    [
+      "ocrEstado",
+      {
+        type: Sequelize.STRING(40),
+        allowNull: false,
+        defaultValue: "NO_PROCESADO",
+      },
+    ],
+    ["ocrTexto", { type: Sequelize.TEXT, allowNull: true }],
+    ["ocrCampos", { type: Sequelize.JSONB, allowNull: true }],
+    [
+      "ocrAdvertencias",
+      { type: Sequelize.JSONB, allowNull: false, defaultValue: [] },
+    ],
+    ["ocrMetadata", { type: Sequelize.JSONB, allowNull: true }],
+    ["ocrError", { type: Sequelize.TEXT, allowNull: true }],
+    ["ocrProcesadoEn", { type: Sequelize.DATE, allowNull: true }],
+    [
+      "ocrProcesadoPorId",
+      {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "usuarios", key: "id" },
+      },
+    ],
+    ["ocrMotor", { type: Sequelize.STRING(80), allowNull: true }],
+    ["ocrVersion", { type: Sequelize.STRING(40), allowNull: true }],
+    [
+      "ocrHistorial",
+      { type: Sequelize.JSONB, allowNull: false, defaultValue: [] },
+    ],
+    ["ocrProcesamientoToken", { type: Sequelize.UUID, allowNull: true }],
+  ];
+
+  for (const [columnName, definition] of columns) {
+    await addColumnIfMissing(
+      queryInterface,
+      "facturas_fisicas",
+      columnName,
+      definition,
+    );
+  }
+};
+
 const ensureConsejoEjecutivoSchema = async (tables) => {
   if (
     !tables.includes("consejo_ejecutivo_planes") ||
@@ -1127,6 +1179,7 @@ const connectDB = async () => {
     const queryInterface = sequelize.getQueryInterface();
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
+    await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
     await sequelize.sync({});
 
     const tables = await queryInterface.showAllTables();
@@ -1405,4 +1458,5 @@ const connectDB = async () => {
 module.exports = {
   sequelize,
   connectDB,
+  ensureFacturasFisicasOcrPreSyncSchema,
 };

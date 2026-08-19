@@ -87,4 +87,23 @@ describe("calcularEstadisticasVentas", () => {
     expect(estadisticas.indicadorGerenciaPorSemana["Semana 1"]).toBe(31);
     expect(estadisticas.promedioIndicadorGerenciaPorSemana["Semana 1"]).toBe(15.5);
   });
+
+  test("calcula el precio vendedor promedio sobre el numero total de ventas", () => {
+    const estadisticas = calcularEstadisticasVentas([
+      { precioVendedor: "100.50" },
+      { precioVendedor: 200 },
+      { precioVendedor: "" },
+    ]);
+
+    expect(estadisticas.totalVentas).toBe(3);
+    expect(estadisticas.precioVendedorTotal).toBe(300.5);
+    expect(estadisticas.precioVendedorPromedio).toBe(100.17);
+  });
+
+  test("devuelve precio vendedor promedio 0 cuando no hay ventas", () => {
+    const estadisticas = calcularEstadisticasVentas([]);
+
+    expect(estadisticas.precioVendedorTotal).toBe(0);
+    expect(estadisticas.precioVendedorPromedio).toBe(0);
+  });
 });

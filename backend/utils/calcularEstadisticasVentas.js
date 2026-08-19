@@ -86,6 +86,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     indicadorGerenciaTotal: 0,
     indicadorEngancheJavierTotal: 0,
     precioVentaTotal: 0,
+    precioVendedorTotal: 0,
+    precioVendedorPromedio: 0,
     costoTotal: 0,
     margenPorcentualTotal: 0,
 
@@ -204,9 +206,11 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
 
     const margen = normalizarNumero(v.margen);
     const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);
+    const precioVendedor = normalizarNumero(v.precioVendedor);
     const costo = normalizarNumero(v.costo);
     stats.indicadorGerenciaTotal += margen;
     stats.precioVentaTotal += precioVenta;
+    stats.precioVendedorTotal += precioVendedor;
     stats.costoTotal += costo;
 
     // Semana comercial jueves-miercoles calculada desde la fecha real.
@@ -318,6 +322,11 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
 
   stats.indicadorGerenciaTotal = redondear2(stats.indicadorGerenciaTotal);
   stats.precioVentaTotal = redondear2(stats.precioVentaTotal);
+  stats.precioVendedorTotal = redondear2(stats.precioVendedorTotal);
+  stats.precioVendedorPromedio =
+    stats.totalVentas === 0
+      ? 0
+      : redondear2(stats.precioVendedorTotal / stats.totalVentas);
   stats.costoTotal = redondear2(stats.costoTotal);
 
   stats.margenPorcentualTotal =

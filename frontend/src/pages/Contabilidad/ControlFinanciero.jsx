@@ -20,10 +20,16 @@ import {
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import FiltroPeriodoRapido from "../../components/common/FiltroPeriodoRapido";
 import {
   crearLibroControlFinanciero,
   crearNombreExcelControlFinanciero,
 } from "../../utils/controlFinancieroExcel";
+import {
+  getHoyLocal,
+  PERIODO_RAPIDO_ANIO,
+  PERIODOS_RAPIDOS,
+} from "../../utils/dateUtils";
 import { FaFileExcel } from "react-icons/fa";
 
 const money = new Intl.NumberFormat("es-EC", {
@@ -38,41 +44,10 @@ const filtrosIniciales = {
   estado: "ACTIVA",
 };
 
-const PERIODOS_RAPIDOS = [
-  { id: "HOY", label: "Hoy" },
-  { id: "SEMANA", label: "Esta semana" },
-  { id: "MES", label: "Este mes" },
-  { id: "SIETE_DIAS", label: "Ultimos 7 dias" },
-  { id: "ANIO", label: "Este año" },
+const PERIODOS_CONTROL_FINANCIERO = [
+  ...PERIODOS_RAPIDOS,
+  PERIODO_RAPIDO_ANIO,
 ];
-
-const fechaLocalIso = (fecha) => {
-  const anio = fecha.getFullYear();
-  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
-  const dia = String(fecha.getDate()).padStart(2, "0");
-  return `${anio}-${mes}-${dia}`;
-};
-
-const obtenerRangoPeriodo = (periodo, ahora = new Date()) => {
-  const fin = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
-  const inicio = new Date(fin);
-
-  if (periodo === "SEMANA") {
-    const diasDesdeLunes = (fin.getDay() + 6) % 7;
-    inicio.setDate(fin.getDate() - diasDesdeLunes);
-  } else if (periodo === "MES") {
-    inicio.setDate(1);
-  } else if (periodo === "SIETE_DIAS") {
-    inicio.setDate(fin.getDate() - 6);
-  } else if (periodo === "ANIO") {
-    inicio.setMonth(0, 1);
-  }
-
-  return {
-    fechaInicio: fechaLocalIso(inicio),
-    fechaFin: fechaLocalIso(fin),
-  };
-};
 
 const registrosIniciales = {
   caja: [],
@@ -1381,21 +1356,12 @@ export default function ControlFinanciero() {
     setFiltrosAplicados(filtros);
   };
 
-  const aplicarPeriodoRapido = (periodo) => {
-    const rango = obtenerRangoPeriodo(periodo);
+  const aplicarPeriodoRapido = (rango) => {
     const nuevosFiltros = { ...filtros, ...rango };
     setFiltros(nuevosFiltros);
     setPagina(1);
     setFiltrosAplicados(nuevosFiltros);
   };
-
-  const periodoRapidoActivo = PERIODOS_RAPIDOS.find(({ id }) => {
-    const rango = obtenerRangoPeriodo(id);
-    return (
-      rango.fechaInicio === filtros.fechaInicio &&
-      rango.fechaFin === filtros.fechaFin
-    );
-  })?.id;
 
   const resumenCaja = useMemo(
     () => crearResumenCaja(registros.caja || []),
@@ -1535,32 +1501,19 @@ export default function ControlFinanciero() {
               onSubmit={aplicarFiltros}
               className="grid w-full gap-2 lg:w-auto"
             >
-              <div
-                className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1"
-                aria-label="Periodos rapidos"
-              >
-                {PERIODOS_RAPIDOS.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => aplicarPeriodoRapido(id)}
-                    className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition sm:flex-none ${
-                      periodoRapidoActivo === id
-                        ? "bg-green-600 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                    aria-pressed={periodoRapidoActivo === id}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <FiltroPeriodoRapido
+                fechaInicio={filtros.fechaInicio}
+                fechaFin={filtros.fechaFin}
+                onChange={aplicarPeriodoRapido}
+                periodos={PERIODOS_CONTROL_FINANCIERO}
+                activeClassName="bg-green-600 text-white shadow-sm"
+              />
               <div className="grid gap-3 sm:grid-cols-[150px_150px_160px_auto] sm:items-end">
                 <label className="grid gap-1 text-xs font-semibold ">
                   Reporte desde
                   <input
                     type="date"
-                    max={fechaLocalIso(new Date())}
+                    max={getHoyLocal()}
                     value={filtros.fechaInicio}
                     onChange={(event) =>
                       setFiltros((actual) => ({
@@ -1575,7 +1528,7 @@ export default function ControlFinanciero() {
                   Reporte hasta
                   <input
                     type="date"
-                    max={fechaLocalIso(new Date())}
+                    max={getHoyLocal()}
                     value={filtros.fechaFin}
                     onChange={(event) =>
                       setFiltros((actual) => ({

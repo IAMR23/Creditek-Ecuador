@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { API_URL } from "../../../config";
 import { api } from "../../api/client";
+import FiltroPeriodoRapido from "../../components/common/FiltroPeriodoRapido";
 import CalendarioTareas from "../../components/tareas/CalendarioTareas";
 import {
   desplazarMes,
@@ -287,6 +288,11 @@ export default function GestionTareas() {
     setFiltros(filtrosIniciales);
   };
 
+  const aplicarPeriodoRapido = (rango) => {
+    setPagina(1);
+    setFiltros((prev) => ({ ...prev, ...rango }));
+  };
+
   const cambiarLimite = (value) => {
     setPagina(1);
     setLimite(Number(value));
@@ -495,6 +501,15 @@ export default function GestionTareas() {
         <div className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900">
           <Filter size={16} />
           Filtros
+        </div>
+
+        <div className="mb-3">
+          <FiltroPeriodoRapido
+            fechaInicio={filtros.fechaInicio}
+            fechaFin={filtros.fechaFin}
+            onChange={aplicarPeriodoRapido}
+            ariaLabel="Filtrar tareas por período"
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
