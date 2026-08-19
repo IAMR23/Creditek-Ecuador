@@ -71,6 +71,7 @@ const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 const DescuentoDecimo = require('./DescuentoDecimo');
 const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
+const FacturaFisica = require('./FacturaFisica');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -115,6 +116,38 @@ Usuario.hasMany(EgresoCreditekEntrada, {
 EgresoCreditekEntrada.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
+});
+Usuario.hasMany(FacturaFisica, {
+  foreignKey: "usuarioCargaId",
+  as: "facturasFisicasCargadas",
+});
+FacturaFisica.belongsTo(Usuario, {
+  foreignKey: "usuarioCargaId",
+  as: "usuarioCarga",
+});
+Usuario.hasMany(FacturaFisica, {
+  foreignKey: "creadoPorId",
+  as: "facturasFisicasCreadas",
+});
+FacturaFisica.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+Usuario.hasMany(FacturaFisica, {
+  foreignKey: "actualizadoPorId",
+  as: "facturasFisicasActualizadas",
+});
+FacturaFisica.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(FacturaFisica, {
+  foreignKey: "anuladoPorId",
+  as: "facturasFisicasAnuladas",
+});
+FacturaFisica.belongsTo(Usuario, {
+  foreignKey: "anuladoPorId",
+  as: "anuladoPor",
 });
 
 // Agencia ↔ Usuario (muchos a muchos)

@@ -1,0 +1,30 @@
+---
+import SeoPage from "../../components/SeoPage.astro";
+
+const points = [
+  {
+    title: "Información personal",
+    body: "Ten a mano tus datos de contacto y la información solicitada por el asesor comercial.",
+  },
+  {
+    title: "Producto de interés",
+    body: "Indica si buscas celulares, televisiones a crédito u otro producto tecnológico disponible.",
+  },
+  {
+    title: "Validación y respuesta",
+    body: "Creditek revisa tu solicitud y te orienta sobre los siguientes pasos según la información entregada.",
+  },
+];
+---
+
+<SeoPage
+  title="Requisitos para Crédito en Ecuador | Creditek"
+  description="Consulta requisitos para solicitar crédito de celulares y televisiones con Creditek Ecuador. Recibe asesoría personalizada."
+  h1="Requisitos para Crédito en Ecuador"
+  intro="Conoce la información básica para consultar opciones de crédito en Creditek Ecuador y adquirir tecnología en cuotas."
+  image="/Creditek/webp/datos.webp"
+  imageAlt="Requisitos de crédito Creditek"
+  points={points}
+  secondaryText="Ver crédito"
+  secondaryHref="/credito/"
+/>

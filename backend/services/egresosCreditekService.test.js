@@ -4,13 +4,19 @@ jest.mock("../models/EgresoCreditekEntrada", () => ({
   findByPk: jest.fn(),
   findOne: jest.fn(),
 }));
+jest.mock("../models/ControlFinancieroCarga", () => ({}));
+jest.mock("../models/ControlFinancieroRegistro", () => ({
+  findAll: jest.fn(),
+}));
 jest.mock("../models/Usuario", () => ({
   findAll: jest.fn(),
   findOne: jest.fn(),
 }));
 
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
+const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const Usuario = require("../models/Usuario");
+const { Op } = require("sequelize");
 const {
   actualizarRegistro,
   cambiarEstadoRegistro,
@@ -23,6 +29,7 @@ const {
 describe("egresosCreditekService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    ControlFinancieroRegistro.findAll.mockResolvedValue([]);
   });
 
   test("lista usuarios activos, entradas y suma total", async () => {
@@ -45,6 +52,64 @@ describe("egresosCreditekService", () => {
       ],
       total: 62.09,
     });
+  });
+
+  test("incluye entradas vinculadas de control financiero con valor de entrada", async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 2, nombre: "Ana" }]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([
+      { id: 8, usuarioId: 2, valor: "10.00", createdAt: "2026-08-10" },
+    ]);
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      {
+        get: () => ({
+          id: 44,
+          cargaId: 5,
+          tipoRegistro: "VENTA_TV",
+          contrato: "TV-100",
+          cliente: "Cliente TV",
+          vendedor: "Vendedor TV",
+          entradas: "25.50",
+          estadoPagoEntrada: "PAGADO",
+          responsablePagoEntradaId: 2,
+          observacionPagoEntrada: "Entrada verificada",
+          responsablePagoEntrada: { id: 2, nombre: "Ana", activo: true },
+          carga: {
+            id: 5,
+            fechaReporte: "2026-08-11",
+            estado: "ACTIVA",
+            usuario: { id: 7, nombre: "Contabilidad" },
+          },
+          createdAt: "2026-08-11T10:00:00.000Z",
+          updatedAt: "2026-08-11T11:00:00.000Z",
+        }),
+      },
+    ]);
+
+    const resultado = await obtenerRegistros("entradas");
+
+    expect(ControlFinancieroRegistro.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tipoRegistro: { [Op.in]: ["VENTA_TV", "VENTA_CELULAR"] },
+          entradas: { [Op.gt]: 0 },
+        }),
+      }),
+    );
+    expect(resultado.registros).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          origen: "CONTROL_FINANCIERO",
+          controlFinancieroRegistroId: 44,
+          usuarioId: 2,
+          valor: 25.5,
+          estadoPagoEntrada: "PAGADO",
+          tipoProductoEntrada: "TV",
+          contrato: "TV-100",
+        }),
+        expect.objectContaining({ id: 8, origen: "MANUAL", valor: 10 }),
+      ]),
+    );
+    expect(resultado.total).toBe(35.5);
   });
 
   test("crea una entrada para un usuario activo", async () => {
@@ -121,6 +186,7 @@ describe("egresosCreditekService", () => {
     expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ where: { seccion: "CAJAS" } }),
     );
+    expect(ControlFinancieroRegistro.findAll).not.toHaveBeenCalled();
     expect(resultado).toEqual(
       expect.objectContaining({
         seccion: "CAJAS",

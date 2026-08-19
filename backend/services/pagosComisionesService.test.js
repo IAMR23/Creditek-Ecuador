@@ -11,6 +11,7 @@ const {
   getLeaderCommissionMembers,
   getLeaderBonusTeam,
   getUsuarioPayload,
+  isAvailableForTeamWeek,
   calculateSalesPenalty,
   calculateWeeklyPenalty,
   calculateMonthlyBonus,
@@ -632,20 +633,28 @@ describe("pagosComisionesService", () => {
     ).toBe(true);
   });
 
-  test("supervisor excluye del conteo semanal a quien ingresa tarde o sale esa semana", () => {
+  test("supervisor mantiene en la semana al vendedor que ingresa o sale durante esa semana", () => {
     const week = { startDate: "2026-07-09", endDate: "2026-07-15" };
     const members = [
       { usuarioId: 1, fechaIngreso: "2026-06-01", fechaSalida: null },
       { usuarioId: 2, fechaIngreso: "2026-06-01", fechaSalida: "2026-07-12" },
       { usuarioId: 3, fechaIngreso: "2026-06-01", fechaSalida: "2026-07-15" },
-      { usuarioId: 4, fechaIngreso: "2026-06-01", fechaSalida: "2026-07-16" },
-      { usuarioId: 5, fechaIngreso: "2026-07-10", fechaSalida: null },
-      { usuarioId: 6, fechaIngreso: "2026-07-09", fechaSalida: null },
+      { usuarioId: 4, fechaIngreso: "2026-06-01", fechaSalida: "2026-07-08" },
+      { usuarioId: 5, fechaIngreso: "2026-07-16", fechaSalida: null },
+      { usuarioId: 6, fechaIngreso: "2026-07-10", fechaSalida: null },
     ];
 
+    expect(isAvailableForTeamWeek(members[1], week)).toBe(true);
     expect(
       getActiveTeamMembersForWeek(members, week).map((member) => member.usuarioId),
-    ).toEqual([1, 4, 6]);
+    ).toEqual([1, 2, 3, 6]);
+    expect(
+      getCommissionTeamMembersForWeek({
+        members,
+        week,
+        esSupervisor: true,
+      }).map((member) => member.usuarioId),
+    ).toEqual([1, 2, 3, 6]);
   });
 
   test("jefe comercial suma todos sus vendedores aunque sean nuevos o parciales", () => {

@@ -120,6 +120,23 @@ const formatDate = (value) => {
     year: "numeric",
   });
 };
+const toDateKey = (value) => (value ? String(value).slice(0, 10) : null);
+const isSellerAvailableForWeek = (seller, week) => {
+  if (Array.isArray(seller?.semanasDisponiblesEquipo)) {
+    return seller.semanasDisponiblesEquipo
+      .map((weekStart) => String(weekStart).slice(0, 10))
+      .includes(String(week?.startDate || "").slice(0, 10));
+  }
+
+  const inicioSemana = toDateKey(week?.startDate);
+  const finSemana = toDateKey(week?.endDate);
+  const fechaIngreso = toDateKey(seller?.fechaIngreso || seller?.fechaCreacionUsuario);
+  const fechaSalida = toDateKey(seller?.fechaSalida);
+  if (!inicioSemana || !finSemana) return true;
+  if (fechaIngreso && fechaIngreso > finSemana) return false;
+  if (fechaSalida && fechaSalida < inicioSemana) return false;
+  return true;
+};
 const addDays = (date, days) => {
   const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   copy.setDate(copy.getDate() + days);
@@ -1772,9 +1789,17 @@ function WeeklyTeamCard({
 }) {
   const values = getWeekValues(leader, week);
   const configured = Boolean(values.equipoSemanalConfigurado);
+  const sellersForWeek = leader.esSupervisorComercial
+    ? sellers.filter((seller) => isSellerAvailableForWeek(seller, week))
+    : sellers;
+  const sellerIdsForWeek = new Set(
+    sellersForWeek.map((seller) => String(seller.usuarioId)),
+  );
   const savedIds = [...new Set(
     (values.vendedorIdsSeleccionados || []).map((id) => String(id)),
-  )].sort((a, b) => Number(a) - Number(b));
+  )]
+    .filter((id) => !leader.esSupervisorComercial || sellerIdsForWeek.has(id))
+    .sort((a, b) => Number(a) - Number(b));
   const savedSignature = savedIds.join(",");
   const [selectedIds, setSelectedIds] = useState(savedIds);
 
@@ -1815,8 +1840,8 @@ function WeeklyTeamCard({
       </div>
 
       <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded border border-slate-200 p-2">
-        {sellers.length ? (
-          sellers.map((seller) => {
+        {sellersForWeek.length ? (
+          sellersForWeek.map((seller) => {
             const id = String(seller.usuarioId);
             const detalleCargo =
               seller.cargoComision || seller.cargo || seller.rol || "Vendedor";
@@ -1845,7 +1870,7 @@ function WeeklyTeamCard({
           })
         ) : (
           <p className="py-2 text-center text-xs text-slate-500">
-            No hay vendedores de piso disponibles.
+            No hay vendedores disponibles para esta semana.
           </p>
         )}
       </div>

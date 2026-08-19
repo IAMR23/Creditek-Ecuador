@@ -22,6 +22,7 @@ import {
   MonitorCog,
   Table2,
   FileCheck2,
+  ReceiptText,
   MapPinned,
   FileSpreadsheet,
   Megaphone,
@@ -108,6 +109,11 @@ export default function Sidebar({ auth }) {
             label: "Consejo Ejecutivo",
             icon: <UsersRound size={20} />,
             path: "/consejo-ejecutivo",
+          },
+          {
+            label: "Facturas fisicas",
+            icon: <ReceiptText size={20} />,
+            path: "/gerencia/facturas-fisicas",
           },
           {
             label: "Ver planes de batalla",

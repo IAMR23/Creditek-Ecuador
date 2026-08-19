@@ -372,20 +372,15 @@ const isActiveFullWeek = ({ fechaIngreso, fechaSalida, week }) => {
   return true;
 };
 
-const getActiveTeamMembersForWeek = (members, week) =>
-  members.filter((member) => {
-    const inicioSemana = String(week.startDate || "").slice(0, 10);
-    const finSemana = String(week.endDate || "").slice(0, 10);
-    const ingreso = member.fechaIngreso || member.fechaCreacionUsuario;
-    const fechaIngreso = ingreso ? String(ingreso).slice(0, 10) : null;
-    const fechaSalida = member.fechaSalida
-      ? String(member.fechaSalida).slice(0, 10)
-      : null;
-
-    if (fechaIngreso && fechaIngreso > inicioSemana) return false;
-    if (fechaSalida && fechaSalida <= finSemana) return false;
-    return true;
+const isAvailableForTeamWeek = (member, week) =>
+  isActiveDuringWeek({
+    fechaIngreso: member.fechaIngreso || member.fechaCreacionUsuario,
+    fechaSalida: member.fechaSalida,
+    week,
   });
+
+const getActiveTeamMembersForWeek = (members, week) =>
+  members.filter((member) => isAvailableForTeamWeek(member, week));
 
 const getCommissionTeamMembersForWeek = ({ members, week, esSupervisor }) =>
   esSupervisor
@@ -2128,6 +2123,12 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       rol: vendedor.rol,
       cargo: vendedor.cargo,
       cargoComision: vendedor.cargoComision,
+      fechaIngreso: vendedor.fechaIngreso || null,
+      fechaSalida: vendedor.fechaSalida || null,
+      fechaCreacionUsuario: vendedor.fechaCreacionUsuario || null,
+      semanasDisponiblesEquipo: weeks
+        .filter((week) => isAvailableForTeamWeek(vendedor, week))
+        .map((week) => week.startDate),
       tieneMultiplesCargos: vendedor.tieneMultiplesCargos,
       cargosPago: (vendedor.posicionesPago || []).map(
         ({ rolPagoId, cargo, nivel }) => ({ rolPagoId, cargo, nivel }),
@@ -2409,6 +2410,20 @@ const guardarEquipoSemanalLiderComercial = async ({
     );
   }
 
+  if (esSupervisor) {
+    const unavailableSellerId = normalizedSellerIds.find((sellerId) => {
+      const seller = personasPorId.get(sellerId);
+      return !isAvailableForTeamWeek(seller, week);
+    });
+    if (unavailableSellerId) {
+      const sellerName = personasPorId.get(unavailableSellerId)?.nombre;
+      throw createHttpError(
+        `${sellerName || `El vendedor ${unavailableSellerId}`} no estuvo activo en la semana seleccionada`,
+        400,
+      );
+    }
+  }
+
   const otherTeams = await PagoComisionEquipoSemanal.findAll({
     where: {
       semanaInicio: week.startDate,
@@ -2685,6 +2700,7 @@ module.exports = {
   getLeaderBonusExclusionReasons,
   getLeaderBonusTeam,
   getUsuarioPayload,
+  isAvailableForTeamWeek,
   getLogisticsProfile,
   buildLogisticsCommissionRows,
   buildWeeklyRulesByGroup,

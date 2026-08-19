@@ -127,6 +127,9 @@ const fechaHora = (value) => {
   });
 };
 
+const esEntradaControlFinanciero = (registro) =>
+  registro?.origen === "CONTROL_FINANCIERO";
+
 export default function EgresosCreditek() {
   const [usuarios, setUsuarios] = useState([]);
   const [registros, setRegistros] = useState([]);
@@ -142,6 +145,7 @@ export default function EgresosCreditek() {
     usuarioId: "",
     valor: "",
     observacion: "",
+    estadoPagoEntrada: "PENDIENTE",
   });
   const [actualizandoId, setActualizandoId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -183,6 +187,8 @@ export default function EgresosCreditek() {
   const seccion =
     SECCIONES.find((item) => item.id === seccionActiva) || SECCIONES[0];
   const SeccionIcon = seccion.icon;
+  const editandoControlFinanciero =
+    registroEditando && esEntradaControlFinanciero(registroEditando);
 
   const registrosFiltrados = useMemo(() => {
     const query = normalizarTexto(busqueda.trim());
@@ -195,6 +201,13 @@ export default function EgresosCreditek() {
         registro.registradoPor?.nombre,
         registro.actualizadoPor?.nombre,
         ACCIONES[registro.ultimaAccion],
+        registro.origen === "CONTROL_FINANCIERO" ? "control financiero" : "manual",
+        registro.estadoPagoEntrada,
+        registro.tipoProductoEntrada,
+        registro.contrato,
+        registro.cliente,
+        registro.vendedor,
+        registro.modelo,
         registro.activo === false ? "inactivo" : "activo",
       ].some((value) => normalizarTexto(value).includes(query)),
     );
@@ -299,38 +312,74 @@ export default function EgresosCreditek() {
       usuarioId: String(registro.usuarioId || ""),
       valor: Number(registro.valor || 0).toFixed(2),
       observacion: registro.observacion || "",
+      estadoPagoEntrada: registro.estadoPagoEntrada || "PENDIENTE",
     });
   };
 
   const guardarEdicion = async (event) => {
-    event.preventDefault();
+    event?.preventDefault();
     if (!registroEditando || actualizandoId !== null) return;
 
+    const esVinculado = esEntradaControlFinanciero(registroEditando);
     const valorNumerico = normalizarValor(edicion.valor);
     if (!edicion.usuarioId) {
-      Swal.fire("Usuario requerido", "Selecciona un usuario.", "warning");
+      Swal.fire(
+        esVinculado ? "Responsable requerido" : "Usuario requerido",
+        esVinculado ? "Selecciona un responsable." : "Selecciona un usuario.",
+        "warning",
+      );
       return;
     }
-    if (valorNumerico <= 0) {
+    if (!esVinculado && valorNumerico <= 0) {
       Swal.fire("Valor no válido", "Ingresa un valor mayor a cero.", "warning");
       return;
     }
 
     try {
       setActualizandoId(registroEditando.id);
-      const { data } = await api.put(
-        `/api/contabilidad/egresos-creditek/${seccionActiva}/${registroEditando.id}`,
-        {
-          usuarioId: Number(edicion.usuarioId),
-          valor: edicion.valor,
-          observacion: edicion.observacion,
-        },
-      );
-      setRegistros((actuales) =>
-        actuales.map((registro) =>
-          registro.id === data.registro.id ? data.registro : registro,
-        ),
-      );
+      if (esVinculado) {
+        const { data } = await api.patch(
+          `/api/contabilidad/control-financiero/registros/${registroEditando.controlFinancieroRegistroId}/pago-entrada`,
+          {
+            estado: edicion.estadoPagoEntrada,
+            responsableUsuarioId: Number(edicion.usuarioId),
+            observacion: edicion.observacion,
+          },
+        );
+        const registroControl = data.registro || {};
+        const registroActualizado = {
+          ...registroEditando,
+          usuarioId: registroControl.responsablePagoEntradaId,
+          usuario: registroControl.responsablePagoEntrada || null,
+          valor: Number(registroControl.entradas || registroEditando.valor || 0),
+          observacion: registroControl.observacionPagoEntrada || "",
+          estadoPagoEntrada:
+            registroControl.estadoPagoEntrada || edicion.estadoPagoEntrada,
+          actualizadoPor:
+            registroControl.responsablePagoEntrada ||
+            registroEditando.actualizadoPor,
+          updatedAt: registroControl.updatedAt || new Date().toISOString(),
+        };
+        setRegistros((actuales) =>
+          actuales.map((registro) =>
+            registro.id === registroEditando.id ? registroActualizado : registro,
+          ),
+        );
+      } else {
+        const { data } = await api.put(
+          `/api/contabilidad/egresos-creditek/${seccionActiva}/${registroEditando.id}`,
+          {
+            usuarioId: Number(edicion.usuarioId),
+            valor: edicion.valor,
+            observacion: edicion.observacion,
+          },
+        );
+        setRegistros((actuales) =>
+          actuales.map((registro) =>
+            registro.id === data.registro.id ? data.registro : registro,
+          ),
+        );
+      }
       setRegistroEditando(null);
       Swal.fire({
         icon: "success",
@@ -393,6 +442,320 @@ export default function EgresosCreditek() {
       setActualizandoId(null);
     }
   };
+
+  const renderOpcionUsuarioActual = (registro) =>
+    registro.usuario &&
+    !usuarios.some((usuario) => usuario.id === registro.usuarioId) ? (
+      <option value={registro.usuarioId}>
+        {registro.usuario.nombre} (inactivo)
+      </option>
+    ) : null;
+
+  const renderTablaEntradas = () => (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
+              <th className="px-4 py-2.5">Origen</th>
+              <th className="px-3 py-2.5">Contrato</th>
+              <th className="px-3 py-2.5">Cliente</th>
+              <th className="px-3 py-2.5">Vendedor</th>
+              <th className="px-3 py-2.5">Modelo</th>
+              <th className="px-3 py-2.5">Responsable</th>
+              <th className="px-3 py-2.5 text-right">Valor</th>
+              <th className="px-3 py-2.5">Estado</th>
+              <th className="px-3 py-2.5">Observacion</th>
+              <th className="px-3 py-2.5">Actualizado</th>
+              <th className="px-4 py-2.5 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {registrosFiltrados.map((registro) => {
+              const editando = registroEditando?.id === registro.id;
+              const esVinculado = esEntradaControlFinanciero(registro);
+              const bloqueado =
+                actualizandoId !== null && actualizandoId !== registro.id;
+
+              return (
+                <tr
+                  key={registro.id}
+                  className={`align-top transition-colors ${
+                    registro.activo === false
+                      ? "bg-slate-50/80"
+                      : "hover:bg-slate-50"
+                  } ${editando ? "bg-cyan-50/40" : ""}`}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1.5">
+                      <span
+                        className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          esVinculado
+                            ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+                            : "border-slate-200 bg-slate-50 text-slate-600"
+                        }`}
+                      >
+                        {esVinculado ? "Control financiero" : "Manual"}
+                      </span>
+                      {esVinculado && (
+                        <span className="inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                          {registro.tipoProductoEntrada}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="max-w-32 px-3 py-3 text-xs font-semibold text-slate-700">
+                    <span className="block truncate">
+                      {registro.contrato || "-"}
+                    </span>
+                  </td>
+                  <td className="max-w-44 px-3 py-3 text-xs text-slate-600">
+                    <span className="block truncate">
+                      {registro.cliente || "-"}
+                    </span>
+                  </td>
+                  <td className="max-w-40 px-3 py-3 text-xs text-slate-600">
+                    <span className="block truncate">
+                      {registro.vendedor || "-"}
+                    </span>
+                  </td>
+                  <td className="max-w-44 px-3 py-3 text-xs text-slate-600">
+                    <span className="block truncate">
+                      {registro.modelo || "-"}
+                    </span>
+                  </td>
+                  <td className="w-56 px-3 py-3">
+                    {editando ? (
+                      <select
+                        value={edicion.usuarioId}
+                        onChange={(event) =>
+                          setEdicion((actual) => ({
+                            ...actual,
+                            usuarioId: event.target.value,
+                          }))
+                        }
+                        disabled={actualizandoId !== null}
+                        className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      >
+                        <option value="">Seleccionar responsable</option>
+                        {renderOpcionUsuarioActual(registro)}
+                        {usuarios.map((usuario) => (
+                          <option key={usuario.id} value={usuario.id}>
+                            {usuario.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md ${seccion.iconTone}`}
+                        >
+                          <UserRound size={14} />
+                        </span>
+                        <span className="truncate font-semibold text-slate-900">
+                          {registro.usuario?.nombre ||
+                            (esVinculado
+                              ? "Sin responsable"
+                              : `Usuario #${registro.usuarioId}`)}
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="w-32 px-3 py-3 text-right">
+                    {editando && !esVinculado ? (
+                      <span className="relative block">
+                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2 text-xs font-semibold text-slate-400">
+                          $
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={edicion.valor}
+                          onChange={(event) => {
+                            const next = event.target.value;
+                            if (/^\d*([.,]\d{0,2})?$/.test(next)) {
+                              setEdicion((actual) => ({
+                                ...actual,
+                                valor: next,
+                              }));
+                            }
+                          }}
+                          disabled={actualizandoId !== null}
+                          className="h-9 w-full rounded-md border border-slate-300 bg-white pl-6 pr-2 text-right text-xs font-bold text-slate-950 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        className={`font-bold tabular-nums ${
+                          registro.activo === false
+                            ? "text-slate-400 line-through"
+                            : "text-slate-950"
+                        }`}
+                      >
+                        {money.format(Number(registro.valor || 0))}
+                      </span>
+                    )}
+                  </td>
+                  <td className="w-36 px-3 py-3">
+                    {editando && esVinculado ? (
+                      <select
+                        value={edicion.estadoPagoEntrada}
+                        onChange={(event) =>
+                          setEdicion((actual) => ({
+                            ...actual,
+                            estadoPagoEntrada: event.target.value,
+                          }))
+                        }
+                        disabled={actualizandoId !== null}
+                        className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      >
+                        <option value="PENDIENTE">PENDIENTE</option>
+                        <option value="PAGADO">PAGADO</option>
+                      </select>
+                    ) : (
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${
+                          esVinculado
+                            ? registro.estadoPagoEntrada === "PAGADO"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                            : registro.activo === false
+                              ? "border-slate-300 bg-slate-100 text-slate-600"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {esVinculado
+                          ? registro.estadoPagoEntrada || "PENDIENTE"
+                          : registro.activo === false
+                            ? "Inactivo"
+                            : "Activo"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="w-64 px-3 py-3">
+                    {editando ? (
+                      <textarea
+                        value={edicion.observacion}
+                        onChange={(event) =>
+                          setEdicion((actual) => ({
+                            ...actual,
+                            observacion: event.target.value,
+                          }))
+                        }
+                        disabled={actualizandoId !== null}
+                        maxLength={1000}
+                        rows={2}
+                        placeholder="Observacion"
+                        className="min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      />
+                    ) : (
+                      <span className="block max-w-64 break-words text-xs leading-5 text-slate-600">
+                        {registro.observacion || "Sin observacion"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="w-44 px-3 py-3 text-[11px] leading-4 text-slate-500">
+                    <span className="block truncate">
+                      {registro.actualizadoPor?.nombre ||
+                        registro.registradoPor?.nombre ||
+                        "-"}
+                    </span>
+                    <span className="mt-1 flex items-center gap-1.5">
+                      <Clock3 size={12} className="shrink-0" />
+                      <span className="truncate">
+                        {fechaHora(registro.updatedAt || registro.createdAt)}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {editando ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => guardarEdicion()}
+                            disabled={actualizandoId !== null}
+                            className={`inline-flex size-8 items-center justify-center rounded-md text-white shadow-sm disabled:opacity-60 ${seccion.buttonTone}`}
+                            title="Guardar cambios"
+                            aria-label="Guardar cambios"
+                          >
+                            {actualizandoId === registro.id ? (
+                              <RefreshCw size={15} className="animate-spin" />
+                            ) : (
+                              <Save size={15} />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRegistroEditando(null)}
+                            disabled={actualizandoId !== null}
+                            className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50"
+                            title="Cancelar"
+                            aria-label="Cancelar edicion"
+                          >
+                            <X size={15} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => abrirEdicion(registro)}
+                            disabled={actualizandoId !== null || bloqueado}
+                            className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Editar en tabla"
+                            aria-label="Editar en tabla"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          {!esVinculado && (
+                            <button
+                              type="button"
+                              onClick={() => cambiarEstado(registro)}
+                              disabled={actualizandoId !== null || bloqueado}
+                              className={`inline-flex size-8 items-center justify-center rounded-md border bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                registro.activo === false
+                                  ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                  : "border-rose-200 text-rose-700 hover:bg-rose-50"
+                              }`}
+                              title={
+                                registro.activo === false
+                                  ? "Reactivar registro"
+                                  : "Desactivar registro"
+                              }
+                              aria-label={
+                                registro.activo === false
+                                  ? "Reactivar registro"
+                                  : "Desactivar registro"
+                              }
+                            >
+                              {registro.activo === false ? (
+                                <RotateCcw size={15} />
+                              ) : (
+                                <Power size={15} />
+                              )}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+        <span className="text-xs font-semibold uppercase text-slate-500">
+          Total activo
+        </span>
+        <span className={`text-lg font-bold tabular-nums ${seccion.totalTone}`}>
+          {money.format(total)}
+        </span>
+      </div>
+    </div>
+  );
 
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-4 sm:px-5 lg:px-6">
@@ -712,6 +1075,8 @@ export default function EgresosCreditek() {
                 Limpiar búsqueda
               </button>
             </div>
+          ) : seccionActiva === "entradas" ? (
+            renderTablaEntradas()
           ) : (
             <div>
               <div className="hidden grid-cols-[minmax(0,1fr)_110px_92px_minmax(0,1.15fr)_minmax(180px,1.1fr)_84px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase text-slate-500 lg:grid">
@@ -739,9 +1104,37 @@ export default function EgresosCreditek() {
                           <UserRound size={14} />
                         </span>
                         <span className="truncate">
-                          {registro.usuario?.nombre || `Usuario #${registro.usuarioId}`}
+                          {registro.usuario?.nombre ||
+                            (esEntradaControlFinanciero(registro)
+                              ? "Sin responsable"
+                              : `Usuario #${registro.usuarioId}`)}
                         </span>
                       </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            esEntradaControlFinanciero(registro)
+                              ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+                              : "border-slate-200 bg-slate-50 text-slate-600"
+                          }`}
+                        >
+                          {esEntradaControlFinanciero(registro)
+                            ? "Control financiero"
+                            : "Manual"}
+                        </span>
+                        {esEntradaControlFinanciero(registro) && (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                            {registro.tipoProductoEntrada}
+                          </span>
+                        )}
+                      </div>
+                      {esEntradaControlFinanciero(registro) && (
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {registro.contrato
+                            ? `Contrato ${registro.contrato}`
+                            : "Contrato no disponible"}
+                        </p>
+                      )}
                     </div>
                     <div className="min-w-0 sm:text-right">
                       <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Valor</p>
@@ -759,12 +1152,20 @@ export default function EgresosCreditek() {
                       <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Estado</p>
                       <span
                         className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${
-                          registro.activo === false
-                            ? "border-slate-300 bg-slate-100 text-slate-600"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          esEntradaControlFinanciero(registro)
+                            ? registro.estadoPagoEntrada === "PAGADO"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                            : registro.activo === false
+                              ? "border-slate-300 bg-slate-100 text-slate-600"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
                         }`}
                       >
-                        {registro.activo === false ? "Inactivo" : "Activo"}
+                        {esEntradaControlFinanciero(registro)
+                          ? registro.estadoPagoEntrada || "PENDIENTE"
+                          : registro.activo === false
+                            ? "Inactivo"
+                            : "Activo"}
                       </span>
                     </div>
                     <div className="min-w-0 sm:col-span-2 lg:col-span-1">
@@ -772,6 +1173,11 @@ export default function EgresosCreditek() {
                       <p className="break-words text-xs leading-5 text-slate-600">
                         {registro.observacion || "Sin observación"}
                       </p>
+                      {esEntradaControlFinanciero(registro) && (
+                        <p className="mt-1 truncate text-[11px] text-slate-500">
+                          {registro.cliente || "Cliente no disponible"}
+                        </p>
+                      )}
                     </div>
                     <div className="min-w-0 sm:col-span-2 lg:col-span-1">
                       <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Trazabilidad</p>
@@ -813,6 +1219,7 @@ export default function EgresosCreditek() {
                       >
                         <Pencil size={15} />
                         </button>
+                        {!esEntradaControlFinanciero(registro) && (
                         <button
                         type="button"
                         onClick={() => cambiarEstado(registro)}
@@ -833,6 +1240,7 @@ export default function EgresosCreditek() {
                           <Power size={15} />
                         )}
                         </button>
+                        )}
                       </div>
                     </div>
                   </article>
@@ -849,7 +1257,7 @@ export default function EgresosCreditek() {
         </section>
       </div>
 
-      {registroEditando && (
+      {registroEditando && seccionActiva !== "entradas" && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4"
           role="dialog"
@@ -886,7 +1294,7 @@ export default function EgresosCreditek() {
             <form onSubmit={guardarEdicion}>
               <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
                 <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">
-                  Usuario
+                  {editandoControlFinanciero ? "Responsable" : "Usuario"}
                   <select
                     value={edicion.usuarioId}
                     onChange={(event) =>
@@ -898,6 +1306,11 @@ export default function EgresosCreditek() {
                     disabled={actualizandoId !== null}
                     className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                   >
+                    <option value="">
+                      {editandoControlFinanciero
+                        ? "Seleccionar responsable"
+                        : "Seleccionar usuario"}
+                    </option>
                     {registroEditando.usuario &&
                       !usuarios.some(
                         (usuario) => usuario.id === registroEditando.usuarioId,
@@ -930,23 +1343,46 @@ export default function EgresosCreditek() {
                           setEdicion((actual) => ({ ...actual, valor: next }));
                         }
                       }}
-                      disabled={actualizandoId !== null}
-                      className="h-10 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-right text-sm font-bold text-slate-950 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      disabled={
+                        actualizandoId !== null || editandoControlFinanciero
+                      }
+                      className={`h-10 w-full rounded-md border border-slate-300 pl-8 pr-3 text-right text-sm font-bold outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${
+                        editandoControlFinanciero
+                          ? "bg-slate-50 text-slate-500"
+                          : "bg-white text-slate-950"
+                      }`}
                     />
                   </span>
                 </label>
 
                 <div className="grid content-end gap-1.5 text-xs font-semibold text-slate-700">
-                  Estado
-                  <span
-                    className={`inline-flex h-10 items-center rounded-md border px-3 text-sm ${
-                      registroEditando.activo === false
-                        ? "border-slate-300 bg-slate-100 text-slate-600"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    }`}
-                  >
-                    {registroEditando.activo === false ? "Inactivo" : "Activo"}
-                  </span>
+                  {editandoControlFinanciero ? "Estado de pago" : "Estado"}
+                  {editandoControlFinanciero ? (
+                    <select
+                      value={edicion.estadoPagoEntrada}
+                      onChange={(event) =>
+                        setEdicion((actual) => ({
+                          ...actual,
+                          estadoPagoEntrada: event.target.value,
+                        }))
+                      }
+                      disabled={actualizandoId !== null}
+                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    >
+                      <option value="PENDIENTE">PENDIENTE</option>
+                      <option value="PAGADO">PAGADO</option>
+                    </select>
+                  ) : (
+                    <span
+                      className={`inline-flex h-10 items-center rounded-md border px-3 text-sm ${
+                        registroEditando.activo === false
+                          ? "border-slate-300 bg-slate-100 text-slate-600"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {registroEditando.activo === false ? "Inactivo" : "Activo"}
+                    </span>
+                  )}
                 </div>
 
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">

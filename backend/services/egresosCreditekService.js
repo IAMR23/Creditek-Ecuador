@@ -1,8 +1,12 @@
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
+const ControlFinancieroCarga = require("../models/ControlFinancieroCarga");
+const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const Usuario = require("../models/Usuario");
+const { Op } = require("sequelize");
 
 const MAX_VALOR = 9999999999.99;
 const SECCIONES = ["ENTRADAS", "CAJAS", "TRANSFERENCIAS", "DESCUENTOS"];
+const TIPOS_VENTA_CONTROL_FINANCIERO = ["VENTA_TV", "VENTA_CELULAR"];
 
 const crearError = (message, statusCode = 400) => {
   const error = new Error(message);
@@ -48,9 +52,52 @@ const serializarEntrada = (value) => {
   const entrada = typeof value?.toJSON === "function" ? value.toJSON() : value;
   return {
     ...entrada,
+    origen: entrada.origen || "MANUAL",
     valor: Number(entrada.valor || 0),
     observacion: entrada.observacion || "",
   };
+};
+
+const serializarEntradaControlFinanciero = (value) => {
+  const registro = typeof value?.toJSON === "function" ? value.toJSON() : value;
+  const tipoProductoEntrada =
+    registro.tipoRegistro === "VENTA_TV" ? "TV" : "CELULAR";
+
+  return {
+    id: `control-financiero-${registro.id}`,
+    origen: "CONTROL_FINANCIERO",
+    controlFinancieroRegistroId: registro.id,
+    usuarioId: registro.responsablePagoEntradaId || null,
+    usuario: registro.responsablePagoEntrada || null,
+    valor: Number(registro.entradas || 0),
+    observacion: registro.observacionPagoEntrada || "",
+    seccion: "ENTRADAS",
+    activo: true,
+    ultimaAccion: "CONTROL_FINANCIERO",
+    estadoPagoEntrada: registro.estadoPagoEntrada || "PENDIENTE",
+    tipoProductoEntrada,
+    contrato: registro.contrato || "",
+    cliente: registro.cliente || "",
+    vendedor: registro.vendedor || "",
+    modelo: registro.modelo || "",
+    imei: registro.imei || "",
+    fecha: registro.fecha || "",
+    cargaId: registro.cargaId,
+    carga: registro.carga || null,
+    registradoPor: registro.carga?.usuario || null,
+    actualizadoPor: registro.responsablePagoEntrada || null,
+    createdAt: registro.createdAt,
+    updatedAt: registro.updatedAt,
+  };
+};
+
+const ordenarPorActividad = (a, b) => {
+  const tiempoA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+  const tiempoB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+  const fechaA = Number.isNaN(tiempoA) ? 0 : tiempoA;
+  const fechaB = Number.isNaN(tiempoB) ? 0 : tiempoB;
+  if (fechaA !== fechaB) return fechaB - fechaA;
+  return String(b.id).localeCompare(String(a.id), "es", { numeric: true });
 };
 
 const includeUsuarios = [
@@ -91,19 +138,62 @@ const obtenerRegistroCompleto = async (registro) => {
 
 const obtenerRegistros = async (seccionValue) => {
   const seccion = normalizarSeccion(seccionValue);
-  const [usuarios, registrosValues] = await Promise.all([
-    Usuario.findAll({
-      where: { activo: true },
-      attributes: ["id", "nombre"],
-      order: [["nombre", "ASC"], ["id", "ASC"]],
-    }),
-    EgresoCreditekEntrada.findAll({
-      where: { seccion },
-      include: includeUsuarios,
-      order: [["createdAt", "DESC"], ["id", "DESC"]],
-    }),
-  ]);
-  const registros = registrosValues.map(serializarEntrada);
+  const incluirControlFinanciero = seccion === "ENTRADAS";
+  const [usuarios, registrosValues, registrosControlFinanciero] =
+    await Promise.all([
+      Usuario.findAll({
+        where: { activo: true },
+        attributes: ["id", "nombre"],
+        order: [["nombre", "ASC"], ["id", "ASC"]],
+      }),
+      EgresoCreditekEntrada.findAll({
+        where: { seccion },
+        include: includeUsuarios,
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+      }),
+      incluirControlFinanciero
+        ? ControlFinancieroRegistro.findAll({
+            where: {
+              tipoRegistro: { [Op.in]: TIPOS_VENTA_CONTROL_FINANCIERO },
+              entradas: { [Op.gt]: 0 },
+            },
+            include: [
+              {
+                model: Usuario,
+                as: "responsablePagoEntrada",
+                attributes: ["id", "nombre", "activo"],
+                required: false,
+              },
+              {
+                model: ControlFinancieroCarga,
+                as: "carga",
+                attributes: [
+                  "id",
+                  "fechaReporte",
+                  "archivoGenerado",
+                  "estado",
+                  "usuarioId",
+                ],
+                where: { estado: "ACTIVA" },
+                required: true,
+                include: [
+                  {
+                    model: Usuario,
+                    as: "usuario",
+                    attributes: ["id", "nombre"],
+                    required: false,
+                  },
+                ],
+              },
+            ],
+            order: [["updatedAt", "DESC"], ["id", "DESC"]],
+          })
+        : Promise.resolve([]),
+    ]);
+  const registros = [
+    ...registrosValues.map(serializarEntrada),
+    ...registrosControlFinanciero.map(serializarEntradaControlFinanciero),
+  ].sort(ordenarPorActividad);
 
   return {
     seccion,

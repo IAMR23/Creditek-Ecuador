@@ -133,6 +133,11 @@ const getErrorMessage = (error, fallback) =>
 const redondearMoneda = (value) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
+const esTabVentas = (tipo) => ["ventasTv", "ventasCelular"].includes(tipo);
+
+const filtrarRegistrosConEntrada = (items = []) =>
+  items.filter((registro) => Number(registro.entradas || 0) > 0);
+
 const crearResumenCaja = (registros) => {
   const acumulados = Object.fromEntries(
     AGENCIAS_CAJA.map((agencia) => [agencia, { uphone: 0, creditv: 0 }]),
@@ -973,6 +978,7 @@ export default function ControlFinanciero() {
   });
   const [tabActivo, setTabActivo] = useState("caja");
   const [busqueda, setBusqueda] = useState("");
+  const [soloConEntrada, setSoloConEntrada] = useState(false);
   const [loadingCargas, setLoadingCargas] = useState(true);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const [anulandoCarga, setAnulandoCarga] = useState(false);
@@ -1401,9 +1407,17 @@ export default function ControlFinanciero() {
         ["ventasTv", "ventasCelular"].includes(id),
       )
     : tabs;
+  const tabVentasActivo = esTabVentas(tabActivo);
+  const totalRegistrosConEntrada = tabVentasActivo
+    ? filtrarRegistrosConEntrada(registros[tabActivo] || []).length
+    : 0;
+  const registrosExportablesActuales =
+    soloConEntrada && tabVentasActivo
+      ? filtrarRegistrosConEntrada(registros[tabActivo] || [])
+      : registros[tabActivo] || [];
 
   const exportarSeccionExcel = async () => {
-    const registrosExportar = registros[tabActivo] || [];
+    const registrosExportar = registrosExportablesActuales;
     if (!registrosExportar.length || exportandoExcel) {
       if (!registrosExportar.length) {
         Swal.fire(
@@ -1450,9 +1464,13 @@ export default function ControlFinanciero() {
   const registrosVisibles = useMemo(() => {
     const termino = busqueda.trim().toLocaleLowerCase("es");
     const actuales = registros[tabActivo] || [];
-    if (!termino) return actuales;
+    const base =
+      soloConEntrada && esTabVentas(tabActivo)
+        ? filtrarRegistrosConEntrada(actuales)
+        : actuales;
+    if (!termino) return base;
 
-    return actuales.filter((registro) =>
+    return base.filter((registro) =>
       [
         registro.contrato,
         registro.fecha,
@@ -1472,7 +1490,7 @@ export default function ControlFinanciero() {
           .includes(termino),
       ),
     );
-  }, [busqueda, registros, tabActivo]);
+  }, [busqueda, registros, soloConEntrada, tabActivo]);
 
   const resultadosConciliacionVisibles = useMemo(() => {
     const resultados = conciliacionEntradas?.resultados || [];
@@ -1839,17 +1857,41 @@ export default function ControlFinanciero() {
                     />
                   </label>
                   {tabActivo !== "conciliacionEntradas" && (
-                    <button
-                      type="button"
-                      onClick={exportarSeccionExcel}
-                      disabled={
-                        exportandoExcel || !(registros[tabActivo]?.length > 0)
-                      }
-                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <FaFileExcel size={17} />
-                      {exportandoExcel ? "Generando..." : "Exportar"}
-                    </button>
+                    <>
+                      {tabVentasActivo && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSoloConEntrada((actual) => !actual)
+                          }
+                          aria-pressed={soloConEntrada}
+                          className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                            soloConEntrada
+                              ? "border-amber-300 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-amber-200 hover:text-amber-700"
+                          }`}
+                          title="Filtrar ventas con valor de entrada"
+                        >
+                          <DollarSign size={16} />
+                          {soloConEntrada ? "Con entrada" : "Todas"}
+                          <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs">
+                            {totalRegistrosConEntrada}
+                          </span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={exportarSeccionExcel}
+                        disabled={
+                          exportandoExcel ||
+                          !(registrosExportablesActuales.length > 0)
+                        }
+                        className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FaFileExcel size={17} />
+                        {exportandoExcel ? "Generando..." : "Exportar"}
+                      </button>
+                    </>
                   )}
                   {cargaSeleccionada?.estado === "ACTIVA" && (
                     <button
