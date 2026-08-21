@@ -1,0 +1,17 @@
+{
+  "name": "creditek-shortener",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Microservicio liviano de enlaces cortos para Creditek Ecuador",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "express": "5.1.0"
+  }
+}
