@@ -97,6 +97,15 @@ export const getCandidateEducationLevel = (postulacion) => {
   return importedApplicant.nivelEstudio || datos.nivelEstudio || "-";
 };
 
+export const getCandidateThirdLevelTitle = (postulacion) => {
+  const datos = getPersonalData(postulacion);
+  const hasThirdLevelTitle =
+    String(datos.tieneTituloTercerNivel || "").trim().toLowerCase() === "si";
+  const title = String(datos.tituloTercerNivel || "").trim();
+
+  return hasThirdLevelTitle && title ? title : "";
+};
+
 export const getInitials = (name = "") => {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "--";

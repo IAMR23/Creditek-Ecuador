@@ -21,6 +21,7 @@ import {
   getCandidateIdentification,
   getCandidateName,
   getCandidatePhone,
+  getCandidateThirdLevelTitle,
   getInitials,
   getInterviewStatus,
 } from "../../utils/interviews";
@@ -61,6 +62,8 @@ function CandidateCell({ interview }) {
 }
 
 function CandidateProfileCell({ interview }) {
+  const thirdLevelTitle = getCandidateThirdLevelTitle(interview);
+
   return (
     <dl className="space-y-1 text-xs leading-4 text-slate-700">
       <div>
@@ -75,6 +78,12 @@ function CandidateProfileCell({ interview }) {
         <dt className="inline font-bold text-slate-500">Estudios: </dt>
         <dd className="inline font-semibold">{getCandidateEducationLevel(interview)}</dd>
       </div>
+      {thirdLevelTitle && (
+        <div>
+          <dt className="inline font-bold text-slate-500">Titulo: </dt>
+          <dd className="inline break-words font-semibold">{thirdLevelTitle}</dd>
+        </div>
+      )}
     </dl>
   );
 }
@@ -344,6 +353,7 @@ function InterviewActions({
 function MobileCard(props) {
   const { interview } = props;
   const email = getCandidateEmail(interview);
+  const thirdLevelTitle = getCandidateThirdLevelTitle(interview);
 
   return (
     <article className="space-y-4 border-b border-slate-100 p-4 last:border-b-0">
@@ -378,6 +388,16 @@ function MobileCard(props) {
             {getCandidateEducationLevel(interview)}
           </p>
         </div>
+        {thirdLevelTitle && (
+          <div className="col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Titulo de tercer nivel
+            </p>
+            <p className="mt-1 break-words font-semibold text-slate-700">
+              {thirdLevelTitle}
+            </p>
+          </div>
+        )}
       </div>
       <InterviewStatusBadge status={getInterviewStatus(interview)} />
       <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">

@@ -21,6 +21,7 @@ import {
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
 import ModalDetalle from "../../components/PostulacionDetalle";
+import { getCandidateThirdLevelTitle } from "../../utils/interviews";
 
 const dash = "-";
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
@@ -1335,6 +1336,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                     const totalRegistrosTxt = familiaresTxt.length + (titularTxt ? 1 : 0);
                     const trabajos = p.formulario?.historial_laboral?.length || 0;
                     const motivoDescarte = p.formulario?.metadata?.motivo_descarte || "";
+                    const tituloTercerNivel = getCandidateThirdLevelTitle(p);
 
                     const editingObservation = editingObservationId === p.id;
 
@@ -1365,6 +1367,14 @@ export default function Postulaciones({ modo = "postulacion" }) {
                               <dt className="font-bold text-slate-500">Estado civil</dt>
                               <dd>{datos.estadoCivil || dash}</dd>
                             </div>
+                            {tituloTercerNivel && (
+                              <div>
+                                <dt className="font-bold text-slate-500">
+                                  Titulo de tercer nivel
+                                </dt>
+                                <dd className="break-words">{tituloTercerNivel}</dd>
+                              </div>
+                            )}
                           </dl>
                         </td>
                         <td className={tdClass}>
