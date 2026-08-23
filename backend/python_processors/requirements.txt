@@ -1,3 +1,6 @@
 pandas
 pdfplumber
 openpyxl
+Pillow
+pytesseract
+pypdfium2

@@ -3,7 +3,12 @@ FROM node:22
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && apt-get install -y --no-install-recommends \
+      python3 \
+      python3-venv \
+      tesseract-ocr \
+      tesseract-ocr-eng \
+      tesseract-ocr-spa \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHON_BIN=/opt/venv/bin/python

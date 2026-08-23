@@ -50,8 +50,7 @@ const parseCookies = (req, _res, next) => {
 // Permitir localhost y dominio de producción
 const allowedOrigins = [
   process.env.WEB_CORS,
-  "http://192.168.1.123:5173",
-  "http://192.168.1.4:5173",
+  "http://192.168.1.18:5173",
   /^https?:\/\/localhost:\d+$/,
   /^https?:\/\/127\.0\.0\.1:\d+$/,
   /^https?:\/\/(www\.)?creditek-ecuador\.com(:\d+)?$/,
@@ -223,6 +222,7 @@ connectDB()
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/api/gerencia/facturas-fisicas", require("./routes/Gerencia/facturasFisicasRoutes"));
+    app.use("/api/gerencia/facturas-ia", require("./routes/Gerencia/facturasIaRoutes"));
     app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
     app.use("/api/gerencia/consejo-ejecutivo/planes", require("./routes/Gerencia/consejoEjecutivoPlanesRoutes"));

@@ -28,6 +28,7 @@ import {
   Megaphone,
   UsersRound,
   WalletCards,
+  Sparkles,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
@@ -114,6 +115,11 @@ export default function Sidebar({ auth }) {
             label: "Facturas fisicas",
             icon: <ReceiptText size={20} />,
             path: "/gerencia/facturas-fisicas",
+          },
+          {
+            label: "Facturas IA",
+            icon: <Sparkles size={20} />,
+            path: "/gerencia/facturas-ia",
           },
           {
             label: "Ver planes de batalla",

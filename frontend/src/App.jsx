@@ -97,6 +97,7 @@ import VerPlanesBatalla from "./pages/Admin/VerPlanesBatalla";
 import SecretariosEjecutivos from "./pages/Admin/SecretariosEjecutivos";
 import ConsejoEjecutivo from "./pages/Admin/ConsejoEjecutivo";
 import FacturasFisicas from "./pages/Gerencia/FacturasFisicas";
+import FacturasIa from "./pages/Gerencia/FacturasIa";
 import ConciliacionFacturas from "./pages/Admin/ConciliacionFacturas";
 import Nomina from "./pages/Contabilidad/Nomina";
 import RolesPago from "./pages/Contabilidad/RolesPago";
@@ -349,6 +350,7 @@ function App() {
                 <Route path="secretarios-ejecutivos" element={protect(<SecretariosEjecutivos />, "/secretarios-ejecutivos")} />
                 <Route path="consejo-ejecutivo" element={protect(<ConsejoEjecutivo />, "/consejo-ejecutivo")} />
                 <Route path="gerencia/facturas-fisicas" element={protect(<FacturasFisicas />, "/gerencia/facturas-fisicas")} />
+                <Route path="gerencia/facturas-ia" element={protect(<FacturasIa />, "/gerencia/facturas-ia")} />
                 <Route path="ver-planes-batalla" element={protect(<VerPlanesBatalla />, "/ver-planes-batalla")} />
                 <Route
                   path="entrega-logistica/:id"

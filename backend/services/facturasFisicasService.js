@@ -42,6 +42,12 @@ const includeUsuarios = [
     attributes: ["id", "nombre"],
     required: false,
   },
+  {
+    model: Usuario,
+    as: "ocrProcesadoPor",
+    attributes: ["id", "nombre"],
+    required: false,
+  },
 ];
 
 const crearError = (message, statusCode = 400, extra = {}) => {

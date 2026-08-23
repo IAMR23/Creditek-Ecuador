@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+/* eslint-disable react/prop-types */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { AlertTriangle, BarChart3, Filter, RefreshCcw, Search, X } from "lucide-react";
 import { API_URL } from "../../../config";
@@ -78,7 +79,7 @@ export default function OportunidadesMatriz() {
   });
 
   const columns = useMemo(() => normalizeColumns(matriz?.columns), [matriz]);
-  const rows = matriz?.rows || [];
+  const rows = useMemo(() => matriz?.rows || [], [matriz]);
   const totals = matriz?.totals || { values: {}, total: 0 };
 
   const owners = useMemo(
@@ -165,7 +166,7 @@ export default function OportunidadesMatriz() {
       ? `${fechasAplicadas.fechaInicio || "Inicio"} - ${fechasAplicadas.fechaFin || "Hoy"}`
       : "Sin filtro de fecha";
 
-  const cargarMatriz = async (filtrosConsulta = filtros) => {
+  const cargarMatriz = useCallback(async (filtrosConsulta) => {
     if (
       filtrosConsulta.fechaInicio &&
       filtrosConsulta.fechaFin &&
@@ -204,11 +205,11 @@ export default function OportunidadesMatriz() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     cargarMatriz(filtrosBase);
-  }, []);
+  }, [cargarMatriz, filtrosBase]);
 
   const actualizarFiltro = (campo, value) => {
     setFiltros((prev) => ({
@@ -248,7 +249,7 @@ export default function OportunidadesMatriz() {
         <button
           type="button"
           className="inline-flex h-9 items-center justify-center gap-2 rounded bg-green-600 px-4 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
-          onClick={() => cargarMatriz()}
+          onClick={() => cargarMatriz(filtros)}
           disabled={loading}
           title="Actualizar"
         >
@@ -351,7 +352,7 @@ export default function OportunidadesMatriz() {
             <button
               type="button"
               className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded bg-green-600 px-4 text-sm font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => cargarMatriz()}
+              onClick={() => cargarMatriz(filtros)}
               disabled={loading}
             >
               <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />

@@ -72,6 +72,8 @@ const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 const DescuentoDecimo = require('./DescuentoDecimo');
 const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
 const FacturaFisica = require('./FacturaFisica');
+const FacturaFisicaProductoOcr = require('./FacturaFisicaProductoOcr');
+const FacturaIaResultado = require('./FacturaIaResultado');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -148,6 +150,70 @@ Usuario.hasMany(FacturaFisica, {
 FacturaFisica.belongsTo(Usuario, {
   foreignKey: "anuladoPorId",
   as: "anuladoPor",
+});
+Usuario.hasMany(FacturaFisica, {
+  foreignKey: "ocrProcesadoPorId",
+  as: "facturasFisicasOcrProcesadas",
+});
+FacturaFisica.belongsTo(Usuario, {
+  foreignKey: "ocrProcesadoPorId",
+  as: "ocrProcesadoPor",
+});
+FacturaFisica.hasMany(FacturaFisicaProductoOcr, {
+  foreignKey: "facturaFisicaId",
+  as: "productosOcr",
+});
+FacturaFisicaProductoOcr.belongsTo(FacturaFisica, {
+  foreignKey: "facturaFisicaId",
+  as: "facturaFisica",
+});
+Usuario.hasMany(FacturaFisicaProductoOcr, {
+  foreignKey: "detectadoPorId",
+  as: "productosFacturaOcrDetectados",
+});
+FacturaFisicaProductoOcr.belongsTo(Usuario, {
+  foreignKey: "detectadoPorId",
+  as: "detectadoPor",
+});
+Usuario.hasMany(FacturaFisicaProductoOcr, {
+  foreignKey: "actualizadoPorId",
+  as: "productosFacturaOcrActualizados",
+});
+FacturaFisicaProductoOcr.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(FacturaFisicaProductoOcr, {
+  foreignKey: "confirmadoPorId",
+  as: "productosFacturaOcrConfirmados",
+});
+FacturaFisicaProductoOcr.belongsTo(Usuario, {
+  foreignKey: "confirmadoPorId",
+  as: "confirmadoPor",
+});
+Usuario.hasMany(FacturaFisicaProductoOcr, {
+  foreignKey: "descartadoPorId",
+  as: "productosFacturaOcrDescartados",
+});
+FacturaFisicaProductoOcr.belongsTo(Usuario, {
+  foreignKey: "descartadoPorId",
+  as: "descartadoPor",
+});
+Usuario.hasMany(FacturaIaResultado, {
+  foreignKey: "creadoPorId",
+  as: "facturasIaCreadas",
+});
+FacturaIaResultado.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+Usuario.hasMany(FacturaIaResultado, {
+  foreignKey: "seleccionadoPorId",
+  as: "facturasIaSeleccionadas",
+});
+FacturaIaResultado.belongsTo(Usuario, {
+  foreignKey: "seleccionadoPorId",
+  as: "seleccionadoPor",
 });
 
 // Agencia ↔ Usuario (muchos a muchos)

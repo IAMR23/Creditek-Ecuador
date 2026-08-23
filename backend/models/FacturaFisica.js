@@ -10,6 +10,14 @@ const ESTADOS_FACTURA_FISICA = [
   "ERROR",
 ];
 
+const ESTADOS_OCR_FACTURA_FISICA = [
+  "NO_PROCESADO",
+  "PROCESANDO",
+  "PROCESADO",
+  "PROCESADO_CON_ADVERTENCIAS",
+  "ERROR",
+];
+
 const FacturaFisica = sequelize.define(
   "FacturaFisica",
   {
@@ -135,6 +143,64 @@ const FacturaFisica = sequelize.define(
         key: "id",
       },
     },
+    ocrEstado: {
+      type: DataTypes.STRING(40),
+      allowNull: false,
+      defaultValue: "NO_PROCESADO",
+      validate: {
+        isIn: [ESTADOS_OCR_FACTURA_FISICA],
+      },
+    },
+    ocrTexto: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    ocrCampos: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    ocrAdvertencias: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
+    },
+    ocrMetadata: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    ocrError: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    ocrProcesadoEn: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    ocrProcesadoPorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id",
+      },
+    },
+    ocrMotor: {
+      type: DataTypes.STRING(80),
+      allowNull: true,
+    },
+    ocrVersion: {
+      type: DataTypes.STRING(40),
+      allowNull: true,
+    },
+    ocrHistorial: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
+    },
+    ocrProcesamientoToken: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
   },
   {
     tableName: "facturas_fisicas",
@@ -149,10 +215,12 @@ const FacturaFisica = sequelize.define(
       },
       { name: "facturas_fisicas_ruc_proveedor_idx", fields: ["rucProveedor"] },
       { name: "facturas_fisicas_numero_factura_idx", fields: ["numeroFactura"] },
+      { name: "facturas_fisicas_ocr_estado_idx", fields: ["ocrEstado"] },
     ],
   },
 );
 
 FacturaFisica.ESTADOS = ESTADOS_FACTURA_FISICA;
+FacturaFisica.ESTADOS_OCR = ESTADOS_OCR_FACTURA_FISICA;
 
 module.exports = FacturaFisica;

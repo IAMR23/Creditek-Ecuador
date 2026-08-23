@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Ban,
@@ -16,8 +16,18 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import FacturaFisicaOcrPanel from "../../components/Gerencia/FacturaFisicaOcrPanel";
 
 const API_BASE = "/api/gerencia/facturas-fisicas";
+const CAMPOS_FORMALES_OCR = [
+  "proveedor",
+  "rucProveedor",
+  "numeroFactura",
+  "fechaEmision",
+  "subtotal",
+  "impuestos",
+  "total",
+];
 const ESTADOS = [
   "CARGADA",
   "PENDIENTE_REVISION",
@@ -120,9 +130,13 @@ export default function FacturasFisicas() {
   const [loading, setLoading] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [procesandoOcr, setProcesandoOcr] = useState(false);
+  const [aplicandoOcr, setAplicandoOcr] = useState(false);
   const [modalCarga, setModalCarga] = useState(false);
   const [archivo, setArchivo] = useState(null);
   const [previewCarga, setPreviewCarga] = useState("");
+  const [origenCarga, setOrigenCarga] = useState("WEB");
+  const cameraInputRef = useRef(null);
   const [detalle, setDetalle] = useState(null);
   const [visorUrl, setVisorUrl] = useState("");
   const [visorMime, setVisorMime] = useState("");
@@ -179,10 +193,30 @@ export default function FacturasFisicas() {
     };
   }, [previewCarga, visorUrl]);
 
-  const seleccionarArchivo = (file) => {
+  const seleccionarArchivo = (file, origen = "WEB") => {
     if (previewCarga) URL.revokeObjectURL(previewCarga);
     setArchivo(file || null);
     setPreviewCarga(file ? URL.createObjectURL(file) : "");
+    setOrigenCarga(file ? origen : "WEB");
+  };
+
+  const abrirModalCarga = () => {
+    seleccionarArchivo(null);
+    setModalCarga(true);
+  };
+
+  const cerrarModalCarga = () => {
+    if (subiendo) return;
+    seleccionarArchivo(null);
+    setModalCarga(false);
+  };
+
+  const repetirFoto = () => {
+    seleccionarArchivo(null);
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+      cameraInputRef.current.click();
+    }
   };
 
   const subirFactura = async (event) => {
@@ -194,7 +228,7 @@ export default function FacturasFisicas() {
 
     const formData = new FormData();
     formData.append("archivo", archivo);
-    formData.append("origenCarga", "WEB");
+    formData.append("origenCarga", origenCarga);
 
     try {
       setSubiendo(true);
@@ -339,6 +373,102 @@ export default function FacturasFisicas() {
     }
   };
 
+  const procesarOcr = async () => {
+    if (!detalle || procesandoOcr || detalle.estado === "ANULADA") return;
+    try {
+      setProcesandoOcr(true);
+      const { data } = await api.post(`${API_BASE}/${detalle.id}/ocr`);
+      setDetalle(data.factura);
+      await cargarFacturas({ page: paginacion.page, silent: true });
+      Swal.fire({
+        icon: data.factura?.ocrAdvertencias?.length ? "warning" : "success",
+        title: data.factura?.ocrAdvertencias?.length
+          ? "OCR procesado con advertencias"
+          : "OCR procesado",
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      try {
+        const { data } = await api.get(`${API_BASE}/${detalle.id}`);
+        setDetalle(data.factura);
+      } catch {
+        // Se conserva el detalle visible si no fue posible refrescar el error OCR.
+      }
+      Swal.fire(
+        "Error OCR",
+        error.response?.data?.message || "No se pudo procesar el documento.",
+        "error",
+      );
+    } finally {
+      setProcesandoOcr(false);
+    }
+  };
+
+  const aplicarSugerenciasOcr = async (campos) => {
+    if (!detalle || aplicandoOcr || !campos?.length) return false;
+    try {
+      setAplicandoOcr(true);
+      let response;
+      try {
+        response = await api.patch(`${API_BASE}/${detalle.id}/aplicar-ocr`, {
+          campos,
+        });
+      } catch (error) {
+        if (error.response?.data?.code !== "OCR_ADDITIONAL_DATA_CONFLICT") {
+          throw error;
+        }
+        const conflicts = error.response.data.conflictos || [];
+        const confirmation = await Swal.fire({
+          icon: "warning",
+          title: "Datos adicionales existentes",
+          text: `Ya existen valores distintos para: ${conflicts.join(", ")}. ¿Deseas reemplazarlos con la sugerencia OCR?`,
+          showCancelButton: true,
+          confirmButtonText: "Sí, reemplazar",
+          cancelButtonText: "Conservar actuales",
+          confirmButtonColor: "#b45309",
+        });
+        if (!confirmation.isConfirmed) return false;
+        response = await api.patch(`${API_BASE}/${detalle.id}/aplicar-ocr`, {
+          campos,
+          sobrescribirDatosAdicionales: true,
+        });
+      }
+      const { data } = response;
+      setDetalle(data.factura);
+      setDatosAdicionales(
+        crearDatosAdicionalesArray(data.factura?.datosAdicionales),
+      );
+      setForm((actual) =>
+        campos.filter((field) => CAMPOS_FORMALES_OCR.includes(field)).reduce(
+          (next, field) => ({
+            ...next,
+            [field]: data.factura?.[field] ?? "",
+          }),
+          actual,
+        ),
+      );
+      await cargarFacturas({ page: paginacion.page, silent: true });
+      Swal.fire({
+        icon: "success",
+        title: "Sugerencias aplicadas",
+        text: `${data.camposAplicados?.length || campos.length} campo(s) actualizado(s).`,
+        timer: 1500,
+        showConfirmButton: false,
+      });
+      return true;
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudieron aplicar las sugerencias OCR.",
+        "error",
+      );
+      return false;
+    } finally {
+      setAplicandoOcr(false);
+    }
+  };
+
   const aplicarFiltros = (event) => {
     event.preventDefault();
     setPaginacion((actual) => ({ ...actual, page: 1 }));
@@ -392,7 +522,7 @@ export default function FacturasFisicas() {
             </button>
             <button
               type="button"
-              onClick={() => setModalCarga(true)}
+              onClick={abrirModalCarga}
               className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
             >
               <Plus size={17} />
@@ -654,7 +784,7 @@ export default function FacturasFisicas() {
 
       {modalCarga && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-4">
-          <section className="mx-auto mt-8 w-full max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+          <section className="mx-auto my-4 w-full max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl sm:my-8">
             <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
                 <h2 className="text-base font-bold text-slate-950">
@@ -666,83 +796,126 @@ export default function FacturasFisicas() {
               </div>
               <button
                 type="button"
-                onClick={() => setModalCarga(false)}
-                className="inline-flex size-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+                onClick={cerrarModalCarga}
+                disabled={subiendo}
+                className="inline-flex size-10 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+                aria-label="Cerrar nueva factura"
               >
                 <X size={17} />
               </button>
             </header>
-            <form onSubmit={subirFactura} className="space-y-4 p-5">
+            <form onSubmit={subirFactura} className="space-y-4 p-4 sm:p-5">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                <p className="font-semibold">
+                  Procura que toda la factura aparezca dentro de la imagen y que el texto sea legible.
+                </p>
+                <p className="mt-1 text-xs">Evita sombras, reflejos y movimiento.</p>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center hover:bg-slate-100">
+                <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center hover:bg-slate-100 sm:min-h-36">
                   <Upload size={24} className="text-slate-500" />
                   <span className="mt-2 text-sm font-semibold text-slate-700">
-                    Seleccionar archivo
+                    Subir archivo
+                  </span>
+                  <span className="mt-1 text-xs text-slate-500">
+                    JPG, PNG, WEBP o PDF
                   </span>
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
                     className="sr-only"
-                    onChange={(event) =>
-                      seleccionarArchivo(event.target.files?.[0] || null)
-                    }
+                    onClick={(event) => {
+                      event.currentTarget.value = "";
+                    }}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) seleccionarArchivo(file, "WEB");
+                    }}
                   />
                 </label>
-                <label className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center hover:bg-slate-100">
+                <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-blue-300 bg-blue-50 p-4 text-center hover:bg-blue-100 sm:min-h-36">
                   <Camera size={24} className="text-slate-500" />
                   <span className="mt-2 text-sm font-semibold text-slate-700">
-                    Tomar fotografia
+                    Tomar foto
+                  </span>
+                  <span className="mt-1 text-xs text-slate-500">
+                    Usara la camara trasera cuando sea posible
                   </span>
                   <input
+                    ref={cameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
                     className="sr-only"
-                    onChange={(event) =>
-                      seleccionarArchivo(event.target.files?.[0] || null)
-                    }
+                    onClick={(event) => {
+                      event.currentTarget.value = "";
+                    }}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) seleccionarArchivo(file, "CELULAR");
+                    }}
                   />
                 </label>
               </div>
 
               {archivo && (
-                <div className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-md bg-slate-100 sm:w-56">
-                      {archivo.type.startsWith("image/") ? (
-                        <img
-                          src={previewCarga}
-                          alt="Vista previa"
-                          className="h-full w-full object-contain"
-                        />
-                      ) : (
-                        <FileText size={36} className="text-slate-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
+                <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                  <div className="flex min-h-64 w-full items-center justify-center overflow-hidden rounded-md bg-slate-100 sm:min-h-80">
+                    {archivo.type.startsWith("image/") ? (
+                      <img
+                        src={previewCarga}
+                        alt="Vista previa completa de la factura seleccionada"
+                        className="max-h-[55vh] w-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-slate-500">
+                        <FileText size={48} className="text-slate-400" />
+                        <span className="text-xs font-semibold">
+                          Documento PDF seleccionado
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-slate-900">
                         {archivo.name}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
                         {archivo.type || "Tipo no disponible"} · {bytes(archivo.size)}
                       </p>
+                      <p className="mt-1 text-[11px] font-semibold uppercase text-slate-500">
+                        Origen: {origenCarga === "CELULAR" ? "Camara" : "Archivo"}
+                      </p>
                     </div>
+                    {origenCarga === "CELULAR" && archivo.type.startsWith("image/") && (
+                      <button
+                        type="button"
+                        onClick={repetirFoto}
+                        disabled={subiendo}
+                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-blue-300 bg-white px-4 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50 sm:w-auto"
+                      >
+                        <Camera size={16} />
+                        Repetir foto
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
-              <footer className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+              <footer className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => setModalCarga(false)}
-                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  onClick={cerrarModalCarga}
+                  disabled={subiendo}
+                  className="h-11 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 sm:w-auto"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={subiendo || !archivo}
-                  className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white disabled:opacity-60"
+                  className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
                 >
                   {subiendo ? <RefreshCw size={16} className="animate-spin" /> : <Upload size={16} />}
                   Confirmar carga
@@ -901,6 +1074,15 @@ export default function FacturasFisicas() {
                     </span>
                   </div>
                 )}
+
+                <FacturaFisicaOcrPanel
+                  factura={detalle}
+                  valoresActuales={form}
+                  procesando={procesandoOcr}
+                  aplicando={aplicandoOcr}
+                  onProcesar={procesarOcr}
+                  onAplicar={aplicarSugerenciasOcr}
+                />
 
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
                   Observacion

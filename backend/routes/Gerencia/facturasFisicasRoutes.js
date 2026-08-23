@@ -52,6 +52,18 @@ router.get("/", controller.listarFacturas);
 router.post("/", cargarArchivo, controller.subirFactura);
 router.get("/:id", controller.obtenerFactura);
 router.get("/:id/archivo", controller.verArchivo);
+router.post("/:id/ocr", controller.procesarOcr);
+router.patch("/:id/aplicar-ocr", controller.aplicarOcr);
+router.get("/:id/productos-ocr", controller.listarProductosOcr);
+router.patch("/:id/productos-ocr/:productoId", controller.editarProductoOcr);
+router.patch(
+  "/:id/productos-ocr/:productoId/confirmar",
+  controller.confirmarProductoOcr,
+);
+router.patch(
+  "/:id/productos-ocr/:productoId/descartar",
+  controller.descartarProductoOcr,
+);
 router.patch("/:id", controller.actualizarFactura);
 router.patch("/:id/anular", controller.anularFactura);
 
