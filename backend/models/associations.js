@@ -71,6 +71,7 @@ const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 const DescuentoDecimo = require('./DescuentoDecimo');
 const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
+const RolCreditekAjuste = require('./RolCreditekAjuste');
 const FacturaFisica = require('./FacturaFisica');
 const FacturaFisicaProductoOcr = require('./FacturaFisicaProductoOcr');
 const FacturaIaResultado = require('./FacturaIaResultado');
@@ -116,6 +117,18 @@ Usuario.hasMany(EgresoCreditekEntrada, {
   as: "entradasEgresosCreditekActualizadas",
 });
 EgresoCreditekEntrada.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(RolCreditekAjuste, {
+  foreignKey: "usuarioId",
+  as: "ajustesRolesCreditek",
+});
+RolCreditekAjuste.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+RolCreditekAjuste.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
 });

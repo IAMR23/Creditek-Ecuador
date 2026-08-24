@@ -1087,6 +1087,44 @@ const ensureConsejoEjecutivoPreSyncSchema = async (queryInterface) => {
   );
 };
 
+const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
+  if (!tables.includes("roles_creditek_ajustes")) return;
+
+  const columnasValor = [
+    "adelantosTransfer",
+    "deudaJimena",
+    "atrasos",
+    "diasNoLaborables",
+    "multasFacturacion",
+    "planmovi",
+    "prestamo",
+    "mecanica",
+  ];
+
+  for (const columnName of columnasValor) {
+    await addColumnIfMissing(
+      queryInterface,
+      "roles_creditek_ajustes",
+      columnName,
+      {
+        type: Sequelize.DECIMAL(12, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+    );
+  }
+
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS roles_creditek_ajustes_usuario_periodo_unique
+    ON roles_creditek_ajustes ("usuarioId", anio, mes);
+  `);
+
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS roles_creditek_ajustes_periodo_idx
+    ON roles_creditek_ajustes (anio, mes);
+  `);
+};
+
 const ensureFacturasFisicasOcrPreSyncSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("facturas_fisicas")) return;
@@ -1265,6 +1303,7 @@ const connectDB = async () => {
     await ensureRolesPagoSchema(tables);
     await ensureComisionesConfiguracionSchema(queryInterface, tables);
     await ensurePagosComisionesSchema(queryInterface, tables);
+    await ensureRolesCreditekResumenSchema(queryInterface, tables);
     await ensureNominaSchema(queryInterface, tables);
     await ensureMapaComercialSchema(tables);
     await ensureDetalleEntregasUbicacionSchema(queryInterface, tables);

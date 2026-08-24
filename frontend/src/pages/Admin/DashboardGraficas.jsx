@@ -96,14 +96,6 @@ export default function DashboardGraficas({
 
   const cards = [
     {
-      title: "Cantidad de oportunidades por etapa",
-      type: "pie",
-      data: oportunidadesPorEtapa,
-      loading: loadingOportunidadesGhl,
-      emptyMessage:
-        errorOportunidadesGhl || "Sin oportunidades para el periodo seleccionado",
-    },
-    {
       title: "Ventas por Agencia",
       type: "bar",
       data: toArray(estadisticas.porAgencia),
@@ -200,6 +192,18 @@ export default function DashboardGraficas({
           color={COLORS[5]}
         />
       </div>
+
+      <ChartCard title="Cantidad de oportunidades por etapa">
+        <ChartRenderer
+          type="pie"
+          data={oportunidadesPorEtapa}
+          loading={loadingOportunidadesGhl}
+          emptyMessage={
+            errorOportunidadesGhl ||
+            "Sin oportunidades para el periodo seleccionado"
+          }
+        />
+      </ChartCard>
     </section>
   );
 }

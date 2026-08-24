@@ -52,7 +52,8 @@ export default function Sidebar({ auth }) {
     contabilidad:
       location.pathname === "/contabilidad/pagos-comisiones" ||
       location.pathname === "/contabilidad/descuentos-decimos" ||
-      location.pathname === "/contabilidad/egresos-creditek",
+      location.pathname === "/contabilidad/egresos-creditek" ||
+      location.pathname === "/contabilidad/roles-creditek-resumen",
     Auditoria: false,
     DesarrolloOrganizacional: true,
     Sistemas: false,
@@ -61,7 +62,8 @@ export default function Sidebar({ auth }) {
     rolesCreditek:
       location.pathname === "/contabilidad/pagos-comisiones" ||
       location.pathname === "/contabilidad/descuentos-decimos" ||
-      location.pathname === "/contabilidad/egresos-creditek",
+      location.pathname === "/contabilidad/egresos-creditek" ||
+      location.pathname === "/contabilidad/roles-creditek-resumen",
   });
 
   const toggleSection = (key) => {
@@ -249,6 +251,11 @@ export default function Sidebar({ auth }) {
                 label: "Egresos",
                 icon: <WalletCards size={18} />,
                 path: "/contabilidad/egresos-creditek",
+              },
+              {
+                label: "Resumen roles",
+                icon: <FileSpreadsheet size={18} />,
+                path: "/contabilidad/roles-creditek-resumen",
               },
             ],
           },
