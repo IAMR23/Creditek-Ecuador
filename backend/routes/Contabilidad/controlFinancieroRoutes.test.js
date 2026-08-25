@@ -34,6 +34,12 @@ jest.mock("../../controllers/Contabilidad/controlFinancieroController", () => ({
       cargaId: req.params.cargaId,
       resultadoId: req.params.resultadoId,
     }),
+  obtenerConciliacionCaja: (req, res) =>
+    res.json({ accion: "obtener-conciliacion-caja", cargaId: req.params.cargaId }),
+  obtenerHistorialConciliacionCaja: (req, res) =>
+    res.json({ accion: "historial-conciliacion-caja", cargaId: req.params.cargaId }),
+  reconciliarCaja: (req, res) =>
+    res.json({ accion: "reconciliar-caja", cargaId: req.params.cargaId }),
 }));
 
 const routes = require("./controlFinancieroRoutes");
@@ -114,6 +120,23 @@ describe("controlFinancieroRoutes conciliacion de entradas", () => {
       accion: "actualizar-pago",
       registroId: "21",
     });
+  });
+
+  test("expone consulta, historial y reejecucion de conciliacion de caja", async () => {
+    const app = crearApp();
+    const consulta = await request(app)
+      .get("/api/contabilidad/control-financiero/cargas/25/conciliacion-caja")
+      .expect(200);
+    const historial = await request(app)
+      .get("/api/contabilidad/control-financiero/cargas/25/conciliacion-caja/historial")
+      .expect(200);
+    const reconciliar = await request(app)
+      .post("/api/contabilidad/control-financiero/cargas/25/reconciliar-caja")
+      .expect(200);
+
+    expect(consulta.body.accion).toBe("obtener-conciliacion-caja");
+    expect(historial.body.accion).toBe("historial-conciliacion-caja");
+    expect(reconciliar.body.accion).toBe("reconciliar-caja");
   });
 
   test("expone la cobertura de reportes antes de la ruta de detalle", async () => {

@@ -8,6 +8,11 @@ const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro")
 const ControlFinancieroConciliacionEntrada = require(
   "../models/ControlFinancieroConciliacionEntrada",
 );
+const {
+  aCentavos,
+  desdeCentavos,
+  normalizarNombre,
+} = require("./conciliacionFinancieraUtils");
 
 const TOLERANCIA_CENTAVOS = 1;
 const TIPOS_VENTA = ["VENTA_TV", "VENTA_CELULAR"];
@@ -34,23 +39,6 @@ const errorServicio = (message, status = 400, code = null) => {
 
 const plano = (registro) =>
   registro?.get ? registro.get({ plain: true }) : registro;
-
-const numero = (value) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const aCentavos = (value) => Math.round(numero(value) * 100);
-const desdeCentavos = (value) => Number((Number(value || 0) / 100).toFixed(2));
-
-const normalizarNombre = (value) =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
 
 const tokensNombre = (value) =>
   normalizarNombre(value)

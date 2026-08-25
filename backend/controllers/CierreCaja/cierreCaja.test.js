@@ -52,6 +52,10 @@ jest.mock("../../services/conciliacionEntradasService", () => ({
   conciliarCargasPorFecha: jest.fn(),
 }));
 
+jest.mock("../../services/conciliacionCuotasCajaService", () => ({
+  conciliarCargasCajaPorFecha: jest.fn(),
+}));
+
 jest.mock("./DenominacionCajaTemp", () => ({
   crearHistorialDenominaciones: jest.fn(),
   limpiarDenominacionesTemp: jest.fn(),
@@ -69,6 +73,9 @@ const UsuarioAgencia = require("../../models/UsuarioAgencia");
 const {
   conciliarCargasPorFecha,
 } = require("../../services/conciliacionEntradasService");
+const {
+  conciliarCargasCajaPorFecha,
+} = require("../../services/conciliacionCuotasCajaService");
 const {
   crearHistorialDenominaciones,
   limpiarDenominacionesTemp,
@@ -122,6 +129,11 @@ describe("cierreCaja controller", () => {
     limpiarDenominacionesTemp.mockResolvedValue(undefined);
     obtenerDenominacionesTempParaCierre.mockResolvedValue([]);
     conciliarCargasPorFecha.mockResolvedValue({
+      fecha: "2026-06-12",
+      cargasProcesadas: 0,
+      conciliaciones: [],
+    });
+    conciliarCargasCajaPorFecha.mockResolvedValue({
       fecha: "2026-06-12",
       cargasProcesadas: 0,
       conciliaciones: [],
@@ -192,10 +204,18 @@ describe("cierreCaja controller", () => {
     expect(conciliarCargasPorFecha).toHaveBeenCalledWith(
       expect.objectContaining({ origen: "CIERRE", usuarioId: 7 }),
     );
+    expect(conciliarCargasCajaPorFecha).toHaveBeenCalledWith(
+      expect.objectContaining({ origen: "CIERRE", usuarioId: 7 }),
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         conciliacionEntradas: expect.objectContaining({
+          fecha: expect.any(String),
+          pendiente: true,
+          estado: "PENDIENTE",
+        }),
+        conciliacionCaja: expect.objectContaining({
           fecha: expect.any(String),
           pendiente: true,
           estado: "PENDIENTE",

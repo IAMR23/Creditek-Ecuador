@@ -23,7 +23,7 @@ export default function Login() {
 
       Swal.fire({
         icon: "success",
-        title: "Bienvenido",
+        title: "BIENVENIDO ",
         timer: 1200,
         showConfirmButton: false,
       });

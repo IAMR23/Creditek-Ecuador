@@ -32,6 +32,7 @@ const DetalleVenta = require("../../models/DetalleVenta");
 const Task = require("../../models/Task");
 const Usuario = require("../../models/Usuario");
 const Venta = require("../../models/Venta");
+const Entrega = require("../../models/Entrega");
 const {
   auditarVentasDesdeDirectorio,
   auditarVentasDesdeRegistros,
@@ -46,6 +47,61 @@ const {
   obtenerRegistrosAuditoriaDesdeControlFinanciero,
 } = require("../../services/controlFinancieroAuditoriaService");
 const controller = require("./auditoriaVentasController");
+
+describe("obtenerEntregasPorVendedorDashboard", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("incluye los procesos completos usando la evidencia existente", async () => {
+    const findAll = jest.spyOn(Entrega, "findAll").mockResolvedValue([
+      {
+        id: 1,
+        estado: "Pendiente",
+        FechaHoraLlamada: null,
+        fotoFechaLlamada: null,
+        usuarioAgencia: {
+          usuario: { id: 10, nombre: "Ana" },
+          agencia: { id: 2, nombre: "Norte" },
+        },
+      },
+      {
+        id: 2,
+        estado: "Entregado",
+        FechaHoraLlamada: "2026-08-24T09:30",
+        fotoFechaLlamada: "/uploads/ventas/llamada.jpg",
+        usuarioAgencia: {
+          usuario: { id: 10, nombre: "Ana" },
+          agencia: { id: 2, nombre: "Norte" },
+        },
+      },
+    ]);
+
+    const resultado = await controller.obtenerEntregasPorVendedorDashboard({
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-08-25",
+      agenciaId: "2",
+      vendedorId: "10",
+    });
+
+    expect(findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: [
+          "id",
+          "estado",
+          "FechaHoraLlamada",
+          "fotoFechaLlamada",
+        ],
+      }),
+    );
+    expect(resultado).toEqual(
+      expect.objectContaining({
+        totales: { Ana: 2 },
+        procesosCompletos: 1,
+      }),
+    );
+  });
+});
 
 const crearVentaTv = ({ ventaId, detalleId, contrato = "CONTRATO" }) => ({
   id: ventaId,

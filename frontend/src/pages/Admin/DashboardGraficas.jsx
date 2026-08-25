@@ -193,17 +193,33 @@ export default function DashboardGraficas({
         />
       </div>
 
-      <ChartCard title="Cantidad de oportunidades por etapa">
-        <ChartRenderer
-          type="pie"
-          data={oportunidadesPorEtapa}
-          loading={loadingOportunidadesGhl}
-          emptyMessage={
-            errorOportunidadesGhl ||
-            "Sin oportunidades para el periodo seleccionado"
-          }
-        />
-      </ChartCard>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <ChartCard title="Cantidad de oportunidades por etapa">
+          <ChartRenderer
+            type="pie"
+            data={oportunidadesPorEtapa}
+            loading={loadingOportunidadesGhl}
+            emptyMessage={
+              errorOportunidadesGhl ||
+              "Sin oportunidades para el periodo seleccionado"
+            }
+          />
+        </ChartCard>
+
+        <ChartCard title="Procesos completos">
+          <div className="flex h-full flex-col items-center justify-center rounded-lg border border-violet-100 bg-violet-50 px-6 text-center">
+            <p className="text-6xl font-bold tabular-nums text-violet-700">
+              {Number(estadisticas.procesosCompletos) || 0}
+            </p>
+            <p className="mt-4 text-sm font-semibold text-slate-700">
+              Entregas registradas como proceso completo
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Según el período, las agencias y los vendedores seleccionados
+            </p>
+          </div>
+        </ChartCard>
+      </div>
     </section>
   );
 }

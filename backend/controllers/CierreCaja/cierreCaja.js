@@ -14,6 +14,9 @@ const {
   conciliarCargasPorFecha,
 } = require("../../services/conciliacionEntradasService");
 const {
+  conciliarCargasCajaPorFecha,
+} = require("../../services/conciliacionCuotasCajaService");
+const {
   crearHistorialDenominaciones,
   limpiarDenominacionesTemp,
   obtenerDenominacionesTempParaCierre,
@@ -57,6 +60,32 @@ const crearEstadoConciliacionPendiente = (fecha) => ({
 const programarConciliacionEntradas = ({ fecha, origen, usuarioId }) => {
   setImmediate(() => {
     void conciliarEntradasSinBloquearCierre({ fecha, origen, usuarioId });
+  });
+};
+
+const conciliarCajaSinBloquearCierre = async ({
+  fecha,
+  origen,
+  usuarioId,
+}) => {
+  try {
+    return await conciliarCargasCajaPorFecha({ fecha, origen, usuarioId });
+  } catch (error) {
+    console.error(
+      "El cierre se guardo, pero no se pudo conciliar su caja financiera:",
+      error,
+    );
+    return {
+      fecha,
+      cargasProcesadas: 0,
+      error: true,
+    };
+  }
+};
+
+const programarConciliacionCaja = ({ fecha, origen, usuarioId }) => {
+  setImmediate(() => {
+    void conciliarCajaSinBloquearCierre({ fecha, origen, usuarioId });
   });
 };
 
@@ -651,15 +680,22 @@ const cerrarCaja = async (req, res) => {
     await t.commit();
     t = null;
     const conciliacionEntradas = crearEstadoConciliacionPendiente(fechaCierre);
+    const conciliacionCaja = crearEstadoConciliacionPendiente(fechaCierre);
 
     const response = res.status(200).json({
       message: "Caja cerrada correctamente",
       cierre: cierreCreado,
       totalMovimientos: movimientosUnificados.length,
       conciliacionEntradas,
+      conciliacionCaja,
     });
 
     programarConciliacionEntradas({
+      fecha: fechaCierre,
+      origen: "CIERRE",
+      usuarioId,
+    });
+    programarConciliacionCaja({
       fecha: fechaCierre,
       origen: "CIERRE",
       usuarioId,
@@ -973,10 +1009,18 @@ const reabrirCierreCaja = async (req, res) => {
 
     await t.commit();
 
+    const conciliacionCaja = crearEstadoConciliacionPendiente(cierre.fecha);
+    programarConciliacionCaja({
+      fecha: cierre.fecha,
+      origen: "REAPERTURA",
+      usuarioId: req.user.id,
+    });
+
     return res.status(200).json({
       message: "Cierre de caja reabierto correctamente",
       cierre,
       reapertura,
+      conciliacionCaja,
     });
   } catch (error) {
     await t.rollback();
@@ -1030,6 +1074,7 @@ const actualizarCierreCajaReabierto = async (req, res) => {
     const fechaCierre = cierrePayload.fecha !== undefined
       ? cierrePayload.fecha
       : cierre.fecha;
+    const fechaCierreAnterior = cierre.fecha;
     const usuarioIdCierre = cierrePayload.usuarioId !== undefined
       ? Number(cierrePayload.usuarioId)
       : Number(cierre.usuarioId);
@@ -1176,6 +1221,16 @@ const actualizarCierreCajaReabierto = async (req, res) => {
       origen: "RECIERRE",
       usuarioId: req.user.id,
     });
+    const conciliacionCaja = crearEstadoConciliacionPendiente(fechaCierre);
+    [...new Set([fechaCierreAnterior, fechaCierre])].forEach(
+      (fechaAConciliar) => {
+        programarConciliacionCaja({
+          fecha: fechaAConciliar,
+          origen: "RECIERRE",
+          usuarioId: req.user.id,
+        });
+      },
+    );
 
     const detalleActualizado = await obtenerDetalleCierre(id);
 
@@ -1183,6 +1238,7 @@ const actualizarCierreCajaReabierto = async (req, res) => {
       message: "Cierre de caja actualizado y cerrado correctamente",
       data: detalleActualizado,
       conciliacionEntradas,
+      conciliacionCaja,
     });
   } catch (error) {
     await t.rollback();

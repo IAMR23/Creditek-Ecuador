@@ -26,6 +26,12 @@ jest.mock("../../services/conciliacionEntradasService", () => ({
   obtenerConciliacionCarga: jest.fn(),
 }));
 
+jest.mock("../../services/conciliacionCuotasCajaService", () => ({
+  conciliarCargaCaja: jest.fn(),
+  listarHistorialConciliacionCaja: jest.fn(),
+  obtenerConciliacionCajaCarga: jest.fn(),
+}));
+
 const ControlFinancieroCarga = require("../../models/ControlFinancieroCarga");
 const ControlFinancieroRegistro = require("../../models/ControlFinancieroRegistro");
 const Usuario = require("../../models/Usuario");
@@ -36,6 +42,11 @@ const {
   confirmarCoincidenciaManual,
   obtenerConciliacionCarga,
 } = require("../../services/conciliacionEntradasService");
+const {
+  conciliarCargaCaja,
+  listarHistorialConciliacionCaja,
+  obtenerConciliacionCajaCarga,
+} = require("../../services/conciliacionCuotasCajaService");
 const controller = require("./controlFinancieroController");
 
 const crearRes = () => {
@@ -447,6 +458,54 @@ describe("controlFinancieroController", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ ok: true }),
     );
+  });
+
+  test("devuelve y reejecuta la conciliacion historica de caja", async () => {
+    obtenerConciliacionCajaCarga.mockResolvedValue({
+      carga: { id: 5, fechaReporte: "2026-08-25", estado: "ACTIVA" },
+      conciliacion: { id: "90", resultados: [], resumen: { coinciden: 1 } },
+    });
+    conciliarCargaCaja.mockResolvedValue({ id: "91", resultados: [] });
+    const resGet = crearRes();
+    const resPost = crearRes();
+
+    await controller.obtenerConciliacionCaja(
+      { params: { cargaId: "5" } },
+      resGet,
+    );
+    await controller.reconciliarCaja(
+      { params: { cargaId: "5" }, user: { id: 7 } },
+      resPost,
+    );
+
+    expect(obtenerConciliacionCajaCarga).toHaveBeenCalledWith("5");
+    expect(conciliarCargaCaja).toHaveBeenCalledWith({
+      cargaId: "5",
+      origen: "MANUAL",
+      usuarioId: 7,
+    });
+    expect(resGet.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, conciliacion: { id: "90", resultados: [], resumen: { coinciden: 1 } } }),
+    );
+    expect(resPost.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true }),
+    );
+  });
+
+  test("lista ejecuciones historicas de conciliacion de caja", async () => {
+    listarHistorialConciliacionCaja.mockResolvedValue([{ id: "91" }]);
+    const res = crearRes();
+
+    await controller.obtenerHistorialConciliacionCaja(
+      { params: { cargaId: "5" }, query: { limite: "10" } },
+      res,
+    );
+
+    expect(listarHistorialConciliacionCaja).toHaveBeenCalledWith("5", "10");
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      ejecuciones: [{ id: "91" }],
+    });
   });
 
   test("confirma una coincidencia manual sin modificar movimientos", async () => {

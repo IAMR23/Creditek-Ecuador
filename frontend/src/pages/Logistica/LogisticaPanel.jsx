@@ -76,7 +76,7 @@ function LogisticaPanel() {
   return (
     <div className="p-8 bg-gradient-to-br from-green-50 to-gray-100 min-h-screen">
       <h1 className="text-4xl font-extrabold text-gray-900 mb-6 tracking-tight">
-        Bienvenido{" "}
+        BIENVENIDO {" "}
         <span className="text-green-600">
           {user?.usuario.nombre || "Vendedor"}
         </span>

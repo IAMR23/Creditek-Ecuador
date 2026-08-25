@@ -9,6 +9,11 @@ const {
   obtenerConciliacionCarga,
 } = require("../../services/conciliacionEntradasService");
 const {
+  conciliarCargaCaja,
+  listarHistorialConciliacionCaja,
+  obtenerConciliacionCajaCarga,
+} = require("../../services/conciliacionCuotasCajaService");
+const {
   construirCoberturaReportes,
   obtenerFechaActualEcuadorIso,
 } = require("../../services/controlFinancieroService");
@@ -554,6 +559,63 @@ exports.confirmarConciliacionEntrada = async (req, res) => {
       error,
       res,
       "No se pudo confirmar la coincidencia manual.",
+    );
+  }
+};
+
+exports.obtenerConciliacionCaja = async (req, res) => {
+  try {
+    const resultado = await obtenerConciliacionCajaCarga(req.params.cargaId);
+    return res.json({
+      ok: true,
+      carga: resultado.carga,
+      conciliacion: resultado.conciliacion,
+      message: resultado.conciliacion
+        ? undefined
+        : "La carga aun no tiene una conciliacion de caja.",
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo cargar la conciliacion de caja.",
+    );
+  }
+};
+
+exports.reconciliarCaja = async (req, res) => {
+  try {
+    const conciliacion = await conciliarCargaCaja({
+      cargaId: req.params.cargaId,
+      origen: "MANUAL",
+      usuarioId: req.user?.id,
+    });
+    return res.json({
+      ok: true,
+      message: "La conciliacion de caja fue ejecutada correctamente.",
+      conciliacion,
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo ejecutar la conciliacion de caja.",
+    );
+  }
+};
+
+exports.obtenerHistorialConciliacionCaja = async (req, res) => {
+  try {
+    const ejecuciones = await listarHistorialConciliacionCaja(
+      req.params.cargaId,
+      req.query.limite,
+    );
+    return res.json({ ok: true, ejecuciones });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo cargar el historial de conciliacion de caja.",
     );
   }
 };

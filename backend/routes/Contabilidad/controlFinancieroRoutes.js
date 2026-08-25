@@ -29,6 +29,18 @@ router.post(
   "/cargas/:cargaId/conciliacion-entradas/:resultadoId/confirmar",
   controller.confirmarConciliacionEntrada,
 );
+router.get(
+  "/cargas/:cargaId/conciliacion-caja",
+  controller.obtenerConciliacionCaja,
+);
+router.get(
+  "/cargas/:cargaId/conciliacion-caja/historial",
+  controller.obtenerHistorialConciliacionCaja,
+);
+router.post(
+  "/cargas/:cargaId/reconciliar-caja",
+  controller.reconciliarCaja,
+);
 router.get("/cargas/:id", controller.obtenerCarga);
 router.patch("/cargas/:id/anular", controller.anularCarga);
 

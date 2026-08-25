@@ -22,6 +22,10 @@ jest.mock("../../services/conciliacionEntradasService", () => ({
   conciliarCarga: jest.fn(),
 }));
 
+jest.mock("../../services/conciliacionCuotasCajaService", () => ({
+  conciliarCargaCaja: jest.fn(),
+}));
+
 jest.mock("../../services/auditoriaVentasPdfService", () => ({
   auditarVentasDesdeDirectorios: jest.fn(),
 }));
@@ -48,6 +52,9 @@ const {
 const {
   conciliarCarga,
 } = require("../../services/conciliacionEntradasService");
+const {
+  conciliarCargaCaja,
+} = require("../../services/conciliacionCuotasCajaService");
 const {
   auditarVentasDesdeDirectorios,
 } = require("../../services/auditoriaVentasPdfService");
@@ -93,6 +100,7 @@ describe("reportesCajaVentasController", () => {
     jest.clearAllMocks();
     fsp.rm.mockResolvedValue(undefined);
     auditarVentasDesdeDirectorios.mockResolvedValue(resumenAuditoriaCompleta);
+    conciliarCargaCaja.mockResolvedValue(null);
   });
 
   test("procesa una solicitud que contiene solamente ventas TV", async () => {
@@ -174,6 +182,55 @@ describe("reportesCajaVentasController", () => {
       "CIERRE_CAJA_20260725.xlsx",
       expect.any(Function),
     );
+  });
+
+  test("concilia caja automaticamente sin impedir la descarga", async () => {
+    const datos = {
+      registrosCaja: [
+        { FECHA: "8/25/26 10:00 AM", CLIENTE: "JUAN PEREZ" },
+      ],
+      ventasTv: [],
+      ventasCelular: [],
+    };
+    fs.existsSync.mockReturnValue(true);
+    fsp.readFile.mockResolvedValue(JSON.stringify(datos));
+    spawn.mockReturnValue(
+      crearProcesoPython({ registrosCaja: 1, ventasTv: 0, ventasCelular: 0 }),
+    );
+    obtenerFechaReporte.mockReturnValue("2026-08-25");
+    guardarCargaControlFinanciero.mockResolvedValue({
+      carga: { id: 26 },
+      esCargaNueva: true,
+      archivosAgregados: 1,
+      archivosOmitidos: 0,
+    });
+    conciliarCarga.mockResolvedValue(null);
+    conciliarCargaCaja.mockResolvedValue({ id: "92" });
+    const res = crearRes();
+
+    await controller.extraerCierreCajaConVentas(
+      {
+        files: { reportesCaja: [{ originalname: "caja.pdf" }] },
+        body: { asignacionesAgencias: "[]" },
+        user: { id: 7 },
+        reportesCajaVentasTempRoot: "C:/temp/reporte",
+        reportesCajaDir: "C:/temp/reporte/caja",
+        ventasTvDir: "C:/temp/reporte/tv",
+        ventasCelularDir: "C:/temp/reporte/celular",
+      },
+      res,
+    );
+
+    expect(conciliarCargaCaja).toHaveBeenCalledWith({
+      cargaId: 26,
+      origen: "CARGA",
+      usuarioId: 7,
+    });
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "X-RVE-Conciliacion-Caja",
+      "92",
+    );
+    expect(res.download).toHaveBeenCalledTimes(1);
   });
 
   test("rechaza una solicitud sin archivos de ningun tipo", async () => {

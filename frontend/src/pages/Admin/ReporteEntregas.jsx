@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -9,10 +8,10 @@ import {
   YAxis,
   Tooltip,
   Legend,
+  Cell,
 } from "recharts";
-import { API_URL } from "../../../config";
-import { Cell } from "recharts";
 import { getHoyLocal } from "../../utils/dateUtils";
+import api from "../../api/client";
 
 export default function DashboardEntregas() {
 
@@ -24,11 +23,13 @@ export default function DashboardEntregas() {
   const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [repartidorSeleccionado, setRepartidorSeleccionado] = useState("");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      setError("");
 
       const params = {};
 
@@ -36,22 +37,27 @@ export default function DashboardEntregas() {
       if (fechaInicio) params.fechaInicio = fechaInicio;
       if (fechaFin) params.fechaFin = fechaFin;
 
-      const res = await axios.get(`${API_URL}/dashboard/entregas`, {
+      const res = await api.get("/dashboard/entregas", {
         params,
       });
 
       setData(res.data);
-    } catch (error) {
-      console.error(error);
+    } catch (requestError) {
+      console.error(requestError);
       setData(null);
+      setError(
+        requestError.response?.data?.message ||
+          requestError.response?.data?.error ||
+          "No se pudo cargar el resumen de entregas.",
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [fechaFin, fechaInicio, repartidorSeleccionado]);
 
   useEffect(() => {
     fetchData();
-  }, [ repartidorSeleccionado, fechaInicio, fechaFin]);
+  }, [fetchData]);
 
   const estados = data?.porEstado || {};
 
@@ -65,8 +71,8 @@ export default function DashboardEntregas() {
   useEffect(() => {
     const fetchRepartidores = async () => {
       try {
-        const response = await axios.get(
-          `${API_URL}/api/usuario-permisos/usuarios-repartidores`,
+        const response = await api.get(
+          "/api/usuario-permisos/usuarios-repartidores",
         );
 
         setRepartidores(Array.isArray(response.data) ? response.data : []);
@@ -142,6 +148,12 @@ export default function DashboardEntregas() {
         </div>
       )}
 
+      {!loading && error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* CONTENIDO */}
       {!loading && data && (
         <motion.div
@@ -198,6 +210,16 @@ export default function DashboardEntregas() {
               <p className="text-xs text-gray-500">No Entregadas - Fallidas</p>
               <p className="mt-3 text-2xl font-semibold text-red-600">
                 {estados.noEntregado || 0}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-violet-500 col-span-2 lg:col-span-1">
+              <p className="text-xs text-gray-500">Procesos completos</p>
+              <p className="mt-3 text-2xl font-semibold text-violet-600">
+                {data.procesosCompletos || 0}
+              </p>
+              <p className="mt-2 text-xs text-gray-400">
+                Indicador adicional al estado de entrega
               </p>
             </div>
           </div>

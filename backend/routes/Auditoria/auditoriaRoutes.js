@@ -288,6 +288,7 @@ router.get("/ventas2", async (req, res) => {
       });
     estadisticas.entregasPorVendedor = entregasPorVendedor.totales;
     estadisticas.entregasPorVendedorEstados = entregasPorVendedor.porEstado;
+    estadisticas.procesosCompletos = entregasPorVendedor.procesosCompletos;
  
     res.json({ ok: true, estadisticas});
   } catch (error) {

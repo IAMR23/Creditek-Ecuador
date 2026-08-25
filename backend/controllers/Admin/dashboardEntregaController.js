@@ -67,6 +67,29 @@ const includeMotorizado = {
       distinct: true,
     });
 
+    // Es un indicador transversal y no un estado de la entrega.
+    const procesosCompletos = await Entrega.count({
+      where: {
+        ...whereBase,
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { FechaHoraLlamada: null },
+              { FechaHoraLlamada: "" },
+            ],
+          },
+          {
+            [Op.or]: [
+              { fotoFechaLlamada: null },
+              { fotoFechaLlamada: "" },
+            ],
+          },
+        ],
+      },
+      include: [includeMotorizado],
+      distinct: true,
+    });
+
     res.json({
       filtros: {
         fechaInicio: fechaInicio || null,
@@ -74,6 +97,7 @@ const includeMotorizado = {
         userId: userId || null,
       },
       total,
+      procesosCompletos,
       porEstado: {
         pendiente: counts["Pendiente"],
         transito: counts["Transito"],

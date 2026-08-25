@@ -531,7 +531,7 @@ export default function Dashboard() {
     <div className="p-4">
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-gray-900">
-          Bienvenido {user?.usuario?.nombre || "Admin"}
+          BIENVENIDO {user?.usuario?.nombre || "Admin"}
         </h1>
       </div>
 

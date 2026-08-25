@@ -66,6 +66,7 @@ const InventarioSistema = require('./InventarioSistema');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
 const ControlFinancieroConciliacionEntrada = require('./ControlFinancieroConciliacionEntrada');
+const ControlFinancieroConciliacionCaja = require('./ControlFinancieroConciliacionCaja');
 const NotificacionPersonal = require('./NotificacionPersonal');
 const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
@@ -538,6 +539,16 @@ CierreCaja.hasMany(MovimientoCaja, {
 MovimientoCaja.belongsTo(CierreCaja, {
   foreignKey: "cierreId",
   as: "cierre",
+});
+
+MovimientoCaja.belongsTo(Cliente, {
+  foreignKey: "clienteId",
+  as: "cliente",
+});
+
+Cliente.hasMany(MovimientoCaja, {
+  foreignKey: "clienteId",
+  as: "movimientosCaja",
 });
 
 
@@ -1056,6 +1067,27 @@ Usuario.hasMany(ControlFinancieroConciliacionEntrada, {
 });
 
 ControlFinancieroConciliacionEntrada.belongsTo(Usuario, {
+  foreignKey: "ejecutadoPor",
+  as: "ejecutor",
+});
+
+ControlFinancieroCarga.hasMany(ControlFinancieroConciliacionCaja, {
+  foreignKey: "cargaId",
+  as: "conciliacionesCaja",
+  onDelete: "RESTRICT",
+});
+
+ControlFinancieroConciliacionCaja.belongsTo(ControlFinancieroCarga, {
+  foreignKey: "cargaId",
+  as: "carga",
+});
+
+Usuario.hasMany(ControlFinancieroConciliacionCaja, {
+  foreignKey: "ejecutadoPor",
+  as: "conciliacionesCajaEjecutadas",
+});
+
+ControlFinancieroConciliacionCaja.belongsTo(Usuario, {
   foreignKey: "ejecutadoPor",
   as: "ejecutor",
 });

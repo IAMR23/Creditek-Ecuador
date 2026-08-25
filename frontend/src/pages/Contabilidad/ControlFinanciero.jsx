@@ -68,6 +68,20 @@ const resumenConciliacionInicial = {
   totalResultados: 0,
 };
 
+const resumenConciliacionCajaInicial = {
+  totalRegistrosReporte: 0,
+  totalMovimientosCierre: 0,
+  coinciden: 0,
+  montoDiferente: 0,
+  noEnCierre: 0,
+  soloEnCierre: 0,
+  pendienteRevision: 0,
+  fechaInvalida: 0,
+  montoTotalReporte: 0,
+  montoTotalCierre: 0,
+  diferenciaTotal: 0,
+};
+
 const AGENCIAS_CAJA = ["NUEVA AURORA", "CAUPICHO", "SANGOLQUI", "OTROS"];
 const PRODUCTOS_CAJA = ["CREDITV", "UPHONE"];
 
@@ -79,6 +93,11 @@ const tabs = [
     id: "conciliacionEntradas",
     label: "Conciliación de entradas",
     icon: ClipboardCheck,
+  },
+  {
+    id: "conciliacionCaja",
+    label: "Conciliación de caja",
+    icon: DollarSign,
   },
 ];
 
@@ -104,6 +123,11 @@ const formatFechaReporte = (value) => {
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.message || fallback;
+
+const formatFechaCorta = (value) => {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "-";
+};
 
 const redondearMoneda = (value) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -216,6 +240,11 @@ function EstadoConciliacionBadge({ estado }) {
       "border-amber-200 bg-amber-50 text-amber-800",
     PENDIENTE_REVISION:
       "border-orange-200 bg-orange-50 text-orange-800",
+    COINCIDE: "border-green-200 bg-green-50 text-green-700",
+    MONTO_DIFERENTE: "border-red-200 bg-red-50 text-red-700",
+    NO_EN_CIERRE: "border-blue-200 bg-blue-50 text-blue-700",
+    SOLO_EN_CIERRE: "border-violet-200 bg-violet-50 text-violet-700",
+    FECHA_INVALIDA: "border-orange-200 bg-orange-50 text-orange-800",
   };
   const estadoNormalizado = String(estado || "PENDIENTE_REVISION").toUpperCase();
 
@@ -447,6 +476,209 @@ function VistaConciliacionEntradas({
                   esta fecha.
                 </td>
               </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const filtrosConciliacionCaja = [
+  { id: "TODOS", label: "Todos" },
+  { id: "COINCIDE", label: "Coinciden" },
+  { id: "DIFERENCIAS", label: "Con diferencias" },
+  { id: "NO_EN_CIERRE", label: "No registrados" },
+  { id: "SOLO_EN_CIERRE", label: "Solo en cierre" },
+  { id: "PENDIENTES", label: "Pendientes de revisión" },
+];
+
+function VistaConciliacionCaja({
+  conciliacion,
+  error,
+  resultados,
+  onReconciliar,
+  reconciliando,
+}) {
+  const [filtro, setFiltro] = useState("TODOS");
+
+  if (!conciliacion) {
+    return (
+      <div className="p-10 text-center">
+        <DollarSign className="mx-auto text-slate-400" size={36} />
+        <h3 className="mt-3 font-semibold ">
+          Conciliación de caja no ejecutada
+        </h3>
+        <p className="mx-auto mt-1 max-w-2xl text-sm text-slate-500">
+          {error ||
+            "Compara cada pago del reporte con un movimiento CUOTA del mismo día, cliente y monto."}
+        </p>
+        <button
+          type="button"
+          onClick={onReconciliar}
+          disabled={reconciliando}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={reconciliando ? "animate-spin" : ""} />
+          {reconciliando ? "Conciliando..." : "Reconciliar caja"}
+        </button>
+      </div>
+    );
+  }
+
+  const resumen = {
+    ...resumenConciliacionCajaInicial,
+    ...(conciliacion.resumen || {}),
+  };
+  const pendientes = resumen.pendienteRevision + resumen.fechaInvalida;
+  const visibles = resultados.filter((resultado) => {
+    if (filtro === "TODOS") return true;
+    if (filtro === "DIFERENCIAS") {
+      return ["MONTO_DIFERENTE", "NO_EN_CIERRE", "SOLO_EN_CIERRE"].includes(
+        resultado.estado,
+      );
+    }
+    if (filtro === "PENDIENTES") {
+      return ["PENDIENTE_REVISION", "FECHA_INVALIDA"].includes(
+        resultado.estado,
+      );
+    }
+    return resultado.estado === filtro;
+  });
+
+  return (
+    <div className="space-y-5 p-4">
+      <div className="flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-emerald-950">
+            Conciliación de caja - Última ejecución:{" "}
+            {formatFechaHora(conciliacion.createdAt)}
+          </p>
+          <p className="mt-1 text-xs text-emerald-800">
+            Origen: {conciliacion.origen || "MANUAL"} - Fechas:{" "}
+            {(conciliacion.fechas || []).map(formatFechaCorta).join(", ") ||
+              "sin fechas válidas"}
+          </p>
+          <p className="mt-1 text-xs text-emerald-800">
+            Regla automática: fecha + cliente exacto, con al menos 90% de
+            similitud o abreviado al final + monto exacto. La agencia no
+            participa.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onReconciliar}
+          disabled={reconciliando}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={reconciliando ? "animate-spin" : ""} />
+          {reconciliando ? "Conciliando..." : "Reconciliar caja"}
+        </button>
+      </div>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <StatCard label="Pagos reporte" value={resumen.totalRegistrosReporte} icon={<DollarSign size={19} />} />
+        <StatCard label="Coinciden" value={resumen.coinciden} icon={<CheckCircle2 size={19} />} />
+        <StatCard label="Monto diferente" value={resumen.montoDiferente} icon={<AlertTriangle size={19} />} tone="red" />
+        <StatCard label="No registrados" value={resumen.noEnCierre} icon={<AlertTriangle size={19} />} tone="blue" />
+        <StatCard label="Solo en cierre" value={resumen.soloEnCierre} icon={<DollarSign size={19} />} tone="violet" />
+        <StatCard label="Pendientes" value={pendientes} icon={<AlertTriangle size={19} />} tone="amber" />
+      </section>
+
+      <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
+        <div><p className="text-xs font-semibold uppercase text-slate-500">Monto reporte</p><p className="font-bold">{money.format(resumen.montoTotalReporte)}</p></div>
+        <div><p className="text-xs font-semibold uppercase text-slate-500">Monto cierre</p><p className="font-bold">{money.format(resumen.montoTotalCierre)}</p></div>
+        <div><p className="text-xs font-semibold uppercase text-slate-500">Diferencia total</p><p className={`font-bold ${Math.abs(resumen.diferenciaTotal) <= 0.01 ? "text-green-700" : "text-red-700"}`}>{money.format(resumen.diferenciaTotal)}</p></div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {filtrosConciliacionCaja.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setFiltro(item.id)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              filtro === item.id
+                ? "border-green-600 bg-green-600 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-green-300"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-100 text-left text-xs uppercase tracking-wide">
+            <tr>
+              <th className="whitespace-nowrap px-3 py-3 font-semibold">Fecha</th>
+              <th className="min-w-60 px-3 py-3 font-semibold">Cliente</th>
+              <th className="whitespace-nowrap px-3 py-3 text-right font-semibold">Reporte</th>
+              <th className="whitespace-nowrap px-3 py-3 text-right font-semibold">Cierre</th>
+              <th className="whitespace-nowrap px-3 py-3 text-right font-semibold">Diferencia</th>
+              <th className="whitespace-nowrap px-3 py-3 font-semibold">Estado</th>
+              <th className="whitespace-nowrap px-3 py-3 font-semibold">Auditoría</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.length ? visibles.map((resultado) => {
+              const reporte = resultado.auditoria?.reporte;
+              const cierre = resultado.auditoria?.cierre;
+              return (
+                <tr key={resultado.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
+                  <td className="whitespace-nowrap px-3 py-3">{formatFechaCorta(resultado.fechaReporteRegistro || resultado.fechaCierre)}</td>
+                  <td className="px-3 py-3">
+                    <p className="font-medium">{resultado.clienteReporte || resultado.clienteCierre || resultado.entidadCierre || "-"}</p>
+                    {["NOMBRE_SIMILAR", "NOMBRE_TRUNCADO"].includes(
+                      resultado.tipoCoincidencia,
+                    ) && (
+                      <p className="mt-1 text-xs font-semibold text-amber-700">
+                        {resultado.tipoCoincidencia === "NOMBRE_TRUNCADO"
+                          ? "Nombre abreviado compatible"
+                          : `Nombre similar: ${Math.round(
+                              Number(resultado.similitudCliente || 0) * 100,
+                            )}%`}
+                      </p>
+                    )}
+                    {resultado.clienteReporte && resultado.clienteCierre && resultado.clienteReporte !== resultado.clienteCierre && (
+                      <p className="mt-1 text-xs text-slate-500">Cierre: {resultado.clienteCierre}</p>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-medium">{resultado.controlFinancieroRegistroId ? money.format(resultado.montoReporte) : "-"}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-medium">{resultado.movimientoCajaId ? money.format(resultado.montoCierre) : "-"}</td>
+                  <td className={`whitespace-nowrap px-3 py-3 text-right font-bold ${Math.abs(resultado.diferencia) <= 0.01 ? "text-green-700" : "text-red-700"}`}>{money.format(resultado.diferencia)}</td>
+                  <td className="px-3 py-3"><EstadoConciliacionBadge estado={resultado.estado} /></td>
+                  <td className="px-3 py-3">
+                    <details className="min-w-56 text-xs text-slate-600">
+                      <summary className="cursor-pointer font-semibold text-green-700">Ver detalle</summary>
+                      <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div>
+                          <p className="font-bold text-slate-800">REPORTE</p>
+                          <p>Registro: {resultado.controlFinancieroRegistroId || "-"}</p>
+                          <p>Fecha original: {reporte?.fechaOriginal || "-"}</p>
+                          <p>Contrato: {reporte?.contrato || "-"}</p>
+                          <p>Cobrador: {reporte?.usuarioCobrador || "-"}</p>
+                          <p>Agencia: {reporte?.agencia || "-"}</p>
+                          <p>Archivo: {reporte?.archivoOrigen || "-"}</p>
+                        </div>
+                        <div className="border-t border-slate-100 pt-2">
+                          <p className="font-bold text-slate-800">CIERRE</p>
+                          <p>Cierre: {resultado.cierreId || "-"}</p>
+                          <p>Movimiento: {resultado.movimientoCajaId || "-"}</p>
+                          <p>Cliente ID: {resultado.clienteId || "-"}</p>
+                          <p>Entidad: {cierre?.entidad || "-"}</p>
+                          <p>Responsable: {cierre?.responsable || "-"}</p>
+                          <p>Forma de pago: {cierre?.formaPago || "-"}</p>
+                          <p>Agencia ID: {cierre?.agenciaId || "-"}</p>
+                        </div>
+                      </div>
+                    </details>
+                  </td>
+                </tr>
+              );
+            }) : (
+              <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No hay resultados para los filtros seleccionados.</td></tr>
             )}
           </tbody>
         </table>
@@ -966,6 +1198,9 @@ export default function ControlFinanciero() {
   const [reconciliandoEntradas, setReconciliandoEntradas] = useState(false);
   const [revisandoConciliacionId, setRevisandoConciliacionId] =
     useState(null);
+  const [conciliacionCaja, setConciliacionCaja] = useState(null);
+  const [errorConciliacionCaja, setErrorConciliacionCaja] = useState("");
+  const [reconciliandoCaja, setReconciliandoCaja] = useState(false);
 
   const cargarConciliacionEntradas = useCallback(async (cargaId) => {
     if (!cargaId) {
@@ -991,6 +1226,27 @@ export default function ControlFinanciero() {
     }
   }, []);
 
+  const cargarConciliacionCaja = useCallback(async (cargaId) => {
+    if (!cargaId) {
+      setConciliacionCaja(null);
+      setErrorConciliacionCaja("");
+      return;
+    }
+
+    try {
+      const { data } = await api.get(
+        `/api/contabilidad/control-financiero/cargas/${cargaId}/conciliacion-caja`,
+      );
+      setConciliacionCaja(data.conciliacion || null);
+      setErrorConciliacionCaja(data.conciliacion ? "" : data.message || "");
+    } catch (error) {
+      setConciliacionCaja(null);
+      setErrorConciliacionCaja(
+        getErrorMessage(error, "No se pudo consultar la conciliacion de caja."),
+      );
+    }
+  }, []);
+
   const cargarDetalle = useCallback(async (id) => {
     if (!id) {
       setConsolidadoVentas(null);
@@ -998,6 +1254,8 @@ export default function ControlFinanciero() {
       setRegistros(registrosIniciales);
       setConciliacionEntradas(null);
       setErrorConciliacion("");
+      setConciliacionCaja(null);
+      setErrorConciliacionCaja("");
       return;
     }
 
@@ -1009,11 +1267,15 @@ export default function ControlFinanciero() {
       setConsolidadoVentas(null);
       setCargaSeleccionada(data.carga || null);
       setRegistros(data.registros || registrosIniciales);
-      await cargarConciliacionEntradas(id);
+      await Promise.all([
+        cargarConciliacionEntradas(id),
+        cargarConciliacionCaja(id),
+      ]);
     } catch (error) {
       setCargaSeleccionada(null);
       setRegistros(registrosIniciales);
       setConciliacionEntradas(null);
+      setConciliacionCaja(null);
       Swal.fire(
         "Error",
         getErrorMessage(error, "No se pudo cargar el detalle financiero."),
@@ -1022,7 +1284,7 @@ export default function ControlFinanciero() {
     } finally {
       setLoadingDetalle(false);
     }
-  }, [cargarConciliacionEntradas]);
+  }, [cargarConciliacionCaja, cargarConciliacionEntradas]);
 
   const cargarConsolidadoVentas = async () => {
     if (filtrosAplicados.estado !== "ACTIVA" || loadingDetalle) return;
@@ -1044,6 +1306,8 @@ export default function ControlFinanciero() {
       setCargaSeleccionada(null);
       setConciliacionEntradas(null);
       setErrorConciliacion("");
+      setConciliacionCaja(null);
+      setErrorConciliacionCaja("");
       setRegistros({
         caja: [],
         ventasTv: data.registros?.ventasTv || [],
@@ -1090,6 +1354,8 @@ export default function ControlFinanciero() {
       setRegistros(registrosIniciales);
       setConciliacionEntradas(null);
       setErrorConciliacion("");
+      setConciliacionCaja(null);
+      setErrorConciliacionCaja("");
       Swal.fire(
         "Error",
         getErrorMessage(error, "No se pudo cargar el control financiero."),
@@ -1240,6 +1506,32 @@ export default function ControlFinanciero() {
       );
     } finally {
       setReconciliandoEntradas(false);
+    }
+  };
+
+  const reconciliarCaja = async () => {
+    if (!cargaSeleccionada?.id || reconciliandoCaja) return;
+
+    try {
+      setReconciliandoCaja(true);
+      const { data } = await api.post(
+        `/api/contabilidad/control-financiero/cargas/${cargaSeleccionada.id}/reconciliar-caja`,
+      );
+      setConciliacionCaja(data.conciliacion || null);
+      setErrorConciliacionCaja("");
+      await Swal.fire(
+        "Conciliacion de caja completada",
+        "Se creo una nueva ejecucion historica sin modificar el reporte ni los cierres.",
+        "success",
+      );
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        getErrorMessage(error, "No se pudo reconciliar la caja."),
+        "error",
+      );
+    } finally {
+      setReconciliandoCaja(false);
     }
   };
 
@@ -1481,6 +1773,31 @@ export default function ControlFinanciero() {
       ),
     );
   }, [busqueda, conciliacionEntradas]);
+
+  const resultadosConciliacionCajaVisibles = useMemo(() => {
+    const resultados = conciliacionCaja?.resultados || [];
+    const termino = busqueda.trim().toLocaleLowerCase("es");
+    if (!termino) return resultados;
+
+    return resultados.filter((resultado) =>
+      [
+        resultado.fechaReporteRegistro,
+        resultado.fechaCierre,
+        resultado.clienteReporte,
+        resultado.clienteCierre,
+        resultado.entidadCierre,
+        resultado.estado,
+        resultado.controlFinancieroRegistroId,
+        resultado.movimientoCajaId,
+        resultado.auditoria?.reporte?.contrato,
+        resultado.auditoria?.reporte?.archivoOrigen,
+      ].some((value) =>
+        String(value || "")
+          .toLocaleLowerCase("es")
+          .includes(termino),
+      ),
+    );
+  }, [busqueda, conciliacionCaja]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
@@ -1809,7 +2126,9 @@ export default function ControlFinanciero() {
                       className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-green-400"
                     />
                   </label>
-                  {tabActivo !== "conciliacionEntradas" && (
+                  {!["conciliacionEntradas", "conciliacionCaja"].includes(
+                    tabActivo,
+                  ) && (
                     <>
                       {tabVentasActivo && (
                         <button
@@ -1879,7 +2198,9 @@ export default function ControlFinanciero() {
                     {label} (
                     {id === "conciliacionEntradas"
                       ? conciliacionEntradas?.resultados?.length || 0
-                      : registros[id]?.length || 0}
+                      : id === "conciliacionCaja"
+                        ? conciliacionCaja?.resultados?.length || 0
+                        : registros[id]?.length || 0}
                     )
                   </button>
                 ))}
@@ -1899,6 +2220,15 @@ export default function ControlFinanciero() {
                     onReconciliar={reconciliarEntradas}
                     reconciliando={reconciliandoEntradas}
                     revisandoId={revisandoConciliacionId}
+                  />
+                ) : tabActivo === "conciliacionCaja" ? (
+                  <VistaConciliacionCaja
+                    key={`${cargaSeleccionada?.id}-${conciliacionCaja?.id || "sin-ejecucion"}`}
+                    conciliacion={conciliacionCaja}
+                    error={errorConciliacionCaja}
+                    resultados={resultadosConciliacionCajaVisibles}
+                    onReconciliar={reconciliarCaja}
+                    reconciliando={reconciliandoCaja}
                   />
                 ) : tabActivo === "caja" ? (
                   <VistaCaja

@@ -48,6 +48,9 @@ const {
 const {
   obtenerRegistrosAuditoriaDesdeControlFinanciero,
 } = require("../../services/controlFinancieroAuditoriaService");
+const {
+  esProcesoCompletoRegistrado,
+} = require("../../utils/procesoLlamadaEntrega");
 
 exports.obtenerReporteAuditoria = async ({
   fechaInicio,
@@ -878,7 +881,7 @@ exports.obtenerEntregasPorVendedorDashboard = async ({
 
   const entregas = await Entrega.findAll({
     where: whereEntrega,
-    attributes: ["id", "estado"],
+    attributes: ["id", "estado", "FechaHoraLlamada", "fotoFechaLlamada"],
     include: [
       {
         model: UsuarioAgencia,
@@ -936,10 +939,16 @@ exports.obtenerEntregasPorVendedorDashboard = async ({
     acc[item.vendedor] = item.total;
     return acc;
   }, {});
+  const procesosCompletos = entregas.reduce(
+    (total, entrega) =>
+      total + (esProcesoCompletoRegistrado(entrega) ? 1 : 0),
+    0,
+  );
 
   return {
     totales,
     porEstado,
+    procesosCompletos,
   };
 };
 

@@ -10,6 +10,9 @@ const {
   conciliarCarga,
 } = require("../../services/conciliacionEntradasService");
 const {
+  conciliarCargaCaja,
+} = require("../../services/conciliacionCuotasCajaService");
+const {
   auditarVentasDesdeDirectorios,
 } = require("../../services/auditoriaVentasPdfService");
 const {
@@ -278,6 +281,7 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
     });
     const { carga } = persistencia;
     let conciliacionEntradas = null;
+    let conciliacionCaja = null;
 
     try {
       conciliacionEntradas = await conciliarCarga({
@@ -290,6 +294,21 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
         "La carga se guardo, pero no se pudo conciliar sus entradas:",
         errorConciliacion,
       );
+    }
+
+    if ((datosControlFinanciero.registrosCaja || []).length) {
+      try {
+        conciliacionCaja = await conciliarCargaCaja({
+          cargaId: carga.id,
+          origen: "CARGA",
+          usuarioId: req.user?.id,
+        });
+      } catch (errorConciliacionCaja) {
+        console.error(
+          "La carga se guardo, pero no se pudo conciliar su caja:",
+          errorConciliacionCaja,
+        );
+      }
     }
 
     let auditoriaAutomatica = crearResumenAuditoriaNoAplica();
@@ -372,6 +391,12 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
       res.setHeader(
         "X-RVE-Conciliacion-Entradas",
         String(conciliacionEntradas.id),
+      );
+    }
+    if (conciliacionCaja?.id) {
+      res.setHeader(
+        "X-RVE-Conciliacion-Caja",
+        String(conciliacionCaja.id),
       );
     }
     establecerHeadersAuditoria(res, auditoriaAutomatica);
