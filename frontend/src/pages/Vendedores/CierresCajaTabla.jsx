@@ -15,6 +15,7 @@ import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
 import { getHoyLocal } from "../../utils/dateUtils";
 import { useAuthUser } from "../../utils/useAuthUser";
+import ClienteAutocomplete from "../../components/clientes/ClienteAutocomplete";
 
 const DENOMINACIONES_BASE = [100, 50, 20, 10, 5, 1, 0.5, 0.25, 0.1, 0.05, 0.01];
 const DETALLES_CAJA = [
@@ -37,6 +38,7 @@ const movimientoVacio = {
   formaPago: "",
   recibo: "",
   entidad: "",
+  clienteId: null,
   observacion: "",
 };
 
@@ -142,6 +144,7 @@ const mapMovimientoEdit = (m = {}) => ({
   formaPago: m.formaPago || "",
   recibo: m.recibo || "",
   entidad: m.entidad || m.observacion || "",
+  clienteId: m.clienteId || null,
   observacion: m.entidad ? m.observacion || "" : "",
 });
 
@@ -540,6 +543,7 @@ export default function CierresCajaTabla() {
           formaPago: m.formaPago,
           recibo: m.recibo || null,
           entidad: m.entidad || "",
+          clienteId: m.clienteId || null,
           observacion: m.observacion || "",
         })),
         retiros: editForm.retiros
@@ -578,6 +582,18 @@ export default function CierresCajaTabla() {
       const next = [...prev[lista]];
       next[index] = { ...next[index], [field]: value };
       return { ...prev, [lista]: next };
+    });
+  };
+
+  const actualizarClienteMovimiento = (index, texto, clienteId = null) => {
+    setEditForm((prev) => {
+      const movimientos = [...prev.movimientos];
+      movimientos[index] = {
+        ...movimientos[index],
+        entidad: texto,
+        clienteId,
+      };
+      return { ...prev, movimientos };
     });
   };
 
@@ -708,6 +724,7 @@ export default function CierresCajaTabla() {
                         saving={saving}
                         actualizarEditForm={actualizarEditForm}
                         actualizarLista={actualizarLista}
+                        actualizarClienteMovimiento={actualizarClienteMovimiento}
                         agregarItem={agregarItem}
                         eliminarItem={eliminarItem}
                         guardarEdicion={guardarEdicion}
@@ -1321,6 +1338,7 @@ function EditorCierre({
   saving,
   actualizarEditForm,
   actualizarLista,
+  actualizarClienteMovimiento,
   agregarItem,
   eliminarItem,
   guardarEdicion,
@@ -1670,11 +1688,17 @@ function EditorCierre({
                     />
                   </Td>
                   <Td>
-                    <input
-                      className="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    <ClienteAutocomplete
                       value={m.entidad}
-                      onChange={(e) =>
-                        actualizarLista("movimientos", index, "entidad", e.target.value)
+                      clienteId={m.clienteId}
+                      dropdownId={`clientes-cierre-admin-${index}`}
+                      wrapperClassName="relative min-w-0"
+                      inputClassName="w-full min-w-0 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      onChange={(value) =>
+                        actualizarClienteMovimiento(index, value)
+                      }
+                      onSelect={(cliente) =>
+                        actualizarClienteMovimiento(index, cliente.texto, cliente.id)
                       }
                     />
                   </Td>

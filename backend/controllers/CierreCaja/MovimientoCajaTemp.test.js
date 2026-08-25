@@ -37,6 +37,8 @@ describe("MovimientoCajaTemp controller", () => {
         detalle: "CUOTA",
         valor: "0",
         formaPago: "EFECTIVO",
+        entidad: "0102030405 - ANA PEREZ",
+        clienteId: 42,
       },
     };
     const res = crearRes();
@@ -49,6 +51,8 @@ describe("MovimientoCajaTemp controller", () => {
         detalle: "CUOTA",
         valor: 0,
         formaPago: "EFECTIVO",
+        entidad: "0102030405 - ANA PEREZ",
+        clienteId: 42,
       }),
     );
     expect(res.json).toHaveBeenCalledWith({
@@ -115,6 +119,7 @@ describe("MovimientoCajaTemp controller", () => {
         formaPago: "EFECTIVO",
         recibo: 555,
         entidad: "Cliente",
+        clienteId: 42,
         observacion: "Editado",
       },
     };
@@ -137,6 +142,7 @@ describe("MovimientoCajaTemp controller", () => {
         formaPago: "EFECTIVO",
         recibo: 555,
         entidad: "Cliente",
+        clienteId: 42,
         observacion: "Editado",
         estado: "ACTIVO",
       }),

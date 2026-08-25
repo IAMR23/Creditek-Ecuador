@@ -167,10 +167,17 @@ const esMovimientoValido = (m) =>
 const normalizarValorMovimiento = (valor) =>
   tieneValorNoNegativo(valor) ? redondearDosDecimales(valor) : null;
 
+const normalizarClienteId = (valor) => {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const clienteId = Number(valor);
+  return Number.isInteger(clienteId) && clienteId > 0 ? clienteId : null;
+};
+
 const normalizarMovimiento = (m = {}) => ({
   responsable: normalizarTexto(m.responsable),
   detalle: normalizarTexto(m.detalle),
   entidad: m.entidad ? normalizarTexto(m.entidad) : null,
+  clienteId: normalizarClienteId(m.clienteId),
   valor: normalizarValorMovimiento(m.valor),
   formaPago: m.formaPago ? normalizarTexto(m.formaPago).toUpperCase() : null,
   recibo:
@@ -202,6 +209,7 @@ const crearKeyMovimiento = (m) =>
     m.responsable || "",
     m.detalle || "",
     m.entidad || "",
+    m.clienteId || "",
     Number(m.valor) || 0,
     m.formaPago || "",
     m.recibo ?? "",
@@ -435,6 +443,7 @@ const obtenerMovimientosParaCierre = async ({
         responsable: m.responsable,
         detalle: m.detalle,
         entidad: m.entidad,
+        clienteId: m.clienteId,
         valor: m.valor,
         formaPago: m.formaPago,
         recibo: m.recibo,
@@ -620,6 +629,7 @@ const cerrarCaja = async (req, res) => {
         responsable: m.responsable,
         detalle: m.detalle,
         entidad: m.entidad,
+        clienteId: m.clienteId,
         valor: m.valor,
         formaPago: m.formaPago,
         recibo: m.recibo,
@@ -1112,6 +1122,7 @@ const actualizarCierreCajaReabierto = async (req, res) => {
         responsable: m.responsable,
         detalle: m.detalle,
         entidad: m.entidad,
+        clienteId: m.clienteId,
         valor: m.valor,
         formaPago: m.formaPago,
         recibo: m.recibo,

@@ -225,6 +225,8 @@ describe("cierreCaja controller", () => {
           {
             responsable: "Ana",
             detalle: "CUOTA",
+            entidad: "0102030405 - ANA PEREZ",
+            clienteId: 42,
             valor: "10.15",
             formaPago: "efectivo",
           },
@@ -258,6 +260,8 @@ describe("cierreCaja controller", () => {
           cierreId: 120,
           responsable: "Ana",
           detalle: "CUOTA",
+          entidad: "0102030405 - ANA PEREZ",
+          clienteId: 42,
           valor: 10.15,
           formaPago: "EFECTIVO",
         }),

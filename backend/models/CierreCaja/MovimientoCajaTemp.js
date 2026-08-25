@@ -23,6 +23,16 @@ const MovimientoCajaTemp = sequelize.define(
     },
     recibo: DataTypes.STRING,
     entidad: DataTypes.STRING,
+    clienteId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "clientes",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
     observacion: DataTypes.STRING,
     estado: DataTypes.STRING,
   },

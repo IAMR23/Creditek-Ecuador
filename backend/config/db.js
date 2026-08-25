@@ -177,12 +177,32 @@ const ensureMovimientoCajaSchema = async (queryInterface, tables) => {
       type: Sequelize.STRING,
       allowNull: true,
     });
+    await addColumnIfMissing(queryInterface, "movimiento_caja_temp", "clienteId", {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: {
+        model: "clientes",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    });
   }
 
   if (tables.includes("movimientos_caja")) {
     await addColumnIfMissing(queryInterface, "movimientos_caja", "entidad", {
       type: Sequelize.STRING,
       allowNull: true,
+    });
+    await addColumnIfMissing(queryInterface, "movimientos_caja", "clienteId", {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: {
+        model: "clientes",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
     });
   }
 };

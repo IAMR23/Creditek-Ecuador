@@ -31,6 +31,17 @@ const MovimientoCaja = sequelize.define(
       allowNull: true,
     },
 
+    clienteId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "clientes",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+
     valor: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
@@ -57,4 +68,4 @@ const MovimientoCaja = sequelize.define(
   },
 );
 
-module.exports = MovimientoCaja;    
+module.exports = MovimientoCaja;

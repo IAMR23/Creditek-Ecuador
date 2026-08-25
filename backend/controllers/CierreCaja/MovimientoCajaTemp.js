@@ -14,6 +14,12 @@ const esFechaISOValida = (fecha) =>
 const redondearDosDecimales = (valor) =>
   Number((Number(valor) || 0).toFixed(2));
 
+const normalizarClienteId = (valor) => {
+  if (valor === null || valor === undefined || valor === "") return null;
+  const clienteId = Number(valor);
+  return Number.isInteger(clienteId) && clienteId > 0 ? clienteId : null;
+};
+
 const tieneValorNoNegativo = (valor) => {
   const texto = String(valor ?? "").trim();
   if (texto === "") return false;
@@ -68,7 +74,16 @@ const crearMovimientoTemp = async (req, res) => {
       });
     }
 
-    const { responsable, detalle, valor, formaPago, recibo, entidad, observacion } = req.body;
+    const {
+      responsable,
+      detalle,
+      valor,
+      formaPago,
+      recibo,
+      entidad,
+      clienteId,
+      observacion,
+    } = req.body;
 
     if (!detalle?.trim() && !observacion?.trim()) {
       return res.status(400).json({
@@ -101,6 +116,7 @@ const crearMovimientoTemp = async (req, res) => {
       formaPago: formaPago?.trim() || null,
       recibo,
       entidad: entidad?.trim() || null,
+      clienteId: normalizarClienteId(clienteId),
       observacion,
       estado: "ACTIVO",
     });
@@ -121,7 +137,16 @@ const crearMovimientoTemp = async (req, res) => {
 };
 
 const validarPayloadMovimiento = (body = {}) => {
-  const { responsable, detalle, valor, formaPago, recibo, entidad, observacion } = body;
+  const {
+    responsable,
+    detalle,
+    valor,
+    formaPago,
+    recibo,
+    entidad,
+    clienteId,
+    observacion,
+  } = body;
 
   if (!detalle?.trim() && !observacion?.trim()) {
     return { error: "Detalle requerido" };
@@ -143,6 +168,7 @@ const validarPayloadMovimiento = (body = {}) => {
       formaPago: formaPago?.trim() || null,
       recibo: recibo || null,
       entidad: entidad?.trim() || null,
+      clienteId: normalizarClienteId(clienteId),
       observacion: observacion?.trim() || null,
       estado: "ACTIVO",
     },

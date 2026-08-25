@@ -1,5 +1,47 @@
 const Cliente = require("../models/Cliente");
+const { Op } = require("sequelize");
 const { buscarPersonaPorCedula } = require("../services/personasService");
+
+const LIMITE_BUSQUEDA_CLIENTES = 15;
+const LIMITE_MAXIMO_BUSQUEDA_CLIENTES = 20;
+
+const escaparPatronLike = (valor) =>
+  String(valor).replace(/[\\%_]/g, "\\$&");
+
+exports.buscarClientes = async (req, res) => {
+  const busqueda = String(req.query.q || "").trim();
+
+  if (busqueda.length < 2 || busqueda.length > 100) {
+    return res.status(400).json({
+      mensaje: "La busqueda debe tener entre 2 y 100 caracteres.",
+    });
+  }
+
+  const limiteSolicitado = Number.parseInt(req.query.limit, 10);
+  const limite = Number.isFinite(limiteSolicitado) && limiteSolicitado > 0
+    ? Math.min(limiteSolicitado, LIMITE_MAXIMO_BUSQUEDA_CLIENTES)
+    : LIMITE_BUSQUEDA_CLIENTES;
+  const patron = `%${escaparPatronLike(busqueda)}%`;
+
+  try {
+    const clientes = await Cliente.findAll({
+      where: {
+        [Op.or]: [
+          { cliente: { [Op.iLike]: patron } },
+          { cedula: { [Op.iLike]: patron } },
+        ],
+      },
+      attributes: ["id", "cliente", "cedula"],
+      order: [["cliente", "ASC"], ["id", "ASC"]],
+      limit: limite,
+    });
+
+    return res.json({ clientes });
+  } catch (error) {
+    console.error("Error buscando clientes:", error);
+    return res.status(500).json({ mensaje: "No se pudieron buscar los clientes." });
+  }
+};
 
 exports.buscarClientePorCedula = async (req, res) => {
   const cedula = String(req.params.cedula || "").trim();
