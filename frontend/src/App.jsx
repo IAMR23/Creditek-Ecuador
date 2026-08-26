@@ -84,6 +84,7 @@ import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
 import MapaComercial from "./pages/Sistemas/MapaComercial";
 import Inventarios from "./pages/Sistemas/Inventarios";
 import Personas from "./pages/Sistemas/Personas";
+import ConfiguracionReportesCaja from "./pages/Sistemas/ConfiguracionReportesCaja";
 import { registerSW } from "./utils/serviceWorker";
 import { initAppVersionWatcher } from "./utils/appVersion";
 
@@ -513,6 +514,13 @@ function App() {
                 <Route
                   path="sistemas/personas"
                   element={protect(<Personas />, "/sistemas/personas")}
+                />
+                <Route
+                  path="sistemas/reportes-caja-agencias"
+                  element={protect(
+                    <ConfiguracionReportesCaja />,
+                    "/sistemas/reportes-caja-agencias",
+                  )}
                 />
               </Route>
 

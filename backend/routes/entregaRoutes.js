@@ -26,6 +26,10 @@ const Obsequio = require("../models/Obsequio");
 const { Op, Sequelize } = require("sequelize");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
+const {
+  authenticate,
+  requirePermission,
+} = require("../middleware/authMiddleware");
 
 router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -221,10 +225,13 @@ router.get("/entregas", async (req, res) => {
           required: !!(userId && userId !== "todos"), // fuerza INNER JOIN si hay filtro
           through: {
             attributes: ["estado" , "activo"],
-            ...(userId &&
-              userId !== "todos" && {
-                where: { usuario_agencia_id: Number(userId) },
-              }),
+            where: {
+              activo: true,
+              ...(userId &&
+                userId !== "todos" && {
+                  usuario_agencia_id: Number(userId),
+                }),
+            },
           },
           include: [
             {
@@ -352,7 +359,12 @@ router.get("/contador", async (req, res) => {
   }
 });
 
-router.post("/:entregaId/asignar-repartidor", asignarEntrega);
+router.post(
+  "/:entregaId/asignar-repartidor",
+  authenticate,
+  requirePermission("Logistica", "Administracion"),
+  asignarEntrega,
+);
 
 // --------------------- CONTROLADORES ---------------------
 router.put("/entrega/:id/validar", upload.single("foto"), fotoClienteRespaldo);

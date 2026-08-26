@@ -2,6 +2,9 @@ const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
 const { spawn } = require("child_process");
+const {
+  obtenerMapeoReporteCaja,
+} = require("../../services/reporteCajaAgenciasService");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 
@@ -75,7 +78,12 @@ const normalizarAsignacionesAgencia = (raw) => {
     });
 };
 
-const runReporteCajaProcessor = ({ pdfs, outputFile, asignacionesAgencias }) =>
+const runReporteCajaProcessor = ({
+  pdfs,
+  outputFile,
+  asignacionesAgencias,
+  mapeoAgencias,
+}) =>
   new Promise((resolve, reject) => {
     const scriptPath = path.join(
       __dirname,
@@ -91,6 +99,7 @@ const runReporteCajaProcessor = ({ pdfs, outputFile, asignacionesAgencias }) =>
     if (asignacionesAgencias.length) {
       args.push("--asignaciones-agencias", JSON.stringify(asignacionesAgencias));
     }
+    args.push("--mapeo-agencias", JSON.stringify(mapeoAgencias));
 
     const child = spawn(getPythonBin(), [...args, ...pdfs], {
       cwd: path.join(__dirname, "..", ".."),
@@ -169,6 +178,7 @@ exports.extraerReportesCaja = async (req, res) => {
     const asignacionesAgencias = normalizarAsignacionesAgencia(
       req.body?.asignacionesAgencias,
     );
+    const mapeoAgencias = await obtenerMapeoReporteCaja();
     const pdfs = archivos.map((file) => file.path);
     const outputFile = path.join(tempRoot, "REPORTE_CAJA_GENERADO.xlsx");
 
@@ -176,6 +186,7 @@ exports.extraerReportesCaja = async (req, res) => {
       pdfs,
       outputFile,
       asignacionesAgencias,
+      mapeoAgencias,
     });
 
     if (!fs.existsSync(outputFile)) {

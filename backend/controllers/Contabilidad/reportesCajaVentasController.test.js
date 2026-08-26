@@ -34,6 +34,12 @@ jest.mock("../../services/auditoriaVentasPersistenciaService", () => ({
   guardarAuditoriaVentasPdf: jest.fn(),
 }));
 
+jest.mock("../../services/reporteCajaAgenciasService", () => ({
+  obtenerMapeoReporteCaja: jest.fn().mockResolvedValue([
+    { usuario: "ALEXFER", agencia: "NUEVA AURORA" },
+  ]),
+}));
+
 jest.mock("../Auditoria/auditoriaVentasController", () => ({
   obtenerReporteAuditoria: jest.fn(),
   auditarRegistrosPdf: jest.fn(),
@@ -226,6 +232,12 @@ describe("reportesCajaVentasController", () => {
       origen: "CARGA",
       usuarioId: 7,
     });
+    const argumentosPython = spawn.mock.calls[0][1];
+    const indiceMapeo = argumentosPython.indexOf("--mapeo-agencias");
+    expect(indiceMapeo).toBeGreaterThan(-1);
+    expect(JSON.parse(argumentosPython[indiceMapeo + 1])).toEqual([
+      { usuario: "ALEXFER", agencia: "NUEVA AURORA" },
+    ]);
     expect(res.setHeader).toHaveBeenCalledWith(
       "X-RVE-Conciliacion-Caja",
       "92",

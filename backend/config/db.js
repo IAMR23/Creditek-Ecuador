@@ -1107,6 +1107,84 @@ const ensureConsejoEjecutivoPreSyncSchema = async (queryInterface) => {
   );
 };
 
+const ensureReporteCajaUsuarioAgenciaPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("reporte_caja_usuario_agencia")) return;
+
+  await addColumnIfMissing(
+    queryInterface,
+    "reporte_caja_usuario_agencia",
+    "fechaDesde",
+    {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "reporte_caja_usuario_agencia",
+    "fechaHasta",
+    {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    },
+  );
+
+  await sequelize.query(`
+    UPDATE reporte_caja_usuario_agencia
+    SET "fechaDesde" = DATE '2000-01-01'
+    WHERE "fechaDesde" IS NULL;
+
+    ALTER TABLE reporte_caja_usuario_agencia
+      ALTER COLUMN "fechaDesde" SET DEFAULT DATE '2000-01-01',
+      ALTER COLUMN "fechaDesde" SET NOT NULL;
+
+    DO $$
+    DECLARE
+      restriccion RECORD;
+      indice RECORD;
+    BEGIN
+      FOR restriccion IN
+        SELECT con.conname
+        FROM pg_constraint con
+        JOIN pg_class tabla ON tabla.oid = con.conrelid
+        WHERE tabla.relname = 'reporte_caja_usuario_agencia'
+          AND con.contype = 'u'
+          AND pg_get_constraintdef(con.oid) = 'UNIQUE ("codigoUsuario")'
+      LOOP
+        EXECUTE format(
+          'ALTER TABLE reporte_caja_usuario_agencia DROP CONSTRAINT %I',
+          restriccion.conname
+        );
+      END LOOP;
+
+      FOR indice IN
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename = 'reporte_caja_usuario_agencia'
+          AND (
+            (
+              indexdef LIKE 'CREATE UNIQUE INDEX%'
+              AND indexdef LIKE '%("codigoUsuario")'
+            )
+            OR indexname LIKE 'reporte_caja_usuario_agencia_codigo_usuario_fecha_desde_fecha%'
+          )
+      LOOP
+        EXECUTE format('DROP INDEX IF EXISTS %I', indice.indexname);
+      END LOOP;
+    END $$;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS reporte_caja_usuario_agencia_codigo_desde_uidx
+    ON reporte_caja_usuario_agencia ("codigoUsuario", "fechaDesde");
+
+    CREATE INDEX IF NOT EXISTS reporte_caja_usuario_agencia_activo_agencia_idx
+    ON reporte_caja_usuario_agencia (activo, "agenciaId");
+
+    CREATE INDEX IF NOT EXISTS reporte_caja_usuario_agencia_codigo_vigencia_idx
+    ON reporte_caja_usuario_agencia ("codigoUsuario", "fechaDesde", "fechaHasta");
+  `);
+};
+
 const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
   if (!tables.includes("roles_creditek_ajustes")) return;
 
@@ -1238,6 +1316,7 @@ const connectDB = async () => {
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
+    await ensureReporteCajaUsuarioAgenciaPreSyncSchema(queryInterface);
     await sequelize.sync({});
 
     const tables = await queryInterface.showAllTables();
@@ -1339,6 +1418,10 @@ const connectDB = async () => {
       seedMetaMinimaMultaConfiguracion,
     } = require("../seeders/metaMinimaMultaSeeder");
     await seedMetaMinimaMultaConfiguracion();
+    const {
+      seedReporteCajaUsuarioAgencia,
+    } = require("../services/reporteCajaAgenciasService");
+    await seedReporteCajaUsuarioAgencia();
 
     if (tables.includes("precios_venta")) {
       await addColumnIfMissing(queryInterface, "precios_venta", "modeloId", {

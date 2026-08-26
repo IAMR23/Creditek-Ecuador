@@ -14,9 +14,86 @@ PDFS_DIR = BACKEND_DIR / "pdfs"
 sys.path.insert(0, str(MODULO_DIR))
 
 import ventas_cierre_processor as processor
+import processor as caja_processor
 
 
 class VentasCierreProcessorTest(unittest.TestCase):
+    def test_usa_mapeo_configurable_y_deja_desconocidos_en_otros(self):
+        mapeo = caja_processor.normalizar_mapeo_agencias(
+            [{"usuario": "USRCAJA", "agencia": "AGENCIA CENTRO"}]
+        )
+
+        self.assertEqual(
+            caja_processor.obtener_agencia(
+                "PREFIJO-USRCAJA-01",
+                mapeo_agencias=mapeo,
+            ),
+            "AGENCIA CENTRO",
+        )
+        self.assertEqual(
+            caja_processor.obtener_agencia("SINCONFIG", mapeo_agencias=mapeo),
+            "OTROS",
+        )
+
+    def test_excepcion_por_horario_tiene_prioridad_sobre_configuracion(self):
+        asignaciones = caja_processor.normalizar_asignaciones_agencias(
+            [
+                {
+                    "fecha": "2026-08-26",
+                    "usuario": "USRCAJA",
+                    "horaInicio": "10:00",
+                    "horaFin": "11:00",
+                    "agencia": "AGENCIA TEMPORAL",
+                }
+            ]
+        )
+        mapeo = caja_processor.normalizar_mapeo_agencias(
+            [{"usuario": "USRCAJA", "agencia": "AGENCIA BASE"}]
+        )
+
+        self.assertEqual(
+            caja_processor.obtener_agencia(
+                "USRCAJA",
+                "26/08/26",
+                asignaciones,
+                "10:30",
+                "",
+                mapeo,
+            ),
+            "AGENCIA TEMPORAL",
+        )
+
+    def test_selecciona_agencia_segun_historial_de_vigencias(self):
+        mapeo = caja_processor.normalizar_mapeo_agencias(
+            [
+                {
+                    "usuario": "HISTUSR",
+                    "agencia": "CAUPICHO",
+                    "fechaDesde": "2026-01-01",
+                    "fechaHasta": "2026-01-31",
+                },
+                {
+                    "usuario": "HISTUSR",
+                    "agencia": "SANGOLQUI",
+                    "fechaDesde": "2026-02-01",
+                    "fechaHasta": None,
+                },
+            ]
+        )
+
+        self.assertEqual(
+            caja_processor.obtener_agencia(
+                "HISTUSR01", "15/01/26", mapeo_agencias=mapeo
+            ),
+            "CAUPICHO",
+        )
+        self.assertEqual(
+            caja_processor.obtener_agencia(
+                "HISTUSR01", "15/02/26", mapeo_agencias=mapeo
+            ),
+            "SANGOLQUI",
+        )
+
     def test_extrae_los_dos_formatos_de_ventas(self):
         tv, errores_tv = processor.extraer_ventas(
             [PDFS_DIR / "ReportUphone_CierreCajaVentas_IAMRS2.pdf"],

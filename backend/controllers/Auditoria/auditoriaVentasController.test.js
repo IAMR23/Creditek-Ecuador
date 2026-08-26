@@ -597,6 +597,17 @@ describe("comentario de auditoria de ventas", () => {
     expect(fila.comentarioAuditoria).toBe("Validado contra el contrato");
   });
 
+  test("incluye la observacion del detalle al formatear el reporte", () => {
+    const venta = crearVentaTv({ ventaId: 3802, detalleId: 3678 });
+    venta.detalleVenta[0].observacionDetalle = "Cliente solicita entrega por la tarde";
+
+    const [fila] = controller.formatearReporte([venta]);
+
+    expect(fila.observacionDetalle).toBe(
+      "Cliente solicita entrega por la tarde",
+    );
+  });
+
   test("guarda un comentario normalizado para la venta", async () => {
     const update = jest.fn().mockResolvedValue(undefined);
     jest.spyOn(Venta, "findByPk").mockResolvedValue({ id: 3802, update });

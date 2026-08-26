@@ -29,6 +29,7 @@ import {
   UsersRound,
   WalletCards,
   Sparkles,
+  Settings2,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
@@ -333,6 +334,11 @@ export default function Sidebar({ auth }) {
             label: "Personas",
             icon: <Users size={20} />,
             path: "/sistemas/personas",
+          },
+          {
+            label: "Agencias reportes caja",
+            icon: <Settings2 size={20} />,
+            path: "/sistemas/reportes-caja-agencias",
           },
           {
             label: "Normalizacion dispositivos",

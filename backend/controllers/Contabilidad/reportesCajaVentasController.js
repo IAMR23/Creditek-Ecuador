@@ -19,6 +19,9 @@ const {
   guardarAuditoriaVentasPdf,
 } = require("../../services/auditoriaVentasPersistenciaService");
 const auditoriaVentasController = require("../Auditoria/auditoriaVentasController");
+const {
+  obtenerMapeoReporteCaja,
+} = require("../../services/reporteCajaAgenciasService");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -96,6 +99,7 @@ const runProcessor = ({
   outputFile,
   dataOutputFile,
   asignacionesAgencias,
+  mapeoAgencias,
 }) =>
   new Promise((resolve, reject) => {
     const scriptPath = path.join(
@@ -123,6 +127,7 @@ const runProcessor = ({
     if (asignacionesAgencias.length) {
       args.push("--asignaciones-agencias", JSON.stringify(asignacionesAgencias));
     }
+    args.push("--mapeo-agencias", JSON.stringify(mapeoAgencias));
 
     const child = spawn(getPythonBin(), args, {
       cwd: path.join(__dirname, "..", ".."),
@@ -243,6 +248,9 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
     const asignacionesAgencias = normalizarAsignacionesAgencia(
       req.body?.asignacionesAgencias,
     );
+    const mapeoAgencias = reportesCaja.length
+      ? await obtenerMapeoReporteCaja()
+      : [];
     const outputFile = path.join(tempRoot, "CIERRE_CAJA_CON_VENTAS.xlsx");
     const dataOutputFile = path.join(tempRoot, "CONTROL_FINANCIERO.json");
     const { summary } = await runProcessor({
@@ -252,6 +260,7 @@ exports.extraerCierreCajaConVentas = async (req, res) => {
       outputFile,
       dataOutputFile,
       asignacionesAgencias,
+      mapeoAgencias,
     });
 
     if (!fs.existsSync(outputFile)) {

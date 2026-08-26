@@ -11,16 +11,6 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 
-MAPEO_AGENCIAS = {
-    "ALEXFER": "NUEVA AURORA",
-    "GABYMATRIZ": "NUEVA AURORA",
-    "GABYCAUP": "NUEVA AURORA",
-    "GABYSANGO": "NUEVA AURORA",
-    "GABYCHILLO": "NUEVA AURORA",
-    "DAMIZA": "CAUPICHO",
-    "CHAVICTK": "SANGOLQUI",
-}
-
 PRODUCTOS_VALIDOS = ["CREDITV", "UPHONE"]
 
 PATRON_INICIO_FILA = re.compile(
@@ -165,15 +155,53 @@ def normalizar_asignaciones_agencias(raw) -> dict[str, list[dict]]:
     return asignaciones
 
 
+def normalizar_mapeo_agencias(raw) -> list[dict]:
+    mapeo = []
+
+    if not raw:
+        return mapeo
+
+    for item in raw:
+        usuario = str(item.get("usuario", "")).upper().strip()
+        agencia = str(item.get("agencia", "")).upper().strip()
+        fecha_desde = normalizar_fecha_asignacion(
+            str(item.get("fechaDesde", ""))
+        ) or "0001-01-01"
+        fecha_hasta_raw = str(item.get("fechaHasta", "") or "").strip()
+        fecha_hasta = (
+            normalizar_fecha_asignacion(fecha_hasta_raw)
+            if fecha_hasta_raw
+            else ""
+        )
+        if usuario and agencia:
+            mapeo.append(
+                {
+                    "usuario": usuario,
+                    "agencia": agencia,
+                    "fechaDesde": fecha_desde,
+                    "fechaHasta": fecha_hasta,
+                }
+            )
+
+    return sorted(
+        mapeo,
+        key=lambda item: (len(item["usuario"]), item["fechaDesde"]),
+        reverse=True,
+    )
+
+
 def obtener_agencia(
     usuario_cobrador: str,
     fecha: str = "",
     asignaciones_agencias: dict[str, list[dict]] | None = None,
     hora: str = "",
     ampm: str = "",
+    mapeo_agencias: list[dict] | None = None,
 ) -> str:
     usuario = (usuario_cobrador or "").upper().strip()
     fechas_posibles = obtener_fechas_posibles(fecha)
+    if not fechas_posibles:
+        fechas_posibles = [date.today().isoformat()]
     hora_registro = hora_a_minutos(hora, ampm)
 
     if asignaciones_agencias:
@@ -193,9 +221,14 @@ def obtener_agencia(
                     ):
                         return asignacion["agencia"]
 
-    for clave, agencia in MAPEO_AGENCIAS.items():
-        if clave in usuario:
-            return agencia
+    for configuracion in mapeo_agencias or []:
+        if configuracion["usuario"] not in usuario:
+            continue
+
+        fecha_desde = configuracion.get("fechaDesde") or "0001-01-01"
+        fecha_hasta = configuracion.get("fechaHasta") or "9999-12-31"
+        if any(fecha_desde <= fecha_item <= fecha_hasta for fecha_item in fechas_posibles):
+            return configuracion["agencia"]
 
     return "OTROS"
 
@@ -273,6 +306,7 @@ def unir_lineas_cortadas(lineas: list[str]) -> list[str]:
 def extraer_pdf(
     ruta_pdf: Path,
     asignaciones_agencias: dict[str, list[dict]] | None = None,
+    mapeo_agencias: list[dict] | None = None,
 ) -> tuple[list[dict], list[str]]:
     registros = []
     no_leidas = []
@@ -325,6 +359,7 @@ def extraer_pdf(
                     asignaciones_agencias,
                     hora,
                     ampm,
+                    mapeo_agencias,
                 ),
                 "ARCHIVO": ruta_pdf.name,
             }
@@ -426,7 +461,13 @@ def escribir_reporte(registros: list[dict], salida: Path, no_leidas_por_archivo)
     ws.append(["RESUMEN GENERAL"])
     ws.append(["AGENCIA", "UPHONE", "CREDITV", "TOTAL"])
 
-    agencias = ["NUEVA AURORA", "CAUPICHO", "SANGOLQUI", "OTROS"]
+    agencias_preferidas = ["NUEVA AURORA", "CAUPICHO", "SANGOLQUI"]
+    agencias_en_registros = {
+        r["AGENCIA"] for r in registros if r.get("AGENCIA") and r["AGENCIA"] != "OTROS"
+    }
+    agencias = list(agencias_preferidas)
+    agencias.extend(sorted(agencias_en_registros.difference(agencias)))
+    agencias.append("OTROS")
     resumen = defaultdict(lambda: defaultdict(float))
 
     for r in registros:
@@ -482,14 +523,20 @@ def escribir_reporte(registros: list[dict], salida: Path, no_leidas_por_archivo)
     wb.save(salida)
 
 
-def procesar(pdfs: list[Path], salida: Path, asignaciones_agencias=None):
+def procesar(
+    pdfs: list[Path],
+    salida: Path,
+    asignaciones_agencias=None,
+    mapeo_agencias=None,
+):
     registros = []
     todas_no_leidas = defaultdict(list)
     detalle_archivos = []
     asignaciones = normalizar_asignaciones_agencias(asignaciones_agencias or [])
+    mapeo = normalizar_mapeo_agencias(mapeo_agencias or [])
 
     for pdf in pdfs:
-        extraidos, no_leidas = extraer_pdf(pdf, asignaciones)
+        extraidos, no_leidas = extraer_pdf(pdf, asignaciones, mapeo)
         registros.extend(extraidos)
 
         if no_leidas:
@@ -519,17 +566,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--asignaciones-agencias", default="[]")
+    parser.add_argument("--mapeo-agencias", default="[]")
     parser.add_argument("pdfs", nargs="+")
     args = parser.parse_args()
 
     try:
         asignaciones_agencias = json.loads(args.asignaciones_agencias)
+        mapeo_agencias = json.loads(args.mapeo_agencias)
     except json.JSONDecodeError as exc:
-        raise ValueError("Las asignaciones de agencias no tienen un formato valido.") from exc
+        raise ValueError("La configuracion de agencias no tiene un formato valido.") from exc
 
     pdfs = [Path(pdf) for pdf in args.pdfs]
     salida = Path(args.output)
-    resultado = procesar(pdfs, salida, asignaciones_agencias)
+    resultado = procesar(pdfs, salida, asignaciones_agencias, mapeo_agencias)
     print(json.dumps(resultado, ensure_ascii=False))
 
 

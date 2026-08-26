@@ -63,6 +63,7 @@ const ConfiguracionMesComision = require('./ConfiguracionMesComision');
 const PagoComisionPeriodo = require('./PagoComisionPeriodo');
 const MetaMinimaMultaConfiguracion = require('./MetaMinimaMultaConfiguracion');
 const InventarioSistema = require('./InventarioSistema');
+const ReporteCajaUsuarioAgencia = require('./ReporteCajaUsuarioAgencia');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
 const ControlFinancieroConciliacionEntrada = require('./ControlFinancieroConciliacionEntrada');
@@ -995,6 +996,18 @@ InventarioSistema.belongsTo(Usuario, {
 InventarioSistema.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
+});
+
+/* CONFIGURACION AGENCIAS DE REPORTES DE CAJA */
+
+ReporteCajaUsuarioAgencia.belongsTo(Agencia, {
+  foreignKey: "agenciaId",
+  as: "agencia",
+});
+
+Agencia.hasMany(ReporteCajaUsuarioAgencia, {
+  foreignKey: "agenciaId",
+  as: "usuariosReportesCaja",
 });
 
 /* CONTROL FINANCIERO */

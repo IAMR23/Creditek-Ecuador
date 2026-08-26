@@ -55,6 +55,7 @@ const TABLE_COLUMNS = [
   "Alcance",
   "Estado",
   "Observacion",
+  "Observacion Detalle",
   "Comentario Auditoria",
   "Observacion Error",
 ];
@@ -225,6 +226,7 @@ const mapVentaAuditoria = (
     Vendedor: venta.vendedor ?? "",
     Origen: venta.origen ?? "",
     Observacion: venta.observaciones ?? "",
+    "Observacion Detalle": venta.observacionDetalle ?? "",
     "Comentario Auditoria": venta.comentarioAuditoria ?? "",
     Dispositivo: `${venta.tipo ?? ""}`.toUpperCase(),
     Modelo: `${venta.marca ?? ""} ${venta.modelo ?? ""}`.toUpperCase(),
@@ -1315,6 +1317,7 @@ export default function VentasAuditoria() {
 
     if (
       key === "Observacion" ||
+      key === "Observacion Detalle" ||
       key === "Comentario Auditoria" ||
       key === "Observacion Error"
     ) {
@@ -1694,7 +1697,7 @@ export default function VentasAuditoria() {
           </div>
 
           <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[2500px] border-collapse text-xs">
+            <table className="w-full min-w-[2650px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-gray-100 text-left uppercase text-gray-600">
                 <tr>
                   <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-100 px-3 py-2 text-center">

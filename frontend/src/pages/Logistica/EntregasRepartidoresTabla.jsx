@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import axios from "axios";
-import { API_URL } from "../../../config";
+import Swal from "sweetalert2";
+import api from "../../api/client";
 import { getHoyLocal } from "../../utils/dateUtils";
 
 const OPCIONES_ERRORES = [
@@ -38,14 +38,17 @@ export default function EntregasRepartidoresTabla() {
   const [filaAbierta, setFilaAbierta] = useState(null);
   const [erroresTemp, setErroresTemp] = useState({});
   const [guardandoErrores, setGuardandoErrores] = useState({});
+  const [entregaReasignacion, setEntregaReasignacion] = useState(null);
+  const [nuevoRepartidorId, setNuevoRepartidorId] = useState("");
+  const [reasignando, setReasignando] = useState(false);
 
   useEffect(() => {
     const fetchRepartidores = async () => {
       try {
         setLoadingRepartidores(true);
 
-        const response = await axios.get(
-          `${API_URL}/api/usuario-permisos/usuarios-repartidores`,
+        const response = await api.get(
+          "/api/usuario-permisos/usuarios-repartidores",
         );
 
         setRepartidores(Array.isArray(response.data) ? response.data : []);
@@ -71,7 +74,7 @@ export default function EntregasRepartidoresTabla() {
       if (fechaFin) params.fechaFin = fechaFin;
       if (estado) params.estado = estado;
 
-      const response = await axios.get(`${API_URL}/entregas/entregas`, {
+      const response = await api.get("/entregas/entregas", {
         params,
       });
 
@@ -140,7 +143,7 @@ export default function EntregasRepartidoresTabla() {
 
       const errores = erroresTemp[id] || [];
 
-      await axios.put(`${API_URL}/entregas/${id}`, {
+      await api.put(`/entregas/${id}`, {
         errores,
       });
 
@@ -158,6 +161,100 @@ export default function EntregasRepartidoresTabla() {
       setGuardandoErrores((prev) => ({ ...prev, [id]: false }));
     }
   };
+
+  const abrirReasignacion = (entrega) => {
+    setEntregaReasignacion(entrega);
+    setNuevoRepartidorId("");
+  };
+
+  const cerrarReasignacion = () => {
+    if (reasignando) return;
+    setEntregaReasignacion(null);
+    setNuevoRepartidorId("");
+  };
+
+  const repartidorActualId =
+    entregaReasignacion?.repartidores?.find(
+      (repartidor) =>
+        repartidor.UsuarioAgenciaEntrega?.activo !== false,
+    )?.id ?? entregaReasignacion?.repartidores?.[0]?.id;
+
+  const repartidoresDisponibles = useMemo(
+    () =>
+      repartidores.filter(
+        (repartidor) => String(repartidor.id) !== String(repartidorActualId),
+      ),
+    [repartidorActualId, repartidores],
+  );
+
+  const confirmarReasignacion = async () => {
+    if (!entregaReasignacion || !nuevoRepartidorId) return;
+
+    const nuevoRepartidor = repartidores.find(
+      (repartidor) => String(repartidor.id) === String(nuevoRepartidorId),
+    );
+    const nombreNuevo = nuevoRepartidor?.usuario?.nombre || "el repartidor seleccionado";
+
+    const confirmacion = await Swal.fire({
+      icon: "warning",
+      title: "Confirmar reasignación",
+      text: `La entrega #${entregaReasignacion.id} pasará de ${entregaReasignacion.motorizado || "su repartidor actual"} a ${nombreNuevo}.`,
+      showCancelButton: true,
+      confirmButtonText: "Sí, reasignar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#2563eb",
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      setReasignando(true);
+
+      await api.post(
+        `/entregas/${entregaReasignacion.id}/asignar-repartidor`,
+        {
+          usuarioAgenciaId: Number(nuevoRepartidorId),
+          forzarReasignacion: true,
+        },
+      );
+
+      await fetchEntregas();
+      setEntregaReasignacion(null);
+      setNuevoRepartidorId("");
+
+      await Swal.fire({
+        icon: "success",
+        title: "Entrega reasignada",
+        text: `Ahora está asignada a ${nombreNuevo}.`,
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error(err);
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo reasignar",
+        text:
+          err.response?.data?.message ||
+          "Ocurrió un error al cambiar el repartidor.",
+      });
+    } finally {
+      setReasignando(false);
+    }
+  };
+
+  const renderAccionReasignar = (entrega) =>
+    entrega.estado === "Transito" ? (
+      <button
+        type="button"
+        onClick={() => abrirReasignacion(entrega)}
+        className="whitespace-nowrap rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+      >
+        Reasignar
+      </button>
+    ) : (
+      <span className="text-gray-400">—</span>
+    );
 
   const renderErroresGuardados = (errores) => {
     if (!Array.isArray(errores) || errores.length === 0) {
@@ -309,6 +406,7 @@ export default function EntregasRepartidoresTabla() {
               <th className="px-4 py-3">Alcance</th>
               <th className="px-4 py-3">Motorizado</th>
               <th className="px-4 py-3">Errores</th>
+              <th className="px-4 py-3">Acciones</th>
             </tr>
           </thead>
 
@@ -480,6 +578,12 @@ export default function EntregasRepartidoresTabla() {
                             )}
                           </div>
                         </td>
+
+                        <td className="px-4 py-2">
+                          {index === 0
+                            ? renderAccionReasignar(entrega)
+                            : null}
+                        </td>
                       </tr>
                     ))
                   : [
@@ -490,12 +594,78 @@ export default function EntregasRepartidoresTabla() {
                         >
                           Entrega sin productos
                         </td>
+                        <td className="px-4 py-2">
+                          {renderAccionReasignar(entrega)}
+                        </td>
                       </tr>,
                     ],
               )}
           </tbody>
         </table>
       </div>
+
+      {entregaReasignacion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-reasignacion"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3
+              id="titulo-reasignacion"
+              className="text-lg font-bold text-gray-800"
+            >
+              Reasignar entrega #{entregaReasignacion.id}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Repartidor actual: {entregaReasignacion.motorizado || "Sin información"}
+            </p>
+
+            <label className="mt-5 block text-sm font-medium text-gray-700">
+              Nuevo repartidor
+              <select
+                value={nuevoRepartidorId}
+                onChange={(event) => setNuevoRepartidorId(event.target.value)}
+                disabled={reasignando}
+                className="mt-1 w-full rounded-xl border-gray-300"
+              >
+                <option value="">-- Seleccione un repartidor --</option>
+                {repartidoresDisponibles.map((repartidor) => (
+                  <option key={repartidor.id} value={repartidor.id}>
+                    {repartidor.usuario?.nombre || "Sin nombre"} — {repartidor.agencia?.nombre || "Sin agencia"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {repartidoresDisponibles.length === 0 && (
+              <p className="mt-2 text-sm text-amber-700">
+                No hay otro repartidor activo disponible.
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={cerrarReasignacion}
+                disabled={reasignando}
+                className="rounded-lg bg-gray-200 px-4 py-2 text-sm text-gray-700 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarReasignacion}
+                disabled={!nuevoRepartidorId || reasignando}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {reasignando ? "Reasignando..." : "Reasignar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

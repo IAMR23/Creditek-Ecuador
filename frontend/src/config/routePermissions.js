@@ -100,6 +100,7 @@ export const ROUTE_PERMISSIONS = {
   "/sistemas/mapa-comercial": ["Sistemas", "Administracion"],
   "/sistemas/inventarios": ["Sistemas", "Administracion"],
   "/sistemas/personas": ["Sistemas", "Administracion"],
+  "/sistemas/reportes-caja-agencias": ["Sistemas", "Administracion"],
 
   "/usuarios": "Administracion",
   "/rol": "Administracion",

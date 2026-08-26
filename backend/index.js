@@ -232,6 +232,7 @@ connectDB()
     app.use("/api/sistemas/mapa-comercial", require("./routes/Sistemas/mapaComercialRoutes"));
     app.use("/api/sistemas/inventarios", require("./routes/Sistemas/inventariosRoutes"));
     app.use("/api/sistemas/personas", require("./routes/Sistemas/personasRoutes"));
+    app.use("/api/sistemas/reportes-caja-agencias", require("./routes/Sistemas/reporteCajaAgenciasRoutes"));
     app.use("/api/alertas-personal", require("./routes/alertasPersonalRoutes"));
     app.use("/api/planes-batalla", require("./routes/planesBatallaRoutes"));
     app.use("/api/integraciones/abs", require("./routes/integracionesAbsRoutes"));

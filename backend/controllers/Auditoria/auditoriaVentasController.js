@@ -164,6 +164,7 @@ exports.obtenerReporteAuditoria = async ({
           "contrato",
           "cierreCaja",
           "formaPagoId",
+          "observacionDetalle",
           "referenciaPdf",
         ],
         ...((Object.keys(whereDetalleVenta).length > 0 ||
@@ -1952,6 +1953,7 @@ exports.formatearReporte = (ventas) => {
         alcance: detalle.alcance || "0",
 
         observaciones: venta.observacion || "",
+        observacionDetalle: detalle.observacionDetalle || "",
         comentarioAuditoria: venta.comentarioAuditoria || "",
         contrato: detalle.contrato || "",
         validada: venta.validada || "",

@@ -15,6 +15,7 @@ from processor import (
     escribir_reporte as escribir_reporte_caja,
     extraer_pdf as extraer_reporte_caja_pdf,
     normalizar_asignaciones_agencias,
+    normalizar_mapeo_agencias,
 )
 
 
@@ -364,14 +365,16 @@ def procesar_reportes_caja_con_detalle(
     reportes_caja: list[Path],
     salida: Path,
     asignaciones_agencias=None,
+    mapeo_agencias=None,
 ):
     registros = []
     no_leidas_por_archivo = defaultdict(list)
     detalle_archivos = []
     asignaciones = normalizar_asignaciones_agencias(asignaciones_agencias or [])
+    mapeo = normalizar_mapeo_agencias(mapeo_agencias or [])
 
     for pdf in reportes_caja:
-        extraidos, no_leidas = extraer_reporte_caja_pdf(pdf, asignaciones)
+        extraidos, no_leidas = extraer_reporte_caja_pdf(pdf, asignaciones, mapeo)
         nombre_archivo = obtener_nombre_archivo(pdf)
         archivo_hash = calcular_hash_archivo(pdf)
         for registro in extraidos:
@@ -415,6 +418,7 @@ def procesar(
     salida: Path,
     asignaciones_agencias=None,
     salida_datos: Path | None = None,
+    mapeo_agencias=None,
 ):
     if not reportes_caja and not ventas_tv_pdfs and not ventas_celular_pdfs:
         raise ValueError(
@@ -422,10 +426,15 @@ def procesar(
         )
 
     if reportes_caja:
-        resumen_caja, registros_caja = procesar_reportes_caja_con_detalle(
+        argumentos_caja = [
             reportes_caja,
             salida,
             asignaciones_agencias or [],
+        ]
+        if mapeo_agencias:
+            argumentos_caja.append(mapeo_agencias)
+        resumen_caja, registros_caja = procesar_reportes_caja_con_detalle(
+            *argumentos_caja,
         )
         wb = load_workbook(salida)
         hoja_inicial = None
@@ -503,13 +512,15 @@ def main():
     parser.add_argument("--ventas-celular-dir")
     parser.add_argument("--data-output")
     parser.add_argument("--asignaciones-agencias", default="[]")
+    parser.add_argument("--mapeo-agencias", default="[]")
     args = parser.parse_args()
 
     try:
         asignaciones_agencias = json.loads(args.asignaciones_agencias)
+        mapeo_agencias = json.loads(args.mapeo_agencias)
     except json.JSONDecodeError as exc:
         raise ValueError(
-            "Las asignaciones de agencias no tienen un formato valido."
+            "La configuracion de agencias no tiene un formato valido."
         ) from exc
 
     resultado = procesar(
@@ -519,6 +530,7 @@ def main():
         Path(args.output),
         asignaciones_agencias,
         Path(args.data_output) if args.data_output else None,
+        mapeo_agencias,
     )
     print(json.dumps(resultado, ensure_ascii=False))
 
