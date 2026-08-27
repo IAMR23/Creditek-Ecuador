@@ -132,7 +132,8 @@ const ESTADO_OPTIONS_HTML = `
   <option value="libre">Libre / Sin registro</option>
 `
 
-export default function ControlAsistencia() {
+export default function ControlAsistencia({ fase = "", embedded = false }) {
+  const soloCapacitacion = fase === "capacitacion"
   const [mes, setMes] = useState(getTodayMonth())
   const [agenciaId, setAgenciaId] = useState("")
   const [loading, setLoading] = useState(false)
@@ -150,6 +151,7 @@ export default function ControlAsistencia() {
         params: {
           mes,
           agenciaId: agenciaId || undefined,
+          fase: soloCapacitacion ? "capacitacion" : undefined,
         },
       })
 
@@ -167,7 +169,7 @@ export default function ControlAsistencia() {
 
   useEffect(() => {
     cargarAsistencia()
-  }, [mes, agenciaId])
+  }, [mes, agenciaId, soloCapacitacion])
 
   const guardarAsistencia = async ({
     agenciaId: agenciaActualId,
@@ -491,11 +493,13 @@ export default function ControlAsistencia() {
   }, [agencias, search])
 
   return (
-    <div className="p-4">
+    <div className={embedded ? "mt-6" : "p-4"}>
       <div className="overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="bg-black px-4 py-3 text-white">
           <h2 className="text-xl font-extrabold uppercase tracking-wide">
-            Registro de terminales, planificacion semanal de agencias
+            {soloCapacitacion
+              ? "Movimientos del personal en capacitación"
+              : "Registro de terminales, planificacion semanal de agencias"}
           </h2>
         </div>
 
@@ -516,7 +520,7 @@ export default function ControlAsistencia() {
               <option value="">Todas las agencias</option>
               {agencias.map((agencia) => (
                 <option key={agencia.id} value={agencia.id}>
-                  {agencia.nombre}
+                  {agencia.nombre} · {agencia.tipo === "DEPARTAMENTO" ? "Departamento" : "Agencia"}
                 </option>
               ))}
             </select>
@@ -580,7 +584,9 @@ export default function ControlAsistencia() {
                     colSpan={fechas.length + 1}
                     className="px-4 py-8 text-center text-gray-500"
                   >
-                    No hay datos de asistencia
+                    {soloCapacitacion
+                      ? "No hay personal activo en capacitación con usuario y agencia asignados"
+                      : "No hay datos de asistencia"}
                   </td>
                 </tr>
               ) : (
@@ -592,7 +598,12 @@ export default function ControlAsistencia() {
                         className="border border-black px-2 py-1 font-bold uppercase"
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <span>{agencia.nombre}</span>
+                          <span className="flex items-center gap-2">
+                            {agencia.nombre}
+                            <span className="rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-700">
+                              {agencia.tipo === "DEPARTAMENTO" ? "Departamento" : "Agencia"}
+                            </span>
+                          </span>
                           <button
                             type="button"
                             onClick={() =>

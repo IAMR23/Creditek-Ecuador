@@ -5,6 +5,7 @@ const Agencia = require("../models/Agencia");
 const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Asistencia = require("../models/Asistencia");
+const Postulacion = require("../models/Postulacion");
 const { sequelize } = require("../config/db");
 const {
   sincronizarSalidaUsuarioRve,
@@ -48,6 +49,29 @@ const normalizarObservacion = (observacion) => {
 };
 
 const validarFechaISO = (fecha) => /^\d{4}-\d{2}-\d{2}$/.test(String(fecha));
+
+const normalizarCedula = (cedula) => String(cedula || "").replace(/\D/g, "");
+
+const obtenerCedulasCapacitacion = async () => {
+  const postulaciones = await Postulacion.findAll({
+    where: {
+      pasaEntrevista: true,
+      descartada: false,
+      estadoEntrevista: "CAPACITACION",
+    },
+    attributes: ["cedula", "formulario"],
+  });
+
+  return new Set(
+    postulaciones
+      .map((postulacion) =>
+        normalizarCedula(
+          postulacion.cedula || postulacion.formulario?.datos_personales?.cedula,
+        ),
+      )
+      .filter(Boolean),
+  );
+};
 
 const obtenerConflictoFechaIngreso = (usuarios, fecha) =>
   usuarios.find(
@@ -221,14 +245,19 @@ const obtenerFechasEnRango = (fechaInicio, fechaFin) => {
 router.get("/agencias", async (req, res) => {
   try {
     const { mes, agenciaId } = req.query;
+    const fase = String(req.query.fase || "").trim().toLowerCase();
     const { start, end } = parseMesToRange(mes);
+
+    if (fase && fase !== "capacitacion") {
+      return res.status(400).json({ message: "La fase solicitada no es válida." });
+    }
 
     const whereAgencia = {};
     if (agenciaId) whereAgencia.id = agenciaId;
 
     const agencias = await Agencia.findAll({
       where: whereAgencia,
-      attributes: ["id", "nombre"],
+      attributes: ["id", "nombre", "tipo"],
       include: [
         {
           model: Usuario,
@@ -238,20 +267,30 @@ router.get("/agencias", async (req, res) => {
           required: false,
         },
       ],
-      order: [["nombre", "ASC"]],
+      order: [
+        ["tipo", "ASC"],
+        ["nombre", "ASC"],
+      ],
     });
 
-    const usuarioAgencias = await UsuarioAgencia.findAll({
+    let usuarioAgencias = await UsuarioAgencia.findAll({
       where: { activo: true, ...(agenciaId ? { agenciaId } : {}) },
       include: [
         {
           model: Usuario,
           as: "usuario",
-          attributes: ["id", "nombre", "fechaIngreso", "fechaSalida"],
+          attributes: ["id", "cedula", "nombre", "fechaIngreso", "fechaSalida"],
         },
-        { model: Agencia, as: "agencia", attributes: ["id", "nombre"] },
+        { model: Agencia, as: "agencia", attributes: ["id", "nombre", "tipo"] },
       ],
     });
+
+    if (fase === "capacitacion") {
+      const cedulasCapacitacion = await obtenerCedulasCapacitacion();
+      usuarioAgencias = usuarioAgencias.filter((usuarioAgencia) =>
+        cedulasCapacitacion.has(normalizarCedula(usuarioAgencia.usuario?.cedula)),
+      );
+    }
 
     const usuarioIds = [...new Set(usuarioAgencias.map((ua) => ua.usuarioId))];
     const todasRelacionesUsuarios = usuarioIds.length
@@ -326,11 +365,14 @@ router.get("/agencias", async (req, res) => {
       });
     }
 
-    const payload = agencias.map((agencia) => ({
-      id: agencia.id,
-      nombre: agencia.nombre,
-      usuarios: usuariosPorAgencia.get(agencia.id) || [],
-    }));
+    const payload = agencias
+      .map((agencia) => ({
+        id: agencia.id,
+        nombre: agencia.nombre,
+        tipo: agencia.tipo || "AGENCIA",
+        usuarios: usuariosPorAgencia.get(agencia.id) || [],
+      }))
+      .filter((agencia) => fase !== "capacitacion" || agencia.usuarios.length > 0);
 
     return res.json(payload);
   } catch (error) {

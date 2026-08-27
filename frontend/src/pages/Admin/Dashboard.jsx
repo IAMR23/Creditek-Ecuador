@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { nombreCortoUsuario } from "../../utils/nombres";
 import { useNavigate } from "react-router-dom";
@@ -94,7 +95,7 @@ const participoEnPeriodo = (usuario, fechaInicio, fechaFin) => {
   return usuario?.activo !== false || Boolean(salida);
 };
 
-export default function Dashboard() {
+export default function Dashboard({ modoSupervisores = false }) {
   // 🔥 Cargar filtros desde localStorage UNA SOLA VEZ
   const filtrosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
@@ -441,10 +442,16 @@ export default function Dashboard() {
   }, [fetchData, fechaFin, fechaInicio, usuarioInfo?.id]);
 
   useEffect(() => {
-    if (fechaInicio && fechaFin && usuarioInfo?.id) {
+    if (!modoSupervisores && fechaInicio && fechaFin && usuarioInfo?.id) {
       fetchOportunidadesGhl();
     }
-  }, [fetchOportunidadesGhl, fechaFin, fechaInicio, usuarioInfo?.id]);
+  }, [
+    fetchOportunidadesGhl,
+    fechaFin,
+    fechaInicio,
+    modoSupervisores,
+    usuarioInfo?.id,
+  ]);
 
   const generarDataExcel = (porTipoModelo, costosHistoricos = {}) => {
     return Object.entries(porTipoModelo)
@@ -531,7 +538,9 @@ export default function Dashboard() {
     <div className="p-4">
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-gray-900">
-          BIENVENIDO {user?.usuario?.nombre || "Admin"}
+          {modoSupervisores
+            ? "DASHBOARD DE SUPERVISORES"
+            : `BIENVENIDO ${user?.usuario?.nombre || "Admin"}`}
         </h1>
       </div>
 
@@ -596,7 +605,11 @@ export default function Dashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+        <div
+          className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+            modoSupervisores ? "xl:grid-cols-5" : "xl:grid-cols-6"
+          }`}
+        >
           <div className="flex flex-col">
             <label className="mb-1.5 text-sm font-medium text-gray-700">
               Fecha Inicio
@@ -752,21 +765,23 @@ export default function Dashboard() {
             </select>
           </div>
 
-          <div className="flex flex-col justify-end">
-            <button
-              type="button"
-              onClick={() =>
-                exportarExcel(
-                  estadisticas?.porTipoModelo || {},
-                  estadisticas?.costosHistoricosPorTipoModelo || {},
-                )
-              }
-              disabled={!estadisticas}
-              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition"
-            >
-              <FaFileExcel size={18} />
-            </button>
-          </div>
+          {!modoSupervisores && (
+            <div className="flex flex-col justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  exportarExcel(
+                    estadisticas?.porTipoModelo || {},
+                    estadisticas?.costosHistoricosPorTipoModelo || {},
+                  )
+                }
+                disabled={!estadisticas}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl shadow-sm transition"
+              >
+                <FaFileExcel size={18} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -781,6 +796,7 @@ export default function Dashboard() {
             oportunidadesPorEtapa={oportunidadesPorEtapa}
             loadingOportunidadesGhl={loadingOportunidadesGhl}
             errorOportunidadesGhl={errorOportunidadesGhl}
+            soloSupervisores={modoSupervisores}
           />
           <MetasDiarias data={estadisticas} />
         </>

@@ -42,7 +42,7 @@ const request = async (path) => {
 
 beforeEach(() => {
   countCalls = [];
-  const values = [12, 8, 4, 7, 5, 30];
+  const values = [12, 8, 3, 2, 4, 7, 5, 30];
 
   Postulacion.count = async (options = {}) => {
     countCalls.push(options);
@@ -59,12 +59,14 @@ test("el dashboard devuelve sus indicadores filtrados por fecha de postulacion",
   assert.deepEqual(response.body.data, {
     postulaciones: 12,
     entrevistas: 8,
+    seleccionados: 3,
+    capacitacion: 2,
     descartados: 4,
     conTitulo: 7,
     estudiando: 5,
     totalPeriodo: 30,
   });
-  assert.equal(countCalls.length, 6);
+  assert.equal(countCalls.length, 8);
 
   countCalls.forEach(({ where }) => {
     assert.equal(
@@ -81,7 +83,17 @@ test("el dashboard devuelve sus indicadores filtrados por fecha de postulacion",
   assert.equal(countCalls[0].where.descartada, false);
   assert.equal(countCalls[1].where.pasaEntrevista, true);
   assert.equal(countCalls[1].where.descartada, false);
-  assert.equal(countCalls[2].where.descartada, true);
-  assert.equal(countCalls[3].where[Op.and].length, 1);
-  assert.equal(countCalls[4].where[Op.and].length, 1);
+  assert.deepEqual(countCalls[1].where.estadoEntrevista[Op.notIn], [
+    "SELECCIONADO",
+    "CAPACITACION",
+    "NO_ASISTIO_CAP",
+  ]);
+  assert.deepEqual(countCalls[2].where.estadoEntrevista[Op.in], ["SELECCIONADO"]);
+  assert.deepEqual(countCalls[3].where.estadoEntrevista[Op.in], [
+    "CAPACITACION",
+    "NO_ASISTIO_CAP",
+  ]);
+  assert.equal(countCalls[4].where.descartada, true);
+  assert.equal(countCalls[5].where[Op.and].length, 1);
+  assert.equal(countCalls[6].where[Op.and].length, 1);
 });

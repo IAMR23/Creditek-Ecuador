@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarDays, List, Plus, RefreshCw } from "lucide-react";
+import { CalendarDays, ClipboardList, List, Plus, RefreshCw, UsersRound } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
 import InterviewCalendar from "../../components/entrevistas/InterviewCalendar";
@@ -10,6 +10,7 @@ import InterviewSummaryCards from "../../components/entrevistas/InterviewSummary
 import InterviewTable from "../../components/entrevistas/InterviewTable";
 import ModalDetalle from "../../components/PostulacionDetalle";
 import CreateUserModal from "../../components/usuarios/CreateUserModal";
+import ControlAsistencia from "./ControlAsistencia";
 import {
   getCandidateIdentification,
   getCandidateName,
@@ -57,6 +58,8 @@ const getDownloadErrorMessage = async (error) => {
 export default function Entrevistas({ modo = "entrevista" }) {
   const navigate = useNavigate();
   const isSelectedMode = modo === "seleccionado";
+  const isTrainingMode = modo === "capacitacion";
+  const isPostInterviewMode = isSelectedMode || isTrainingMode;
   const [interviews, setInterviews] = useState([]);
   const [agencies, setAgencies] = useState([]);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
@@ -64,6 +67,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(EMPTY_PAGINATION);
   const [activeView, setActiveView] = useState("lista");
+  const [trainingView, setTrainingView] = useState("movimientos");
   const [loading, setLoading] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [error, setError] = useState("");
@@ -115,12 +119,16 @@ export default function Entrevistas({ modo = "entrevista" }) {
         const [listResponse, summaryResponse] = await Promise.all([
           api.get("/api/postulaciones", {
             params: {
-              fase: isSelectedMode ? "seleccionado" : "entrevista",
+              fase: isTrainingMode
+                ? "capacitacion"
+                : isSelectedMode
+                  ? "seleccionado"
+                  : "entrevista",
               page: activeView === "calendario" ? 1 : page,
               limit,
               q: filters.q.trim() || undefined,
               estadoEntrevista:
-                !isSelectedMode && filters.estadoEntrevista
+                !isPostInterviewMode && filters.estadoEntrevista
                   ? filters.estadoEntrevista
                   : undefined,
               entrevistaPeriodo: filters.periodo || undefined,
@@ -141,9 +149,11 @@ export default function Entrevistas({ modo = "entrevista" }) {
         setInterviews([]);
         setError(
           requestError.response?.data?.message ||
-            (isSelectedMode
-              ? "No se pudieron cargar los postulantes seleccionados."
-              : "No se pudieron cargar las entrevistas."),
+            (isTrainingMode
+              ? "No se pudieron cargar los postulantes en capacitación."
+              : isSelectedMode
+                ? "No se pudieron cargar los postulantes seleccionados."
+                : "No se pudieron cargar las entrevistas."),
         );
       } finally {
         if (active) {
@@ -157,7 +167,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
       active = false;
       window.clearTimeout(timeoutId);
     };
-  }, [activeView, filters, isSelectedMode, page, refreshToken]);
+  }, [activeView, filters, isPostInterviewMode, isSelectedMode, isTrainingMode, page, refreshToken]);
 
   const refresh = () => {
     setRefreshToken((current) => current + 1);
@@ -414,12 +424,16 @@ export default function Entrevistas({ modo = "entrevista" }) {
         estadoEntrevista: status,
       });
       const updatedInterview = response.data?.data;
-      const selectedStatuses = ["SELECCIONADO", "NO_ASISTIO_CAP"];
-      const remainsInCurrentPhase = isSelectedMode
-        ? selectedStatuses.includes(status)
-        : !selectedStatuses.includes(status);
+      const selectedStatuses = ["SELECCIONADO"];
+      const trainingStatuses = ["CAPACITACION", "NO_ASISTIO_CAP"];
+      const postInterviewStatuses = [...selectedStatuses, ...trainingStatuses];
+      const remainsInCurrentPhase = isTrainingMode
+        ? trainingStatuses.includes(status)
+        : isSelectedMode
+          ? selectedStatuses.includes(status)
+          : !postInterviewStatuses.includes(status);
       const matchesStatusFilter =
-        isSelectedMode || !filters.estadoEntrevista || filters.estadoEntrevista === status;
+        isPostInterviewMode || !filters.estadoEntrevista || filters.estadoEntrevista === status;
 
       if (!remainsInCurrentPhase || !matchesStatusFilter) {
         quitarEntrevistaVisible(interview.id, response.data?.resumen);
@@ -438,7 +452,12 @@ export default function Entrevistas({ modo = "entrevista" }) {
       }
       Swal.fire({
         icon: "success",
-        title: status === "SELECCIONADO" ? "Postulante seleccionado" : "Estado actualizado",
+        title:
+          status === "SELECCIONADO"
+            ? "Postulante seleccionado"
+            : status === "CAPACITACION"
+              ? "Postulante enviado a capacitación"
+              : "Estado actualizado",
         timer: 1300,
         showConfirmButton: false,
       });
@@ -766,15 +785,17 @@ export default function Entrevistas({ modo = "entrevista" }) {
             Desarrollo Organizacional
           </p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950">
-            {isSelectedMode ? "Seleccionados" : "Entrevistas"}
+            {isTrainingMode ? "Capacitación" : isSelectedMode ? "Seleccionados" : "Entrevistas"}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            {isSelectedMode
-              ? "Consulta los postulantes seleccionados después de su entrevista."
-              : "Administra y agenda las entrevistas de los postulantes."}
+            {isTrainingMode
+              ? "Administra los postulantes que pasaron a capacitación."
+              : isSelectedMode
+                ? "Consulta los postulantes seleccionados después de su entrevista."
+                : "Administra y agenda las entrevistas de los postulantes."}
           </p>
         </div>
-        {!isSelectedMode && (
+        {!isPostInterviewMode && (
           <button
             type="button"
             onClick={openCandidatePicker}
@@ -787,12 +808,36 @@ export default function Entrevistas({ modo = "entrevista" }) {
         )}
       </header>
 
-      {!isSelectedMode && (
+      {isTrainingMode && (
+        <div className="mb-6 flex w-fit rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+          {[
+            { key: "movimientos", label: "Movimientos", icon: ClipboardList },
+            { key: "personal", label: "Personal", icon: UsersRound },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTrainingView(key)}
+              className={`inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-extrabold transition ${
+                trainingView === key
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <Icon size={17} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!isPostInterviewMode && (
         <InterviewSummaryCards summary={summary} loading={summaryLoading} />
       )}
 
+      {(!isTrainingMode || trainingView === "personal") && (
       <section className="mt-6 overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {!isSelectedMode && (
+        {!isPostInterviewMode && (
           <div className="flex border-b border-slate-200 px-4 pt-2">
             {[
               { key: "lista", label: "Lista", icon: List },
@@ -821,7 +866,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
           filters={filters}
           onChange={changeFilters}
           onClear={() => changeFilters(EMPTY_FILTERS)}
-          showStatus={!isSelectedMode}
+          showStatus={!isPostInterviewMode}
         />
 
         {error && (
@@ -831,7 +876,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
           </div>
         )}
 
-        {activeView === "lista" || isSelectedMode ? (
+        {activeView === "lista" || isPostInterviewMode ? (
           <InterviewTable
             interviews={interviews}
             loading={loading}
@@ -843,7 +888,7 @@ export default function Entrevistas({ modo = "entrevista" }) {
             downloadingContractId={downloadingContractId}
             onCreateUser={openCreateUserModal}
             onEvaluate={(interview) =>
-              navigate(`/seleccionados/${interview.id}/evaluacion-desempeno`)
+              navigate(`/${isTrainingMode ? "capacitacion" : "seleccionados"}/${interview.id}/evaluacion-desempeno`)
             }
             checkingUserCandidateId={checkingUserCandidateId}
             userExistsCandidateIds={userExistsCandidateIds}
@@ -860,11 +905,17 @@ export default function Entrevistas({ modo = "entrevista" }) {
             onGeneralObservationBlur={saveGeneralReferenceObservation}
             onAddReference={addReference}
             selectedMode={isSelectedMode}
+            trainingMode={isTrainingMode}
           />
         ) : (
           <InterviewCalendar interviews={interviews} loading={loading} onView={viewInterview} />
         )}
       </section>
+      )}
+
+      {isTrainingMode && trainingView === "movimientos" && (
+        <ControlAsistencia fase="capacitacion" embedded />
+      )}
 
       <InterviewSchedulerDrawer
         open={drawerOpen}

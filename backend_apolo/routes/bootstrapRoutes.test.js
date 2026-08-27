@@ -89,3 +89,24 @@ test("el bootstrap acepta y normaliza un usuario explícito", async () => {
   assert.equal(response.status, 201);
   assert.equal(response.body.usuario.usuario, "admin_abs");
 });
+
+test("el bootstrap permite una contraseña numerica de seis caracteres", async () => {
+  const response = await requestJson({
+    nombre: "Administrador",
+    email: "admin@ejemplo.com",
+    password: "123456",
+  });
+
+  assert.equal(response.status, 201);
+});
+
+test("el bootstrap rechaza una contraseña de menos de seis caracteres", async () => {
+  const response = await requestJson({
+    nombre: "Administrador",
+    email: "admin@ejemplo.com",
+    password: "12345",
+  });
+
+  assert.equal(response.status, 400);
+  assert.match(response.body.message, /mínimo 6 caracteres/i);
+});

@@ -27,9 +27,15 @@ const INTERVIEW_STATUSES = [
   "NO_ASISTIO",
   "CANCELADA",
   "SELECCIONADO",
+  "CAPACITACION",
   "NO_ASISTIO_CAP",
 ];
-const SELECTED_INTERVIEW_STATUSES = ["SELECCIONADO", "NO_ASISTIO_CAP"];
+const SELECTED_INTERVIEW_STATUSES = ["SELECCIONADO"];
+const TRAINING_INTERVIEW_STATUSES = ["CAPACITACION", "NO_ASISTIO_CAP"];
+const POST_INTERVIEW_STATUSES = [
+  ...SELECTED_INTERVIEW_STATUSES,
+  ...TRAINING_INTERVIEW_STATUSES,
+];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
 const PERFORMANCE_RECOMMENDATIONS = [
@@ -563,18 +569,23 @@ const buildListWhere = (query = {}) => {
     where.descartada = false;
     where.estadoEntrevista =
       INTERVIEW_STATUSES.includes(estadoEntrevista) &&
-      !SELECTED_INTERVIEW_STATUSES.includes(estadoEntrevista)
+      !POST_INTERVIEW_STATUSES.includes(estadoEntrevista)
         ? estadoEntrevista
-        : { [Op.notIn]: SELECTED_INTERVIEW_STATUSES };
+        : { [Op.notIn]: POST_INTERVIEW_STATUSES };
   }
   if (fase === "seleccionado" || fase === "seleccionados") {
     where.pasaEntrevista = true;
     where.descartada = false;
     where.estadoEntrevista = { [Op.in]: SELECTED_INTERVIEW_STATUSES };
   }
+  if (fase === "capacitacion") {
+    where.pasaEntrevista = true;
+    where.descartada = false;
+    where.estadoEntrevista = { [Op.in]: TRAINING_INTERVIEW_STATUSES };
+  }
   if (fase === "descartado") where.descartada = true;
   if (
-    !["entrevista", "seleccionado", "seleccionados"].includes(fase) &&
+    !["entrevista", "seleccionado", "seleccionados", "capacitacion"].includes(fase) &&
     INTERVIEW_STATUSES.includes(estadoEntrevista)
   ) {
     where.estadoEntrevista = estadoEntrevista;
@@ -953,7 +964,7 @@ const buildResumen = async () => {
   const activeInterviewWhere = {
     pasaEntrevista: true,
     descartada: false,
-    estadoEntrevista: { [Op.notIn]: SELECTED_INTERVIEW_STATUSES },
+    estadoEntrevista: { [Op.notIn]: POST_INTERVIEW_STATUSES },
   };
 
   const [
@@ -962,6 +973,7 @@ const buildResumen = async () => {
     noLeidas,
     entrevistas,
     seleccionados,
+    capacitacion,
     descartados,
     pendientesAgendar,
     agendadasHoy,
@@ -979,6 +991,13 @@ const buildResumen = async () => {
         estadoEntrevista: { [Op.in]: SELECTED_INTERVIEW_STATUSES },
       },
     }),
+    Postulacion.count({
+      where: {
+        pasaEntrevista: true,
+        descartada: false,
+        estadoEntrevista: { [Op.in]: TRAINING_INTERVIEW_STATUSES },
+      },
+    }),
     Postulacion.count({ where: { descartada: true } }),
     Postulacion.count({
       where: { ...activeInterviewWhere, fechaEntrevista: null },
@@ -991,7 +1010,7 @@ const buildResumen = async () => {
             "CANCELADA",
             "NO_ASISTIO",
             "NO_CONTESTO",
-            ...SELECTED_INTERVIEW_STATUSES,
+            ...POST_INTERVIEW_STATUSES,
           ],
         },
         fechaEntrevista: { [Op.between]: [todayStart, todayEnd] },
@@ -1018,6 +1037,7 @@ const buildResumen = async () => {
     noLeidas,
     entrevistas,
     seleccionados,
+    capacitacion,
     descartados,
     pendientesAgendar,
     agendadasHoy,
@@ -1033,12 +1053,14 @@ const buildDashboardMetrics = async (query = {}) => {
     ...periodWhere,
     pasaEntrevista: true,
     descartada: false,
-    estadoEntrevista: { [Op.notIn]: SELECTED_INTERVIEW_STATUSES },
+    estadoEntrevista: { [Op.notIn]: POST_INTERVIEW_STATUSES },
   };
 
   const [
     postulaciones,
     entrevistas,
+    seleccionados,
+    capacitacion,
     descartados,
     conTitulo,
     estudiando,
@@ -1052,6 +1074,22 @@ const buildDashboardMetrics = async (query = {}) => {
         },
       }),
       Postulacion.count({ where: activeInterviewWhere }),
+      Postulacion.count({
+        where: {
+          ...periodWhere,
+          pasaEntrevista: true,
+          descartada: false,
+          estadoEntrevista: { [Op.in]: SELECTED_INTERVIEW_STATUSES },
+        },
+      }),
+      Postulacion.count({
+        where: {
+          ...periodWhere,
+          pasaEntrevista: true,
+          descartada: false,
+          estadoEntrevista: { [Op.in]: TRAINING_INTERVIEW_STATUSES },
+        },
+      }),
       Postulacion.count({
         where: { ...periodWhere, descartada: true },
       }),
@@ -1083,6 +1121,8 @@ const buildDashboardMetrics = async (query = {}) => {
   return {
     postulaciones,
     entrevistas,
+    seleccionados,
+    capacitacion,
     descartados,
     conTitulo,
     estudiando,
@@ -1277,7 +1317,7 @@ router.get("/", auth, async (req, res) => {
       offset,
     });
     const totalPages = Math.max(Math.ceil(count / limit), 1);
-    const data = ["seleccionado", "seleccionados"].includes(fase)
+    const data = ["seleccionado", "seleccionados", "capacitacion"].includes(fase)
       ? await agregarDatosIncorporacion(rows)
       : rows;
 
@@ -1327,7 +1367,7 @@ router.get("/:id/evaluacion-desempeno", auth, async (req, res) => {
     if (
       !postulacion.pasaEntrevista ||
       postulacion.descartada ||
-      !SELECTED_INTERVIEW_STATUSES.includes(postulacion.estadoEntrevista)
+      !POST_INTERVIEW_STATUSES.includes(postulacion.estadoEntrevista)
     ) {
       return res.status(409).json({
         ok: false,
@@ -1381,7 +1421,7 @@ router.put("/:id/evaluacion-desempeno", auth, async (req, res) => {
     if (
       !postulacion.pasaEntrevista ||
       postulacion.descartada ||
-      !SELECTED_INTERVIEW_STATUSES.includes(postulacion.estadoEntrevista)
+      !POST_INTERVIEW_STATUSES.includes(postulacion.estadoEntrevista)
     ) {
       return res.status(409).json({
         ok: false,

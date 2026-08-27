@@ -12,6 +12,7 @@ const {
 } = require("../utils/usuarioLogin");
 
 const router = express.Router();
+const passwordRegex = /^.{6,}$/;
 
 router.post("/", async (req, res) => {
   try {
@@ -23,6 +24,12 @@ router.post("/", async (req, res) => {
     const { nombre, cedula, email, usuario: nombreUsuario, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ message: "Email y password son obligatorios." });
+    }
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        message: "La contraseña debe tener mínimo 6 caracteres.",
+      });
     }
 
     const emailNormalizado = String(email).trim().toLowerCase();

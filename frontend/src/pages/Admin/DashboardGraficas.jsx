@@ -71,6 +71,7 @@ export default function DashboardGraficas({
   oportunidadesPorEtapa = [],
   loadingOportunidadesGhl = false,
   errorOportunidadesGhl = "",
+  soloSupervisores = false,
 }) {
   if (!estadisticas) return null;
 
@@ -152,25 +153,24 @@ export default function DashboardGraficas({
 
   return (
     <section className="mt-6 space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
-        <KpiCard
-          label="Precio vendedor promedio"
-          value={formatCurrency(estadisticas.precioVendedorPromedio)}
-        />
-        <KpiCard
-          label="Total entregas"
-          value={totalEntregas}
-        />
-        <KpiCard
-          label="Agencias con ventas"
-          value={toArray(estadisticas.porAgencia).length}
-        />
-        <KpiCard
-          label="Vendedores con ventas"
-          value={toArray(estadisticas.porVendedor).length}
-        />
-      </div>
+      {!soloSupervisores && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
+          <KpiCard
+            label="Precio vendedor promedio"
+            value={formatCurrency(estadisticas.precioVendedorPromedio)}
+          />
+          <KpiCard label="Total entregas" value={totalEntregas} />
+          <KpiCard
+            label="Agencias con ventas"
+            value={toArray(estadisticas.porAgencia).length}
+          />
+          <KpiCard
+            label="Vendedores con ventas"
+            value={toArray(estadisticas.porVendedor).length}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {cards.map((card) => (
@@ -193,7 +193,8 @@ export default function DashboardGraficas({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      {!soloSupervisores && (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <ChartCard title="Cantidad de oportunidades por etapa">
           <ChartRenderer
             type="pie"
@@ -219,7 +220,8 @@ export default function DashboardGraficas({
             </p>
           </div>
         </ChartCard>
-      </div>
+        </div>
+      )}
     </section>
   );
 }

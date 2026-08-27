@@ -11,6 +11,8 @@ const interviewStatusLabels = {
   NO_ASISTIO: "No asistió",
   CANCELADA: "Cancelada",
   SELECCIONADO: "Seleccionado",
+  CAPACITACION: "En capacitación",
+  NO_ASISTIO_CAP: "No asistió a la capacitación",
 };
 
 const labels = {

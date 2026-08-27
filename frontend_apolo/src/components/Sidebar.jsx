@@ -3,9 +3,11 @@ import { NavLink } from "react-router-dom";
 import {
   Archive,
   BadgeCheck,
+  Bell,
   Building2,
   ClipboardList,
   FileText,
+  GraduationCap,
   LayoutDashboard,
   Shield,
   UserCheck,
@@ -19,12 +21,14 @@ const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
 
 export default function Sidebar() {
   const auth = useContext(AuthContext);
+  const [notificaciones90Dias, setNotificaciones90Dias] = useState(0);
   const [resumenPostulaciones, setResumenPostulaciones] = useState({
     totalGeneral: 0,
     total: 0,
     noLeidas: 0,
     entrevistas: 0,
     seleccionados: 0,
+    capacitacion: 0,
     descartados: 0,
   });
 
@@ -50,6 +54,7 @@ export default function Sidebar() {
             noLeidas: 0,
             entrevistas: 0,
             seleccionados: 0,
+            capacitacion: 0,
             descartados: 0,
           }
         );
@@ -68,6 +73,29 @@ export default function Sidebar() {
       active = false;
       window.clearInterval(intervalId);
       window.removeEventListener(POSTULACIONES_EVENT, onUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const cargarNotificaciones = async () => {
+      try {
+        const response = await api.get("/usuarios/notificaciones-90-dias", {
+          params: { soloConteo: true },
+        });
+        if (active) setNotificaciones90Dias(response.data?.total || 0);
+      } catch {
+        if (active) setNotificaciones90Dias(0);
+      }
+    };
+
+    cargarNotificaciones();
+    const intervalId = window.setInterval(cargarNotificaciones, 60000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -108,6 +136,16 @@ export default function Sidebar() {
           Usuarios
         </NavLink>
 
+        <NavLink to="/notificaciones" className={linkClass}>
+          <Bell size={18} />
+          <span className="flex-1">Notificaciones</span>
+          {notificaciones90Dias > 0 && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800">
+              {notificaciones90Dias}
+            </span>
+          )}
+        </NavLink>
+
         <NavLink to="/usuarios-agencias" className={linkClass}>
           <UsersRound size={18} />
           Usuarios/Agencias
@@ -144,6 +182,14 @@ export default function Sidebar() {
           <span className="flex-1">Seleccionados</span>
           <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-bold text-teal-700">
             {resumenPostulaciones.seleccionados || 0}
+          </span>
+        </NavLink>
+
+        <NavLink to="/capacitacion" className={linkClass}>
+          <GraduationCap size={18} />
+          <span className="flex-1">Capacitación</span>
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">
+            {resumenPostulaciones.capacitacion || 0}
           </span>
         </NavLink>
 

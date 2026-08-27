@@ -26,7 +26,7 @@ const {
 
 const router = express.Router();
 
-const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+const passwordRegex = /^.{6,}$/;
 const fechaIsoRegex = /^\d{4}-\d{2}-\d{2}$/;
 const normalizeText = (value) => String(value ?? "").trim();
 const normalizeOptionalText = (value) => normalizeText(value) || null;
@@ -41,6 +41,12 @@ const buildUsuarioWhere = (usuario) =>
   condicionCampoNormalizado("usuario", usuario);
 const httpError = (statusCode, code, message) =>
   Object.assign(new Error(message), { statusCode, code });
+const NOVENTA_DIAS_MS = 90 * 24 * 60 * 60 * 1000;
+
+const buildUsuarios90DiasWhere = (now = new Date()) => ({
+  activo: true,
+  createdAt: { [Op.lte]: new Date(now.getTime() - NOVENTA_DIAS_MS) },
+});
 
 const findUsuarioByUsername = (usuario, transaction) =>
   Usuario.findOne({
@@ -135,7 +141,7 @@ router.post("/", async (req, res) => {
 
     if (!passwordRegex.test(password || "")) {
       return res.status(400).json({
-        message: "La contraseña debe tener mínimo 6 caracteres e incluir letras y números.",
+        message: "La contraseña debe tener mínimo 6 caracteres.",
       });
     }
 
@@ -365,6 +371,56 @@ router.get("/por-cedula/:cedula", async (req, res) => {
   }
 });
 
+router.get("/notificaciones-90-dias", async (req, res) => {
+  try {
+    const now = new Date();
+    const where = buildUsuarios90DiasWhere(now);
+    const soloConteo =
+      String(req.query.soloConteo || "").trim().toLowerCase() === "true";
+
+    if (soloConteo) {
+      const total = await Usuario.count({ where });
+      return res.json({ total });
+    }
+
+    const usuarios = await Usuario.findAll({
+      where,
+      attributes: ["id", "nombre", "cedula", "email", "createdAt", "fechaIngreso", "activo"],
+      include: [
+        { model: Rol, as: "rol", attributes: ["id", "nombre"] },
+        {
+          model: Agencia,
+          as: "agencias",
+          attributes: ["id", "nombre", "tipo"],
+          through: { attributes: [], where: { activo: true } },
+          required: false,
+        },
+      ],
+      order: [
+        ["createdAt", "ASC"],
+        ["nombre", "ASC"],
+      ],
+    });
+
+    const data = usuarios.map((usuario) => {
+      const plain = usuario.toJSON ? usuario.toJSON() : usuario;
+      const createdAt = new Date(plain.createdAt);
+      const diasDesdeCreacion = Number.isNaN(createdAt.getTime())
+        ? 90
+        : Math.max(Math.floor((now.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000)), 90);
+
+      return { ...plain, diasDesdeCreacion };
+    });
+
+    return res.json({ total: data.length, data });
+  } catch (error) {
+    console.error("Error obteniendo notificaciones de usuarios:", error);
+    return res.status(500).json({
+      message: "Error al obtener las notificaciones de usuarios",
+    });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const usuario = await Usuario.findByPk(req.params.id, {
@@ -470,7 +526,7 @@ router.put("/:id", async (req, res) => {
     if (password) {
       if (!passwordRegex.test(password)) {
         return res.status(400).json({
-          message: "La contraseña debe tener mínimo 6 caracteres e incluir letras y números.",
+          message: "La contraseña debe tener mínimo 6 caracteres.",
         });
       }
       usuario.password = await bcrypt.hash(password, 10);

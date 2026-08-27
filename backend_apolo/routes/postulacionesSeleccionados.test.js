@@ -79,7 +79,7 @@ beforeEach(() => {
   UsuarioAgencia.findAll = async () => [];
 });
 
-test("la lista de Entrevistas excluye a los postulantes seleccionados", async () => {
+test("la lista de Entrevistas excluye Seleccionados y Capacitacion", async () => {
   const response = await request("/?fase=entrevista");
 
   assert.equal(response.status, 200);
@@ -87,11 +87,11 @@ test("la lista de Entrevistas excluye a los postulantes seleccionados", async ()
   assert.equal(lastListOptions.where.descartada, false);
   assert.deepEqual(
     lastListOptions.where.estadoEntrevista[Op.notIn],
-    ["SELECCIONADO", "NO_ASISTIO_CAP"],
+    ["SELECCIONADO", "CAPACITACION", "NO_ASISTIO_CAP"],
   );
 });
 
-test("la fase Seleccionados incluye sus estados finales", async () => {
+test("la fase Seleccionados incluye solo a los pendientes de capacitacion", async () => {
   const response = await request("/?fase=seleccionado");
 
   assert.equal(response.status, 200);
@@ -99,7 +99,19 @@ test("la fase Seleccionados incluye sus estados finales", async () => {
   assert.equal(lastListOptions.where.descartada, false);
   assert.deepEqual(
     lastListOptions.where.estadoEntrevista[Op.in],
-    ["SELECCIONADO", "NO_ASISTIO_CAP"],
+    ["SELECCIONADO"],
+  );
+});
+
+test("la fase Capacitacion incluye sus estados", async () => {
+  const response = await request("/?fase=capacitacion");
+
+  assert.equal(response.status, 200);
+  assert.equal(lastListOptions.where.pasaEntrevista, true);
+  assert.equal(lastListOptions.where.descartada, false);
+  assert.deepEqual(
+    lastListOptions.where.estadoEntrevista[Op.in],
+    ["CAPACITACION", "NO_ASISTIO_CAP"],
   );
 });
 
@@ -156,6 +168,19 @@ test("permite marcar una entrevista agendada como seleccionada", async () => {
   assert.equal(saved, 1);
 });
 
+test("permite pasar un postulante seleccionado a capacitacion", async () => {
+  candidate.estadoEntrevista = "SELECCIONADO";
+  const response = await request("/21/estado-entrevista", {
+    method: "PATCH",
+    body: { estadoEntrevista: "CAPACITACION" },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.estadoEntrevista, "CAPACITACION");
+  assert.equal(candidate.estadoEntrevista, "CAPACITACION");
+  assert.equal(saved, 1);
+});
+
 test("permite marcar una entrevista como no contesto", async () => {
   candidate.fechaEntrevista = null;
   const response = await request("/21/estado-entrevista", {
@@ -169,20 +194,27 @@ test("permite marcar una entrevista como no contesto", async () => {
   assert.equal(saved, 1);
 });
 
-test("el resumen separa los contadores de Entrevistas y Seleccionados", async () => {
+test("el resumen separa Entrevistas, Seleccionados y Capacitacion", async () => {
   Postulacion.count = async (options = {}) => {
     const where = options.where || {};
 
     if (
-      where.estadoEntrevista?.[Op.in]?.includes("SELECCIONADO") &&
-      where.estadoEntrevista?.[Op.in]?.includes("NO_ASISTIO_CAP")
+      where.estadoEntrevista?.[Op.in]?.length === 1 &&
+      where.estadoEntrevista?.[Op.in]?.includes("SELECCIONADO")
     ) {
       return 3;
+    }
+    if (
+      where.estadoEntrevista?.[Op.in]?.includes("CAPACITACION") &&
+      where.estadoEntrevista?.[Op.in]?.includes("NO_ASISTIO_CAP")
+    ) {
+      return 2;
     }
     if (
       where.pasaEntrevista === true &&
       where.descartada === false &&
       where.estadoEntrevista?.[Op.notIn]?.includes("SELECCIONADO") &&
+      where.estadoEntrevista?.[Op.notIn]?.includes("CAPACITACION") &&
       where.estadoEntrevista?.[Op.notIn]?.includes("NO_ASISTIO_CAP") &&
       Object.keys(where).length === 3
     ) {
@@ -197,6 +229,7 @@ test("el resumen separa los contadores de Entrevistas y Seleccionados", async ()
   assert.equal(response.status, 200);
   assert.equal(response.body.data.entrevistas, 5);
   assert.equal(response.body.data.seleccionados, 3);
+  assert.equal(response.body.data.capacitacion, 2);
 });
 
 test("obtiene la evaluacion de desempeno de un postulante seleccionado", async () => {

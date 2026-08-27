@@ -9,6 +9,7 @@ import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones.jsx";
 import Agencias from "./pages/Admin/Agencias.jsx";
 import Roles from "./pages/Admin/Roles.jsx";
 import UsuariosAgencias from "./pages/Admin/UsuariosAgencias.jsx";
+import Notificaciones from "./pages/Admin/Notificaciones.jsx";
 import Login from "./pages/Login.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import PublicRoute from "./components/PublicRoute.jsx";
@@ -39,6 +40,7 @@ export default function App() {
                     <Route path="/agencias" element={<Agencias />} />
                     <Route path="/roles" element={<Roles />} />
                     <Route path="/usuarios-agencias" element={<UsuariosAgencias />} />
+                    <Route path="/notificaciones" element={<Notificaciones />} />
                     <Route path="/control-asistencia" element={<ControlAsistencia />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route
@@ -54,7 +56,15 @@ export default function App() {
                       element={<Entrevistas key="seleccionados" modo="seleccionado" />}
                     />
                     <Route
+                      path="/capacitacion"
+                      element={<Entrevistas key="capacitacion" modo="capacitacion" />}
+                    />
+                    <Route
                       path="/seleccionados/:id/evaluacion-desempeno"
+                      element={<EvaluacionDesempeno />}
+                    />
+                    <Route
+                      path="/capacitacion/:id/evaluacion-desempeno"
                       element={<EvaluacionDesempeno />}
                     />
                     <Route

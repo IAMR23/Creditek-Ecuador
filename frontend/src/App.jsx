@@ -312,6 +312,14 @@ function App() {
               >
                 <Route index element={<Navigate to={defaultRoute} replace />} />
                 <Route path="dashboard" element={protect(<Dashboard />, "/dashboard")} />
+                <Route
+                  path="supervisores"
+                  element={protect(
+                    <Dashboard modoSupervisores />,
+                    "/supervisores",
+                    ["admin", "administrador"],
+                  )}
+                />
                 <Route path="powerbi" element={protect(<Powerbi />, "/powerbi")} />
                 <Route
                   path="ghl/oportunidades-matriz"

@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
 
-const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+const passwordRegex = /^.{6,}$/;
 
 const Usuario = sequelize.define(
   "Usuario",
@@ -38,7 +38,7 @@ const Usuario = sequelize.define(
         isValidPassword(value) {
           if (!passwordRegex.test(value)) {
             throw new Error(
-              "La contraseña debe tener mínimo 6 caracteres e incluir letras y números."
+              "La contraseña debe tener mínimo 6 caracteres."
             );
           }
         },

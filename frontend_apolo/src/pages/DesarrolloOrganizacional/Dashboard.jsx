@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Archive,
+  Award,
+  BadgeCheck,
   BookOpen,
   CalendarDays,
   FileText,
@@ -20,6 +22,8 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EMPTY_METRICS = {
   postulaciones: 0,
   entrevistas: 0,
+  seleccionados: 0,
+  capacitacion: 0,
   descartados: 0,
   conTitulo: 0,
   estudiando: 0,
@@ -55,6 +59,24 @@ const cards = [
     accent: "border-t-emerald-500",
   },
   {
+    key: "seleccionados",
+    title: "Seleccionados",
+    description: "Personas seleccionadas para continuar",
+    icon: BadgeCheck,
+    iconClass: "text-teal-600",
+    iconBg: "bg-teal-50",
+    accent: "border-t-teal-500",
+  },
+  {
+    key: "capacitacion",
+    title: "En capacitación",
+    description: "Personas en la etapa de capacitación",
+    icon: GraduationCap,
+    iconClass: "text-violet-600",
+    iconBg: "bg-violet-50",
+    accent: "border-t-violet-500",
+  },
+  {
     key: "descartados",
     title: "Descartados",
     description: "Postulantes descartados",
@@ -67,7 +89,7 @@ const cards = [
     key: "conTitulo",
     title: "Con título",
     description: "Personas con título de tercer nivel",
-    icon: GraduationCap,
+    icon: Award,
     iconClass: "text-blue-600",
     iconBg: "bg-blue-50",
     accent: "border-t-blue-500",
@@ -174,6 +196,8 @@ function StageDonut({ metrics, loading }) {
   const items = [
     { key: "postulaciones", label: "Postulaciones", strokeClass: "stroke-orange-500", dotClass: "bg-orange-500" },
     { key: "entrevistas", label: "Entrevistas", strokeClass: "stroke-emerald-500", dotClass: "bg-emerald-500" },
+    { key: "seleccionados", label: "Seleccionados", strokeClass: "stroke-teal-500", dotClass: "bg-teal-500" },
+    { key: "capacitacion", label: "Capacitación", strokeClass: "stroke-violet-500", dotClass: "bg-violet-500" },
     { key: "descartados", label: "Descartados", strokeClass: "stroke-slate-500", dotClass: "bg-slate-500" },
   ];
   const total = loading
@@ -192,7 +216,7 @@ function StageDonut({ metrics, loading }) {
       <div>
         <h2 className="text-base font-extrabold text-slate-900">Distribución por etapa</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Participación de postulaciones, entrevistas y descartados
+          Cantidad de personas que se encuentran en cada etapa
         </p>
       </div>
 
@@ -204,7 +228,7 @@ function StageDonut({ metrics, loading }) {
           aria-label={`Distribución por etapa, ${numberFormatter.format(total)} personas`}
         >
           <title>Distribución circular por etapa</title>
-          <desc>Postulaciones, entrevistas y descartados del período seleccionado.</desc>
+          <desc>Distribución de personas por cada etapa del proceso de selección.</desc>
           <circle cx="60" cy="60" r="45" fill="none" strokeWidth="15" className="stroke-slate-100" />
           {segments.map(({ key, percentage, offset, strokeClass }) => (
             <circle

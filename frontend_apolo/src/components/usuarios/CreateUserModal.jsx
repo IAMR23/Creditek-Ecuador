@@ -273,7 +273,7 @@ export default function CreateUserModal({
                 value={form.password}
                 onChange={updateField("password")}
                 className={`${fieldClass} mt-1`}
-                placeholder="Mínimo 6 caracteres, letras y números"
+                placeholder="Mínimo 6 caracteres"
               />
             </label>
 

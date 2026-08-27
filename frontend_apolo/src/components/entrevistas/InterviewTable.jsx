@@ -201,8 +201,10 @@ function InterviewActions({
   onToggleReferences,
   expandedReferencesId,
   selectedMode,
+  trainingMode,
 }) {
   const scheduled = Boolean(interview.fechaEntrevista);
+  const postInterviewMode = selectedMode || trainingMode;
   const downloadingContract = downloadingContractId === interview.id;
   const checkingUser = checkingUserCandidateId === interview.id;
   const userExists =
@@ -213,7 +215,7 @@ function InterviewActions({
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {!selectedMode && (
+      {!postInterviewMode && (
         <button
           type="button"
           onClick={() => onSchedule(interview)}
@@ -222,7 +224,7 @@ function InterviewActions({
           {scheduled ? "Reprogramar" : "Agendar"}
         </button>
       )}
-      {selectedMode && (
+      {postInterviewMode && (
         <>
           <button
             type="button"
@@ -292,32 +294,37 @@ function InterviewActions({
           <EllipsisVertical size={16} />
         </summary>
         <div className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
-          {scheduled && getInterviewStatus(interview) !== "CONFIRMADA" && (
+          {!postInterviewMode && scheduled && getInterviewStatus(interview) !== "CONFIRMADA" && (
             <button type="button" onClick={() => onStatusChange(interview, "CONFIRMADA")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
               Marcar como confirmada
             </button>
           )}
-          {scheduled && getInterviewStatus(interview) !== "REALIZADA" && (
+          {!postInterviewMode && scheduled && getInterviewStatus(interview) !== "REALIZADA" && (
             <button type="button" onClick={() => onStatusChange(interview, "REALIZADA")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50">
               Marcar como realizada
             </button>
           )}
-          {!selectedMode && getInterviewStatus(interview) !== "NO_CONTESTO" && (
+          {!postInterviewMode && getInterviewStatus(interview) !== "NO_CONTESTO" && (
             <button type="button" onClick={() => onStatusChange(interview, "NO_CONTESTO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-amber-700 hover:bg-amber-50">
               No contestó
             </button>
           )}
-          {scheduled && getInterviewStatus(interview) !== "SELECCIONADO" && (
+          {!postInterviewMode && scheduled && getInterviewStatus(interview) !== "SELECCIONADO" && (
             <button type="button" onClick={() => onStatusChange(interview, "SELECCIONADO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-teal-700 hover:bg-teal-50">
               Marcar como seleccionado
             </button>
           )}
-          {selectedMode && getInterviewStatus(interview) !== "NO_ASISTIO_CAP" && (
-            <button type="button" onClick={() => onStatusChange(interview, "NO_ASISTIO_CAP")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
-              No asistio a la capacitacion
+          {selectedMode && (
+            <button type="button" onClick={() => onStatusChange(interview, "CAPACITACION")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-violet-700 hover:bg-violet-50">
+              Pasar a capacitación
             </button>
           )}
-          {!selectedMode && (
+          {trainingMode && getInterviewStatus(interview) !== "NO_ASISTIO_CAP" && (
+            <button type="button" onClick={() => onStatusChange(interview, "NO_ASISTIO_CAP")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
+              No asistió a la capacitación
+            </button>
+          )}
+          {!postInterviewMode && (
             <button type="button" onClick={() => onDiscard(interview, "Entrevistado no seleccionado")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
               Entrevistado no seleccionado
             </button>
@@ -327,12 +334,12 @@ function InterviewActions({
               No aprobo referencias
             </button>
           )}
-          {scheduled && (
+          {!postInterviewMode && scheduled && getInterviewStatus(interview) !== "NO_ASISTIO" && (
             <button type="button" onClick={() => onStatusChange(interview, "NO_ASISTIO")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-700 hover:bg-red-50">
-              Registrar que no asistió
+              No asistió
             </button>
           )}
-          {scheduled && (
+          {!postInterviewMode && scheduled && (
             <button type="button" onClick={() => onStatusChange(interview, "CANCELADA")} className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100">
               Cancelar entrevista
             </button>
@@ -401,7 +408,7 @@ function MobileCard(props) {
       </div>
       <InterviewStatusBadge status={getInterviewStatus(interview)} />
       <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-sm">
-        {props.selectedMode ? (
+        {props.selectedMode || props.trainingMode ? (
           <>
             <IncorporationDateCell interview={interview} showLabel />
             <IncorporationAgencyCell interview={interview} showLabel />
@@ -436,13 +443,17 @@ export default function InterviewTable({
   pagination,
   onPageChange,
   selectedMode = false,
+  trainingMode = false,
   ...actions
 }) {
+  const postInterviewMode = selectedMode || trainingMode;
+  const phaseLabel = trainingMode ? "capacitación" : selectedMode ? "seleccionados" : "entrevistas";
+
   if (loading) {
     return (
       <div className="flex min-h-64 items-center justify-center text-sm font-semibold text-slate-500">
         <span className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-orange-500" />
-        Cargando {selectedMode ? "seleccionados" : "entrevistas"}...
+        Cargando {phaseLabel}...
       </div>
     );
   }
@@ -451,12 +462,18 @@ export default function InterviewTable({
     return (
       <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
         <p className="text-base font-bold text-slate-800">
-          {selectedMode ? "No hay postulantes seleccionados" : "No hay entrevistas para mostrar"}
+          {trainingMode
+            ? "No hay postulantes en capacitación"
+            : selectedMode
+              ? "No hay postulantes seleccionados"
+              : "No hay entrevistas para mostrar"}
         </p>
         <p className="mt-1 max-w-md text-sm text-slate-500">
-          {selectedMode
-            ? "Los postulantes marcados como seleccionados aparecerán en esta sección."
-            : "Ajusta los filtros o pasa un postulante a Entrevistas para comenzar."}
+          {trainingMode
+            ? "Los postulantes enviados desde Seleccionados aparecerán en esta sección."
+            : selectedMode
+              ? "Los postulantes marcados como seleccionados aparecerán en esta sección."
+              : "Ajusta los filtros o pasa un postulante a Entrevistas para comenzar."}
         </p>
       </div>
     );
@@ -470,6 +487,7 @@ export default function InterviewTable({
             key={interview.id}
             interview={interview}
             selectedMode={selectedMode}
+            trainingMode={trainingMode}
             {...actions}
           />
         ))}
@@ -495,10 +513,10 @@ export default function InterviewTable({
               <th className="px-4 py-3 font-bold">Perfil</th>
               <th className="px-4 py-3 font-bold">Estado</th>
               <th className="px-4 py-3 font-bold">
-                {selectedMode ? "Fecha de ingreso" : "Entrevista"}
+                {postInterviewMode ? "Fecha de ingreso" : "Entrevista"}
               </th>
               <th className="px-4 py-3 font-bold">
-                {selectedMode ? "Agencia" : "Lugar de la entrevista"}
+                {postInterviewMode ? "Agencia" : "Lugar de la entrevista"}
               </th>
               <th className="px-5 py-3 text-right font-bold">Acciones</th>
             </tr>
@@ -518,14 +536,14 @@ export default function InterviewTable({
                   <td className="px-4 py-4"><CandidateProfileCell interview={interview} /></td>
                   <td className="px-4 py-4"><InterviewStatusBadge status={getInterviewStatus(interview)} /></td>
                   <td className="px-4 py-4 text-sm">
-                    {selectedMode ? (
+                    {postInterviewMode ? (
                       <IncorporationDateCell interview={interview} />
                     ) : (
                       <InterviewDateCell interview={interview} />
                     )}
                   </td>
                   <td className="px-4 py-4 text-sm">
-                    {selectedMode ? (
+                    {postInterviewMode ? (
                       <IncorporationAgencyCell interview={interview} />
                     ) : (
                       <InterviewLocationCell interview={interview} />
@@ -535,6 +553,7 @@ export default function InterviewTable({
                     <InterviewActions
                       interview={interview}
                       selectedMode={selectedMode}
+                      trainingMode={trainingMode}
                       {...actions}
                     />
                   </td>
@@ -565,9 +584,11 @@ export default function InterviewTable({
       <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
         <p>
           Mostrando {interviews.length} de {pagination.total}{" "}
-          {selectedMode
-            ? `seleccionado${pagination.total === 1 ? "" : "s"}`
-            : `entrevista${pagination.total === 1 ? "" : "s"}`}
+          {trainingMode
+            ? `postulante${pagination.total === 1 ? "" : "s"} en capacitación`
+            : selectedMode
+              ? `seleccionado${pagination.total === 1 ? "" : "s"}`
+              : `entrevista${pagination.total === 1 ? "" : "s"}`}
         </p>
         <div className="flex items-center gap-2">
           <button

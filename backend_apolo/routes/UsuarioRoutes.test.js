@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const { beforeEach, test } = require("node:test");
 const express = require("express");
+const { Op } = require("sequelize");
 
 const { sequelize } = require("../config/db");
 const Agencia = require("../models/Agencia");
@@ -86,6 +87,49 @@ beforeEach(() => {
   });
 });
 
+test("notifica usuarios activos con al menos 90 dias desde su creacion", async () => {
+  const createdAt = new Date(Date.now() - 95 * 24 * 60 * 60 * 1000);
+  let listOptions;
+  let countOptions;
+  Usuario.findAll = async (options) => {
+    listOptions = options;
+    return [
+      {
+        id: 40,
+        nombre: "Usuario antiguo",
+        email: "antiguo@ejemplo.com",
+        activo: true,
+        createdAt,
+        rol: { id: 2, nombre: "USUARIO" },
+        agencias: [{ id: 4, nombre: "Matriz", tipo: "AGENCIA" }],
+        toJSON() {
+          return { ...this };
+        },
+      },
+    ];
+  };
+  Usuario.count = async (options) => {
+    countOptions = options;
+    return 1;
+  };
+
+  const response = await requestJson("/notificaciones-90-dias");
+  const countResponse = await requestJson(
+    "/notificaciones-90-dias?soloConteo=true",
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.total, 1);
+  assert.equal(response.body.data[0].id, 40);
+  assert.equal(response.body.data[0].diasDesdeCreacion, 95);
+  assert.equal(listOptions.where.activo, true);
+  assert.ok(listOptions.where.createdAt[Op.lte] instanceof Date);
+  assert.equal(countResponse.status, 200);
+  assert.equal(countResponse.body.total, 1);
+  assert.equal(countOptions.where.activo, true);
+  assert.ok(countOptions.where.createdAt[Op.lte] instanceof Date);
+});
+
 test("crea usuario y agencia en una sola transaccion", async () => {
   const usuariosCreados = [];
   const relacionesCreadas = [];
@@ -127,6 +171,25 @@ test("crea usuario y agencia en una sola transaccion", async () => {
     usuariosCreados[0].options.transaction,
     relacionesCreadas[0].options.transaction,
   );
+});
+
+test("permite una contraseña numerica de seis caracteres", async () => {
+  const response = await requestJson("", {
+    method: "POST",
+    body: { ...validPayload, password: "123456" },
+  });
+
+  assert.equal(response.status, 201);
+});
+
+test("rechaza una contraseña de menos de seis caracteres", async () => {
+  const response = await requestJson("", {
+    method: "POST",
+    body: { ...validPayload, password: "12345" },
+  });
+
+  assert.equal(response.status, 400);
+  assert.match(response.body.message, /mínimo 6 caracteres/i);
 });
 
 test("serializa las consultas que comparten la transaccion", async () => {

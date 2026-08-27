@@ -10,6 +10,7 @@ export default function Agencias() {
     direccion: "",
     telefono: "",
     ciudad: "",
+    tipo: "AGENCIA",
   });
 
   const cargar = async () => {
@@ -26,7 +27,7 @@ export default function Agencias() {
     try {
       setLoading(true);
       await api.post("/agencias", { ...form, activo: true });
-      setForm({ nombre: "", direccion: "", telefono: "", ciudad: "" });
+      setForm({ nombre: "", direccion: "", telefono: "", ciudad: "", tipo: "AGENCIA" });
       await cargar();
       Swal.fire({ icon: "success", title: "Agencia creada", timer: 1200, showConfirmButton: false });
     } catch (error) {
@@ -49,15 +50,28 @@ export default function Agencias() {
     }
   };
 
+  const actualizarTipo = async (agencia, tipo) => {
+    try {
+      await api.put(`/agencias/${agencia.id}`, { tipo });
+      await cargar();
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.response?.data?.message || "No se pudo actualizar el tipo",
+      });
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-7">
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Agencias</h1>
-        <p className="text-sm text-slate-500 mt-1">Crea y administra agencias.</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">Agencias y departamentos</h1>
+        <p className="text-sm text-slate-500 mt-1">Crea y clasifica las unidades de la organización.</p>
       </div>
 
       <div className="bg-white/80 backdrop-blur shadow-sm rounded-2xl p-6 mb-8 border border-slate-200">
-        <h2 className="text-lg font-bold text-slate-950 mb-5">Crear agencia</h2>
+        <h2 className="text-lg font-bold text-slate-950 mb-5">Crear unidad</h2>
         <form onSubmit={crear} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
             placeholder="Nombre"
@@ -71,6 +85,17 @@ export default function Agencias() {
             value={form.ciudad}
             onChange={(e) => setForm({ ...form, ciudad: e.target.value })}
           />
+          <label>
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Tipo</span>
+            <select
+              value={form.tipo}
+              onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+              className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
+            >
+              <option value="AGENCIA">Agencia</option>
+              <option value="DEPARTAMENTO">Departamento</option>
+            </select>
+          </label>
           <input
             placeholder="Teléfono"
             className="border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
@@ -88,7 +113,7 @@ export default function Agencias() {
             disabled={loading}
             className="md:col-span-2 bg-slate-950 hover:bg-slate-900 disabled:bg-slate-700 text-white p-3 rounded-xl font-semibold"
           >
-            {loading ? "Creando..." : "Crear Agencia"}
+            {loading ? "Creando..." : "Crear unidad"}
           </button>
         </form>
       </div>
@@ -100,6 +125,7 @@ export default function Agencias() {
             <thead>
               <tr className="bg-slate-950 text-white">
                 <th className="p-3 text-left">Nombre</th>
+                <th className="p-3 text-left">Tipo</th>
                 <th className="p-3 text-left">Ciudad</th>
                 <th className="p-3 text-left hidden lg:table-cell">Teléfono</th>
                 <th className="p-3 text-left hidden xl:table-cell">Dirección</th>
@@ -111,6 +137,17 @@ export default function Agencias() {
               {agencias.map((a) => (
                 <tr key={a.id} className="border-b border-slate-200 hover:bg-white">
                   <td className="p-3">{a.nombre}</td>
+                  <td className="p-3">
+                    <select
+                      value={a.tipo || "AGENCIA"}
+                      onChange={(e) => actualizarTipo(a, e.target.value)}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-700"
+                      aria-label={`Tipo de ${a.nombre}`}
+                    >
+                      <option value="AGENCIA">Agencia</option>
+                      <option value="DEPARTAMENTO">Departamento</option>
+                    </select>
+                  </td>
                   <td className="p-3">{a.ciudad || "-"}</td>
                   <td className="p-3 hidden lg:table-cell">{a.telefono || "-"}</td>
                   <td className="p-3 hidden xl:table-cell">{a.direccion || "-"}</td>
@@ -127,8 +164,8 @@ export default function Agencias() {
               ))}
               {agencias.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-4 text-center text-slate-500">
-                    No hay agencias registradas.
+                  <td colSpan="7" className="p-4 text-center text-slate-500">
+                    No hay unidades registradas.
                   </td>
                 </tr>
               )}
@@ -139,4 +176,3 @@ export default function Agencias() {
     </div>
   );
 }
-

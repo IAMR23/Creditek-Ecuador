@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   BarChart3,
@@ -359,7 +359,11 @@ function EvaluationMobileCards({ form, onRatingChange, onObservationChange }) {
 
 export default function EvaluacionDesempeno() {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const returnToTraining = location.pathname.startsWith("/capacitacion/");
+  const returnPath = returnToTraining ? "/capacitacion" : "/seleccionados";
+  const returnLabel = returnToTraining ? "Capacitación" : "Seleccionados";
   const auth = useContext(AuthContext);
   const [candidate, setCandidate] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -490,7 +494,7 @@ export default function EvaluacionDesempeno() {
       const result = await Swal.fire({
         icon: "warning",
         title: "Hay cambios sin guardar",
-        text: "Si regresas a Seleccionados, estos cambios se perderán.",
+        text: `Si regresas a ${returnLabel}, estos cambios se perderán.`,
         showCancelButton: true,
         confirmButtonText: "Salir sin guardar",
         cancelButtonText: "Continuar editando",
@@ -498,7 +502,7 @@ export default function EvaluacionDesempeno() {
       });
       if (!result.isConfirmed) return;
     }
-    navigate("/seleccionados");
+    navigate(returnPath);
   };
 
   const handleSave = async () => {
@@ -551,8 +555,8 @@ export default function EvaluacionDesempeno() {
       <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
         <h1 className="text-xl font-black text-slate-900">No se pudo abrir la evaluación</h1>
         <p className="mt-2 text-sm text-red-700">{error || "Postulante no encontrado."}</p>
-        <button type="button" onClick={() => navigate("/seleccionados")} className="mt-6 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white">
-          Volver a Seleccionados
+        <button type="button" onClick={() => navigate(returnPath)} className="mt-6 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white">
+          Volver a {returnLabel}
         </button>
       </div>
     );
@@ -564,7 +568,7 @@ export default function EvaluacionDesempeno() {
     <div className="performance-evaluation mx-auto max-w-[1600px]">
       <div className="abs-no-print mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button type="button" onClick={handleBack} className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50">
-          <ArrowLeft size={17} /> Volver a Seleccionados
+          <ArrowLeft size={17} /> Volver a {returnLabel}
         </button>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {lastSavedAt && (

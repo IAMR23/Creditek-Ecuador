@@ -44,8 +44,13 @@ export const INTERVIEW_STATUS = {
     className: "border-teal-200 bg-teal-50 text-teal-800",
     dotClassName: "bg-teal-600",
   },
+  CAPACITACION: {
+    label: "En capacitación",
+    className: "border-violet-200 bg-violet-50 text-violet-800",
+    dotClassName: "bg-violet-600",
+  },
   NO_ASISTIO_CAP: {
-    label: "No asistio a la capacitacion",
+    label: "No asistió a la capacitación",
     className: "border-red-200 bg-red-50 text-red-700",
     dotClassName: "bg-red-500",
   },

@@ -32,7 +32,11 @@ import {
   Settings2,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
-import { hasRouteAccess, ROUTE_PERMISSIONS } from "../config/routePermissions";
+import {
+  hasRouteAccess,
+  normalizeRole,
+  ROUTE_PERMISSIONS,
+} from "../config/routePermissions";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
 
 export default function Sidebar({ auth }) {
@@ -58,6 +62,7 @@ export default function Sidebar({ auth }) {
     Auditoria: false,
     DesarrolloOrganizacional: true,
     Sistemas: false,
+    supervisores: location.pathname === "/supervisores",
     admin: false,
     catalogos: false,
     rolesCreditek:
@@ -349,6 +354,19 @@ export default function Sidebar({ auth }) {
         ],
       },
 
+      supervisores: {
+        title: "Supervisores",
+        permission: "Administracion",
+        allowedRoles: ["admin", "administrador"],
+        items: [
+          {
+            label: "Dashboard",
+            icon: <BarChart3 size={20} />,
+            path: "/supervisores",
+          },
+        ],
+      },
+
       admin: {
         title: "Administración",
         permission: "Administracion",
@@ -440,13 +458,18 @@ export default function Sidebar({ auth }) {
 
     return Object.fromEntries(
       Object.entries(sections)
-        .filter(([, section]) =>
-          hasRouteAccess({
+        .filter(([, section]) => {
+          const rolesPermitidos = (section.allowedRoles || []).map(normalizeRole);
+          const rolPermitido =
+            rolesPermitidos.length === 0 ||
+            rolesPermitidos.includes(normalizeRole(rol));
+
+          return rolPermitido && hasRouteAccess({
             rol,
             permisos,
             permission: section.permission,
-          }),
-        )
+          });
+        })
         .map(([key, section]) => [
           key,
           {

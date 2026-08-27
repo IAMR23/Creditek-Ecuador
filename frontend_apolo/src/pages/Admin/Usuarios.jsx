@@ -473,7 +473,10 @@ export default function Usuarios() {
             </label>
             <input
               type="password"
-              placeholder="Ingrese la contraseña"
+              required
+              minLength={6}
+              autoComplete="new-password"
+              placeholder="Mínimo 6 caracteres"
               className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -871,7 +874,9 @@ export default function Usuarios() {
                 </label>
                 <input
                   type="password"
-                  placeholder="Opcional"
+                  minLength={6}
+                  autoComplete="new-password"
+                  placeholder="Opcional, mínimo 6 caracteres"
                   className="w-full border border-slate-200 bg-white p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-200"
                   value={editForm.password}
                   onChange={(e) =>

@@ -2,10 +2,21 @@ const express = require("express");
 const Agencia = require("../models/Agencia");
 
 const router = express.Router();
+const TIPOS_UNIDAD = new Set(["AGENCIA", "DEPARTAMENTO"]);
+
+const normalizarTipo = (tipo) => String(tipo || "AGENCIA").trim().toUpperCase();
+
+const validarTipo = (tipo) => TIPOS_UNIDAD.has(tipo);
 
 router.post("/", async (req, res) => {
   try {
-    const { nombre, direccion, telefono, ciudad, activo } = req.body;
+    const { nombre, direccion, telefono, ciudad, tipo, activo } = req.body;
+    const tipoNormalizado = normalizarTipo(tipo);
+    if (!validarTipo(tipoNormalizado)) {
+      return res.status(400).json({
+        message: "El tipo debe ser AGENCIA o DEPARTAMENTO.",
+      });
+    }
     const existing = await Agencia.findOne({ where: { nombre } });
     if (existing) return res.status(400).json({ message: "La agencia ya existe." });
     const nueva = await Agencia.create({
@@ -13,6 +24,7 @@ router.post("/", async (req, res) => {
       direccion,
       telefono,
       ciudad,
+      tipo: tipoNormalizado,
       activo: activo ?? true,
     });
     return res.status(201).json(nueva);
@@ -23,7 +35,12 @@ router.post("/", async (req, res) => {
 
 router.get("/", async (_req, res) => {
   try {
-    const agencias = await Agencia.findAll({ order: [["nombre", "ASC"]] });
+    const agencias = await Agencia.findAll({
+      order: [
+        ["tipo", "ASC"],
+        ["nombre", "ASC"],
+      ],
+    });
     return res.json(agencias);
   } catch (error) {
     return res.status(500).json({ message: "Error al obtener agencias", error });
@@ -44,7 +61,16 @@ router.put("/:id", async (req, res) => {
   try {
     const agencia = await Agencia.findByPk(req.params.id);
     if (!agencia) return res.status(404).json({ message: "Agencia no encontrada" });
-    const { nombre, direccion, telefono, ciudad, activo } = req.body;
+    const { nombre, direccion, telefono, ciudad, tipo, activo } = req.body;
+    if (tipo !== undefined) {
+      const tipoNormalizado = normalizarTipo(tipo);
+      if (!validarTipo(tipoNormalizado)) {
+        return res.status(400).json({
+          message: "El tipo debe ser AGENCIA o DEPARTAMENTO.",
+        });
+      }
+      agencia.tipo = tipoNormalizado;
+    }
     agencia.nombre = nombre ?? agencia.nombre;
     agencia.direccion = direccion ?? agencia.direccion;
     agencia.telefono = telefono ?? agencia.telefono;
@@ -69,4 +95,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 module.exports = router;
-

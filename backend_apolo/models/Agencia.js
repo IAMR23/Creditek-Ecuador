@@ -9,10 +9,15 @@ const Agencia = sequelize.define(
     direccion: { type: DataTypes.STRING, allowNull: true },
     telefono: { type: DataTypes.STRING, allowNull: true },
     ciudad: { type: DataTypes.STRING, allowNull: true },
+    tipo: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "AGENCIA",
+      validate: { isIn: [["AGENCIA", "DEPARTAMENTO"]] },
+    },
     activo: { type: DataTypes.BOOLEAN, defaultValue: true },
   },
   { timestamps: true, tableName: "agencias" }
 );
 
 module.exports = Agencia;
-
