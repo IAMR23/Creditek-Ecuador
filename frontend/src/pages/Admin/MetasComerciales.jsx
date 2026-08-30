@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { nombreCortoUsuario } from "../../utils/nombres";
+import { nombreCortoPersona, nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import { FaFileExcel, FaTrash } from "react-icons/fa";
 
@@ -332,7 +332,11 @@ export default function MetasComerciales() {
               !OBSERVACIONES_OPERATIVAS.includes(observacion) &&
               !promotores.some(
                 (promotor) => promotor.nombre === observacion,
-              ) && <option value={observacion}>{observacion}</option>}
+              ) && (
+                <option value={observacion}>
+                  {nombreCortoPersona(observacion)}
+                </option>
+              )}
             {OBSERVACIONES_OPERATIVAS.map((o) => (
               <option key={o} value={o}>
                 {o}
@@ -343,7 +347,7 @@ export default function MetasComerciales() {
                 key={`promotor-${promotor.id}`}
                 value={promotor.nombre}
               >
-                {promotor.nombre}
+                {nombreCortoPersona(promotor.nombre)}
               </option>
             ))}
           </select>

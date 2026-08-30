@@ -493,14 +493,152 @@ const filtrosConciliacionCaja = [
   { id: "PENDIENTES", label: "Pendientes de revisión" },
 ];
 
+function GestionCajaNoEnCierre({
+  editable,
+  guardando,
+  onGuardar,
+  registro,
+  resultado,
+  usuariosResponsables,
+}) {
+  const [responsableId, setResponsableId] = useState(
+    registro?.responsablePagoEntradaId
+      ? String(registro.responsablePagoEntradaId)
+      : "",
+  );
+  const [observacion, setObservacion] = useState(
+    registro?.observacionPagoEntrada || "",
+  );
+  const [guardado, setGuardado] = useState(false);
+  const responsableActual = registro?.responsablePagoEntrada;
+  const responsables =
+    responsableActual &&
+    !usuariosResponsables.some(
+      (usuario) => Number(usuario.id) === Number(responsableActual.id),
+    )
+      ? [responsableActual, ...usuariosResponsables]
+      : usuariosResponsables;
+  const cambioPendiente =
+    responsableId !==
+      (registro?.responsablePagoEntradaId
+        ? String(registro.responsablePagoEntradaId)
+        : "") || observacion !== (registro?.observacionPagoEntrada || "");
+
+  useEffect(() => {
+    setResponsableId(
+      registro?.responsablePagoEntradaId
+        ? String(registro.responsablePagoEntradaId)
+        : "",
+    );
+    setObservacion(registro?.observacionPagoEntrada || "");
+    setGuardado(false);
+  }, [registro]);
+
+  const guardar = async () => {
+    if (!responsableId || !registro?.id || !cambioPendiente || guardando) {
+      return;
+    }
+    setGuardado(false);
+    try {
+      await onGuardar(registro.id, {
+        responsableUsuarioId: Number(responsableId),
+        observacion,
+      });
+      setGuardado(true);
+    } catch {
+      setGuardado(false);
+    }
+  };
+
+  if (!registro) {
+    return (
+      <span className="text-xs font-semibold text-amber-700">
+        Registro #{resultado.controlFinancieroRegistroId} no cargado
+      </span>
+    );
+  }
+
+  return (
+    <div className="grid min-w-72 gap-2">
+      <select
+        value={responsableId}
+        onChange={(event) => {
+          setResponsableId(event.target.value);
+          setGuardado(false);
+        }}
+        disabled={!editable || guardando}
+        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-green-400 disabled:cursor-not-allowed disabled:bg-slate-50"
+      >
+        <option value="">Seleccionar usuario</option>
+        {responsables.map((usuario) => (
+          <option
+            key={usuario.id}
+            value={usuario.id}
+            disabled={usuario.activo === false}
+          >
+            {usuario.nombre}
+            {usuario.activo === false ? " (inactivo)" : ""}
+          </option>
+        ))}
+      </select>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={observacion}
+          onChange={(event) => {
+            setObservacion(event.target.value);
+            setGuardado(false);
+          }}
+          disabled={!editable || guardando}
+          maxLength={1000}
+          placeholder="Observacion"
+          className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-green-400 disabled:cursor-not-allowed disabled:bg-slate-50"
+        />
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={!editable || guardando || !responsableId || !cambioPendiente}
+          title="Guardar gestion de caja"
+          aria-label="Guardar gestion de caja"
+          className={`inline-flex size-8 shrink-0 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 ${
+            guardado && !cambioPendiente
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-slate-200 bg-white hover:border-green-300 hover:text-green-700"
+          }`}
+        >
+          {guardando ? (
+            <RefreshCw size={15} className="animate-spin" />
+          ) : guardado && !cambioPendiente ? (
+            <CheckCircle2 size={16} />
+          ) : (
+            <Save size={15} />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VistaConciliacionCaja({
   conciliacion,
   error,
   resultados,
+  registrosCaja,
   onReconciliar,
+  onGuardarGestionCaja,
   reconciliando,
+  guardandoGestionId,
+  usuariosResponsables,
+  editable,
 }) {
   const [filtro, setFiltro] = useState("TODOS");
+  const registrosCajaPorId = useMemo(
+    () =>
+      new Map(
+        (registrosCaja || []).map((registro) => [Number(registro.id), registro]),
+      ),
+    [registrosCaja],
+  );
 
   if (!conciliacion) {
     return (
@@ -618,6 +756,7 @@ function VistaConciliacionCaja({
               <th className="whitespace-nowrap px-3 py-3 text-right font-semibold">Cierre</th>
               <th className="whitespace-nowrap px-3 py-3 text-right font-semibold">Diferencia</th>
               <th className="whitespace-nowrap px-3 py-3 font-semibold">Estado</th>
+              <th className="min-w-72 px-3 py-3 font-semibold">Gestion</th>
               <th className="whitespace-nowrap px-3 py-3 font-semibold">Auditoría</th>
             </tr>
           </thead>
@@ -645,6 +784,9 @@ function VistaConciliacionCaja({
                     : `Nombre similar: ${Math.round(
                         Number(resultado.similitudCliente || 0) * 100,
                       )}%`;
+              const registroCaja = registrosCajaPorId.get(
+                Number(resultado.controlFinancieroRegistroId),
+              );
               return (
                 <tr key={resultado.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
                   <td className="whitespace-nowrap px-3 py-3">{formatFechaCorta(resultado.fechaReporteRegistro || resultado.fechaCierre)}</td>
@@ -671,6 +813,24 @@ function VistaConciliacionCaja({
                   <td className="whitespace-nowrap px-3 py-3 text-right font-medium">{resultado.movimientoCajaId ? money.format(resultado.montoCierre) : "-"}</td>
                   <td className={`whitespace-nowrap px-3 py-3 text-right font-bold ${Math.abs(resultado.diferencia) <= 0.01 ? "text-green-700" : "text-red-700"}`}>{money.format(resultado.diferencia)}</td>
                   <td className="px-3 py-3"><EstadoConciliacionBadge estado={resultado.estado} /></td>
+                  <td className="px-3 py-3">
+                    {resultado.estado === "NO_EN_CIERRE" &&
+                    resultado.controlFinancieroRegistroId ? (
+                      <GestionCajaNoEnCierre
+                        editable={editable}
+                        guardando={
+                          guardandoGestionId ===
+                          resultado.controlFinancieroRegistroId
+                        }
+                        onGuardar={onGuardarGestionCaja}
+                        registro={registroCaja}
+                        resultado={resultado}
+                        usuariosResponsables={usuariosResponsables}
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-400">-</span>
+                    )}
+                  </td>
                   <td className="px-3 py-3">
                     <details className="min-w-56 text-xs text-slate-600">
                       <summary className="cursor-pointer font-semibold text-green-700">Ver detalle</summary>
@@ -700,7 +860,7 @@ function VistaConciliacionCaja({
                 </tr>
               );
             }) : (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No hay resultados para los filtros seleccionados.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">No hay resultados para los filtros seleccionados.</td></tr>
             )}
           </tbody>
         </table>
@@ -1430,6 +1590,33 @@ export default function ControlFinanciero() {
       Swal.fire(
         "Error",
         getErrorMessage(error, "No se pudo guardar la gestion del pago."),
+        "error",
+      );
+      throw error;
+    } finally {
+      setGuardandoPagoId(null);
+    }
+  };
+
+  const guardarGestionCaja = async (registroId, payload) => {
+    try {
+      setGuardandoPagoId(registroId);
+      const { data } = await api.patch(
+        `/api/contabilidad/control-financiero/registros/${registroId}/gestion-caja-no-en-cierre`,
+        payload,
+      );
+      const registroActualizado = data.registro;
+      setRegistros((actuales) => ({
+        ...actuales,
+        caja: actuales.caja.map((registro) =>
+          registro.id === registroId ? registroActualizado : registro,
+        ),
+      }));
+      return registroActualizado;
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        getErrorMessage(error, "No se pudo guardar la gestion de caja."),
         "error",
       );
       throw error;
@@ -2249,8 +2436,13 @@ export default function ControlFinanciero() {
                     conciliacion={conciliacionCaja}
                     error={errorConciliacionCaja}
                     resultados={resultadosConciliacionCajaVisibles}
+                    registrosCaja={registros.caja}
                     onReconciliar={reconciliarCaja}
+                    onGuardarGestionCaja={guardarGestionCaja}
                     reconciliando={reconciliandoCaja}
+                    guardandoGestionId={guardandoPagoId}
+                    usuariosResponsables={usuariosResponsables}
+                    editable={cargaSeleccionada?.estado === "ACTIVA"}
                   />
                 ) : tabActivo === "caja" ? (
                   <VistaCaja

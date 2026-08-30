@@ -17,6 +17,10 @@ router.patch(
   "/registros/:registroId/pago-entrada",
   controller.actualizarPagoEntrada,
 );
+router.patch(
+  "/registros/:registroId/gestion-caja-no-en-cierre",
+  controller.actualizarGestionCajaNoEnCierre,
+);
 router.get(
   "/cargas/:cargaId/conciliacion-entradas",
   controller.obtenerConciliacionEntradas,

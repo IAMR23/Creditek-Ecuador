@@ -4,6 +4,10 @@ export const SIDEBAR_SECTION_PERMISSIONS = [
     descripcion: "Acceso a la seccion Gerencia del sidebar",
   },
   {
+    permission: "Supervisores",
+    descripcion: "Acceso a la seccion Supervisores del sidebar",
+  },
+  {
     permission: "Marketing",
     descripcion: "Acceso a la seccion Marketing del sidebar",
   },
@@ -41,8 +45,8 @@ export const VENDEDOR_PERMISSION = "Vendedor";
 
 export const ROUTE_PERMISSIONS = {
   "/dashboard": "Gerencia",
-  "/supervisores": "Administracion",
-  "/supervisores/powerbi": "Administracion",
+  "/supervisores": "Supervisores",
+  "/supervisores/powerbi": "Supervisores",
   "/powerbi": "Gerencia",
   "/ghl/oportunidades-matriz": "Gerencia",
   "/ghl/rendimiento-pautas": ["Gerencia", "Administracion", "Sistemas"],
@@ -149,6 +153,7 @@ export const SYSTEM_ROUTES = SIDEBAR_SECTION_PERMISSIONS;
 
 export const ROUTE_REDIRECT_ORDER = [
   "/dashboard",
+  "/supervisores",
   "/vendedor-panel",
   "/logistica-panel",
   "/metas-comerciales",
@@ -186,13 +191,6 @@ export const hasRouteAccess = ({ rol, permisos = [], path, permission }) => {
       ? [permisoRequerido]
       : [];
   const permisosRequeridosNormalizados = permisosRequeridos.map(normalizePermissionName);
-
-  if (
-    ["admin", "administrador"].includes(rolNormalizado) &&
-    permisosRequeridosNormalizados.includes("administracion")
-  ) {
-    return true;
-  }
 
   if (rolNormalizado === "vendedor" && permisosRequeridos.includes(VENDEDOR_PERMISSION)) {
     return true;

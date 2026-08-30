@@ -317,7 +317,6 @@ function App() {
                   element={protect(
                     <Dashboard modoSupervisores />,
                     "/supervisores",
-                    ["admin", "administrador"],
                   )}
                 />
                 <Route
@@ -325,7 +324,6 @@ function App() {
                   element={protect(
                     <Powerbi modoSupervisores />,
                     "/supervisores/powerbi",
-                    ["admin", "administrador"],
                   )}
                 />
                 <Route path="powerbi" element={protect(<Powerbi />, "/powerbi")} />

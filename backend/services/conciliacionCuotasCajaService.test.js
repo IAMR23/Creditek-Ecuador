@@ -344,6 +344,55 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
     ).toBe(true);
   });
 
+  test("agrupa cuotas con nombre parcial inicial del cierre", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 10),
+        registro(2, "YOLANDA CUMBAJIN GUAYASAMIN", 30),
+      ],
+      movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 40)],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 2,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(
+      calculo.resultados.every(
+        (item) => item.tipoCoincidencia === "NOMBRE_PARCIAL_CUOTAS_AGRUPADAS",
+      ),
+    ).toBe(true);
+  });
+
+  test("no agrupa cuotas parciales cuando dos clientes distintos suman el cierre", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 10),
+        registro(2, "YOLANDA CUMBAJIN GUAYASAMIN", 30),
+        registro(3, "YOLANDA CUMBAJIN TOAPANTA", 20),
+        registro(4, "YOLANDA CUMBAJIN TOAPANTA", 20),
+      ],
+      movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 40)],
+    });
+
+    expect(
+      calculo.resultados.some((item) =>
+        String(item.tipoCoincidencia || "").includes("CUOTAS_AGRUPADAS"),
+      ),
+    ).toBe(false);
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 0,
+        noEnCierre: 4,
+        soloEnCierre: 1,
+      }),
+    );
+  });
+
   test("no agrupa automaticamente cuando hay nombres similares ambiguos", () => {
     const calculo = calcular({
       registros: [
@@ -575,6 +624,90 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
     );
   });
 
+  test("no asigna nombre parcial cuando dos clientes distintos apuntan al mismo cierre", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 40),
+        registro(2, "YOLANDA CUMBAJIN TOAPANTA", 40),
+      ],
+      movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 40)],
+    });
+
+    expect(calculo.resultados).toEqual([
+      expect.objectContaining({
+        controlFinancieroRegistroId: 1,
+        estado: "NO_EN_CIERRE",
+        movimientoCajaId: null,
+      }),
+      expect.objectContaining({
+        controlFinancieroRegistroId: 2,
+        estado: "NO_EN_CIERRE",
+        movimientoCajaId: null,
+      }),
+      expect.objectContaining({
+        controlFinancieroRegistroId: null,
+        estado: "SOLO_EN_CIERRE",
+        movimientoCajaId: 101,
+      }),
+    ]);
+  });
+
+  test("la ambiguedad parcial no depende del orden de los registros", () => {
+    const calcularEstados = (registros) =>
+      calcular({
+        registros,
+        movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 40)],
+      }).resumen;
+
+    const ordenOriginal = calcularEstados([
+      registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 40),
+      registro(2, "YOLANDA CUMBAJIN TOAPANTA", 40),
+    ]);
+    const ordenInvertido = calcularEstados([
+      registro(2, "YOLANDA CUMBAJIN TOAPANTA", 40),
+      registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 40),
+    ]);
+
+    expect(ordenOriginal).toEqual(
+      expect.objectContaining({
+        coinciden: 0,
+        noEnCierre: 2,
+        soloEnCierre: 1,
+      }),
+    );
+    expect(ordenInvertido).toEqual(
+      expect.objectContaining({
+        coinciden: 0,
+        noEnCierre: 2,
+        soloEnCierre: 1,
+      }),
+    );
+  });
+
+  test("asigna nombre parcial cuando solo un cliente compatible coincide en monto", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 40),
+        registro(2, "YOLANDA CUMBAJIN TOAPANTA", 25),
+      ],
+      movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 40)],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "NOMBRE_PARCIAL",
+        movimientoCajaId: 101,
+      }),
+    );
+    expect(calculo.resultados[1]).toEqual(
+      expect.objectContaining({
+        estado: "NO_EN_CIERRE",
+        movimientoCajaId: null,
+      }),
+    );
+  });
+
   test("acepta nombre parcial del cierre con al menos un nombre y un apellido", () => {
     const calculo = calcular({
       registros: [registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 25)],
@@ -602,6 +735,21 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
         estado: "COINCIDE",
         tipoCoincidencia: "NOMBRE_PARCIAL",
         similitudCliente: 1,
+        movimientoCajaId: 101,
+      }),
+    );
+  });
+
+  test("mantiene coincidencia exacta aunque existan reglas de nombre parcial", () => {
+    const calculo = calcular({
+      registros: [registro(1, "YOLANDA CUMBAJIN", 40)],
+      movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 40)],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "NOMBRE_EXACTO",
         movimientoCajaId: 101,
       }),
     );

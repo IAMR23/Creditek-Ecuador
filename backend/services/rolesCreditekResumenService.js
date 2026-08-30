@@ -1,6 +1,9 @@
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/db");
 const ControlFinancieroCarga = require("../models/ControlFinancieroCarga");
+const ControlFinancieroConciliacionCaja = require(
+  "../models/ControlFinancieroConciliacionCaja",
+);
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
 const RolCreditekAjuste = require("../models/RolCreditekAjuste");
@@ -114,11 +117,67 @@ const serializarAjuste = (row) => {
   };
 };
 
+const obtenerUltimasConciliacionesCajaPorCarga = async (cargaIds) => {
+  const ids = [
+    ...new Set(
+      cargaIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)),
+    ),
+  ];
+  if (!ids.length) return new Map();
+
+  const conciliaciones = await ControlFinancieroConciliacionCaja.findAll({
+    where: { cargaId: { [Op.in]: ids } },
+    attributes: ["id", "cargaId", "resultados", "createdAt"],
+    order: [["cargaId", "ASC"], ["createdAt", "DESC"], ["id", "DESC"]],
+  });
+
+  const porCarga = new Map();
+  conciliaciones.forEach((item) => {
+    const conciliacion =
+      typeof item?.toJSON === "function" ? item.toJSON() : item;
+    const cargaId = Number(conciliacion?.cargaId);
+    if (!porCarga.has(cargaId)) porCarga.set(cargaId, conciliacion);
+  });
+  return porCarga;
+};
+
+const filtrarCajasNoEnCierre = async (registros) => {
+  if (!registros.length) return [];
+
+  const conciliacionesPorCarga = await obtenerUltimasConciliacionesCajaPorCarga(
+    registros.map((registro) => {
+      const item =
+        typeof registro?.toJSON === "function" ? registro.toJSON() : registro;
+      return item?.cargaId;
+    }),
+  );
+
+  return registros.filter((registro) => {
+    const item =
+      typeof registro?.toJSON === "function" ? registro.toJSON() : registro;
+    const conciliacion = conciliacionesPorCarga.get(Number(item.cargaId));
+    return Array.isArray(conciliacion?.resultados)
+      ? conciliacion.resultados.some(
+          (resultado) =>
+            Number(resultado?.controlFinancieroRegistroId) ===
+              Number(item.id) && resultado?.estado === "NO_EN_CIERRE",
+        )
+      : false;
+  });
+};
+
 const obtenerResumen = async (periodoValue) => {
   const periodo = normalizarPeriodo(periodoValue);
   const { inicio, fin, fechaInicio, fechaFin } = limitesMes(periodo);
 
-  const [usuarios, egresos, entradasControl, ajustes, reporteComisiones] =
+  const [
+    usuarios,
+    egresos,
+    entradasControl,
+    cajasControlValues,
+    ajustes,
+    reporteComisiones,
+  ] =
     await Promise.all([
       Usuario.findAll({
         where: { activo: true },
@@ -150,6 +209,26 @@ const obtenerResumen = async (periodoValue) => {
           },
         ],
       }),
+      ControlFinancieroRegistro.findAll({
+        where: {
+          tipoRegistro: "CAJA",
+          pagosCuotas: { [Op.gt]: 0 },
+          responsablePagoEntradaId: { [Op.ne]: null },
+        },
+        attributes: ["id", "cargaId", "responsablePagoEntradaId", "pagosCuotas"],
+        include: [
+          {
+            model: ControlFinancieroCarga,
+            as: "carga",
+            attributes: [],
+            where: {
+              estado: "ACTIVA",
+              fechaReporte: { [Op.between]: [fechaInicio, fechaFin] },
+            },
+            required: true,
+          },
+        ],
+      }),
       RolCreditekAjuste.findAll({ where: periodo }),
       pagosComisionesService.obtenerReportePagosComisiones({
         year: periodo.anio,
@@ -175,6 +254,16 @@ const obtenerResumen = async (periodoValue) => {
       row.entradas,
     ),
   );
+  const cajasControl = await filtrarCajasNoEnCierre(cajasControlValues);
+  cajasControl.forEach((row) => {
+    const item = typeof row?.toJSON === "function" ? row.toJSON() : row;
+    acumular(
+      valoresPorUsuario,
+      item.responsablePagoEntradaId,
+      "cajaGeneral",
+      item.pagosCuotas,
+    );
+  });
   (reporteComisiones?.vendedores || []).forEach((vendedor) =>
     acumular(
       valoresPorUsuario,

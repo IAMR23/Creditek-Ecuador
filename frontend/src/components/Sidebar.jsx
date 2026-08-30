@@ -82,7 +82,7 @@ export default function Sidebar({ auth }) {
     () => ({
       comercial: {
         title: "Gerencia",
-        permission: ["Gerencia", "Administracion"],
+        permission: "Gerencia",
         items: [
           {
             label: "Metas Comerciales",
@@ -356,8 +356,7 @@ export default function Sidebar({ auth }) {
 
       supervisores: {
         title: "Supervisores",
-        permission: "Administracion",
-        allowedRoles: ["admin", "administrador"],
+        permission: "Supervisores",
         items: [
           {
             label: "Dashboard",

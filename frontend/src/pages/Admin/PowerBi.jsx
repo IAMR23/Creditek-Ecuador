@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
-import { nombreCortoUsuario } from "../../utils/nombres";
+import { nombreCortoPersona, nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
@@ -152,16 +152,35 @@ export default function Powerbi({ modoSupervisores = false }) {
   );
 
   const opcionesPromotor = useMemo(() => {
-    const items = new Set([
-      ...OBSERVACIONES_OPERATIVAS,
-      ...promotores.map((promotor) => promotor.nombre),
-    ]);
+    const items = new Map();
+
+    OBSERVACIONES_OPERATIVAS.forEach((item) => {
+      items.set(item, { value: item, label: item });
+    });
+
+    promotores.forEach((promotor) => {
+      const nombreCompleto = String(promotor.nombre || "").trim();
+      if (!nombreCompleto) return;
+      items.set(nombreCompleto, {
+        value: nombreCompleto,
+        label: nombreCortoPersona(nombreCompleto),
+      });
+    });
 
     if (observacion) {
-      items.add(observacion);
+      const valorActual = String(observacion).trim();
+      items.set(valorActual, {
+        value: valorActual,
+        label:
+          OBSERVACIONES_OPERATIVAS.includes(valorActual)
+            ? valorActual
+            : nombreCortoPersona(valorActual),
+      });
     }
 
-    return Array.from(items).sort((a, b) => a.localeCompare(b, "es"));
+    return Array.from(items.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, "es"),
+    );
   }, [promotores, observacion]);
 
   useEffect(() => {
@@ -559,8 +578,8 @@ export default function Powerbi({ modoSupervisores = false }) {
             >
               <option value="">Todos</option>
               {opcionesPromotor.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+                <option key={item.value} value={item.value}>
+                  {item.label}
                 </option>
               ))}
             </select>

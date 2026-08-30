@@ -95,17 +95,13 @@ const authenticate = async (req, res, next) => {
 };
 
 const requirePermission = (...permisosPermitidos) => (req, res, next) => {
-  const rolUsuario = normalize(req.user?.rol);
   const permisosUsuario = (req.user?.permisos || []).map(normalize);
   const permisosRequeridos = permisosPermitidos.flat().map(normalize);
-  const tieneAccesoBaseAdmin =
-    ["admin", "administrador"].includes(rolUsuario) &&
-    permisosRequeridos.includes("administracion");
   const tienePermiso = permisosRequeridos.some((permiso) =>
     permisosUsuario.includes(permiso),
   );
 
-  if (!tieneAccesoBaseAdmin && !tienePermiso) {
+  if (!tienePermiso) {
     return res
       .status(403)
       .json({ message: "No tienes permisos para esta accion" });

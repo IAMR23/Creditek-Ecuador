@@ -127,8 +127,17 @@ const fechaHora = (value) => {
   });
 };
 
+const ORIGEN_CONTROL_FINANCIERO_ENTRADA = "CONTROL_FINANCIERO";
+const ORIGEN_CONTROL_FINANCIERO_CAJA = "CONTROL_FINANCIERO_CAJA";
+
 const esEntradaControlFinanciero = (registro) =>
-  registro?.origen === "CONTROL_FINANCIERO";
+  registro?.origen === ORIGEN_CONTROL_FINANCIERO_ENTRADA;
+
+const esCajaControlFinanciero = (registro) =>
+  registro?.origen === ORIGEN_CONTROL_FINANCIERO_CAJA;
+
+const esRegistroControlFinanciero = (registro) =>
+  esEntradaControlFinanciero(registro) || esCajaControlFinanciero(registro);
 
 export default function EgresosCreditek() {
   const [usuarios, setUsuarios] = useState([]);
@@ -188,7 +197,7 @@ export default function EgresosCreditek() {
     SECCIONES.find((item) => item.id === seccionActiva) || SECCIONES[0];
   const SeccionIcon = seccion.icon;
   const editandoControlFinanciero =
-    registroEditando && esEntradaControlFinanciero(registroEditando);
+    registroEditando && esRegistroControlFinanciero(registroEditando);
 
   const registrosFiltrados = useMemo(() => {
     const query = normalizarTexto(busqueda.trim());
@@ -201,7 +210,7 @@ export default function EgresosCreditek() {
         registro.registradoPor?.nombre,
         registro.actualizadoPor?.nombre,
         ACCIONES[registro.ultimaAccion],
-        registro.origen === "CONTROL_FINANCIERO" ? "control financiero" : "manual",
+        esRegistroControlFinanciero(registro) ? "control financiero" : "manual",
         registro.estadoPagoEntrada,
         registro.tipoProductoEntrada,
         registro.contrato,
@@ -320,7 +329,8 @@ export default function EgresosCreditek() {
     event?.preventDefault();
     if (!registroEditando || actualizandoId !== null) return;
 
-    const esVinculado = esEntradaControlFinanciero(registroEditando);
+    const esVinculado = esRegistroControlFinanciero(registroEditando);
+    const esCajaVinculada = esCajaControlFinanciero(registroEditando);
     const valorNumerico = normalizarValor(edicion.valor);
     if (!edicion.usuarioId) {
       Swal.fire(
@@ -339,19 +349,31 @@ export default function EgresosCreditek() {
       setActualizandoId(registroEditando.id);
       if (esVinculado) {
         const { data } = await api.patch(
-          `/api/contabilidad/control-financiero/registros/${registroEditando.controlFinancieroRegistroId}/pago-entrada`,
-          {
-            estado: edicion.estadoPagoEntrada,
-            responsableUsuarioId: Number(edicion.usuarioId),
-            observacion: edicion.observacion,
-          },
+          esCajaVinculada
+            ? `/api/contabilidad/control-financiero/registros/${registroEditando.controlFinancieroRegistroId}/gestion-caja-no-en-cierre`
+            : `/api/contabilidad/control-financiero/registros/${registroEditando.controlFinancieroRegistroId}/pago-entrada`,
+          esCajaVinculada
+            ? {
+                responsableUsuarioId: Number(edicion.usuarioId),
+                observacion: edicion.observacion,
+                estado: edicion.estadoPagoEntrada,
+              }
+            : {
+                estado: edicion.estadoPagoEntrada,
+                responsableUsuarioId: Number(edicion.usuarioId),
+                observacion: edicion.observacion,
+              },
         );
         const registroControl = data.registro || {};
         const registroActualizado = {
           ...registroEditando,
           usuarioId: registroControl.responsablePagoEntradaId,
           usuario: registroControl.responsablePagoEntrada || null,
-          valor: Number(registroControl.entradas || registroEditando.valor || 0),
+          valor: Number(
+            esCajaVinculada
+              ? registroControl.pagosCuotas || registroEditando.valor || 0
+              : registroControl.entradas || registroEditando.valor || 0,
+          ),
           observacion: registroControl.observacionPagoEntrada || "",
           estadoPagoEntrada:
             registroControl.estadoPagoEntrada || edicion.estadoPagoEntrada,
@@ -473,7 +495,7 @@ export default function EgresosCreditek() {
           <tbody className="divide-y divide-slate-100">
             {registrosFiltrados.map((registro) => {
               const editando = registroEditando?.id === registro.id;
-              const esVinculado = esEntradaControlFinanciero(registro);
+              const esVinculado = esRegistroControlFinanciero(registro);
               const bloqueado =
                 actualizandoId !== null && actualizandoId !== registro.id;
 
@@ -1105,7 +1127,7 @@ export default function EgresosCreditek() {
                         </span>
                         <span className="truncate">
                           {registro.usuario?.nombre ||
-                            (esEntradaControlFinanciero(registro)
+                            (esRegistroControlFinanciero(registro)
                               ? "Sin responsable"
                               : `Usuario #${registro.usuarioId}`)}
                         </span>
@@ -1113,22 +1135,24 @@ export default function EgresosCreditek() {
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <span
                           className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            esEntradaControlFinanciero(registro)
+                            esRegistroControlFinanciero(registro)
                               ? "border-cyan-200 bg-cyan-50 text-cyan-700"
                               : "border-slate-200 bg-slate-50 text-slate-600"
                           }`}
                         >
-                          {esEntradaControlFinanciero(registro)
+                          {esRegistroControlFinanciero(registro)
                             ? "Control financiero"
                             : "Manual"}
                         </span>
-                        {esEntradaControlFinanciero(registro) && (
+                        {esRegistroControlFinanciero(registro) && (
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
-                            {registro.tipoProductoEntrada}
+                            {esCajaControlFinanciero(registro)
+                              ? "Caja no en cierre"
+                              : registro.tipoProductoEntrada}
                           </span>
                         )}
                       </div>
-                      {esEntradaControlFinanciero(registro) && (
+                      {esRegistroControlFinanciero(registro) && (
                         <p className="mt-1 truncate text-xs text-slate-500">
                           {registro.contrato
                             ? `Contrato ${registro.contrato}`
@@ -1152,7 +1176,7 @@ export default function EgresosCreditek() {
                       <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Estado</p>
                       <span
                         className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${
-                          esEntradaControlFinanciero(registro)
+                          esRegistroControlFinanciero(registro)
                             ? registro.estadoPagoEntrada === "PAGADO"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                               : "border-amber-200 bg-amber-50 text-amber-700"
@@ -1161,7 +1185,7 @@ export default function EgresosCreditek() {
                               : "border-emerald-200 bg-emerald-50 text-emerald-700"
                         }`}
                       >
-                        {esEntradaControlFinanciero(registro)
+                        {esRegistroControlFinanciero(registro)
                           ? registro.estadoPagoEntrada || "PENDIENTE"
                           : registro.activo === false
                             ? "Inactivo"
@@ -1173,7 +1197,7 @@ export default function EgresosCreditek() {
                       <p className="break-words text-xs leading-5 text-slate-600">
                         {registro.observacion || "Sin observación"}
                       </p>
-                      {esEntradaControlFinanciero(registro) && (
+                      {esRegistroControlFinanciero(registro) && (
                         <p className="mt-1 truncate text-[11px] text-slate-500">
                           {registro.cliente || "Cliente no disponible"}
                         </p>
@@ -1219,7 +1243,7 @@ export default function EgresosCreditek() {
                       >
                         <Pencil size={15} />
                         </button>
-                        {!esEntradaControlFinanciero(registro) && (
+                        {!esRegistroControlFinanciero(registro) && (
                         <button
                         type="button"
                         onClick={() => cambiarEstado(registro)}

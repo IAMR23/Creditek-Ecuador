@@ -41,6 +41,14 @@ const ESTADOS_CARGA = ["ACTIVA", "ANULADA", "REEMPLAZADA"];
 const ESTADOS_FILTRO = [...ESTADOS_CARGA, "TODAS"];
 const ESTADOS_PAGO_ENTRADA = ["PENDIENTE", "PAGADO"];
 
+const tieneResultadoCajaNoEnCierre = (conciliacion, registroId) =>
+  Array.isArray(conciliacion?.resultados) &&
+  conciliacion.resultados.some(
+    (resultado) =>
+      Number(resultado?.controlFinancieroRegistroId) === Number(registroId) &&
+      resultado?.estado === "NO_EN_CIERRE",
+  );
+
 const parsePositiveInt = (value, fallback, max = 100) => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) return fallback;
@@ -495,6 +503,154 @@ exports.actualizarPagoEntrada = async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "No se pudo guardar la gestion del pago.",
+    });
+  }
+};
+
+exports.actualizarGestionCajaNoEnCierre = async (req, res) => {
+  try {
+    const registroId = Number(req.params.registroId);
+    const estadoSolicitado = String(req.body?.estado || "")
+      .trim()
+      .toUpperCase();
+    const responsablePagoEntradaId = Number(req.body?.responsableUsuarioId);
+    const observacionPagoEntrada = String(req.body?.observacion || "").trim();
+
+    if (!Number.isInteger(registroId) || registroId < 1) {
+      return res.status(400).json({
+        ok: false,
+        message: "El registro financiero no es valido.",
+      });
+    }
+    if (
+      !Number.isInteger(responsablePagoEntradaId) ||
+      responsablePagoEntradaId < 1
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message: "Selecciona un usuario responsable del pago.",
+      });
+    }
+    if (estadoSolicitado && !ESTADOS_PAGO_ENTRADA.includes(estadoSolicitado)) {
+      return res.status(400).json({
+        ok: false,
+        message: "El estado debe ser PENDIENTE o PAGADO.",
+      });
+    }
+    if (observacionPagoEntrada.length > 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "La observacion no puede superar 1000 caracteres.",
+      });
+    }
+
+    const resultado = await sequelize.transaction(async (transaction) => {
+      const registro = await ControlFinancieroRegistro.findByPk(registroId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!registro) {
+        return { error: true, status: 404, message: "Registro no encontrado." };
+      }
+      if (registro.tipoRegistro !== "CAJA") {
+        return {
+          error: true,
+          status: 400,
+          message: "La gestion de caja solo aplica a registros de caja.",
+        };
+      }
+      if (Number(registro.pagosCuotas || 0) <= 0) {
+        return {
+          error: true,
+          status: 400,
+          message: "El registro no tiene un valor de pago de cuota.",
+        };
+      }
+
+      const carga = await ControlFinancieroCarga.findByPk(registro.cargaId, {
+        attributes: ["id", "estado"],
+        transaction,
+      });
+      if (!carga || carga.estado !== "ACTIVA") {
+        return {
+          error: true,
+          status: 409,
+          message: "Solo se pueden actualizar registros de cargas activas.",
+        };
+      }
+
+      const conciliacionCaja = await obtenerConciliacionCajaCarga(
+        registro.cargaId,
+      );
+      if (
+        !tieneResultadoCajaNoEnCierre(
+          conciliacionCaja.conciliacion,
+          registroId,
+        )
+      ) {
+        return {
+          error: true,
+          status: 409,
+          message:
+            "Solo se puede gestionar caja cuando el registro esta No en cierre.",
+        };
+      }
+
+      const responsable = await Usuario.findOne({
+        where: { id: responsablePagoEntradaId, activo: true },
+        attributes: ["id", "nombre", "activo"],
+        transaction,
+      });
+      if (!responsable) {
+        return {
+          error: true,
+          status: 400,
+          message: "El usuario responsable no existe o se encuentra inactivo.",
+        };
+      }
+
+      await registro.update(
+        {
+          estadoPagoEntrada:
+            estadoSolicitado || registro.estadoPagoEntrada || "PENDIENTE",
+          responsablePagoEntradaId,
+          observacionPagoEntrada: observacionPagoEntrada || null,
+        },
+        { transaction },
+      );
+
+      const registroPlano = registro.get
+        ? registro.get({ plain: true })
+        : registro;
+      const responsablePlano = responsable.get
+        ? responsable.get({ plain: true })
+        : responsable;
+
+      return {
+        registro: serializarRegistro({
+          ...registroPlano,
+          responsablePagoEntrada: responsablePlano,
+        }),
+      };
+    });
+
+    if (resultado.error) {
+      return res.status(resultado.status).json({
+        ok: false,
+        message: resultado.message,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "La gestion de caja fue guardada.",
+      registro: resultado.registro,
+    });
+  } catch (error) {
+    console.error("Error actualizando gestion de caja no en cierre:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "No se pudo guardar la gestion de caja.",
     });
   }
 };

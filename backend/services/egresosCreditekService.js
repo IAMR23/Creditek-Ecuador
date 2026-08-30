@@ -1,5 +1,8 @@
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
 const ControlFinancieroCarga = require("../models/ControlFinancieroCarga");
+const ControlFinancieroConciliacionCaja = require(
+  "../models/ControlFinancieroConciliacionCaja",
+);
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const Usuario = require("../models/Usuario");
 const { Op } = require("sequelize");
@@ -91,6 +94,89 @@ const serializarEntradaControlFinanciero = (value) => {
   };
 };
 
+const serializarCajaControlFinanciero = (value) => {
+  const registro = typeof value?.toJSON === "function" ? value.toJSON() : value;
+
+  return {
+    id: `control-financiero-caja-${registro.id}`,
+    origen: "CONTROL_FINANCIERO_CAJA",
+    controlFinancieroRegistroId: registro.id,
+    usuarioId: registro.responsablePagoEntradaId || null,
+    usuario: registro.responsablePagoEntrada || null,
+    valor: Number(registro.pagosCuotas || 0),
+    observacion: registro.observacionPagoEntrada || "",
+    seccion: "CAJAS",
+    activo: true,
+    ultimaAccion: "CONTROL_FINANCIERO",
+    estadoPagoEntrada: registro.estadoPagoEntrada || "PENDIENTE",
+    contrato: registro.contrato || "",
+    cliente: registro.cliente || "",
+    vendedor: registro.usuarioCobrador || registro.vendedor || "",
+    modelo: registro.numeroCuotas || "",
+    imei: "",
+    fecha: registro.fecha || "",
+    cargaId: registro.cargaId,
+    carga: registro.carga || null,
+    registradoPor: registro.carga?.usuario || null,
+    actualizadoPor: registro.responsablePagoEntrada || null,
+    createdAt: registro.createdAt,
+    updatedAt: registro.updatedAt,
+  };
+};
+
+const obtenerUltimasConciliacionesCajaPorCarga = async (cargaIds) => {
+  const ids = [
+    ...new Set(
+      cargaIds.map((id) => Number(id)).filter((id) => Number.isInteger(id)),
+    ),
+  ];
+  if (!ids.length) return new Map();
+
+  const conciliaciones = await ControlFinancieroConciliacionCaja.findAll({
+    where: { cargaId: { [Op.in]: ids } },
+    attributes: ["id", "cargaId", "resultados", "createdAt"],
+    order: [["cargaId", "ASC"], ["createdAt", "DESC"], ["id", "DESC"]],
+  });
+
+  const porCarga = new Map();
+  conciliaciones.forEach((item) => {
+    const conciliacion =
+      typeof item?.toJSON === "function" ? item.toJSON() : item;
+    const cargaId = Number(conciliacion?.cargaId);
+    if (!porCarga.has(cargaId)) {
+      porCarga.set(cargaId, conciliacion);
+    }
+  });
+
+  return porCarga;
+};
+
+const filtrarCajasNoEnCierre = async (registros) => {
+  if (!registros.length) return [];
+
+  const conciliacionesPorCarga = await obtenerUltimasConciliacionesCajaPorCarga(
+    registros.map((registro) => {
+      const item = typeof registro?.toJSON === "function"
+        ? registro.toJSON()
+        : registro;
+      return item?.cargaId;
+    }),
+  );
+
+  return registros.filter((registro) => {
+    const item =
+      typeof registro?.toJSON === "function" ? registro.toJSON() : registro;
+    const conciliacion = conciliacionesPorCarga.get(Number(item.cargaId));
+    return Array.isArray(conciliacion?.resultados)
+      ? conciliacion.resultados.some(
+          (resultado) =>
+            Number(resultado?.controlFinancieroRegistroId) ===
+              Number(item.id) && resultado?.estado === "NO_EN_CIERRE",
+        )
+      : false;
+  });
+};
+
 const ordenarPorActividad = (a, b) => {
   const tiempoA = new Date(a.updatedAt || a.createdAt || 0).getTime();
   const tiempoB = new Date(b.updatedAt || b.createdAt || 0).getTime();
@@ -139,7 +225,13 @@ const obtenerRegistroCompleto = async (registro) => {
 const obtenerRegistros = async (seccionValue) => {
   const seccion = normalizarSeccion(seccionValue);
   const incluirControlFinanciero = seccion === "ENTRADAS";
-  const [usuarios, registrosValues, registrosControlFinanciero] =
+  const incluirControlFinancieroCaja = seccion === "CAJAS";
+  const [
+    usuarios,
+    registrosValues,
+    registrosControlFinanciero,
+    registrosControlFinancieroCajaValues,
+  ] =
     await Promise.all([
       Usuario.findAll({
         where: { activo: true },
@@ -189,10 +281,53 @@ const obtenerRegistros = async (seccionValue) => {
             order: [["updatedAt", "DESC"], ["id", "DESC"]],
           })
         : Promise.resolve([]),
+      incluirControlFinancieroCaja
+        ? ControlFinancieroRegistro.findAll({
+            where: {
+              tipoRegistro: "CAJA",
+              pagosCuotas: { [Op.gt]: 0 },
+              responsablePagoEntradaId: { [Op.ne]: null },
+            },
+            include: [
+              {
+                model: Usuario,
+                as: "responsablePagoEntrada",
+                attributes: ["id", "nombre", "activo"],
+                required: false,
+              },
+              {
+                model: ControlFinancieroCarga,
+                as: "carga",
+                attributes: [
+                  "id",
+                  "fechaReporte",
+                  "archivoGenerado",
+                  "estado",
+                  "usuarioId",
+                ],
+                where: { estado: "ACTIVA" },
+                required: true,
+                include: [
+                  {
+                    model: Usuario,
+                    as: "usuario",
+                    attributes: ["id", "nombre"],
+                    required: false,
+                  },
+                ],
+              },
+            ],
+            order: [["updatedAt", "DESC"], ["id", "DESC"]],
+          })
+        : Promise.resolve([]),
     ]);
+  const registrosControlFinancieroCaja = incluirControlFinancieroCaja
+    ? await filtrarCajasNoEnCierre(registrosControlFinancieroCajaValues)
+    : [];
   const registros = [
     ...registrosValues.map(serializarEntrada),
     ...registrosControlFinanciero.map(serializarEntradaControlFinanciero),
+    ...registrosControlFinancieroCaja.map(serializarCajaControlFinanciero),
   ].sort(ordenarPorActividad);
 
   return {

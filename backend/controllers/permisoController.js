@@ -2,6 +2,22 @@ const Permiso = require("../models/Permiso");
 const UsuarioPermiso = require("../models/UsuarioPermiso");
 const { Op } = require("sequelize");
 
+const PERMISOS_SISTEMA = [
+  {
+    nombre: "Supervisores",
+    descripcion: "Acceso a la seccion Supervisores del sidebar",
+  },
+];
+
+const asegurarPermisosSistema = async () => {
+  for (const permiso of PERMISOS_SISTEMA) {
+    await Permiso.findOrCreate({
+      where: { nombre: permiso.nombre },
+      defaults: permiso,
+    });
+  }
+};
+
 exports.crearPermiso = async (req, res) => {
   try {
     const { nombre, descripcion } = req.body;
@@ -15,6 +31,8 @@ exports.crearPermiso = async (req, res) => {
 
 exports.listarPermisos = async (req, res) => {
   try {
+    await asegurarPermisosSistema();
+
     const permisos = await Permiso.findAll({
       order: [["nombre", "ASC"]], 
     });

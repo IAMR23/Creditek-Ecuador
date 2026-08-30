@@ -406,7 +406,8 @@ const construirResultadosConciliacionCaja = ({
   });
 
   const resolverNombresSimilares = ({ registrosPendientes, exigirMonto }) => {
-    const candidatos = [];
+    const candidatosPreliminares = [];
+    const clientesRestringidosPorMovimiento = new Map();
     const movimientosPorContexto = new Map();
 
     movimientosValidos.forEach((movimiento) => {
@@ -445,12 +446,31 @@ const construirResultadosConciliacionCaja = ({
         ) {
           return;
         }
-        candidatos.push({
+        const candidato = {
           registro,
           registroIndex,
           ...posible,
-        });
+        };
+        candidatosPreliminares.push(candidato);
+
+        if (posible.requiereCoincidenciaUnica) {
+          const movimientoId = Number(posible.movimiento.id);
+          if (!clientesRestringidosPorMovimiento.has(movimientoId)) {
+            clientesRestringidosPorMovimiento.set(movimientoId, new Set());
+          }
+          clientesRestringidosPorMovimiento
+            .get(movimientoId)
+            .add(registro.clienteNormalizado);
+        }
       });
+    });
+
+    const candidatos = candidatosPreliminares.filter((candidato) => {
+      if (!candidato.requiereCoincidenciaUnica) return true;
+      const clientesCompatibles = clientesRestringidosPorMovimiento.get(
+        Number(candidato.movimiento.id),
+      );
+      return (clientesCompatibles?.size || 0) <= 1;
     });
 
     candidatos.sort(

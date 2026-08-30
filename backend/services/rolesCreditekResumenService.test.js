@@ -4,6 +4,9 @@ jest.mock("../config/db", () => ({
   },
 }));
 jest.mock("../models/ControlFinancieroCarga", () => ({}));
+jest.mock("../models/ControlFinancieroConciliacionCaja", () => ({
+  findAll: jest.fn(),
+}));
 jest.mock("../models/ControlFinancieroRegistro", () => ({ findAll: jest.fn() }));
 jest.mock("../models/EgresoCreditekEntrada", () => ({ findAll: jest.fn() }));
 jest.mock("../models/RolCreditekAjuste", () => ({
@@ -19,10 +22,14 @@ jest.mock("./pagosComisionesService", () => ({
 }));
 
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
+const ControlFinancieroConciliacionCaja = require(
+  "../models/ControlFinancieroConciliacionCaja",
+);
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
 const RolCreditekAjuste = require("../models/RolCreditekAjuste");
 const Usuario = require("../models/Usuario");
 const pagosComisionesService = require("./pagosComisionesService");
+const { Op } = require("sequelize");
 const { guardarAjustes, obtenerResumen } = require("./rolesCreditekResumenService");
 
 describe("rolesCreditekResumenService", () => {
@@ -31,6 +38,7 @@ describe("rolesCreditekResumenService", () => {
     Usuario.findAll.mockResolvedValue([]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([]);
     ControlFinancieroRegistro.findAll.mockResolvedValue([]);
+    ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([]);
     RolCreditekAjuste.findAll.mockResolvedValue([]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
       vendedores: [],
@@ -47,9 +55,9 @@ describe("rolesCreditekResumenService", () => {
       { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
       { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
     ]);
-    ControlFinancieroRegistro.findAll.mockResolvedValue([
-      { responsablePagoEntradaId: 4, entradas: "5.00" },
-    ]);
+    ControlFinancieroRegistro.findAll
+      .mockResolvedValueOnce([{ responsablePagoEntradaId: 4, entradas: "5.00" }])
+      .mockResolvedValueOnce([]);
     RolCreditekAjuste.findAll.mockResolvedValue([
       {
         usuarioId: 4,
@@ -119,9 +127,9 @@ describe("rolesCreditekResumenService", () => {
       { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
       { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
     ]);
-    ControlFinancieroRegistro.findAll.mockResolvedValue([
-      { responsablePagoEntradaId: 4, entradas: "5.00" },
-    ]);
+    ControlFinancieroRegistro.findAll
+      .mockResolvedValueOnce([{ responsablePagoEntradaId: 4, entradas: "5.00" }])
+      .mockResolvedValueOnce([]);
     RolCreditekAjuste.findAll.mockResolvedValue([
       {
         usuarioId: 4,
@@ -153,6 +161,63 @@ describe("rolesCreditekResumenService", () => {
         descuentosManual: 0,
         totalAnticipos: 88,
         totalDescuentos: 88,
+      }),
+    ]);
+  });
+
+  test("suma cajas no en cierre de control financiero al responsable", async () => {
+    Usuario.findAll.mockResolvedValue([
+      { id: 4, nombre: "Ana Perez", activo: true },
+    ]);
+    ControlFinancieroRegistro.findAll
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 77,
+          cargaId: 9,
+          responsablePagoEntradaId: 4,
+          pagosCuotas: "14.00",
+        },
+      ]);
+    ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([
+      {
+        toJSON: () => ({
+          id: 10,
+          cargaId: 9,
+          resultados: [
+            {
+              controlFinancieroRegistroId: 77,
+              estado: "NO_EN_CIERRE",
+            },
+          ],
+          createdAt: "2026-08-26T12:00:00.000Z",
+        }),
+      },
+    ]);
+
+    const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
+
+    expect(ControlFinancieroRegistro.findAll.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        where: expect.not.objectContaining({
+          fecha: expect.anything(),
+        }),
+        include: [
+          expect.objectContaining({
+            as: "carga",
+            where: {
+              estado: "ACTIVA",
+              fechaReporte: { [Op.between]: ["2026-08-01", "2026-08-31"] },
+            },
+          }),
+        ],
+      }),
+    );
+    expect(resultado.registros).toEqual([
+      expect.objectContaining({
+        usuarioId: 4,
+        cajaGeneral: 14,
+        cajaGeneralCalculado: 14,
       }),
     ]);
   });

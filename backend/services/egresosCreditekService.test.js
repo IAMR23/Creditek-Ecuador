@@ -5,6 +5,9 @@ jest.mock("../models/EgresoCreditekEntrada", () => ({
   findOne: jest.fn(),
 }));
 jest.mock("../models/ControlFinancieroCarga", () => ({}));
+jest.mock("../models/ControlFinancieroConciliacionCaja", () => ({
+  findAll: jest.fn(),
+}));
 jest.mock("../models/ControlFinancieroRegistro", () => ({
   findAll: jest.fn(),
 }));
@@ -14,6 +17,9 @@ jest.mock("../models/Usuario", () => ({
 }));
 
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
+const ControlFinancieroConciliacionCaja = require(
+  "../models/ControlFinancieroConciliacionCaja",
+);
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const Usuario = require("../models/Usuario");
 const { Op } = require("sequelize");
@@ -30,6 +36,7 @@ describe("egresosCreditekService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     ControlFinancieroRegistro.findAll.mockResolvedValue([]);
+    ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([]);
   });
 
   test("lista usuarios activos, entradas y suma total", async () => {
@@ -186,7 +193,15 @@ describe("egresosCreditekService", () => {
     expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ where: { seccion: "CAJAS" } }),
     );
-    expect(ControlFinancieroRegistro.findAll).not.toHaveBeenCalled();
+    expect(ControlFinancieroRegistro.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tipoRegistro: "CAJA",
+          pagosCuotas: { [Op.gt]: 0 },
+          responsablePagoEntradaId: { [Op.ne]: null },
+        }),
+      }),
+    );
     expect(resultado).toEqual(
       expect.objectContaining({
         seccion: "CAJAS",
@@ -194,6 +209,64 @@ describe("egresosCreditekService", () => {
         total: 25.5,
       }),
     );
+  });
+
+  test("incluye cajas no en cierre vinculadas de control financiero", async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 2, nombre: "Ana" }]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([]);
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      {
+        toJSON: () => ({
+          id: 77,
+          cargaId: 9,
+          tipoRegistro: "CAJA",
+          contrato: "C-77",
+          cliente: "Cliente Caja",
+          usuarioCobrador: "Cobrador",
+          pagosCuotas: "14.00",
+          responsablePagoEntradaId: 2,
+          observacionPagoEntrada: "No consta en cierre",
+          responsablePagoEntrada: { id: 2, nombre: "Ana", activo: true },
+          carga: {
+            id: 9,
+            fechaReporte: "2026-08-26",
+            estado: "ACTIVA",
+            usuario: { id: 7, nombre: "Contabilidad" },
+          },
+          createdAt: "2026-08-26T10:00:00.000Z",
+          updatedAt: "2026-08-26T11:00:00.000Z",
+        }),
+      },
+    ]);
+    ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([
+      {
+        toJSON: () => ({
+          id: 15,
+          cargaId: 9,
+          resultados: [
+            {
+              controlFinancieroRegistroId: 77,
+              estado: "NO_EN_CIERRE",
+            },
+          ],
+          createdAt: "2026-08-26T12:00:00.000Z",
+        }),
+      },
+    ]);
+
+    const resultado = await obtenerRegistros("cajas");
+
+    expect(resultado.registros).toEqual([
+      expect.objectContaining({
+        id: "control-financiero-caja-77",
+        origen: "CONTROL_FINANCIERO_CAJA",
+        usuarioId: 2,
+        valor: 14,
+        observacion: "No consta en cierre",
+        seccion: "CAJAS",
+      }),
+    ]);
+    expect(resultado.total).toBe(14);
   });
 
   test("guarda transferencias en su propia seccion", async () => {

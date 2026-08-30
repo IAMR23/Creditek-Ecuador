@@ -416,6 +416,99 @@ describe("controlFinancieroController", () => {
     );
   });
 
+  test("guarda responsable y observacion de caja no en cierre", async () => {
+    const registro = {
+      id: 31,
+      cargaId: 6,
+      tipoRegistro: "CAJA",
+      pagosCuotas: "14.00",
+      estadoPagoEntrada: "PENDIENTE",
+      update: jest.fn().mockImplementation(async function actualizar(payload) {
+        Object.assign(this, payload);
+      }),
+    };
+    ControlFinancieroRegistro.findByPk.mockResolvedValue(registro);
+    ControlFinancieroCarga.findByPk.mockResolvedValue({ id: 6, estado: "ACTIVA" });
+    obtenerConciliacionCajaCarga.mockResolvedValue({
+      carga: { id: 6, estado: "ACTIVA" },
+      conciliacion: {
+        id: "20",
+        resultados: [
+          {
+            controlFinancieroRegistroId: 31,
+            estado: "NO_EN_CIERRE",
+          },
+        ],
+      },
+    });
+    Usuario.findOne.mockResolvedValue({ id: 8, nombre: "Maria", activo: true });
+    const res = crearRes();
+
+    await controller.actualizarGestionCajaNoEnCierre(
+      {
+        params: { registroId: "31" },
+        body: {
+          responsableUsuarioId: 8,
+          observacion: "Pago reportado sin cierre",
+        },
+      },
+      res,
+    );
+
+    expect(registro.update).toHaveBeenCalledWith(
+      {
+        estadoPagoEntrada: "PENDIENTE",
+        responsablePagoEntradaId: 8,
+        observacionPagoEntrada: "Pago reportado sin cierre",
+      },
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        registro: expect.objectContaining({
+          id: 31,
+          responsablePagoEntradaId: 8,
+          responsablePagoEntrada: expect.objectContaining({ id: 8 }),
+        }),
+      }),
+    );
+  });
+
+  test("rechaza gestionar caja si la ultima conciliacion ya no esta no en cierre", async () => {
+    ControlFinancieroRegistro.findByPk.mockResolvedValue({
+      id: 31,
+      cargaId: 6,
+      tipoRegistro: "CAJA",
+      pagosCuotas: "14.00",
+    });
+    ControlFinancieroCarga.findByPk.mockResolvedValue({ id: 6, estado: "ACTIVA" });
+    obtenerConciliacionCajaCarga.mockResolvedValue({
+      carga: { id: 6, estado: "ACTIVA" },
+      conciliacion: {
+        id: "20",
+        resultados: [
+          {
+            controlFinancieroRegistroId: 31,
+            estado: "COINCIDE",
+          },
+        ],
+      },
+    });
+    const res = crearRes();
+
+    await controller.actualizarGestionCajaNoEnCierre(
+      {
+        params: { registroId: "31" },
+        body: { responsableUsuarioId: 8 },
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(Usuario.findOne).not.toHaveBeenCalled();
+  });
+
   test("devuelve la ultima conciliacion historica de la carga", async () => {
     obtenerConciliacionCarga.mockResolvedValue({
       carga: { id: 5, fechaReporte: "2026-07-22", estado: "ACTIVA" },
