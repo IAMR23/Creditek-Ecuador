@@ -625,24 +625,37 @@ function VistaConciliacionCaja({
             {visibles.length ? visibles.map((resultado) => {
               const reporte = resultado.auditoria?.reporte;
               const cierre = resultado.auditoria?.cierre;
+              const tipoCoincidencia = resultado.tipoCoincidencia || "";
+              const esCoincidenciaAgrupada =
+                tipoCoincidencia.includes("CUOTAS_AGRUPADAS");
+              const tipoNombreCompatible = tipoCoincidencia.replace(
+                "_CUOTAS_AGRUPADAS",
+                "",
+              );
+              const mostrarObservacionNombre = [
+                "NOMBRE_SIMILAR",
+                "NOMBRE_TRUNCADO",
+                "NOMBRE_PARCIAL",
+              ].includes(tipoNombreCompatible);
+              const observacionNombre =
+                tipoNombreCompatible === "NOMBRE_TRUNCADO"
+                  ? "Nombre abreviado compatible"
+                  : tipoNombreCompatible === "NOMBRE_PARCIAL"
+                    ? "Nombre parcial en cierre"
+                    : `Nombre similar: ${Math.round(
+                        Number(resultado.similitudCliente || 0) * 100,
+                      )}%`;
               return (
                 <tr key={resultado.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
                   <td className="whitespace-nowrap px-3 py-3">{formatFechaCorta(resultado.fechaReporteRegistro || resultado.fechaCierre)}</td>
                   <td className="px-3 py-3">
                     <p className="font-medium">{resultado.clienteReporte || resultado.clienteCierre || resultado.entidadCierre || "-"}</p>
-                    {["NOMBRE_SIMILAR", "NOMBRE_TRUNCADO"].includes(
-                      resultado.tipoCoincidencia,
-                    ) && (
+                    {mostrarObservacionNombre && (
                       <p className="mt-1 text-xs font-semibold text-amber-700">
-                        {resultado.tipoCoincidencia === "NOMBRE_TRUNCADO"
-                          ? "Nombre abreviado compatible"
-                          : `Nombre similar: ${Math.round(
-                              Number(resultado.similitudCliente || 0) * 100,
-                            )}%`}
+                        {observacionNombre}
                         </p>
                     )}
-                    {resultado.tipoCoincidencia ===
-                      "NOMBRE_EXACTO_CUOTAS_AGRUPADAS" && (
+                    {esCoincidenciaAgrupada && (
                       <p className="mt-1 text-xs font-semibold text-emerald-700">
                         Pago agrupado:{" "}
                         {resultado.agrupacionCaja?.totalRegistrosAgrupados ||

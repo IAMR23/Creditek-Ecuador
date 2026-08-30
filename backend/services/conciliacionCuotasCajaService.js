@@ -56,6 +56,76 @@ const claveExacta = (fecha, cliente, montoCentavos) =>
 
 const claveClienteFecha = (fecha, cliente) => `${fecha}|${cliente}`;
 
+const esNombreCierreParcialCompatible = (clienteReporte, clienteCierre) => {
+  const tokensReporte = normalizarNombre(clienteReporte)
+    .split(" ")
+    .filter(Boolean);
+  const tokensCierre = normalizarNombre(clienteCierre)
+    .split(" ")
+    .filter(Boolean);
+
+  if (tokensCierre.length < 2 || tokensReporte.length <= tokensCierre.length) {
+    return false;
+  }
+
+  const cierreEsPrefijoDelReporte = tokensCierre.every(
+    (token, index) => token === tokensReporte[index],
+  );
+  if (cierreEsPrefijoDelReporte) return true;
+
+  const todosLosTokensExisten = tokensCierre.every((token) =>
+    tokensReporte.includes(token),
+  );
+  if (!todosLosTokensExisten) return false;
+
+  const limiteNombres = Math.ceil(tokensReporte.length / 2);
+  const tokensNombre = tokensReporte.slice(0, limiteNombres);
+  const tokensApellido = tokensReporte.slice(limiteNombres);
+
+  return (
+    tokensCierre.some((token) => tokensNombre.includes(token)) &&
+    tokensCierre.some((token) => tokensApellido.includes(token))
+  );
+};
+
+const obtenerCoincidenciaNombreCompatible = (clienteReporte, clienteCierre) => {
+  const similitud = calcularSimilitudNombres(clienteReporte, clienteCierre);
+  const esPrefijo = esNombreReportePrefijo(clienteReporte, clienteCierre);
+  const esParcial = esNombreCierreParcialCompatible(
+    clienteReporte,
+    clienteCierre,
+  );
+
+  if (similitud >= UMBRAL_SIMILITUD_NOMBRE) {
+    return {
+      similitud,
+      tipoCoincidencia: "NOMBRE_SIMILAR",
+      esPrefijo,
+      requiereCoincidenciaUnica: esPrefijo,
+    };
+  }
+
+  if (esPrefijo) {
+    return {
+      similitud: 1,
+      tipoCoincidencia: "NOMBRE_TRUNCADO",
+      esPrefijo,
+      requiereCoincidenciaUnica: true,
+    };
+  }
+
+  if (esParcial) {
+    return {
+      similitud: 1,
+      tipoCoincidencia: "NOMBRE_PARCIAL",
+      esPrefijo: false,
+      requiereCoincidenciaUnica: true,
+    };
+  }
+
+  return null;
+};
+
 const obtenerNombreMovimiento = (movimiento, clientesPorId) => {
   const clienteId = Number(movimiento.clienteId) || null;
   if (clienteId) {
@@ -355,41 +425,24 @@ const construirResultadosConciliacionCaja = ({
         : registro.fechaNormalizada;
       const posibles = (movimientosPorContexto.get(contextKey) || [])
         .map((movimiento) => {
-          const similitud = calcularSimilitudNombres(
+          const coincidencia = obtenerCoincidenciaNombreCompatible(
             registro.clienteNormalizado,
             movimiento.clienteNormalizado,
           );
-          const esPrefijo = esNombreReportePrefijo(
-            registro.clienteNormalizado,
-            movimiento.clienteNormalizado,
-          );
-          if (similitud >= UMBRAL_SIMILITUD_NOMBRE) {
-            return {
-              movimiento,
-              similitud,
-              tipoCoincidencia: "NOMBRE_SIMILAR",
-              esPrefijo,
-            };
-          }
-          if (esPrefijo) {
-            return {
-              movimiento,
-              similitud: 1,
-              tipoCoincidencia: "NOMBRE_TRUNCADO",
-              esPrefijo,
-            };
-          }
-          return null;
+          return coincidencia ? { movimiento, ...coincidencia } : null;
         })
         .filter(Boolean);
-      const nombresPrefijo = new Set(
+      const nombresConCoincidenciaRestringida = new Set(
         posibles
-          .filter((item) => item.esPrefijo)
+          .filter((item) => item.requiereCoincidenciaUnica)
           .map((item) => item.movimiento.clienteNormalizado),
       );
 
       posibles.forEach((posible) => {
-        if (posible.esPrefijo && nombresPrefijo.size > 1) {
+        if (
+          posible.requiereCoincidenciaUnica &&
+          nombresConCoincidenciaRestringida.size > 1
+        ) {
           return;
         }
         candidatos.push({
@@ -448,6 +501,81 @@ const construirResultadosConciliacionCaja = ({
     const registrosPorClienteFecha = new Map();
     const registrosConsumidos = new Set();
 
+    const registrarAgrupacion = ({
+      movimiento,
+      registrosAgrupados,
+      tipoCoincidencia,
+      similitudCliente,
+    }) => {
+      const idsAgrupados = registrosAgrupados
+        .map((registro) => Number(registro.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      registrosAgrupados.forEach((registro) => {
+        resultadosPorRegistro.set(
+          registro._key,
+          crearResultado({
+            registro,
+            movimiento,
+            estado: "COINCIDE",
+            tipoCoincidencia,
+            similitudCliente,
+            montoCierreAsignadoCentavos: registro.montoReporteCentavos,
+            agrupacionCaja: {
+              movimientoCajaId: Number(movimiento.id),
+              registrosAgrupados: idsAgrupados,
+              totalRegistrosAgrupados: registrosAgrupados.length,
+            },
+          }),
+        );
+        registrosConsumidos.add(registro._key);
+      });
+      movimientosValidos.delete(Number(movimiento.id));
+    };
+
+    const buscarAgrupacionCompatible = (movimiento, tipoObjetivo) => {
+      const grupos = new Map();
+
+      registrosPendientes.forEach((registro) => {
+        if (
+          registrosConsumidos.has(registro._key) ||
+          registro.fechaNormalizada !== movimiento.fechaNormalizada ||
+          !registro.clienteNormalizado ||
+          registro.clienteNormalizado === movimiento.clienteNormalizado
+        ) {
+          return;
+        }
+
+        const coincidencia = obtenerCoincidenciaNombreCompatible(
+          registro.clienteNormalizado,
+          movimiento.clienteNormalizado,
+        );
+        if (!coincidencia || coincidencia.tipoCoincidencia !== tipoObjetivo) {
+          return;
+        }
+
+        if (!grupos.has(registro.clienteNormalizado)) {
+          grupos.set(registro.clienteNormalizado, {
+            ...coincidencia,
+            registros: [],
+          });
+        }
+        grupos.get(registro.clienteNormalizado).registros.push(registro);
+      });
+
+      const agrupaciones = [...grupos.values()]
+        .map((grupo) => ({
+          ...grupo,
+          registrosAgrupados: buscarRegistrosQueSumanMonto(
+            grupo.registros,
+            movimiento.montoCierreCentavos,
+          ),
+        }))
+        .filter((grupo) => grupo.registrosAgrupados.length);
+
+      return agrupaciones.length === 1 ? agrupaciones[0] : null;
+    };
+
     registrosPendientes.forEach((registro) => {
       const key = claveClienteFecha(
         registro.fechaNormalizada,
@@ -475,32 +603,56 @@ const construirResultadosConciliacionCaja = ({
           movimiento.montoCierreCentavos,
         );
 
-        if (!registrosAgrupados.length) return;
+        if (registrosAgrupados.length) {
+          registrarAgrupacion({
+            movimiento,
+            registrosAgrupados,
+            tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+            similitudCliente: 1,
+          });
+          return;
+        }
 
-        const idsAgrupados = registrosAgrupados
-          .map((registro) => Number(registro.id))
-          .filter((id) => Number.isInteger(id) && id > 0);
+        const agrupacionSimilar = buscarAgrupacionCompatible(
+          movimiento,
+          "NOMBRE_SIMILAR",
+        );
+        if (agrupacionSimilar) {
+          registrarAgrupacion({
+            movimiento,
+            registrosAgrupados: agrupacionSimilar.registrosAgrupados,
+            tipoCoincidencia: "NOMBRE_SIMILAR_CUOTAS_AGRUPADAS",
+            similitudCliente: agrupacionSimilar.similitud,
+          });
+          return;
+        }
 
-        registrosAgrupados.forEach((registro) => {
-          resultadosPorRegistro.set(
-            registro._key,
-            crearResultado({
-              registro,
-              movimiento,
-              estado: "COINCIDE",
-              tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
-              similitudCliente: 1,
-              montoCierreAsignadoCentavos: registro.montoReporteCentavos,
-              agrupacionCaja: {
-                movimientoCajaId: Number(movimiento.id),
-                registrosAgrupados: idsAgrupados,
-                totalRegistrosAgrupados: registrosAgrupados.length,
-              },
-            }),
-          );
-          registrosConsumidos.add(registro._key);
-        });
-        movimientosValidos.delete(Number(movimiento.id));
+        const agrupacionTruncada = buscarAgrupacionCompatible(
+          movimiento,
+          "NOMBRE_TRUNCADO",
+        );
+        if (agrupacionTruncada) {
+          registrarAgrupacion({
+            movimiento,
+            registrosAgrupados: agrupacionTruncada.registrosAgrupados,
+            tipoCoincidencia: "NOMBRE_TRUNCADO_CUOTAS_AGRUPADAS",
+            similitudCliente: agrupacionTruncada.similitud,
+          });
+          return;
+        }
+
+        const agrupacionParcial = buscarAgrupacionCompatible(
+          movimiento,
+          "NOMBRE_PARCIAL",
+        );
+        if (agrupacionParcial) {
+          registrarAgrupacion({
+            movimiento,
+            registrosAgrupados: agrupacionParcial.registrosAgrupados,
+            tipoCoincidencia: "NOMBRE_PARCIAL_CUOTAS_AGRUPADAS",
+            similitudCliente: agrupacionParcial.similitud,
+          });
+        }
       });
 
     return registrosPendientes.filter(

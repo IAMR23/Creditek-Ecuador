@@ -228,6 +228,239 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
     ]);
   });
 
+  test("agrupa centavos y dolares del mismo cliente exacto", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 0.2),
+        registro(2, "ANGELA PATRICIA SANTIN TIPANLUISA", 13.8),
+      ],
+      movimientos: [
+        movimiento(101, "ANGELA PATRICIA SANTIN TIPANLUISA", 14),
+      ],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 2,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(calculo.resultados).toEqual([
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+        montoReporte: 0.2,
+        montoCierre: 0.2,
+        diferencia: 0,
+      }),
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+        montoReporte: 13.8,
+        montoCierre: 13.8,
+        diferencia: 0,
+      }),
+    ]);
+  });
+
+  test("agrupa cuotas cuando el nombre del cierre es similar", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 0.2),
+        registro(2, "ANGELA PATRICIA SANTIN TIPANLUISA", 13.8),
+      ],
+      movimientos: [
+        movimiento(101, "ANGELA PATRICIA SANTIN TIPANLUZA", 14),
+      ],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 2,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(calculo.resultados.every((item) => item.estado === "COINCIDE")).toBe(
+      true,
+    );
+    expect(
+      calculo.resultados.every(
+        (item) => item.tipoCoincidencia === "NOMBRE_SIMILAR_CUOTAS_AGRUPADAS",
+      ),
+    ).toBe(true);
+  });
+
+  test("agrupa cuotas cuando el nombre del reporte esta truncado sin ambiguedad", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "GUSTAVO ANDRES CHANAGUANO", 20),
+        registro(2, "GUSTAVO ANDRES CHANAGUANO", 20),
+      ],
+      movimientos: [
+        movimiento(101, "GUSTAVO ANDRES CHANAGUANO CHUGCHILAN", 40),
+      ],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 2,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(
+      calculo.resultados.every(
+        (item) => item.tipoCoincidencia === "NOMBRE_TRUNCADO_CUOTAS_AGRUPADAS",
+      ),
+    ).toBe(true);
+  });
+
+  test("agrupa cuotas cuando el cierre tiene nombre y apellido parciales", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 0.2),
+        registro(2, "ANGELA PATRICIA SANTIN TIPANLUISA", 13.8),
+      ],
+      movimientos: [movimiento(101, "ANGELA SANTIN", 14)],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 2,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(
+      calculo.resultados.every(
+        (item) => item.tipoCoincidencia === "NOMBRE_PARCIAL_CUOTAS_AGRUPADAS",
+      ),
+    ).toBe(true);
+  });
+
+  test("no agrupa automaticamente cuando hay nombres similares ambiguos", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "JUAM PEREZ", 20),
+        registro(2, "JUAM PEREZ", 1380),
+        registro(3, "JUAN PERES", 20),
+        registro(4, "JUAN PERES", 1380),
+      ],
+      movimientos: [movimiento(101, "JUAN PEREZ", 1400)],
+    });
+
+    expect(
+      calculo.resultados.some((item) =>
+        String(item.tipoCoincidencia || "").includes("CUOTAS_AGRUPADAS"),
+      ),
+    ).toBe(false);
+    expect(calculo.resumen.coinciden).toBe(0);
+  });
+
+  test("mantiene monto diferente cuando no existen cuotas compatibles para sumar", () => {
+    const calculo = calcular({
+      registros: [registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 0.2)],
+      movimientos: [
+        movimiento(101, "ANGELA PATRICIA SANTIN TIPANLUISA", 14),
+      ],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "MONTO_DIFERENTE",
+        montoReporte: 0.2,
+        montoCierre: 14,
+        diferencia: -13.8,
+      }),
+    );
+  });
+
+  test("agrupa tres cuotas cuando suman el movimiento de cierre", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "JUAN PEREZ", 10),
+        registro(2, "JUAN PEREZ", 20),
+        registro(3, "JUAN PEREZ", 10),
+      ],
+      movimientos: [movimiento(101, "JUAN PEREZ", 40)],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 3,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(
+      calculo.resultados.every(
+        (item) => item.tipoCoincidencia === "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+      ),
+    ).toBe(true);
+  });
+
+  test("no reutiliza registros consumidos por un match exacto anterior", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "JUAN PEREZ", 20),
+        registro(2, "JUAN PEREZ", 20),
+      ],
+      movimientos: [
+        movimiento(101, "JUAN PEREZ", 20),
+        movimiento(102, "JUAN PEREZ", 40),
+      ],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        movimientoCajaId: 101,
+        tipoCoincidencia: "NOMBRE_EXACTO",
+      }),
+    );
+    expect(calculo.resultados[1]).toEqual(
+      expect.objectContaining({
+        estado: "MONTO_DIFERENTE",
+        movimientoCajaId: 102,
+      }),
+    );
+    expect(
+      calculo.resultados.some((item) =>
+        String(item.tipoCoincidencia || "").includes("CUOTAS_AGRUPADAS"),
+      ),
+    ).toBe(false);
+  });
+
+  test("no reutiliza un movimiento ya consumido por una agrupacion", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "JUAN PEREZ", 20),
+        registro(2, "JUAN PEREZ", 1380),
+        registro(3, "JUAN PEREZ", 20),
+        registro(4, "JUAN PEREZ", 1380),
+      ],
+      movimientos: [movimiento(101, "JUAN PEREZ", 1400)],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 2,
+        montoDiferente: 0,
+        noEnCierre: 2,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(calculo.resultados.filter((item) => item.movimientoCajaId === 101))
+      .toHaveLength(2);
+  });
+
   test("no agrupa cuotas con movimientos de otro cliente o fecha", () => {
     const clienteDiferente = calcular({
       registros: [
@@ -338,6 +571,53 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
         coinciden: 0,
         noEnCierre: 1,
         soloEnCierre: 2,
+      }),
+    );
+  });
+
+  test("acepta nombre parcial del cierre con al menos un nombre y un apellido", () => {
+    const calculo = calcular({
+      registros: [registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 25)],
+      movimientos: [movimiento(101, "ANGELA SANTIN", 25)],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "NOMBRE_PARCIAL",
+        similitudCliente: 1,
+        movimientoCajaId: 101,
+      }),
+    );
+  });
+
+  test("acepta nombre parcial inicial del cierre frente al nombre completo del reporte", () => {
+    const calculo = calcular({
+      registros: [registro(1, "YOLANDA CUMBAJIN GUAYASAMIN", 25)],
+      movimientos: [movimiento(101, "YOLANDA CUMBAJIN", 25)],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "NOMBRE_PARCIAL",
+        similitudCliente: 1,
+        movimientoCajaId: 101,
+      }),
+    );
+  });
+
+  test("no acepta nombre parcial cuando el cierre solo tiene un nombre", () => {
+    const calculo = calcular({
+      registros: [registro(1, "ANGELA PATRICIA SANTIN TIPANLUISA", 25)],
+      movimientos: [movimiento(101, "ANGELA", 25)],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 0,
+        noEnCierre: 1,
+        soloEnCierre: 1,
       }),
     );
   });
