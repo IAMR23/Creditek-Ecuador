@@ -54,11 +54,25 @@ const commissionFormatter = new Intl.NumberFormat("es-EC", {
 });
 
 const currentDate = new Date();
+const padDatePart = (value) => String(value).padStart(2, "0");
+const toInputDate = (date) =>
+  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
 
 const initialFilters = {
   year: currentDate.getFullYear(),
   month: currentDate.getMonth() + 1,
 };
+
+const getCalendarMonthRange = ({ year, month }) => {
+  const numericYear = Number(year);
+  const monthIndex = Number(month) - 1;
+  return {
+    fechaInicio: toInputDate(new Date(numericYear, monthIndex, 1)),
+    fechaFin: toInputDate(new Date(numericYear, monthIndex + 1, 0)),
+  };
+};
+
+const initialLogisticaFilters = getCalendarMonthRange(initialFilters);
 
 const emptyWeekValues = {
   venden: 0,
@@ -121,6 +135,26 @@ const formatDate = (value) => {
   });
 };
 const toDateKey = (value) => (value ? String(value).slice(0, 10) : null);
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const parseDateKey = (value) => {
+  const dateKey = toDateKey(value);
+  if (!dateKey) return null;
+  const date = new Date(`${dateKey}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+const debeMostrarPorPermanencia = (row) => {
+  const ingreso = parseDateKey(row?.fechaIngreso || row?.fechaCreacionUsuario);
+  const salida = parseDateKey(row?.fechaSalida);
+  if (!ingreso || !salida) return true;
+
+  const diasTrabajados = Math.floor(
+    (salida.getTime() - ingreso.getTime()) / MS_PER_DAY,
+  );
+  if (diasTrabajados < 0) return true;
+  return diasTrabajados > 10;
+};
+const filtrarPorPermanencia = (rows = []) =>
+  rows.filter((row) => debeMostrarPorPermanencia(row));
 const isSellerAvailableForWeek = (seller, week) => {
   if (Array.isArray(seller?.semanasDisponiblesEquipo)) {
     return seller.semanasDisponiblesEquipo
@@ -318,8 +352,9 @@ const buildExcelRows = ({ rows, weeks, sectionLabel }) =>
       base[`${prefix} ventas`] = values.venden || 0;
       base[`${prefix} valor vendido`] = Number(values.valorVendido || 0);
       base[`${prefix} comision`] = Number(values.totalComisiones || 0);
-      base[`${prefix} no cumple metas`] = values.noCumpleMetas || 0;
-      base[`${prefix} descuento`] = Number(values.valorDescontar || 0);
+      base[`${prefix} no cumple metas`] = Number(values.valorDescontar || 0)
+        ? `${values.noCumpleMetas || 0} / Desc. ${formatMoney(values.valorDescontar)}`
+        : values.noCumpleMetas || 0;
     });
 
     return {
@@ -329,8 +364,6 @@ const buildExcelRows = ({ rows, weeks, sectionLabel }) =>
       "Valor comision mensual": Number(mensual.valorComisionMensual || 0),
       "Total comisiones": Number(mensual.totalComisionesSemanaMensual || 0),
       "Total no cumple metas": mensual.totalNoCumpleMetas || 0,
-      "Total valor a descontar": Number(mensual.totalValorDescontar || 0),
-      "Total a pagar": Number(mensual.totalPagar || 0),
     };
   });
 
@@ -356,12 +389,13 @@ const buildLogisticsExcelRows = ({ rows, weeks }) =>
     return {
       ...base,
       "Total entregas": Number(row.resumenMensual?.totalEntregas || 0),
-      "Total a pagar": Number(row.resumenMensual?.totalPagar || 0),
+      "A recibir": Number(row.resumenMensual?.totalPagar || 0),
     };
   });
 
 export default function PagosComisiones() {
   const [filters, setFilters] = useState(initialFilters);
+  const [logisticaFilters, setLogisticaFilters] = useState(initialLogisticaFilters);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [vendedorFiltro, setVendedorFiltro] = useState("");
@@ -392,6 +426,11 @@ export default function PagosComisiones() {
   }, []);
 
   const weeks = useMemo(() => report?.weeks || [], [report]);
+  const logisticaWeeks = useMemo(
+    () => report?.logisticaWeeks || weeks,
+    [report, weeks],
+  );
+  const logisticaPeriodo = report?.logisticaPeriodo || logisticaFilters;
   const configuracionMes = report?.configuracionMes || null;
   const estadoPago = report?.estadoPago || null;
   const periodoPagado = Boolean(estadoPago?.pagado);
@@ -399,8 +438,14 @@ export default function PagosComisiones() {
   const selectedMonthLabel =
     MONTHS.find((month) => Number(month.value) === Number(filters.month))?.label ||
     "";
-  const vendedoresBase = useMemo(() => report?.vendedores || [], [report]);
-  const logistica = useMemo(() => report?.logistica || [], [report]);
+  const vendedoresBase = useMemo(
+    () => filtrarPorPermanencia(report?.vendedores || []),
+    [report],
+  );
+  const logistica = useMemo(
+    () => filtrarPorPermanencia(report?.logistica || []),
+    [report],
+  );
   const vendedores = useMemo(() => {
     if (!Object.keys(descuentosEditados).length) return vendedoresBase;
 
@@ -520,7 +565,7 @@ export default function PagosComisiones() {
   const vendedoresElegiblesEquipo = useMemo(() => {
     const disponibles = report?.vendedoresDisponiblesEquipo;
     const candidatos = Array.isArray(disponibles)
-      ? disponibles
+      ? filtrarPorPermanencia(disponibles)
       : vendedores.filter(
           (vendedor) =>
             String(vendedor.rol || "").toUpperCase().includes("VENDEDOR") ||
@@ -592,10 +637,28 @@ export default function PagosComisiones() {
     setVendedorFiltro("");
   };
 
+  const actualizarPeriodoComercial = (nextFilters) => {
+    setFilters(nextFilters);
+    setLogisticaFilters(getCalendarMonthRange(nextFilters));
+  };
+
+  const cambiarMes = (month) => {
+    actualizarPeriodoComercial({ ...filters, month: Number(month) });
+  };
+
+  const cambiarAnio = (year) => {
+    actualizarPeriodoComercial({ ...filters, year: Number(year) });
+  };
+
   const fetchReport = async (reportFilters = filters) => {
     setLoading(true);
     try {
-      const { data } = await api.get(ENDPOINT, { params: reportFilters });
+      const params = {
+        ...reportFilters,
+        logisticaFechaInicio: logisticaFilters.fechaInicio,
+        logisticaFechaFin: logisticaFilters.fechaFin,
+      };
+      const { data } = await api.get(ENDPOINT, { params });
       setReport(data);
       setDescuentosEditados({});
     } catch (error) {
@@ -728,7 +791,7 @@ export default function PagosComisiones() {
         const section = SECCIONES.find((item) => item.id === scope);
         const excelRows =
           scope === "LOGISTICA"
-            ? buildLogisticsExcelRows({ rows: logistica, weeks })
+            ? buildLogisticsExcelRows({ rows: logistica, weeks: logisticaWeeks })
             : buildExcelRows({
                 rows: getRowsForSection(vendedores, scope),
                 weeks,
@@ -998,6 +1061,18 @@ export default function PagosComisiones() {
   };
 
   const generarReporte = async () => {
+    if (!logisticaFilters.fechaInicio || !logisticaFilters.fechaFin) {
+      Swal.fire("Atencion", "Seleccione el periodo de logistica", "warning");
+      return;
+    }
+    if (logisticaFilters.fechaInicio > logisticaFilters.fechaFin) {
+      Swal.fire(
+        "Atencion",
+        "La fecha inicial de logistica no puede ser mayor a la fecha final",
+        "warning",
+      );
+      return;
+    }
     if (cantidadDescuentosEditados) {
       const confirmacion = await Swal.fire({
         title: "Cambios sin guardar",
@@ -1035,34 +1110,71 @@ export default function PagosComisiones() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[150px_160px_auto_auto]">
-              <select
-                value={filters.month}
-                onChange={(event) =>
-                  setFilters({ ...filters, month: Number(event.target.value) })
-                }
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-              >
-                {MONTHS.map((month) => (
-                  <option key={month.value} value={month.value}>
-                    {month.label}
-                  </option>
-                ))}
-              </select>
+            <div
+              className={`grid gap-3 ${
+                seccionActiva === "LOGISTICA"
+                  ? "sm:grid-cols-[160px_160px_auto]"
+                  : "sm:grid-cols-[150px_160px_auto_auto]"
+              }`}
+            >
+              {seccionActiva === "LOGISTICA" ? (
+                <>
+                  <label className="text-xs font-semibold uppercase text-slate-500">
+                    Inicio
+                    <input
+                      type="date"
+                      value={logisticaFilters.fechaInicio}
+                      onChange={(event) =>
+                        setLogisticaFilters((current) => ({
+                          ...current,
+                          fechaInicio: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold uppercase text-slate-500">
+                    Fin
+                    <input
+                      type="date"
+                      value={logisticaFilters.fechaFin}
+                      onChange={(event) =>
+                        setLogisticaFilters((current) => ({
+                          ...current,
+                          fechaFin: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <select
+                    value={filters.month}
+                    onChange={(event) => cambiarMes(event.target.value)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  >
+                    {MONTHS.map((month) => (
+                      <option key={month.value} value={month.value}>
+                        {month.label}
+                      </option>
+                    ))}
+                  </select>
 
-              <select
-                value={filters.year}
-                onChange={(event) =>
-                  setFilters({ ...filters, year: Number(event.target.value) })
-                }
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-              >
-                {years.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
+                  <select
+                    value={filters.year}
+                    onChange={(event) => cambiarAnio(event.target.value)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                  >
+                    {years.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
 
               <button
                 type="button"
@@ -1073,17 +1185,27 @@ export default function PagosComisiones() {
                 <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                 Generar
               </button>
-              <button
-                type="button"
-                onClick={abrirConfiguracionMes}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
-              >
-                <CalendarCog size={16} />
-                Configuracion de mes
-              </button>
+              {seccionActiva !== "LOGISTICA" ? (
+                <button
+                  type="button"
+                  onClick={abrirConfiguracionMes}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  <CalendarCog size={16} />
+                  Configuracion de mes
+                </button>
+              ) : null}
             </div>
           </div>
-          {configuracionMes ? (
+          {seccionActiva === "LOGISTICA" ? (
+            <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-4 text-sm text-slate-700">
+              <span className="font-semibold text-slate-900">Logistica</span>
+              <span>
+                Periodo: {formatDate(logisticaPeriodo.fechaInicio)} al{" "}
+                {formatDate(logisticaPeriodo.fechaFin)}
+              </span>
+            </div>
+          ) : configuracionMes ? (
             <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-4 text-sm text-slate-700">
               <span className="font-semibold text-slate-900">
                 {selectedMonthLabel} {filters.year}
@@ -1136,8 +1258,8 @@ export default function PagosComisiones() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric
             icon={<CalendarDays size={18} />}
-            label="Semanas comerciales"
-            value={weeks.length}
+            label={seccionActiva === "LOGISTICA" ? "Semanas" : "Semanas comerciales"}
+            value={seccionActiva === "LOGISTICA" ? logisticaWeeks.length : weeks.length}
           />
           <Metric
             icon={
@@ -1169,8 +1291,8 @@ export default function PagosComisiones() {
           <Metric
             label={
               cantidadDescuentosEditados
-                ? "Total a pagar (vista previa)"
-                : "Total a pagar"
+                ? "A recibir (vista previa)"
+                : "A recibir"
             }
             value={
               seccionActiva === "LOGISTICA"
@@ -1192,16 +1314,20 @@ export default function PagosComisiones() {
               >
                 {periodoPagado ? <Lock size={20} /> : <CheckCircle2 size={20} />}
               </div>
-              <div>
-                <h2 className="font-semibold text-slate-900">
-                  Estado del periodo
-                </h2>
-                <p className="text-sm text-slate-600">
-                  {periodoPagado
-                    ? `Pagado${estadoPago?.pagadoAt ? ` el ${formatDate(estadoPago.pagadoAt)}` : ""}. El reporte esta congelado.`
-                    : "Abierto. El reporte se recalcula con ventas, entregas, semanas y configuraciones actuales."}
-                </p>
-                {cantidadDescuentosEditados ? (
+                <div>
+                  <h2 className="font-semibold text-slate-900">
+                  {seccionActiva === "LOGISTICA"
+                    ? "Periodo de logistica"
+                    : "Estado del periodo"}
+                  </h2>
+                  <p className="text-sm text-slate-600">
+                  {seccionActiva === "LOGISTICA"
+                    ? `Del ${formatDate(logisticaPeriodo.fechaInicio)} al ${formatDate(logisticaPeriodo.fechaFin)}`
+                    : periodoPagado
+                      ? `Pagado${estadoPago?.pagadoAt ? ` el ${formatDate(estadoPago.pagadoAt)}` : ""}. El reporte esta congelado.`
+                      : "Abierto. El reporte se recalcula con ventas, entregas, semanas y configuraciones actuales."}
+                  </p>
+                {seccionActiva !== "LOGISTICA" && cantidadDescuentosEditados ? (
                   <p className="mt-1 text-xs font-semibold text-amber-700">
                     {cantidadDescuentosEditados} descuento(s) pendiente(s) de guardar.
                   </p>
@@ -1209,7 +1335,13 @@ export default function PagosComisiones() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-[190px_auto_auto_auto]">
+            <div
+              className={`grid gap-3 sm:grid-cols-2 ${
+                seccionActiva === "LOGISTICA"
+                  ? "2xl:grid-cols-[190px_auto]"
+                  : "2xl:grid-cols-[190px_auto_auto_auto]"
+              }`}
+            >
               <select
                 value={exportScope}
                 onChange={(event) => setExportScope(event.target.value)}
@@ -1221,22 +1353,24 @@ export default function PagosComisiones() {
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                onClick={guardarValoresDescuento}
-                disabled={
-                  !cantidadDescuentosEditados ||
-                  guardandoDescuentos ||
-                  periodoPagado ||
-                  loading
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                <Save size={16} />
-                {guardandoDescuentos
-                  ? "Guardando todo..."
-                  : `Guardar todo (${cantidadDescuentosEditados})`}
-              </button>
+              {seccionActiva !== "LOGISTICA" ? (
+                <button
+                  type="button"
+                  onClick={guardarValoresDescuento}
+                  disabled={
+                    !cantidadDescuentosEditados ||
+                    guardandoDescuentos ||
+                    periodoPagado ||
+                    loading
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Save size={16} />
+                  {guardandoDescuentos
+                    ? "Guardando todo..."
+                    : `Guardar todo (${cantidadDescuentosEditados})`}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={exportarExcel}
@@ -1246,25 +1380,27 @@ export default function PagosComisiones() {
                 <Download size={16} />
                 {exportandoExcel ? "Exportando..." : "Exportar Excel"}
               </button>
-              <button
-                type="button"
-                onClick={marcarPeriodoPagado}
-                disabled={
-                  !report ||
-                  periodoPagado ||
-                  pagandoPeriodo ||
-                  loading ||
-                  cantidadDescuentosEditados > 0
-                }
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                <Lock size={16} />
-                {periodoPagado
-                  ? "Pagado"
-                  : pagandoPeriodo
-                    ? "Guardando..."
-                    : "Marcar pagado"}
-              </button>
+              {seccionActiva !== "LOGISTICA" ? (
+                <button
+                  type="button"
+                  onClick={marcarPeriodoPagado}
+                  disabled={
+                    !report ||
+                    periodoPagado ||
+                    pagandoPeriodo ||
+                    loading ||
+                    cantidadDescuentosEditados > 0
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Lock size={16} />
+                  {periodoPagado
+                    ? "Pagado"
+                    : pagandoPeriodo
+                      ? "Guardando..."
+                      : "Marcar pagado"}
+                </button>
+              ) : null}
             </div>
           </div>
         </section>
@@ -1398,7 +1534,7 @@ export default function PagosComisiones() {
         {seccionActiva === "VENDEDORES" ? (
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1200px] border-collapse text-center text-sm text-slate-950">
+            <table className="w-full min-w-[1120px] border-collapse text-center text-sm text-slate-950">
               <thead>
                 <tr>
                   <th
@@ -1410,7 +1546,7 @@ export default function PagosComisiones() {
                   {weeks.map((week, index) => (
                     <th
                       key={week.startDate}
-                      colSpan={5}
+                      colSpan={4}
                       className={`border border-slate-950 px-3 py-2 text-lg font-black ${blockColors[index % blockColors.length]}`}
                     >
                       {week.label}
@@ -1428,7 +1564,7 @@ export default function PagosComisiones() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={1 + weeks.length * 5 + 7}
+                      colSpan={1 + weeks.length * 4 + 5}
                       className="border border-slate-300 px-4 py-10 text-center text-slate-500"
                     >
                       Cargando reporte...
@@ -1509,7 +1645,7 @@ export default function PagosComisiones() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={1 + weeks.length * 5 + 7}
+                      colSpan={1 + weeks.length * 4 + 5}
                       className="border border-slate-300 px-4 py-10 text-center text-slate-500"
                     >
                       No hay registros en esta seccion para el mes seleccionado.
@@ -1539,7 +1675,7 @@ export default function PagosComisiones() {
         ) : seccionActiva === "LOGISTICA" ? (
           <LogisticsCommissionTable
             rows={logistica}
-            weeks={weeks}
+            weeks={logisticaWeeks}
             loading={loading}
           />
         ) : (
@@ -1911,7 +2047,7 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
   if (!rows.length) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
-        No hay personal activo de logistica para el mes seleccionado.
+        No hay personal activo de logistica para el periodo seleccionado.
       </section>
     );
   }
@@ -2350,9 +2486,6 @@ function WeekHeader({ color }) {
       <th className="border border-slate-950 bg-blue-800 px-2 py-2 text-xs font-black text-white">
         NO CUMPLE METAS
       </th>
-      <th className="border border-slate-950 bg-red-700 px-2 py-2 text-xs font-black text-white">
-        VALOR A DESCONTAR
-      </th>
     </>
   );
 }
@@ -2371,6 +2504,7 @@ function WeekValues({
   const noCumpleClass = total
     ? "border border-slate-950 px-2 py-1.5"
     : "border border-slate-950 bg-indigo-100 px-2 py-1.5";
+  const descuentoTextClass = total ? "text-white" : "text-red-700";
   const puedeGestionarMulta =
     !total &&
     vendedor &&
@@ -2395,77 +2529,76 @@ function WeekValues({
         {values.semanaFutura ? "-" : values.totalComisiones ? formatCommission(values.totalComisiones) : 0}
       </td>
       <td className={noCumpleClass}>
-        {values.semanaFutura ||
-        (!total &&
-          (values.semanaLaborada === false ||
-            values.semanaCompletaParaDescuento === false))
-          ? "-"
-          : values.noCumpleMetas || 0}
-      </td>
-      <td className="border border-slate-950 bg-red-100 px-2 py-1.5 text-red-700">
         {values.semanaFutura
-          ? "Pendiente"
+          ? "-"
           : !total && values.semanaLaborada === false
             ? "No laborada"
             : !total && values.semanaCompletaParaDescuento === false
               ? "Semana parcial"
-              : puedeGestionarMulta
-                ? (
-                  <div className="flex min-w-[128px] flex-col items-center gap-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={valorInput}
-                      disabled={guardando}
-                      maxLength={13}
-                      pattern="\d+(\.\d{0,2})?"
-                      placeholder="0.00"
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        if (!esFormatoValorDescuentoInputValido(value)) return;
-                        onCambiarDescuento({
-                          vendedor,
-                          week,
-                          values,
-                          value,
-                        });
-                      }}
-                      aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
-                      className={`w-24 rounded border bg-white px-2 py-1 text-center text-xs font-semibold outline-none focus:ring-2 disabled:opacity-60 ${
-                        !valorInputValido
-                          ? "border-red-600 text-red-700 focus:ring-red-200"
-                          : descuentoEditado
-                            ? "border-amber-500 text-amber-800 focus:ring-amber-200"
-                            : "border-slate-300 text-red-700 focus:ring-red-200"
-                      }`}
-                    />
-                    <span className="text-[10px] text-slate-500">
-                      Sancion: {formatMoney(values.valorMultaCalculado)}
-                    </span>
-                    {descuentoEditado ? (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
-                        Pendiente de guardar
-                      </span>
-                    ) : null}
-                    {(values.descuentoModificado || descuentoEditado) && onRestaurarDescuento ? (
-                      <button
-                        type="button"
+              : (
+                <div className="flex min-w-[128px] flex-col items-center gap-1">
+                  <span className="font-semibold">{values.noCumpleMetas || 0}</span>
+                  {puedeGestionarMulta ? (
+                    <>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={valorInput}
                         disabled={guardando}
-                        onClick={() =>
-                          onRestaurarDescuento({
+                        maxLength={13}
+                        pattern="\d+(\.\d{0,2})?"
+                        placeholder="0.00"
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (!esFormatoValorDescuentoInputValido(value)) return;
+                          onCambiarDescuento({
                             vendedor,
                             week,
                             values,
-                          })
-                        }
-                        className="text-[10px] font-semibold text-emerald-700 underline hover:text-emerald-800 disabled:opacity-60"
-                      >
-                        Usar sancion
-                      </button>
-                    ) : null}
-                  </div>
-                )
-                : formatMoney(values.valorDescontar || 0)}
+                            value,
+                          });
+                        }}
+                        aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
+                        className={`w-24 rounded border bg-white px-2 py-1 text-center text-xs font-semibold outline-none focus:ring-2 disabled:opacity-60 ${
+                          !valorInputValido
+                            ? "border-red-600 text-red-700 focus:ring-red-200"
+                            : descuentoEditado
+                              ? "border-amber-500 text-amber-800 focus:ring-amber-200"
+                              : "border-slate-300 text-red-700 focus:ring-red-200"
+                        }`}
+                      />
+                      <span className="text-[10px] text-slate-500">
+                        Sancion: {formatMoney(values.valorMultaCalculado)}
+                      </span>
+                      {descuentoEditado ? (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
+                          Pendiente de guardar
+                        </span>
+                      ) : null}
+                      {(values.descuentoModificado || descuentoEditado) && onRestaurarDescuento ? (
+                        <button
+                          type="button"
+                          disabled={guardando}
+                          onClick={() =>
+                            onRestaurarDescuento({
+                              vendedor,
+                              week,
+                              values,
+                            })
+                          }
+                          className="text-[10px] font-semibold text-emerald-700 underline hover:text-emerald-800 disabled:opacity-60"
+                        >
+                          Usar sancion
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className={`text-[11px] font-semibold ${descuentoTextClass}`}>
+                      Desc: {formatMoney(values.valorDescontar || 0)}
+                    </span>
+                  )}
+                </div>
+              )}
       </td>
     </>
   );
@@ -2504,18 +2637,6 @@ function MonthlyHeader() {
       >
         Total No Cumple Metas
       </th>
-      <th
-        rowSpan={2}
-        className="border border-slate-950 bg-red-800 px-2 py-2 text-xs font-black text-white"
-      >
-        Total Valor a Descontar
-      </th>
-      <th
-        rowSpan={2}
-        className="border border-slate-950 bg-emerald-800 px-2 py-2 text-xs font-black text-white"
-      >
-        Total a Pagar
-      </th>
     </>
   );
 }
@@ -2545,12 +2666,6 @@ function MonthlyValues({ values, total = false }) {
       </td>
       <td className="border border-slate-950 bg-blue-700 px-2 py-1.5 text-white">
         {values.totalNoCumpleMetas || 0}
-      </td>
-      <td className="border border-slate-950 bg-red-800 px-2 py-1.5 font-semibold text-white">
-        {formatMoney(values.totalValorDescontar || 0)}
-      </td>
-      <td className="border border-slate-950 bg-emerald-800 px-2 py-1.5 font-bold text-white">
-        {formatMoney(values.totalPagar || 0)}
       </td>
     </>
   );

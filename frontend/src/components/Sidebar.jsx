@@ -62,7 +62,7 @@ export default function Sidebar({ auth }) {
     Auditoria: false,
     DesarrolloOrganizacional: true,
     Sistemas: false,
-    supervisores: location.pathname === "/supervisores",
+    supervisores: location.pathname.startsWith("/supervisores"),
     admin: false,
     catalogos: false,
     rolesCreditek:
@@ -119,7 +119,7 @@ export default function Sidebar({ auth }) {
             icon: <UsersRound size={20} />,
             path: "/consejo-ejecutivo",
           },
-          {
+/*           {
             label: "Facturas fisicas",
             icon: <ReceiptText size={20} />,
             path: "/gerencia/facturas-fisicas",
@@ -128,7 +128,7 @@ export default function Sidebar({ auth }) {
             label: "Facturas IA",
             icon: <Sparkles size={20} />,
             path: "/gerencia/facturas-ia",
-          },
+          }, */
           {
             label: "Ver planes de batalla",
             icon: <FileCheck2 size={20} />,
@@ -363,6 +363,11 @@ export default function Sidebar({ auth }) {
             label: "Dashboard",
             icon: <BarChart3 size={20} />,
             path: "/supervisores",
+          },
+          {
+            label: "Power BI",
+            icon: <BarChart3 size={20} />,
+            path: "/supervisores/powerbi",
           },
         ],
       },

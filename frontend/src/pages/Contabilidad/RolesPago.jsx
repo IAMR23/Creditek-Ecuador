@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import {
@@ -42,6 +43,9 @@ const toMoney = (value) => moneyFormatter.format(Number(value || 0));
 
 const getTotal = (rol) =>
   Number((Number(rol.sueldoBase || 0) + Number(rol.sueldoExtra || 0)).toFixed(2));
+
+const getTotalForm = (form) =>
+  Number((Number(form.sueldoBase || 0) + Number(form.sueldoExtra || 0)).toFixed(2));
 
 const getIngreso = (rol) => {
   if (rol.ingresoMin === null || rol.ingresoMin === undefined) return "-";
@@ -246,8 +250,8 @@ export default function RolesPago() {
                   <th className="px-4 py-3">Nivel</th>
                   <th className="px-4 py-3">Cargo</th>
                   <th className="px-4 py-3">Descripcion</th>
-                  <th className="px-4 py-3">Base</th>
-                  <th className="px-4 py-3">Extra</th>
+                  <th className="px-4 py-3">Caja general</th>
+                  <th className="px-4 py-3">Entrada</th>
                   <th className="px-4 py-3">Total</th>
                   <th className="px-4 py-3">Comisiones</th>
                   <th className="px-4 py-3">Ingreso aproximado</th>
@@ -334,7 +338,7 @@ export default function RolesPago() {
                   {editing ? "Editar rol de pago" : "Nuevo rol de pago"}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  El total se calcula como sueldo base mas sueldo extra.
+                  El total se calcula como caja general mas entrada.
                 </p>
               </div>
               <button
@@ -363,7 +367,7 @@ export default function RolesPago() {
                 />
               </Field>
 
-              <Field label="Sueldo base">
+              <Field label="Caja general">
                 <input
                   type="number"
                   min="0"
@@ -376,7 +380,7 @@ export default function RolesPago() {
                 />
               </Field>
 
-              <Field label="Sueldo extra">
+              <Field label="Entrada">
                 <input
                   type="number"
                   min="0"
@@ -388,6 +392,15 @@ export default function RolesPago() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </Field>
+
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+                <p className="text-xs font-semibold uppercase text-emerald-700">
+                  Calculado
+                </p>
+                <p className="mt-1 text-lg font-bold text-emerald-900">
+                  {toMoney(getTotalForm(form))}
+                </p>
+              </div>
 
               <Field label="Ingreso minimo">
                 <input

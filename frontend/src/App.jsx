@@ -320,6 +320,14 @@ function App() {
                     ["admin", "administrador"],
                   )}
                 />
+                <Route
+                  path="supervisores/powerbi"
+                  element={protect(
+                    <Powerbi modoSupervisores />,
+                    "/supervisores/powerbi",
+                    ["admin", "administrador"],
+                  )}
+                />
                 <Route path="powerbi" element={protect(<Powerbi />, "/powerbi")} />
                 <Route
                   path="ghl/oportunidades-matriz"

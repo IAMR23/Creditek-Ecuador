@@ -309,3 +309,115 @@ test("rechaza la evaluacion de un postulante que no esta seleccionado", async ()
   assert.match(response.body.message, /seleccionados/i);
   assert.equal(saved, 0);
 });
+
+test("genera una prueba aleatoria para postulantes en capacitacion", async () => {
+  candidate.estadoEntrevista = "CAPACITACION";
+
+  const response = await request("/21/prueba-capacitacion?tipo=call_center");
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.postulacion.nombre, "Postulante de prueba");
+  assert.deepEqual(response.body.data.tipos, [
+    { value: "piso", label: "Vendedor de piso" },
+    { value: "call_center", label: "Call Center" },
+  ]);
+  assert.equal(response.body.data.cuestionario.tipo, "call_center");
+  assert.equal(response.body.data.cuestionario.totalPreguntas, 36);
+  assert.equal(response.body.data.cuestionario.preguntas.length, 36);
+  assert.equal(
+    response.body.data.cuestionario.preguntas.some((question) => question.id === "q11"),
+    true,
+  );
+  assert.equal(
+    response.body.data.cuestionario.preguntas.some((question) => question.id === "q16"),
+    false,
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      response.body.data.cuestionario.preguntas[0],
+      "answer",
+    ),
+    false,
+  );
+});
+
+test("guarda y califica la prueba de capacitacion", async () => {
+  candidate.estadoEntrevista = "CAPACITACION";
+  const respuestasCorrectasPiso = {
+    q01: "A",
+    q02: "D",
+    q03: "C",
+    q04: "C",
+    q05: "B",
+    q06: "C",
+    q07: "C",
+    q08: "C",
+    q09: "C",
+    q10: "C",
+    q16: "A",
+    q17: "C",
+    q18: "C",
+    q19: "B",
+    q20: "B",
+    q21: "A",
+    q22: "B",
+    q23: "C",
+    q24: "C",
+    q25: "A",
+    q26: "B",
+    q27: "C",
+    q28: "D",
+    q29: "A",
+    q30: "A",
+    q31: "C",
+    q32: "C",
+    q33: "B",
+    q34: "B",
+    q35: "D",
+    q36: "A",
+    q37: "C",
+    q38: "B",
+    q39: "B",
+    q40: "A",
+    q41: "D",
+  };
+
+  const response = await request("/21/prueba-capacitacion", {
+    method: "PUT",
+    body: {
+      tipo: "piso",
+      evaluador: "Evaluador de prueba",
+      questionIds: Object.keys(respuestasCorrectasPiso),
+      respuestas: respuestasCorrectasPiso,
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.tipo, "piso");
+  assert.equal(response.body.data.tipoLabel, "Vendedor de piso");
+  assert.equal(response.body.data.totalPreguntas, 36);
+  assert.equal(response.body.data.correctas, 36);
+  assert.equal(response.body.data.porcentaje, 100);
+  assert.equal(response.body.data.notaSobre10, 10);
+  assert.equal(response.body.data.aprobado, true);
+  assert.equal(candidate.formulario.prueba_capacitacion.porcentaje, 100);
+  assert.equal(candidate.formulario.historial_pruebas_capacitacion.length, 1);
+  assert.equal(saved, 1);
+});
+
+test("rechaza la prueba de un postulante fuera de capacitacion", async () => {
+  candidate.estadoEntrevista = "SELECCIONADO";
+
+  const response = await request("/21/prueba-capacitacion", {
+    method: "PUT",
+    body: {
+      tipo: "piso",
+      questionIds: ["q01"],
+      respuestas: { q01: "A" },
+    },
+  });
+
+  assert.equal(response.status, 409);
+  assert.match(response.body.message, /capacitacion/i);
+  assert.equal(saved, 0);
+});

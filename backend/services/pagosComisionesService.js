@@ -21,6 +21,7 @@ const {
   addDays,
   generateAnnualCommercialCalendar,
   getCommercialWeekKey,
+  getCommercialWeekStart,
   getCommercialWeeksByMonth,
   validateAnnualCommercialWeeksConfiguration,
   parseLocalDateOnly,
@@ -106,6 +107,8 @@ const getDistinctPaidPositions = (positions = []) => {
 
 const round = (value, decimals = 3) =>
   Number((Number(value || 0)).toFixed(decimals));
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const getTodayEcuador = () => {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -448,6 +451,28 @@ const isActiveDuringPeriod = ({ fechaIngreso, fechaSalida, fechaInicio, fechaFin
   if (salida && salida < fechaInicio) return false;
   return true;
 };
+
+const hasEmploymentLongerThanTenDays = ({ fechaIngreso, fechaSalida }) => {
+  const ingreso = fechaIngreso ? String(fechaIngreso).slice(0, 10) : null;
+  const salida = fechaSalida ? String(fechaSalida).slice(0, 10) : null;
+  if (!ingreso || !salida) return true;
+
+  const ingresoDate = parseLocalDateOnly(ingreso);
+  const salidaDate = parseLocalDateOnly(salida);
+  if (!ingresoDate || !salidaDate) return true;
+
+  const diasTrabajados = Math.floor(
+    (salidaDate.getTime() - ingresoDate.getTime()) / MS_PER_DAY,
+  );
+  if (diasTrabajados < 0) return true;
+  return diasTrabajados > 10;
+};
+
+const hasValidEmploymentDuration = (usuarioPayload) =>
+  hasEmploymentLongerThanTenDays({
+    fechaIngreso: usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
+    fechaSalida: usuarioPayload.fechaSalida,
+  });
 
 const isCargoPagoComisionable = (usuarioPayload) => {
   const cargo = normalizeText(usuarioPayload.cargo);
@@ -1068,6 +1093,72 @@ const parseReportPeriod = ({ year, month }) => {
   return { numericYear, numericMonth };
 };
 
+const parseDateOnlyParam = (value, fieldName) => {
+  const text = String(value || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw createHttpError(`${fieldName} debe tener formato YYYY-MM-DD`, 400);
+  }
+
+  try {
+    return {
+      text,
+      date: parseLocalDateOnly(text),
+    };
+  } catch (error) {
+    throw createHttpError(`${fieldName} no es una fecha valida`, 400);
+  }
+};
+
+const parseLogisticaPeriodo = ({
+  logisticaFechaInicio,
+  logisticaFechaFin,
+  defaultFechaInicio,
+  defaultFechaFin,
+}) => {
+  const fechaInicioValue = logisticaFechaInicio || defaultFechaInicio;
+  const fechaFinValue = logisticaFechaFin || defaultFechaFin;
+  const fechaInicio = parseDateOnlyParam(fechaInicioValue, "logisticaFechaInicio");
+  const fechaFin = parseDateOnlyParam(fechaFinValue, "logisticaFechaFin");
+
+  if (fechaInicio.date > fechaFin.date) {
+    throw createHttpError("La fecha inicial de logistica no puede ser mayor a la fecha final", 400);
+  }
+
+  const diasPeriodo =
+    Math.floor((fechaFin.date.getTime() - fechaInicio.date.getTime()) / MS_PER_DAY) + 1;
+  if (diasPeriodo > 370) {
+    throw createHttpError("El periodo de logistica no puede superar 370 dias", 400);
+  }
+
+  return {
+    fechaInicio: fechaInicio.text,
+    fechaFin: fechaFin.text,
+  };
+};
+
+const buildLogisticaWeeks = ({ fechaInicio, fechaFin }) => {
+  const inicioPeriodo = parseLocalDateOnly(fechaInicio);
+  const finPeriodo = parseLocalDateOnly(fechaFin);
+  let startDate = getCommercialWeekStart(fechaInicio);
+  const weeks = [];
+
+  while (startDate <= finPeriodo) {
+    const endDate = addDays(startDate, 6);
+    const startKey = toDateOnly(startDate);
+    const endKey = toDateOnly(endDate);
+    const labelStart = startDate < inicioPeriodo ? inicioPeriodo : startDate;
+    const labelEnd = endDate > finPeriodo ? finPeriodo : endDate;
+    weeks.push({
+      startDate: startKey,
+      endDate: endKey,
+      label: `${toDateOnly(labelStart)} AL ${toDateOnly(labelEnd)}`,
+    });
+    startDate = addDays(startDate, 7);
+  }
+
+  return weeks;
+};
+
 const getDefaultMonthsConfiguration = (year) =>
   Array.from({ length: 12 }, (_, index) => {
     const mes = index + 1;
@@ -1617,6 +1708,55 @@ const obtenerEntregasLogisticaRango = ({ fechaInicio, fechaFin }) =>
     ],
   });
 
+const buildLogisticaRowsFromData = ({
+  relaciones,
+  entregasLogisticaRows,
+  logisticaPeriodo,
+  logisticaWeeks,
+}) => {
+  const usuariosLogistica = relaciones
+    .map((relacion) => getUsuarioPayload(relacion))
+    .filter(
+      (usuario) =>
+        usuario.activo === true &&
+        hasValidEmploymentDuration(usuario) &&
+        isActiveDuringPeriod({
+          fechaIngreso: usuario.fechaIngreso || usuario.fechaCreacionUsuario,
+          fechaSalida: usuario.fechaSalida,
+          fechaInicio: logisticaPeriodo.fechaInicio,
+          fechaFin: logisticaPeriodo.fechaFin,
+        }),
+    );
+  const asignacionesLogistica = entregasLogisticaRows.map((row) => {
+    const item = row?.get ? row.get({ plain: true }) : row;
+    return {
+      usuarioId: item.usuarioAgencia?.usuarioId,
+      entregaId: item.entrega_id,
+      fecha: item.entrega?.fecha,
+    };
+  });
+
+  return buildLogisticsCommissionRows({
+    usuarios: usuariosLogistica,
+    asignaciones: asignacionesLogistica,
+    weeks: logisticaWeeks,
+  });
+};
+
+const construirLogisticaReporte = async ({ logisticaPeriodo, logisticaWeeks }) => {
+  const [relaciones, entregasLogisticaRows] = await Promise.all([
+    obtenerRelacionesVendedores(),
+    obtenerEntregasLogisticaRango(logisticaPeriodo),
+  ]);
+
+  return buildLogisticaRowsFromData({
+    relaciones,
+    entregasLogisticaRows,
+    logisticaPeriodo,
+    logisticaWeeks,
+  });
+};
+
 const getPenaltyAdjustmentKey = (usuarioId, semanaInicio) =>
   `${Number(usuarioId)}:${String(semanaInicio).slice(0, 10)}`;
 
@@ -1818,7 +1958,12 @@ const finalizarVendedor = (
   );
 };
 
-const construirReportePagosComisiones = async ({ year, month }) => {
+const construirReportePagosComisiones = async ({
+  year,
+  month,
+  logisticaFechaInicio,
+  logisticaFechaFin,
+}) => {
   const { numericYear, numericMonth } = parseReportPeriod({ year, month });
   const { weeks, configuracionMes } = await getCommercialWeeksByConfiguredMonth(
     numericYear,
@@ -1827,6 +1972,13 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   const weekKeys = new Set(weeks.map((week) => week.startDate));
   const fechaInicio = weeks[0].startDate;
   const fechaFin = weeks[weeks.length - 1].endDate;
+  const logisticaPeriodo = parseLogisticaPeriodo({
+    logisticaFechaInicio,
+    logisticaFechaFin,
+    defaultFechaInicio: fechaInicio,
+    defaultFechaFin: fechaFin,
+  });
+  const logisticaWeeks = buildLogisticaWeeks(logisticaPeriodo);
 
   const [
     relaciones,
@@ -1839,7 +1991,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   ] = await Promise.all([
     obtenerRelacionesVendedores(),
     obtenerVentasRango({ fechaInicio, fechaFin }),
-    obtenerEntregasLogisticaRango({ fechaInicio, fechaFin }),
+    obtenerEntregasLogisticaRango(logisticaPeriodo),
     ComisionConfiguracion.findAll({
       where: { activo: true },
       order: [["orden", "ASC"]],
@@ -1874,6 +2026,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   relaciones.forEach((relacion) => {
     const usuarioPayload = getUsuarioPayload(relacion);
     if (isInactiveCommercialLeader(usuarioPayload)) return;
+    if (!hasValidEmploymentDuration(usuarioPayload)) return;
 
     const activoEnPeriodo = isActiveDuringPeriod({
       fechaIngreso:
@@ -1900,6 +2053,7 @@ const construirReportePagosComisiones = async ({ year, month }) => {
 
     const usuarioPayload = getUsuarioPayload(venta.usuarioAgencia);
     if (isInactiveCommercialLeader(usuarioPayload)) return;
+    if (!hasValidEmploymentDuration(usuarioPayload)) return;
 
     if (
       !isActiveDuringPeriod({
@@ -1934,30 +2088,11 @@ const construirReportePagosComisiones = async ({ year, month }) => {
     vendedor.semanas[weekKey].valorVendido += totals.valorVendido;
   });
 
-  const usuariosLogistica = relaciones
-    .map((relacion) => getUsuarioPayload(relacion))
-    .filter(
-      (usuario) =>
-        usuario.activo === true &&
-        isActiveDuringPeriod({
-          fechaIngreso: usuario.fechaIngreso || usuario.fechaCreacionUsuario,
-          fechaSalida: usuario.fechaSalida,
-          fechaInicio,
-          fechaFin,
-        }),
-    );
-  const asignacionesLogistica = entregasLogisticaRows.map((row) => {
-    const item = row?.get ? row.get({ plain: true }) : row;
-    return {
-      usuarioId: item.usuarioAgencia?.usuarioId,
-      entregaId: item.entrega_id,
-      fecha: item.entrega?.fecha,
-    };
-  });
-  const logistica = buildLogisticsCommissionRows({
-    usuarios: usuariosLogistica,
-    asignaciones: asignacionesLogistica,
-    weeks,
+  const logistica = buildLogisticaRowsFromData({
+    relaciones,
+    entregasLogisticaRows,
+    logisticaPeriodo,
+    logisticaWeeks,
   });
 
   const vendedoresBase = [...vendedoresMap.values()];
@@ -2210,6 +2345,8 @@ const construirReportePagosComisiones = async ({ year, month }) => {
       mes: numericMonth,
     },
     weeks,
+    logisticaWeeks,
+    logisticaPeriodo,
     vendedores,
     vendedoresDisponiblesEquipo,
     logistica,
@@ -2217,14 +2354,42 @@ const construirReportePagosComisiones = async ({ year, month }) => {
   };
 };
 
-const obtenerReportePagosComisiones = async ({ year, month }) => {
+const obtenerReportePagosComisiones = async ({
+  year,
+  month,
+  logisticaFechaInicio,
+  logisticaFechaFin,
+}) => {
   const { numericYear, numericMonth } = parseReportPeriod({ year, month });
   const periodoPagado = await getPeriodoPagado(numericYear, numericMonth);
-  if (periodoPagado) return buildReportePagado(periodoPagado);
+  if (periodoPagado) {
+    const reportePagado = buildReportePagado(periodoPagado);
+    if (!logisticaFechaInicio && !logisticaFechaFin) return reportePagado;
+
+    const logisticaPeriodo = parseLogisticaPeriodo({
+      logisticaFechaInicio,
+      logisticaFechaFin,
+      defaultFechaInicio: reportePagado.fechaInicio,
+      defaultFechaFin: reportePagado.fechaFin,
+    });
+    const logisticaWeeks = buildLogisticaWeeks(logisticaPeriodo);
+    const logistica = await construirLogisticaReporte({
+      logisticaPeriodo,
+      logisticaWeeks,
+    });
+    return {
+      ...reportePagado,
+      logistica,
+      logisticaWeeks,
+      logisticaPeriodo,
+    };
+  }
 
   return construirReportePagosComisiones({
     year: numericYear,
     month: numericMonth,
+    logisticaFechaInicio,
+    logisticaFechaFin,
   });
 };
 

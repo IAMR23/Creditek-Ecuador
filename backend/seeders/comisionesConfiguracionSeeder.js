@@ -9,6 +9,32 @@ const CARGO_POR_GRUPO = {
   "VENDEDORES DE CALL CENTER": "VENDEDOR CALL CENTER",
 };
 
+const METAS_SUPERVISOR_CALL_CENTER = [
+  { equiposPorVendedor: 10, comisionPorEquipo: 1 },
+  { equiposPorVendedor: 11, comisionPorEquipo: 1.5 },
+  { equiposPorVendedor: 12, comisionPorEquipo: 2 },
+  { equiposPorVendedor: 15, comisionPorEquipo: 3 },
+];
+
+const crearComisionesSemanalesSupervisorCallCenter = (cantidadVendedores) =>
+  METAS_SUPERVISOR_CALL_CENTER.map(({ equiposPorVendedor, comisionPorEquipo }) => {
+    const unidadesVendidas = cantidadVendedores * equiposPorVendedor;
+    const valorAproximado = unidadesVendidas * comisionPorEquipo;
+
+    return [
+      "SUPERVISOR CALL CENTER",
+      `${cantidadVendedores} vendedores`,
+      "COMISION_SEMANAL",
+      String(unidadesVendidas),
+      comisionPorEquipo,
+      null,
+      null,
+      null,
+      String(valorAproximado),
+      null,
+    ];
+  });
+
 const COMISIONES_INICIALES = [
   ["SUPERVISOR CALL CENTER", "2 vendedores", "COMISION_SEMANAL", "20", 1, null, null, null, "20", null],
   ["SUPERVISOR CALL CENTER", "2 vendedores", "COMISION_SEMANAL", "22", 1.5, null, null, null, "33", null],
@@ -78,6 +104,8 @@ const COMISIONES_INICIALES = [
   ["VENDEDORES DE CALL CENTER", null, "BONO_MENSUAL_5_SEMANAS", "55", null, null, null, 80, null, "11*5"],
   ["VENDEDORES DE CALL CENTER", null, "BONO_MENSUAL_5_SEMANAS", "70", null, null, null, 100, null, "14*5"],
   ["VENDEDORES DE CALL CENTER", null, "BONO_MENSUAL_5_SEMANAS", "equipo extra", null, null, null, 1.75, "c/u", null],
+
+  ...crearComisionesSemanalesSupervisorCallCenter(5),
 ];
 
 const toRecord = (row, index) => {

@@ -1212,6 +1212,25 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
     );
   }
 
+  const columnasCalculadasManuales = [
+    "descuentosMetaManual",
+    "cajaGeneralManual",
+    "entradasManual",
+    "descuentosManual",
+  ];
+
+  for (const columnName of columnasCalculadasManuales) {
+    await addColumnIfMissing(
+      queryInterface,
+      "roles_creditek_ajustes",
+      columnName,
+      {
+        type: Sequelize.DECIMAL(12, 2),
+        allowNull: true,
+      },
+    );
+  }
+
   await sequelize.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS roles_creditek_ajustes_usuario_periodo_unique
     ON roles_creditek_ajustes ("usuarioId", anio, mes);

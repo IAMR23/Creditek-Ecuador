@@ -22,6 +22,12 @@ const CAMPOS_MANUALES = [
   "prestamo",
   "mecanica",
 ];
+const CAMPOS_CALCULADOS = [
+  "descuentosMeta",
+  "cajaGeneral",
+  "entradas",
+  "descuentos",
+];
 const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica"];
 const CAMPOS_ANTICIPOS = [
   "adelantosTransfer",
@@ -77,17 +83,30 @@ const formatoNumero = (value) =>
     maximumFractionDigits: 2,
   }).format(numero(value));
 
+const tieneCampo = (obj, campo) =>
+  Object.prototype.hasOwnProperty.call(obj || {}, campo);
+
 const valorCampo = (row, campo, drafts) => {
   const draft = drafts[String(row.usuarioId)];
-  return draft && Object.prototype.hasOwnProperty.call(draft, campo)
-    ? draft[campo]
-    : row[campo];
+  if (tieneCampo(draft, campo)) {
+    return CAMPOS_CALCULADOS.includes(campo) && draft[campo] === ""
+      ? row[`${campo}Calculado`]
+      : draft[campo];
+  }
+  return row[campo];
 };
 
 const valorInput = (row, campo, drafts) => {
   const draft = drafts[String(row.usuarioId)];
-  if (draft && Object.prototype.hasOwnProperty.call(draft, campo)) {
+  if (tieneCampo(draft, campo)) {
     return draft[campo];
+  }
+
+  if (CAMPOS_CALCULADOS.includes(campo)) {
+    const value = row[`${campo}Manual`];
+    return value === null || value === undefined
+      ? ""
+      : String(value).replace(",", ".");
   }
 
   const value = row[campo];
@@ -113,19 +132,36 @@ const sumanPrestamosFila = (row, drafts) =>
 const totalDescuentosFila = (row, drafts) =>
   redondear(totalAnticiposFila(row, drafts) + sumanPrestamosFila(row, drafts));
 
-const InputValor = ({ row, campo, drafts, onChange, disabled }) => (
+const InputValor = ({
+  row,
+  campo,
+  drafts,
+  onChange,
+  disabled,
+  calculado = false,
+}) => (
   <div className="relative min-w-28">
-    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-amber-700">
+    <span
+      className={`pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold ${
+        calculado ? "text-blue-700" : "text-amber-700"
+      }`}
+    >
       $
     </span>
     <input
       type="text"
       inputMode="decimal"
       value={valorInput(row, campo, drafts)}
+      placeholder={calculado ? formatoNumero(row[`${campo}Calculado`]) : undefined}
+      title={calculado ? `Calculado: ${formatoDinero.format(numero(row[`${campo}Calculado`]))}` : undefined}
       onChange={(event) => onChange(row, campo, event.target.value)}
       disabled={disabled}
       aria-label={`${campo} de ${row.nombre}`}
-      className="h-9 w-full rounded-md border border-amber-300 bg-amber-50 pl-6 pr-2 text-right text-sm font-semibold text-slate-800 outline-none transition focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-100 disabled:opacity-60"
+      className={`h-9 w-full rounded-md border pl-6 pr-2 text-right text-sm font-semibold text-slate-800 outline-none transition disabled:opacity-60 ${
+        calculado
+          ? "border-blue-300 bg-blue-50 placeholder:text-blue-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+          : "border-amber-300 bg-amber-50 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-100"
+      }`}
     />
   </div>
 );
@@ -186,8 +222,19 @@ export default function RolesCreditekResumen() {
   };
 
   const cambiarManual = (row, campo, value) => {
-    if (!CAMPOS_MANUALES.includes(campo)) return;
+    const esCalculado = CAMPOS_CALCULADOS.includes(campo);
+    if (!CAMPOS_MANUALES.includes(campo) && !esCalculado) return;
     const valorNormalizado = value.replace(/,/g, ".");
+    if (esCalculado && valorNormalizado === "") {
+      setDrafts((actuales) => ({
+        ...actuales,
+        [String(row.usuarioId)]: {
+          ...(actuales[String(row.usuarioId)] || {}),
+          [campo]: "",
+        },
+      }));
+      return;
+    }
     if (!/^\d{0,10}(\.\d{0,2})?$/.test(valorNormalizado)) return;
     setDrafts((actuales) => ({
       ...actuales,
@@ -201,15 +248,32 @@ export default function RolesCreditekResumen() {
   const guardar = async () => {
     const modificados = rows.filter((row) => drafts[String(row.usuarioId)]);
     if (!modificados.length) return;
-    const registros = modificados.map((row) => ({
-      usuarioId: row.usuarioId,
-      ...Object.fromEntries(
-        CAMPOS_MANUALES.map((campo) => [
-          campo,
-          numero(valorCampo(row, campo, drafts)),
-        ]),
-      ),
-    }));
+    const registros = modificados.map((row) => {
+      const draft = drafts[String(row.usuarioId)] || {};
+      return {
+        usuarioId: row.usuarioId,
+        ...Object.fromEntries(
+          CAMPOS_MANUALES.map((campo) => [
+            campo,
+            numero(valorCampo(row, campo, drafts)),
+          ]),
+        ),
+        ...Object.fromEntries(
+          CAMPOS_CALCULADOS.map((campo) => {
+            const campoManual = `${campo}Manual`;
+            const value = tieneCampo(draft, campo)
+              ? draft[campo]
+              : row[campoManual];
+            return [
+              campoManual,
+              value === "" || value === null || value === undefined
+                ? null
+                : numero(value),
+            ];
+          }),
+        ),
+      };
+    });
 
     try {
       setSaving(true);
@@ -341,7 +405,8 @@ export default function RolesCreditekResumen() {
                 Resumen de egresos Creditek
               </h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-600">
-                Los valores azules se calculan desde Egresos y Pagos comisiones.
+                Los valores azules se calculan desde Egresos y Pagos comisiones,
+                y se pueden reemplazar manualmente cuando sea necesario.
                 Los valores amarillos se ingresan manualmente.
               </p>
             </div>
@@ -458,7 +523,16 @@ export default function RolesCreditekResumen() {
                       <InputValor row={row} campo="adelantosTransfer" drafts={drafts} onChange={cambiarManual} disabled={saving} />
                     </td>
                     {["descuentosMeta", "cajaGeneral", "entradas", "descuentos"].map((campo) => (
-                      <td key={campo} className="border-b border-r border-slate-200 bg-blue-50/40 px-3 py-2.5 text-right font-semibold text-blue-900">{formatoNumero(row[campo])}</td>
+                      <td key={campo} className="border-b border-r border-slate-200 bg-blue-50/40 px-2 py-1.5">
+                        <InputValor
+                          row={row}
+                          campo={campo}
+                          drafts={drafts}
+                          onChange={cambiarManual}
+                          disabled={saving}
+                          calculado
+                        />
+                      </td>
                     ))}
                     {CAMPOS_MANUALES_FINALES.map((campo) => (
                       <td key={campo} className="border-b border-r border-slate-200 px-2 py-1.5">

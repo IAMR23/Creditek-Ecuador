@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
@@ -259,8 +260,8 @@ export default function Nomina() {
       "Tiempo trabajado": registro.tiempoTrabajado || "",
       Nivel: registro.rolPagoNivel || "",
       "Rol de pago": registro.rolPagoCargo || "",
-      "Sueldo base": registro.sueldoBase ?? "",
-      "Sueldo extra": registro.sueldoExtra ?? "",
+      "Caja general": registro.sueldoBase ?? "",
+      Entrada: registro.sueldoExtra ?? "",
       Total: registro.sueldoTotal ?? Number(registro.sueldo || 0),
       Comisiones: registro.comisiones || "",
       "Ingreso aproximado": getIngresoAproximado(registro),
@@ -417,8 +418,8 @@ export default function Nomina() {
                   <th className="px-4 py-3">Tiempo trabajado</th>
                   <th className="px-4 py-3">Nivel</th>
                   <th className="px-4 py-3">Rol de pago</th>
-                  <th className="px-4 py-3">Sueldo base</th>
-                  <th className="px-4 py-3">Sueldo extra</th>
+                  <th className="px-4 py-3">Caja general</th>
+                  <th className="px-4 py-3">Entrada</th>
                   <th className="px-4 py-3">Total</th>
                   <th className="px-4 py-3">Comisiones</th>
                   <th className="px-4 py-3">Ingreso aproximado</th>
@@ -612,11 +613,11 @@ export default function Nomina() {
                 {rolPagoSeleccionado && (
                   <div className="grid gap-2 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-900 sm:grid-cols-2">
                     <InfoCompact
-                      label="Base"
+                      label="Caja general"
                       value={moneyFormatter.format(Number(rolPagoSeleccionado.sueldoBase || 0))}
                     />
                     <InfoCompact
-                      label="Extra"
+                      label="Entrada"
                       value={moneyFormatter.format(Number(rolPagoSeleccionado.sueldoExtra || 0))}
                     />
                     <InfoCompact
@@ -665,7 +666,7 @@ export default function Nomina() {
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
                     />
                     {form.rolPagoId && !readOnly ? (
-                      <span className="text-xs text-slate-500">Suma automática del sueldo base y extra.</span>
+                      <span className="text-xs text-slate-500">Suma automatica de caja general y entrada.</span>
                     ) : null}
                   </label>
 

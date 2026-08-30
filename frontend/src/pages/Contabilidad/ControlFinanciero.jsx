@@ -511,7 +511,7 @@ function VistaConciliacionCaja({
         </h3>
         <p className="mx-auto mt-1 max-w-2xl text-sm text-slate-500">
           {error ||
-            "Compara cada pago del reporte con un movimiento CUOTA del mismo día, cliente y monto."}
+            "Compara los pagos del reporte con movimientos CUOTA del mismo dia y cliente, incluyendo pagos agrupados que cubren varias cuotas."}
         </p>
         <button
           type="button"
@@ -561,8 +561,8 @@ function VistaConciliacionCaja({
           </p>
           <p className="mt-1 text-xs text-emerald-800">
             Regla automática: fecha + cliente exacto, con al menos 90% de
-            similitud o abreviado al final + monto exacto. La agencia no
-            participa.
+            similitud o abreviado al final + monto exacto o suma exacta de
+            varias cuotas. La agencia no participa.
           </p>
         </div>
         <button
@@ -639,6 +639,15 @@ function VistaConciliacionCaja({
                           : `Nombre similar: ${Math.round(
                               Number(resultado.similitudCliente || 0) * 100,
                             )}%`}
+                        </p>
+                    )}
+                    {resultado.tipoCoincidencia ===
+                      "NOMBRE_EXACTO_CUOTAS_AGRUPADAS" && (
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">
+                        Pago agrupado:{" "}
+                        {resultado.agrupacionCaja?.totalRegistrosAgrupados ||
+                          0}{" "}
+                        cuotas
                       </p>
                     )}
                     {resultado.clienteReporte && resultado.clienteCierre && resultado.clienteReporte !== resultado.clienteCierre && (

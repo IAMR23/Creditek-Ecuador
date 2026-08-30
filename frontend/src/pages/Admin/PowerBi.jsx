@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
@@ -5,6 +6,7 @@ import { nombreCortoUsuario } from "../../utils/nombres";
 import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
+import PowerBiGraficasSupervisores from "./PowerBiGraficasSupervisores";
 import { api } from "../../api/client";
 
 const STORAGE_KEY = "powerbi_filtros";
@@ -99,8 +101,12 @@ const getRangoInicialPowerBi = (filtrosGuardados = {}) => {
   return construirRango13SemanasDesdeFin();
 };
 
-export default function Powerbi() {
-  const filtrosGuardados = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+export default function Powerbi({ modoSupervisores = false }) {
+  const storageKey = modoSupervisores
+    ? `${STORAGE_KEY}_supervisores`
+    : STORAGE_KEY;
+  const mostrarFiltroCierreCaja = !modoSupervisores;
+  const filtrosGuardados = JSON.parse(localStorage.getItem(storageKey)) || {};
   const rangoInicial = getRangoInicialPowerBi(filtrosGuardados);
 
   const [loading, setLoading] = useState(false);
@@ -176,17 +182,26 @@ export default function Powerbi() {
 
   useEffect(() => {
     localStorage.setItem(
-      STORAGE_KEY,
+      storageKey,
       JSON.stringify({
         fechaInicio,
         fechaFin,
         agenciaId,
         vendedorId,
-        cierreCajaTipo,
+        ...(mostrarFiltroCierreCaja ? { cierreCajaTipo } : {}),
         observacion,
       })
     );
-  }, [fechaInicio, fechaFin, agenciaId, vendedorId, cierreCajaTipo, observacion]);
+  }, [
+    fechaInicio,
+    fechaFin,
+    agenciaId,
+    vendedorId,
+    cierreCajaTipo,
+    observacion,
+    storageKey,
+    mostrarFiltroCierreCaja,
+  ]);
 
   const cargarUsuarios = async () => {
     try {
@@ -327,7 +342,9 @@ export default function Powerbi() {
       }
 
       if (vendedorId) params.append("vendedorId", vendedorId);
-      if (cierreCajaTipo) params.append("cierreCaja", cierreCajaTipo);
+      if (mostrarFiltroCierreCaja && cierreCajaTipo) {
+        params.append("cierreCaja", cierreCajaTipo);
+      }
       if (observacion.trim()) params.append("observacion", observacion.trim());
 
       const url = `${API_URL}/auditoria/ventas2?${params.toString()}`;
@@ -353,6 +370,7 @@ export default function Powerbi() {
     vendedorId,
     cierreCajaTipo,
     observacion,
+    mostrarFiltroCierreCaja,
   ]);
 
   useEffect(() => {
@@ -365,12 +383,18 @@ export default function Powerbi() {
     <div className="p-4">
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-gray-900">
-          BIENVENIDO {user?.usuario?.nombre || "Admin"}
+          {modoSupervisores
+            ? "POWER BI SUPERVISORES"
+            : `BIENVENIDO ${user?.usuario?.nombre || "Admin"}`}
         </h1>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 mb-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${
+            mostrarFiltroCierreCaja ? "xl:grid-cols-6" : "xl:grid-cols-5"
+          }`}
+        >
           <div className="flex flex-col">
             <label className="mb-1.5 text-sm font-medium text-gray-700">
               Fecha Inicio
@@ -506,21 +530,23 @@ export default function Powerbi() {
             </select>
           </div>
 
-          <div className="flex flex-col">
-            <label className="mb-1.5 text-sm font-medium text-gray-700">
-              Cierre de caja
-            </label>
-            <select
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
-              value={cierreCajaTipo}
-              onChange={(e) => setCierreCajaTipo(e.target.value)}
-            >
-              <option value="">Todos</option>
-              <option value="CONTADO">Contado</option>
-              <option value="CREDITV">CrediTV</option>
-              <option value="UPHONE">Uphone</option>
-            </select>
-          </div>
+          {mostrarFiltroCierreCaja && (
+            <div className="flex flex-col">
+              <label className="mb-1.5 text-sm font-medium text-gray-700">
+                Cierre de caja
+              </label>
+              <select
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                value={cierreCajaTipo}
+                onChange={(e) => setCierreCajaTipo(e.target.value)}
+              >
+                <option value="">Todos</option>
+                <option value="CONTADO">Contado</option>
+                <option value="CREDITV">CrediTV</option>
+                <option value="UPHONE">Uphone</option>
+              </select>
+            </div>
+          )}
 
           <div className="flex flex-col">
             <label className="mb-1.5 text-sm font-medium text-gray-700">
@@ -551,12 +577,17 @@ export default function Powerbi() {
 
       {loading ? (
         <p>Cargando...</p>
+      ) : modoSupervisores ? (
+        <PowerBiGraficasSupervisores
+          estadisticas={estadisticas}
+          fechaInicio={fechaInicio}
+        />
       ) : (
-<DashboardGraficas2
-  estadisticas={estadisticas}
-  fechaInicio={fechaInicio}
-  fechaFin={fechaFin}
-/>
+        <DashboardGraficas2
+          estadisticas={estadisticas}
+          fechaInicio={fechaInicio}
+          fechaFin={fechaFin}
+        />
       )}
     </div>
   );

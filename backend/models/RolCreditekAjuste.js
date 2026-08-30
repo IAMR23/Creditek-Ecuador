@@ -74,6 +74,26 @@ const RolCreditekAjuste = sequelize.define(
       defaultValue: 0,
       validate: { min: 0 },
     },
+    descuentosMetaManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
+    cajaGeneralManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
+    entradasManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
+    descuentosManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

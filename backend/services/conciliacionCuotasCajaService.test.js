@@ -189,6 +189,78 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
     expect(calculo.resumen.noEnCierre).toBe(1);
   });
 
+  test("agrupa cuotas del mismo cliente cuando un movimiento cubre la suma", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "JUAN PEREZ", 20),
+        registro(2, "JUAN PEREZ", 20),
+      ],
+      movimientos: [movimiento(101, "JUAN PEREZ", 40)],
+    });
+
+    expect(calculo.resumen.coinciden).toBe(2);
+    expect(calculo.resumen.noEnCierre).toBe(0);
+    expect(calculo.resumen.soloEnCierre).toBe(0);
+    expect(calculo.resultados).toEqual([
+      expect.objectContaining({
+        estado: "COINCIDE",
+        movimientoCajaId: 101,
+        montoReporte: 20,
+        montoCierre: 20,
+        diferencia: 0,
+        tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+        agrupacionCaja: expect.objectContaining({
+          movimientoCajaId: 101,
+          montoMovimiento: 40,
+          montoAsignado: 20,
+          registrosAgrupados: [1, 2],
+          totalRegistrosAgrupados: 2,
+        }),
+      }),
+      expect.objectContaining({
+        estado: "COINCIDE",
+        movimientoCajaId: 101,
+        montoReporte: 20,
+        montoCierre: 20,
+        diferencia: 0,
+        tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+      }),
+    ]);
+  });
+
+  test("no agrupa cuotas con movimientos de otro cliente o fecha", () => {
+    const clienteDiferente = calcular({
+      registros: [
+        registro(1, "JUAN PEREZ", 20),
+        registro(2, "JUAN PEREZ", 20),
+      ],
+      movimientos: [movimiento(101, "CARLOS PEREZ", 40)],
+    });
+    const fechaDiferente = calcular({
+      registros: [
+        registro(1, "JUAN PEREZ", 20),
+        registro(2, "JUAN PEREZ", 20),
+      ],
+      cierres: [{ id: 9, fecha: "2026-08-24", estadoCierre: "CERRADO" }],
+      movimientos: [movimiento(101, "JUAN PEREZ", 40, 9)],
+    });
+
+    expect(clienteDiferente.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 0,
+        noEnCierre: 2,
+        soloEnCierre: 1,
+      }),
+    );
+    expect(fechaDiferente.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 0,
+        noEnCierre: 2,
+        soloEnCierre: 1,
+      }),
+    );
+  });
+
   test("caso 8: resuelve todos los exactos antes de analizar montos diferentes", () => {
     const calculo = calcular({
       registros: [

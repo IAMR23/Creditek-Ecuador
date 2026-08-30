@@ -126,9 +126,15 @@ const crearResultado = ({
   estado,
   tipoCoincidencia = null,
   similitudCliente = null,
+  montoCierreAsignadoCentavos = null,
+  agrupacionCaja = null,
 }) => {
   const montoReporteCentavos = registro?.montoReporteCentavos ?? 0;
-  const montoCierreCentavos = movimiento?.montoCierreCentavos ?? 0;
+  const montoMovimientoCentavos = movimiento?.montoCierreCentavos ?? 0;
+  const montoCierreCentavos =
+    montoCierreAsignadoCentavos === null
+      ? montoMovimientoCentavos
+      : montoCierreAsignadoCentavos;
   const diferenciaCentavos = montoReporteCentavos - montoCierreCentavos;
 
   return {
@@ -154,6 +160,13 @@ const crearResultado = ({
     diferencia: desdeCentavos(diferenciaCentavos),
     estado,
     tipoCoincidencia,
+    agrupacionCaja: agrupacionCaja
+      ? {
+          ...agrupacionCaja,
+          montoMovimiento: desdeCentavos(montoMovimientoCentavos),
+          montoAsignado: desdeCentavos(montoCierreCentavos),
+        }
+      : null,
     similitudCliente:
       similitudCliente === null
         ? null
@@ -180,6 +193,8 @@ const crearResultado = ({
             entidad: movimiento.entidad || null,
             clienteCanonico: movimiento.clienteCierre || null,
             valor: desdeCentavos(montoCierreCentavos),
+            valorMovimiento: desdeCentavos(montoMovimientoCentavos),
+            esPagoAgrupado: Boolean(agrupacionCaja),
             responsable: movimiento.responsable || null,
             formaPago: movimiento.formaPago || null,
             recibo: movimiento.recibo || null,
@@ -188,6 +203,47 @@ const crearResultado = ({
         : null,
     },
   };
+};
+
+const buscarRegistrosQueSumanMonto = (registros, montoObjetivoCentavos) => {
+  const candidatos = registros
+    .filter(
+      (registro) =>
+        Number.isInteger(registro.montoReporteCentavos) &&
+        registro.montoReporteCentavos > 0 &&
+        registro.montoReporteCentavos < montoObjetivoCentavos,
+    )
+    .sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
+
+  const seleccionar = (inicio, restante, tamanoRestante, acumulados) => {
+    if (restante === 0 && tamanoRestante === 0) {
+      return [...acumulados];
+    }
+    if (restante <= 0 || tamanoRestante <= 0) return null;
+
+    for (let index = inicio; index < candidatos.length; index += 1) {
+      const registro = candidatos[index];
+      if (registro.montoReporteCentavos > restante) continue;
+      acumulados.push(registro);
+      const resultado = seleccionar(
+        index + 1,
+        restante - registro.montoReporteCentavos,
+        tamanoRestante - 1,
+        acumulados,
+      );
+      if (resultado) return resultado;
+      acumulados.pop();
+    }
+
+    return null;
+  };
+
+  for (let tamano = 2; tamano <= candidatos.length; tamano += 1) {
+    const resultado = seleccionar(0, montoObjetivoCentavos, tamano, []);
+    if (resultado) return resultado;
+  }
+
+  return [];
 };
 
 const construirResultadosConciliacionCaja = ({
@@ -388,6 +444,74 @@ const construirResultadosConciliacionCaja = ({
     exigirMonto: true,
   });
 
+  const conciliarCuotasAgrupadas = (registrosPendientes) => {
+    const registrosPorClienteFecha = new Map();
+    const registrosConsumidos = new Set();
+
+    registrosPendientes.forEach((registro) => {
+      const key = claveClienteFecha(
+        registro.fechaNormalizada,
+        registro.clienteNormalizado,
+      );
+      if (!registrosPorClienteFecha.has(key)) {
+        registrosPorClienteFecha.set(key, []);
+      }
+      registrosPorClienteFecha.get(key).push(registro);
+    });
+
+    [...movimientosValidos.values()]
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .forEach((movimiento) => {
+        if (!movimientosValidos.has(Number(movimiento.id))) return;
+
+        const key = claveClienteFecha(
+          movimiento.fechaNormalizada,
+          movimiento.clienteNormalizado,
+        );
+        const registrosDisponibles = (registrosPorClienteFecha.get(key) || [])
+          .filter((registro) => !registrosConsumidos.has(registro._key));
+        const registrosAgrupados = buscarRegistrosQueSumanMonto(
+          registrosDisponibles,
+          movimiento.montoCierreCentavos,
+        );
+
+        if (!registrosAgrupados.length) return;
+
+        const idsAgrupados = registrosAgrupados
+          .map((registro) => Number(registro.id))
+          .filter((id) => Number.isInteger(id) && id > 0);
+
+        registrosAgrupados.forEach((registro) => {
+          resultadosPorRegistro.set(
+            registro._key,
+            crearResultado({
+              registro,
+              movimiento,
+              estado: "COINCIDE",
+              tipoCoincidencia: "NOMBRE_EXACTO_CUOTAS_AGRUPADAS",
+              similitudCliente: 1,
+              montoCierreAsignadoCentavos: registro.montoReporteCentavos,
+              agrupacionCaja: {
+                movimientoCajaId: Number(movimiento.id),
+                registrosAgrupados: idsAgrupados,
+                totalRegistrosAgrupados: registrosAgrupados.length,
+              },
+            }),
+          );
+          registrosConsumidos.add(registro._key);
+        });
+        movimientosValidos.delete(Number(movimiento.id));
+      });
+
+    return registrosPendientes.filter(
+      (registro) => !registrosConsumidos.has(registro._key),
+    );
+  };
+
+  const registrosSinAgrupacion = conciliarCuotasAgrupadas(
+    registrosSinCoincidenciaDeMonto,
+  );
+
   const movimientosPorClienteFecha = new Map();
   movimientosValidos.forEach((movimiento) => {
     const key = claveClienteFecha(
@@ -404,7 +528,7 @@ const construirResultadosConciliacionCaja = ({
   );
 
   const registrosSinClienteExacto = [];
-  registrosSinCoincidenciaDeMonto.forEach((registro) => {
+  registrosSinAgrupacion.forEach((registro) => {
     const key = claveClienteFecha(
       registro.fechaNormalizada,
       registro.clienteNormalizado,

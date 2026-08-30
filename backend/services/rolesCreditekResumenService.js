@@ -17,6 +17,15 @@ const CAMPOS_MANUALES = [
   "prestamo",
   "mecanica",
 ];
+const CAMPOS_CALCULADOS = [
+  "descuentosMeta",
+  "cajaGeneral",
+  "entradas",
+  "descuentos",
+];
+const CAMPOS_CALCULADOS_MANUALES = CAMPOS_CALCULADOS.map(
+  (campo) => `${campo}Manual`,
+);
 const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica"];
 const CAMPOS_ANTICIPOS = [
   "adelantosTransfer",
@@ -67,6 +76,11 @@ const normalizarValor = (value, label) => {
   return redondear(numero);
 };
 
+const normalizarValorOpcional = (value, label) => {
+  if (value === null || value === undefined || value === "") return null;
+  return normalizarValor(value, label);
+};
+
 const limitesMes = ({ anio, mes }) => {
   const inicio = new Date(Date.UTC(anio, mes - 1, 1, 5, 0, 0));
   const fin = new Date(Date.UTC(anio, mes, 1, 5, 0, 0));
@@ -85,9 +99,19 @@ const acumular = (mapa, usuarioIdValue, campo, valor) => {
 
 const serializarAjuste = (row) => {
   const value = typeof row?.toJSON === "function" ? row.toJSON() : row || {};
-  return Object.fromEntries(
-    CAMPOS_MANUALES.map((campo) => [campo, redondear(value[campo])]),
-  );
+  return {
+    ...Object.fromEntries(
+      CAMPOS_MANUALES.map((campo) => [campo, redondear(value[campo])]),
+    ),
+    ...Object.fromEntries(
+      CAMPOS_CALCULADOS_MANUALES.map((campo) => [
+        campo,
+        value[campo] === null || value[campo] === undefined
+          ? null
+          : redondear(value[campo]),
+      ]),
+    ),
+  };
 };
 
 const obtenerResumen = async (periodoValue) => {
@@ -173,11 +197,25 @@ const obtenerResumen = async (periodoValue) => {
     const automaticos = valoresPorUsuario.get(Number(usuario.id)) || {};
     const manuales = ajustesPorUsuario.get(Number(usuario.id)) ||
       serializarAjuste();
-    const valores = {
+    const valoresCalculados = {
       descuentosMeta: redondear(automaticos.descuentosMeta),
       cajaGeneral: redondear(automaticos.cajaGeneral),
       entradas: redondear(automaticos.entradas),
       descuentos: redondear(automaticos.descuentos),
+    };
+    const valores = {
+      ...valoresCalculados,
+      ...Object.fromEntries(
+        CAMPOS_CALCULADOS.map((campo) => {
+          const campoManual = `${campo}Manual`;
+          return [
+            campo,
+            manuales[campoManual] === null || manuales[campoManual] === undefined
+              ? valoresCalculados[campo]
+              : manuales[campoManual],
+          ];
+        }),
+      ),
       ...manuales,
     };
     const totalAnticipos = redondear(
@@ -198,6 +236,12 @@ const obtenerResumen = async (periodoValue) => {
       nombre: usuario.nombre || `Usuario #${usuario.id}`,
       usuarioActivo: usuario.activo !== false,
       ...valores,
+      ...Object.fromEntries(
+        CAMPOS_CALCULADOS.map((campo) => [
+          `${campo}Calculado`,
+          valoresCalculados[campo],
+        ]),
+      ),
       totalAnticipos,
       sumanPrestamos,
       totalDescuentos,
@@ -265,6 +309,12 @@ const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue) => 
           CAMPOS_MANUALES.map((campo) => [
             campo,
             normalizarValor(registro[campo] ?? 0, campo),
+          ]),
+        ),
+        ...Object.fromEntries(
+          CAMPOS_CALCULADOS_MANUALES.map((campo) => [
+            campo,
+            normalizarValorOpcional(registro[campo], campo),
           ]),
         ),
         actualizadoPorId,

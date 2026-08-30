@@ -15,6 +15,11 @@ const auth = require("../middleware/auth");
 const {
   generarContratoCapacitacionPdf,
 } = require("../services/contratoCapacitacionPdfService");
+const {
+  buildTrainingTest,
+  getTrainingTestTypes,
+  gradeTrainingTest,
+} = require("../services/capacitacionPruebaService");
 
 const router = express.Router();
 const INTERVIEW_STATUSES = [
@@ -1461,6 +1466,136 @@ router.put("/:id/evaluacion-desempeno", auth, async (req, res) => {
       message:
         status === 500
           ? "Error al guardar la evaluacion de desempeno."
+          : error.message,
+      ...(status === 500 ? { error: error.message } : {}),
+    });
+  }
+});
+
+router.get("/:id/prueba-capacitacion", auth, async (req, res) => {
+  try {
+    const id = parsePositiveInt(req.params.id, null);
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        message: "El id de la postulacion no es valido.",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada.",
+      });
+    }
+
+    if (
+      !postulacion.pasaEntrevista ||
+      postulacion.descartada ||
+      postulacion.estadoEntrevista !== "CAPACITACION"
+    ) {
+      return res.status(409).json({
+        ok: false,
+        message: "La prueba solo esta disponible para postulantes en capacitacion.",
+      });
+    }
+
+    const [postulacionConIncorporacion] = await agregarDatosIncorporacion([
+      postulacion,
+    ]);
+    const tipo = typeof req.query?.tipo === "string" ? req.query.tipo : "";
+
+    return res.json({
+      ok: true,
+      data: {
+        postulacion: postulacionConIncorporacion,
+        tipos: getTrainingTestTypes(),
+        prueba:
+          postulacionConIncorporacion.formulario?.prueba_capacitacion || null,
+        cuestionario: tipo ? buildTrainingTest(tipo) : null,
+      },
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error("Error obteniendo prueba de capacitacion:", error);
+
+    return res.status(status).json({
+      ok: false,
+      message:
+        status === 500
+          ? "Error al obtener la prueba de capacitacion."
+          : error.message,
+      ...(status === 500 ? { error: error.message } : {}),
+    });
+  }
+});
+
+router.put("/:id/prueba-capacitacion", auth, async (req, res) => {
+  try {
+    const id = parsePositiveInt(req.params.id, null);
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        message: "El id de la postulacion no es valido.",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada.",
+      });
+    }
+
+    if (
+      !postulacion.pasaEntrevista ||
+      postulacion.descartada ||
+      postulacion.estadoEntrevista !== "CAPACITACION"
+    ) {
+      return res.status(409).json({
+        ok: false,
+        message: "La prueba solo puede guardarse para postulantes en capacitacion.",
+      });
+    }
+
+    const formulario = postulacion.formulario || {};
+    const prueba = gradeTrainingTest(req.body, req.user || {});
+    const historial = Array.isArray(formulario.historial_pruebas_capacitacion)
+      ? formulario.historial_pruebas_capacitacion.slice(-9)
+      : [];
+
+    postulacion.formulario = {
+      ...formulario,
+      prueba_capacitacion: prueba,
+      historial_pruebas_capacitacion: [...historial, prueba],
+      metadata: {
+        ...(formulario.metadata || {}),
+        ultima_prueba_capacitacion: prueba.actualizadoAt,
+      },
+    };
+    postulacion.changed("formulario", true);
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: "Prueba de capacitacion guardada.",
+      data: prueba,
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error("Error guardando prueba de capacitacion:", error);
+
+    return res.status(status).json({
+      ok: false,
+      message:
+        status === 500
+          ? "Error al guardar la prueba de capacitacion."
           : error.message,
       ...(status === 500 ? { error: error.message } : {}),
     });

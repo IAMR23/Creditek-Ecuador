@@ -61,6 +61,10 @@ describe("rolesCreditekResumenService", () => {
         planmovi: "6.00",
         prestamo: "7.00",
         mecanica: "8.00",
+        descuentosMetaManual: null,
+        cajaGeneralManual: null,
+        entradasManual: null,
+        descuentosManual: null,
       },
     ]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
@@ -74,9 +78,17 @@ describe("rolesCreditekResumenService", () => {
         usuarioId: 4,
         adelantosTransfer: 10,
         descuentosMeta: 7,
+        descuentosMetaCalculado: 7,
+        descuentosMetaManual: null,
         cajaGeneral: 20,
+        cajaGeneralCalculado: 20,
+        cajaGeneralManual: null,
         entradas: 35,
+        entradasCalculado: 35,
+        entradasManual: null,
         descuentos: 2,
+        descuentosCalculado: 2,
+        descuentosManual: null,
         deudaJimena: 1,
         atrasos: 2,
         diasNoLaborables: 3,
@@ -98,7 +110,54 @@ describe("rolesCreditekResumenService", () => {
     });
   });
 
-  test("guarda solamente campos manuales validados y auditados", async () => {
+  test("permite reemplazar valores calculados con ajustes manuales", async () => {
+    Usuario.findAll.mockResolvedValue([
+      { id: 4, nombre: "Ana Perez", activo: true },
+    ]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([
+      { usuarioId: 4, seccion: "CAJAS", valor: "20.00" },
+      { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
+      { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
+    ]);
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      { responsablePagoEntradaId: 4, entradas: "5.00" },
+    ]);
+    RolCreditekAjuste.findAll.mockResolvedValue([
+      {
+        usuarioId: 4,
+        descuentosMetaManual: "9.00",
+        cajaGeneralManual: "44.00",
+        entradasManual: null,
+        descuentosManual: "0.00",
+      },
+    ]);
+    pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
+      vendedores: [{ usuarioId: 4, total: { valorDescontar: 7 } }],
+    });
+
+    const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
+
+    expect(resultado.registros).toEqual([
+      expect.objectContaining({
+        descuentosMeta: 9,
+        descuentosMetaCalculado: 7,
+        descuentosMetaManual: 9,
+        cajaGeneral: 44,
+        cajaGeneralCalculado: 20,
+        cajaGeneralManual: 44,
+        entradas: 35,
+        entradasCalculado: 35,
+        entradasManual: null,
+        descuentos: 0,
+        descuentosCalculado: 2,
+        descuentosManual: 0,
+        totalAnticipos: 88,
+        totalDescuentos: 88,
+      }),
+    ]);
+  });
+
+  test("guarda campos manuales y reemplazos de calculados auditados", async () => {
     Usuario.count.mockResolvedValue(1);
     const ajuste = { update: jest.fn().mockResolvedValue(undefined) };
     RolCreditekAjuste.findOrCreate.mockResolvedValue([ajuste, true]);
@@ -118,7 +177,10 @@ describe("rolesCreditekResumenService", () => {
             planmovi: 1,
             prestamo: "2,50",
             mecanica: 3,
-            cajaGeneral: 999,
+            descuentosMetaManual: "",
+            cajaGeneralManual: 999,
+            entradasManual: null,
+            descuentosManual: "4,25",
           },
         ],
       },
@@ -137,6 +199,10 @@ describe("rolesCreditekResumenService", () => {
       planmovi: 1,
       prestamo: 2.5,
       mecanica: 3,
+      descuentosMetaManual: null,
+      cajaGeneralManual: 999,
+      entradasManual: null,
+      descuentosManual: 4.25,
       actualizadoPorId: 7,
     };
     expect(RolCreditekAjuste.findOrCreate).toHaveBeenCalledWith(

@@ -6,6 +6,7 @@ import Dashboard from "./pages/DesarrolloOrganizacional/Dashboard.jsx";
 import Entrevistas from "./pages/DesarrolloOrganizacional/Entrevistas.jsx";
 import EvaluacionDesempeno from "./pages/DesarrolloOrganizacional/EvaluacionDesempeno.jsx";
 import Postulaciones from "./pages/DesarrolloOrganizacional/Postulaciones.jsx";
+import PruebaCapacitacion from "./pages/DesarrolloOrganizacional/PruebaCapacitacion.jsx";
 import Agencias from "./pages/Admin/Agencias.jsx";
 import Roles from "./pages/Admin/Roles.jsx";
 import UsuariosAgencias from "./pages/Admin/UsuariosAgencias.jsx";
@@ -66,6 +67,10 @@ export default function App() {
                     <Route
                       path="/capacitacion/:id/evaluacion-desempeno"
                       element={<EvaluacionDesempeno />}
+                    />
+                    <Route
+                      path="/capacitacion/:id/prueba-capacitacion"
+                      element={<PruebaCapacitacion />}
                     />
                     <Route
                       path="/descartados"

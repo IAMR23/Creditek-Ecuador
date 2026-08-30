@@ -33,21 +33,6 @@ const getInitialFilters = () => {
 const inputClass =
   "h-9 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100";
 
-const commercialLegend = [
-  { key: "aplican", label: "Aplican", colorClass: "bg-emerald-500" },
-  { key: "noAplican", label: "No aplican", colorClass: "bg-red-500" },
-  { key: "noContesta", label: "No contestan", colorClass: "bg-orange-400" },
-  { key: "otros", label: "Otros", colorClass: "bg-slate-500" },
-];
-
-const opportunityStatusLegend = [
-  { key: "open", label: "OPEN", colorClass: "bg-blue-500" },
-  { key: "won", label: "WON", colorClass: "bg-emerald-500" },
-  { key: "lost", label: "LOST", colorClass: "bg-red-500" },
-  { key: "abandoned", label: "ABANDONED", colorClass: "bg-orange-400" },
-  { key: "otros", label: "OTROS ESTADOS", colorClass: "bg-slate-500" },
-];
-
 const stageColorClasses = [
   "bg-blue-500",
   "bg-cyan-500",
@@ -123,44 +108,6 @@ const getStageParts = (row, stageLegend) =>
     ...item,
     value: getCellValue(row, item.key),
   }));
-
-const getCommercialParts = (row) => {
-  const total = Number(row?.total || 0);
-  const knownTotal =
-    Number(row?.aplicanTotal || 0) +
-    Number(row?.noAplicanTotal || 0) +
-    Number(row?.noContestaTotal || 0);
-  const values = {
-    aplican: Number(row?.aplicanTotal || 0),
-    noAplican: Number(row?.noAplicanTotal || 0),
-    noContesta: Number(row?.noContestaTotal || 0),
-    otros: Math.max(0, total - knownTotal),
-  };
-
-  return commercialLegend.map((item) => ({
-    ...item,
-    value: values[item.key],
-  }));
-};
-
-const getOpportunityStatusParts = (row) => {
-  const total = Number(row?.total || 0);
-  const values = {
-    open: getStatusCellValue(row, "open"),
-    won: getStatusCellValue(row, "won"),
-    lost: getStatusCellValue(row, "lost"),
-    abandoned: getStatusCellValue(row, "abandoned"),
-  };
-  values.otros = Math.max(
-    0,
-    total - values.open - values.won - values.lost - values.abandoned,
-  );
-
-  return opportunityStatusLegend.map((item) => ({
-    ...item,
-    value: values[item.key],
-  }));
-};
 
 const formatPercentage = (value) => `${Number(value || 0).toFixed(2)}%`;
 
@@ -551,66 +498,6 @@ export default function RendimientoPautas() {
                 getParts={(currentRow) =>
                   getStageParts(currentRow, stageLegend)
                 }
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="mb-4 rounded border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-gray-900">
-              Resultado comercial por Source ID
-            </h2>
-            <p className="mt-1 text-xs text-gray-500">
-              Aplican, no aplican, no contestan y otras etapas
-            </p>
-          </div>
-          <ChartLegend items={commercialLegend} />
-        </div>
-
-        {loading && !report ? (
-          <EmptyState message="Cargando oportunidades..." />
-        ) : rows.length === 0 ? (
-          <EmptyState message="No hay oportunidades con los filtros seleccionados" />
-        ) : (
-          <div className="max-h-[560px] space-y-4 overflow-y-auto pr-1">
-            {rows.map((row) => (
-              <StackedBarRow
-                key={getRowKey(row)}
-                row={row}
-                getParts={getCommercialParts}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="mb-4 rounded border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-gray-900">
-              Estado de oportunidades por Source ID
-            </h2>
-            <p className="mt-1 text-xs text-gray-500">
-              Open, won, lost, abandoned y otros estados reportados por GHL
-            </p>
-          </div>
-          <ChartLegend items={opportunityStatusLegend} />
-        </div>
-
-        {loading && !report ? (
-          <EmptyState message="Cargando estados..." />
-        ) : rows.length === 0 ? (
-          <EmptyState message="No hay oportunidades con los filtros seleccionados" />
-        ) : (
-          <div className="max-h-[560px] space-y-4 overflow-y-auto pr-1">
-            {rows.map((row) => (
-              <StackedBarRow
-                key={getRowKey(row)}
-                row={row}
-                getParts={getOpportunityStatusParts}
               />
             ))}
           </div>
