@@ -28,7 +28,10 @@ jest.mock("../../services/conciliacionEntradasService", () => ({
 
 jest.mock("../../services/conciliacionCuotasCajaService", () => ({
   conciliarCargaCaja: jest.fn(),
+  crearConciliacionManualCaja: jest.fn(),
+  deshacerConciliacionManualCaja: jest.fn(),
   listarHistorialConciliacionCaja: jest.fn(),
+  listarSugerenciasConciliacionCajaManual: jest.fn(),
   obtenerConciliacionCajaCarga: jest.fn(),
 }));
 
@@ -44,7 +47,10 @@ const {
 } = require("../../services/conciliacionEntradasService");
 const {
   conciliarCargaCaja,
+  crearConciliacionManualCaja,
+  deshacerConciliacionManualCaja,
   listarHistorialConciliacionCaja,
+  listarSugerenciasConciliacionCajaManual,
   obtenerConciliacionCajaCarga,
 } = require("../../services/conciliacionCuotasCajaService");
 const controller = require("./controlFinancieroController");
@@ -599,6 +605,86 @@ describe("controlFinancieroController", () => {
       ok: true,
       ejecuciones: [{ id: "91" }],
     });
+  });
+
+  test("gestiona conciliacion manual de caja", async () => {
+    listarSugerenciasConciliacionCajaManual.mockResolvedValue({
+      seleccionado: { origen: "REPORTE", registroReporteId: 1 },
+      registrosReporte: [{ origen: "REPORTE", registroReporteId: 1 }],
+      movimientosCierre: [{ origen: "CIERRE", movimientoCajaId: 101 }],
+    });
+    crearConciliacionManualCaja.mockResolvedValue({
+      conciliacion: { id: "92", resultados: [] },
+    });
+    deshacerConciliacionManualCaja.mockResolvedValue({
+      conciliacion: { id: "93", resultados: [] },
+    });
+    const resSugerencias = crearRes();
+    const resCrear = crearRes();
+    const resDeshacer = crearRes();
+
+    await controller.listarSugerenciasConciliacionManualCaja(
+      {
+        params: { cargaId: "5" },
+        query: { origen: "REPORTE", registroReporteId: "1" },
+      },
+      resSugerencias,
+    );
+    await controller.crearConciliacionManualCaja(
+      {
+        params: { cargaId: "5" },
+        body: {
+          registroReporteIds: [1],
+          movimientoCajaIds: [101],
+          observacion: "Verificado",
+        },
+        user: { id: 7 },
+      },
+      resCrear,
+    );
+    await controller.deshacerConciliacionManualCaja(
+      {
+        params: { cargaId: "5", conciliacionManualId: "900" },
+        body: { motivo: "Error de seleccion" },
+        user: { id: 7 },
+      },
+      resDeshacer,
+    );
+
+    expect(listarSugerenciasConciliacionCajaManual).toHaveBeenCalledWith({
+      cargaId: "5",
+      origen: "REPORTE",
+      registroReporteId: "1",
+      movimientoCajaId: undefined,
+      busqueda: undefined,
+    });
+    expect(crearConciliacionManualCaja).toHaveBeenCalledWith({
+      cargaId: "5",
+      registroReporteIds: [1],
+      movimientoCajaIds: [101],
+      registroReporteId: undefined,
+      movimientoCajaId: undefined,
+      observacion: "Verificado",
+      usuarioId: 7,
+    });
+    expect(deshacerConciliacionManualCaja).toHaveBeenCalledWith({
+      cargaId: "5",
+      conciliacionManualId: "900",
+      motivoDeshacer: "Error de seleccion",
+      usuarioId: 7,
+    });
+    expect(resCrear.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        conciliacion: { id: "92", resultados: [] },
+      }),
+    );
+    expect(resDeshacer.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        conciliacion: { id: "93", resultados: [] },
+      }),
+    );
   });
 
   test("confirma una coincidencia manual sin modificar movimientos", async () => {

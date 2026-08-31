@@ -69,6 +69,8 @@ describe("rolesCreditekResumenService", () => {
         planmovi: "6.00",
         prestamo: "7.00",
         mecanica: "8.00",
+        pagosLentes: "9.00",
+        sueldo: "50.00",
         descuentosMetaManual: null,
         cajaGeneralManual: null,
         entradasManual: null,
@@ -76,7 +78,13 @@ describe("rolesCreditekResumenService", () => {
       },
     ]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
-      vendedores: [{ usuarioId: 4, total: { valorDescontar: 7 } }],
+      vendedores: [
+        {
+          usuarioId: 4,
+          total: { valorDescontar: 7 },
+          resumenMensual: { totalComisionesSemanaMensual: 123.45 },
+        },
+      ],
     });
 
     const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
@@ -84,6 +92,7 @@ describe("rolesCreditekResumenService", () => {
     expect(resultado.registros).toEqual([
       expect.objectContaining({
         usuarioId: 4,
+        ingresosComisiones: 123.45,
         adelantosTransfer: 10,
         descuentosMeta: 7,
         descuentosMetaCalculado: 7,
@@ -105,17 +114,68 @@ describe("rolesCreditekResumenService", () => {
         planmovi: 6,
         prestamo: 7,
         mecanica: 8,
-        sumanPrestamos: 21,
-        totalDescuentos: 105,
+        pagosLentes: 9,
+        sueldo: 50,
+        sumanPrestamos: 30,
+        totalDescuentos: 114,
+        totalNomina: 9.45,
+        totalPagarNomina: 59.45,
       }),
     ]);
     expect(resultado.totales.totalAnticipos).toBe(84);
-    expect(resultado.totales.sumanPrestamos).toBe(21);
-    expect(resultado.totales.totalDescuentos).toBe(105);
+    expect(resultado.totales.ingresosComisiones).toBe(123.45);
+    expect(resultado.totales.sumanPrestamos).toBe(30);
+    expect(resultado.totales.totalDescuentos).toBe(114);
+    expect(resultado.totales.totalNomina).toBe(9.45);
+    expect(resultado.totales.totalPagarNomina).toBe(59.45);
+    expect(resultado.totales.sueldo).toBe(50);
     expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({
       year: 2026,
       month: 8,
     });
+  });
+
+  test("incluye en ingresos todas las personas visibles en pagos comisiones", async () => {
+    Usuario.findAll.mockResolvedValue([
+      { id: 4, nombre: "Ana Perez", activo: true },
+    ]);
+    pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
+      vendedores: [
+        {
+          usuarioId: 4,
+          nombre: "Ana Perez",
+          cargo: "JEFE COMERCIAL",
+          resumenMensual: { totalComisionesSemanaMensual: 123.45 },
+        },
+      ],
+      logistica: [
+        {
+          usuarioId: 9,
+          nombre: "Luis Logistica",
+          cargo: "REPARTIDOR",
+          resumenMensual: { totalPagar: 18.5 },
+        },
+      ],
+    });
+
+    const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
+
+    expect(resultado.ingresos).toEqual([
+      expect.objectContaining({
+        usuarioId: 4,
+        nombre: "Ana Perez",
+        ingresosComisiones: 123.45,
+        tiposIngreso: ["comercial"],
+      }),
+      expect.objectContaining({
+        usuarioId: 9,
+        nombre: "Luis Logistica",
+        ingresosComisiones: 18.5,
+        tiposIngreso: ["logistica"],
+      }),
+    ]);
+    expect(resultado.registros).toHaveLength(1);
+    expect(resultado.totales.ingresosComisiones).toBe(141.95);
   });
 
   test("permite reemplazar valores calculados con ajustes manuales", async () => {
@@ -140,7 +200,13 @@ describe("rolesCreditekResumenService", () => {
       },
     ]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
-      vendedores: [{ usuarioId: 4, total: { valorDescontar: 7 } }],
+      vendedores: [
+        {
+          usuarioId: 4,
+          total: { valorDescontar: 7 },
+          resumenMensual: { totalComisionesSemanaMensual: 123.45 },
+        },
+      ],
     });
 
     const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
@@ -242,6 +308,8 @@ describe("rolesCreditekResumenService", () => {
             planmovi: 1,
             prestamo: "2,50",
             mecanica: 3,
+            pagosLentes: "4,75",
+            sueldo: "11,25",
             descuentosMetaManual: "",
             cajaGeneralManual: 999,
             entradasManual: null,
@@ -264,6 +332,8 @@ describe("rolesCreditekResumenService", () => {
       planmovi: 1,
       prestamo: 2.5,
       mecanica: 3,
+      pagosLentes: 4.75,
+      sueldo: 11.25,
       descuentosMetaManual: null,
       cajaGeneralManual: 999,
       entradasManual: null,

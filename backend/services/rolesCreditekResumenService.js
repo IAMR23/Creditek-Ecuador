@@ -19,6 +19,7 @@ const CAMPOS_MANUALES = [
   "planmovi",
   "prestamo",
   "mecanica",
+  "pagosLentes",
 ];
 const CAMPOS_CALCULADOS = [
   "descuentosMeta",
@@ -29,7 +30,9 @@ const CAMPOS_CALCULADOS = [
 const CAMPOS_CALCULADOS_MANUALES = CAMPOS_CALCULADOS.map(
   (campo) => `${campo}Manual`,
 );
-const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica"];
+const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica", "pagosLentes"];
+const CAMPOS_INGRESOS = ["ingresosComisiones"];
+const CAMPOS_NOMINA_MANUALES = ["sueldo"];
 const CAMPOS_ANTICIPOS = [
   "adelantosTransfer",
   "descuentosMeta",
@@ -100,11 +103,69 @@ const acumular = (mapa, usuarioIdValue, campo, valor) => {
   actual[campo] = redondear((actual[campo] || 0) + Number(valor || 0));
 };
 
+const obtenerValorIngresoComision = (persona, tipo) => {
+  if (tipo === "logistica") {
+    return (
+      persona?.resumenMensual?.totalPagar ??
+      persona?.total?.totalComisiones ??
+      0
+    );
+  }
+  return (
+    persona?.resumenMensual?.totalComisionesSemanaMensual ??
+    persona?.total?.totalComisiones ??
+    0
+  );
+};
+
+const acumularIngresoComision = (mapa, persona, tipo) => {
+  const usuarioId = Number(persona?.usuarioId);
+  if (!Number.isInteger(usuarioId) || usuarioId < 1) return;
+  if (!mapa.has(usuarioId)) {
+    mapa.set(usuarioId, {
+      usuarioId,
+      nombre: persona?.nombre || `Usuario #${usuarioId}`,
+      cargo: persona?.cargoComision || persona?.cargo || "",
+      ingresosComisiones: 0,
+      tiposIngreso: new Set(),
+    });
+  }
+
+  const actual = mapa.get(usuarioId);
+  if (!actual.cargo && (persona?.cargoComision || persona?.cargo)) {
+    actual.cargo = persona.cargoComision || persona.cargo;
+  }
+  actual.ingresosComisiones = redondear(
+    actual.ingresosComisiones + Number(obtenerValorIngresoComision(persona, tipo) || 0),
+  );
+  actual.tiposIngreso.add(tipo);
+};
+
+const construirIngresosComisiones = (reporteComisiones) => {
+  const ingresosPorUsuario = new Map();
+  (reporteComisiones?.vendedores || []).forEach((vendedor) => {
+    acumularIngresoComision(ingresosPorUsuario, vendedor, "comercial");
+  });
+  (reporteComisiones?.logistica || []).forEach((persona) => {
+    acumularIngresoComision(ingresosPorUsuario, persona, "logistica");
+  });
+
+  return [...ingresosPorUsuario.values()]
+    .map((item) => ({
+      ...item,
+      tiposIngreso: [...item.tiposIngreso].sort(),
+    }))
+    .sort((left, right) => left.nombre.localeCompare(right.nombre, "es"));
+};
+
 const serializarAjuste = (row) => {
   const value = typeof row?.toJSON === "function" ? row.toJSON() : row || {};
   return {
     ...Object.fromEntries(
       CAMPOS_MANUALES.map((campo) => [campo, redondear(value[campo])]),
+    ),
+    ...Object.fromEntries(
+      CAMPOS_NOMINA_MANUALES.map((campo) => [campo, redondear(value[campo])]),
     ),
     ...Object.fromEntries(
       CAMPOS_CALCULADOS_MANUALES.map((campo) => [
@@ -264,15 +325,24 @@ const obtenerResumen = async (periodoValue) => {
       item.pagosCuotas,
     );
   });
-  (reporteComisiones?.vendedores || []).forEach((vendedor) =>
+  (reporteComisiones?.vendedores || []).forEach((vendedor) => {
     acumular(
       valoresPorUsuario,
       vendedor.usuarioId,
       "descuentosMeta",
       vendedor.total?.valorDescontar ??
         vendedor.resumenMensual?.totalValorDescontar,
-    ),
-  );
+    );
+  });
+  const ingresos = construirIngresosComisiones(reporteComisiones);
+  ingresos.forEach((row) => {
+    acumular(
+      valoresPorUsuario,
+      row.usuarioId,
+      "ingresosComisiones",
+      row.ingresosComisiones,
+    );
+  });
 
   const ajustesPorUsuario = new Map(
     ajustes.map((row) => [Number(row.usuarioId), serializarAjuste(row)]),
@@ -287,6 +357,7 @@ const obtenerResumen = async (periodoValue) => {
     const manuales = ajustesPorUsuario.get(Number(usuario.id)) ||
       serializarAjuste();
     const valoresCalculados = {
+      ingresosComisiones: redondear(automaticos.ingresosComisiones),
       descuentosMeta: redondear(automaticos.descuentosMeta),
       cajaGeneral: redondear(automaticos.cajaGeneral),
       entradas: redondear(automaticos.entradas),
@@ -320,6 +391,12 @@ const obtenerResumen = async (periodoValue) => {
       ),
     );
     const totalDescuentos = redondear(totalAnticipos + sumanPrestamos);
+    const totalNomina = redondear(
+      Number(valores.ingresosComisiones || 0) - totalDescuentos,
+    );
+    const totalPagarNomina = redondear(
+      totalNomina + Number(valores.sueldo || 0),
+    );
     return {
       usuarioId: Number(usuario.id),
       nombre: usuario.nombre || `Usuario #${usuario.id}`,
@@ -334,6 +411,8 @@ const obtenerResumen = async (periodoValue) => {
       totalAnticipos,
       sumanPrestamos,
       totalDescuentos,
+      totalNomina,
+      totalPagarNomina,
     };
   });
 
@@ -357,10 +436,21 @@ const obtenerResumen = async (periodoValue) => {
       planmovi: 0,
       prestamo: 0,
       mecanica: 0,
+      pagosLentes: 0,
+      sueldo: 0,
+      ingresosComisiones: 0,
       totalAnticipos: 0,
       sumanPrestamos: 0,
       totalDescuentos: 0,
+      totalNomina: 0,
+      totalPagarNomina: 0,
     },
+  );
+  totales.ingresosComisiones = redondear(
+    ingresos.reduce(
+      (total, row) => total + Number(row.ingresosComisiones || 0),
+      0,
+    ),
   );
 
   return {
@@ -368,6 +458,7 @@ const obtenerResumen = async (periodoValue) => {
     fechaInicio,
     fechaFin,
     registros,
+    ingresos,
     totales,
   };
 };
@@ -396,6 +487,12 @@ const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue) => 
         ...periodo,
         ...Object.fromEntries(
           CAMPOS_MANUALES.map((campo) => [
+            campo,
+            normalizarValor(registro[campo] ?? 0, campo),
+          ]),
+        ),
+        ...Object.fromEntries(
+          CAMPOS_NOMINA_MANUALES.map((campo) => [
             campo,
             normalizarValor(registro[campo] ?? 0, campo),
           ]),

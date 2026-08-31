@@ -9,6 +9,12 @@ const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro")
 const ControlFinancieroConciliacionCaja = require(
   "../models/ControlFinancieroConciliacionCaja",
 );
+const ControlFinancieroConciliacionManualCaja = require(
+  "../models/ControlFinancieroConciliacionManualCaja",
+);
+const ControlFinancieroConciliacionManualCajaDetalle = require(
+  "../models/ControlFinancieroConciliacionManualCajaDetalle",
+);
 const {
   aCentavos,
   calcularSimilitudNombres,
@@ -20,6 +26,7 @@ const {
 
 const ESTADOS_CIERRE_CONCILIABLES = ["CERRADO"];
 const UMBRAL_SIMILITUD_NOMBRE = 0.9;
+const MAX_OBSERVACION_MANUAL = 1000;
 
 const plano = (registro) =>
   registro?.get ? registro.get({ plain: true }) : registro;
@@ -55,6 +62,23 @@ const claveExacta = (fecha, cliente, montoCentavos) =>
   `${fecha}|${cliente}|${montoCentavos}`;
 
 const claveClienteFecha = (fecha, cliente) => `${fecha}|${cliente}`;
+
+const serializarConciliacionManual = (conciliacion) => {
+  if (!conciliacion) return null;
+  const item = plano(conciliacion);
+  return {
+    id: item.id ? String(item.id) : null,
+    cargaId: Number(item.cargaId) || null,
+    observacion: item.observacion || null,
+    activo: item.activo !== false,
+    relacionadoPor: Number(item.relacionadoPor) || null,
+    relacionadoEn: item.relacionadoEn || null,
+    deshechoPor: Number(item.deshechoPor) || null,
+    deshechoEn: item.deshechoEn || null,
+    motivoDeshacer: item.motivoDeshacer || null,
+    detalles: Array.isArray(item.detalles) ? item.detalles.map(plano) : [],
+  };
+};
 
 const esNombreCierreParcialCompatible = (clienteReporte, clienteCierre) => {
   const tokensReporte = normalizarNombre(clienteReporte)
@@ -198,6 +222,7 @@ const crearResultado = ({
   similitudCliente = null,
   montoCierreAsignadoCentavos = null,
   agrupacionCaja = null,
+  conciliacionManual = null,
 }) => {
   const montoReporteCentavos = registro?.montoReporteCentavos ?? 0;
   const montoMovimientoCentavos = movimiento?.montoCierreCentavos ?? 0;
@@ -230,6 +255,9 @@ const crearResultado = ({
     diferencia: desdeCentavos(diferenciaCentavos),
     estado,
     tipoCoincidencia,
+    conciliacionManual: conciliacionManual
+      ? serializarConciliacionManual(conciliacionManual)
+      : null,
     agrupacionCaja: agrupacionCaja
       ? {
           ...agrupacionCaja,
@@ -269,6 +297,142 @@ const crearResultado = ({
             formaPago: movimiento.formaPago || null,
             recibo: movimiento.recibo || null,
             agenciaId: Number(movimiento.cierre?.agenciaId) || null,
+          }
+        : null,
+    },
+  };
+};
+
+const serializarRegistroReporteManual = (registro) => ({
+  registroReporteId: Number(registro.id),
+  fecha: registro.fechaNormalizada || null,
+  fechaOriginal: registro.fecha || null,
+  cliente: registro.clienteReporte || null,
+  clienteOriginal: registro.cliente || null,
+  clienteNormalizado: registro.clienteNormalizado || null,
+  monto: desdeCentavos(registro.montoReporteCentavos || 0),
+  contrato: registro.contrato || null,
+  usuarioCobrador: registro.usuarioCobrador || null,
+  vendedor: registro.vendedor || null,
+  agencia: registro.agencia || null,
+  archivoOrigen: registro.archivoOrigen || null,
+});
+
+const serializarMovimientoCierreManual = (movimiento) => ({
+  movimientoCajaId: Number(movimiento.id),
+  cierreId: Number(movimiento.cierreId) || null,
+  fecha: movimiento.fechaNormalizada || null,
+  clienteId: Number(movimiento.clienteId) || null,
+  cliente: movimiento.clienteCierre || movimiento.entidad || null,
+  entidad: movimiento.entidad || null,
+  clienteNormalizado: movimiento.clienteNormalizado || null,
+  monto: desdeCentavos(movimiento.montoCierreCentavos || 0),
+  responsable: movimiento.responsable || null,
+  formaPago: movimiento.formaPago || null,
+  recibo: movimiento.recibo || null,
+  agenciaId: Number(movimiento.cierre?.agenciaId) || null,
+});
+
+const crearResultadoConciliacionManualGrupo = ({
+  conciliacionManual,
+  registrosReporte,
+  movimientosCierre,
+}) => {
+  const totalReporteCentavos = registrosReporte.reduce(
+    (total, registro) => total + (registro.montoReporteCentavos || 0),
+    0,
+  );
+  const totalCierreCentavos = movimientosCierre.reduce(
+    (total, movimiento) => total + (movimiento.montoCierreCentavos || 0),
+    0,
+  );
+  const tieneMontos =
+    registrosReporte.every((registro) =>
+      Number.isInteger(registro.montoReporteCentavos),
+    ) &&
+    movimientosCierre.every((movimiento) =>
+      Number.isInteger(movimiento.montoCierreCentavos),
+    );
+  const diferenciaCentavos = totalReporteCentavos - totalCierreCentavos;
+  const primerRegistro = registrosReporte[0] || null;
+  const primerMovimiento = movimientosCierre[0] || null;
+
+  return {
+    id: randomUUID(),
+    controlFinancieroRegistroId: primerRegistro?.id
+      ? Number(primerRegistro.id)
+      : null,
+    movimientoCajaId: primerMovimiento?.id ? Number(primerMovimiento.id) : null,
+    cierreId: primerMovimiento?.cierreId
+      ? Number(primerMovimiento.cierreId)
+      : null,
+    clienteId: primerMovimiento?.clienteId
+      ? Number(primerMovimiento.clienteId)
+      : null,
+    fechaReporteRegistro: primerRegistro?.fechaNormalizada || null,
+    fechaReporteOriginal: primerRegistro?.fecha || null,
+    fechaCierre: primerMovimiento?.fechaNormalizada || null,
+    clienteReporte: primerRegistro?.clienteReporte || null,
+    clienteCierre: primerMovimiento?.clienteCierre || null,
+    entidadCierre: primerMovimiento?.entidad || null,
+    clienteNormalizado:
+      primerRegistro?.clienteNormalizado ||
+      primerMovimiento?.clienteNormalizado ||
+      null,
+    montoReporte: desdeCentavos(totalReporteCentavos),
+    montoCierre: desdeCentavos(totalCierreCentavos),
+    totalReporte: desdeCentavos(totalReporteCentavos),
+    totalCierre: desdeCentavos(totalCierreCentavos),
+    diferencia: desdeCentavos(diferenciaCentavos),
+    estado: tieneMontos
+      ? diferenciaCentavos === 0
+        ? "COINCIDE"
+        : "MONTO_DIFERENTE"
+      : "PENDIENTE_REVISION",
+    tipoCoincidencia: "MANUAL",
+    conciliacionManualId: String(plano(conciliacionManual).id),
+    conciliacionManual: serializarConciliacionManual(conciliacionManual),
+    registrosReporte: registrosReporte.map(serializarRegistroReporteManual),
+    movimientosCierre: movimientosCierre.map(serializarMovimientoCierreManual),
+    similitudCliente:
+      primerRegistro && primerMovimiento
+        ? Number(
+            calcularSimilitudNombres(
+              primerRegistro.clienteReporte,
+              primerMovimiento.clienteCierre,
+            ).toFixed(4),
+          )
+        : null,
+    auditoria: {
+      reporte: primerRegistro
+        ? {
+            fechaOriginal: primerRegistro.fecha || null,
+            contrato: primerRegistro.contrato || null,
+            clienteOriginal: primerRegistro.cliente || null,
+            pagosCuotas: desdeCentavos(totalReporteCentavos),
+            usuarioCobrador: primerRegistro.usuarioCobrador || null,
+            vendedor: primerRegistro.vendedor || null,
+            agencia: primerRegistro.agencia || null,
+            archivoOrigen: primerRegistro.archivoOrigen || null,
+          }
+        : null,
+      cierre: primerMovimiento
+        ? {
+            cierreId: Number(primerMovimiento.cierreId),
+            movimientoCajaId: Number(primerMovimiento.id),
+            fechaCierre: primerMovimiento.fechaNormalizada,
+            clienteId: Number(primerMovimiento.clienteId) || null,
+            entidad: primerMovimiento.entidad || null,
+            clienteCanonico: primerMovimiento.clienteCierre || null,
+            valor: desdeCentavos(totalCierreCentavos),
+            valorMovimiento: desdeCentavos(
+              primerMovimiento.montoCierreCentavos || 0,
+            ),
+            esPagoAgrupado: movimientosCierre.length > 1,
+            responsable: primerMovimiento.responsable || null,
+            formaPago: primerMovimiento.formaPago || null,
+            recibo: primerMovimiento.recibo || null,
+            agenciaId: Number(primerMovimiento.cierre?.agenciaId) || null,
           }
         : null,
     },
@@ -321,6 +485,7 @@ const construirResultadosConciliacionCaja = ({
   cierres = [],
   movimientos = [],
   clientes = [],
+  relacionesManuales = [],
 }) => {
   const registrosReporte = prepararRegistrosReporte(registros);
   const movimientosCierre = prepararMovimientosCierre({
@@ -331,8 +496,66 @@ const construirResultadosConciliacionCaja = ({
   const resultadosPorRegistro = new Map();
   const movimientosValidos = new Map();
   const movimientosPendientesRevision = [];
+  const registrosPorId = new Map(
+    registrosReporte
+      .filter((registro) => Number.isInteger(Number(registro.id)))
+      .map((registro) => [Number(registro.id), registro]),
+  );
+  const movimientosPorId = new Map(
+    movimientosCierre
+      .filter((movimiento) => Number.isInteger(Number(movimiento.id)))
+      .map((movimiento) => [Number(movimiento.id), movimiento]),
+  );
+  const registrosConsumidosManual = new Set();
+  const movimientosConsumidosManual = new Set();
+  const resultadosManuales = [];
+
+  relacionesManuales.map(plano).forEach((conciliacionManual) => {
+    if (!conciliacionManual || conciliacionManual.activo === false) return;
+    const detalles = Array.isArray(conciliacionManual.detalles)
+      ? conciliacionManual.detalles.map(plano)
+      : [];
+    const registrosGrupo = detalles
+      .filter((detalle) => detalle.tipo === "REPORTE")
+      .map((detalle) => registrosPorId.get(Number(detalle.registroReporteId)))
+      .filter(Boolean);
+    const movimientosGrupo = detalles
+      .filter((detalle) => detalle.tipo === "CIERRE")
+      .map((detalle) => movimientosPorId.get(Number(detalle.movimientoCajaId)))
+      .filter(Boolean);
+
+    if (
+      !registrosGrupo.length ||
+      !movimientosGrupo.length ||
+      registrosGrupo.some((registro) =>
+        registrosConsumidosManual.has(registro._key),
+      ) ||
+      movimientosGrupo.some((movimiento) =>
+        movimientosConsumidosManual.has(Number(movimiento.id)),
+      )
+    ) {
+      return;
+    }
+
+    registrosGrupo.forEach((registro) =>
+      registrosConsumidosManual.add(registro._key),
+    );
+    movimientosGrupo.forEach((movimiento) =>
+      movimientosConsumidosManual.add(Number(movimiento.id)),
+    );
+    resultadosManuales.push(
+      crearResultadoConciliacionManualGrupo({
+        conciliacionManual,
+        registrosReporte: registrosGrupo,
+        movimientosCierre: movimientosGrupo,
+      }),
+    );
+  });
 
   movimientosCierre.forEach((movimiento) => {
+    if (movimientosConsumidosManual.has(Number(movimiento.id))) {
+      return;
+    }
     if (
       !movimiento.fechaNormalizada ||
       !movimiento.clienteNormalizado ||
@@ -362,6 +585,9 @@ const construirResultadosConciliacionCaja = ({
 
   const registrosSinCoincidenciaExacta = [];
   registrosReporte.forEach((registro) => {
+    if (registrosConsumidosManual.has(registro._key)) {
+      return;
+    }
     if (!registro.fechaNormalizada) {
       resultadosPorRegistro.set(
         registro._key,
@@ -737,9 +963,13 @@ const construirResultadosConciliacionCaja = ({
     );
   });
 
-  const resultados = registrosReporte.map((registro) =>
-    resultadosPorRegistro.get(registro._key),
-  );
+  const resultados = [
+    ...resultadosManuales,
+    ...registrosReporte
+      .filter((registro) => !registrosConsumidosManual.has(registro._key))
+      .map((registro) => resultadosPorRegistro.get(registro._key))
+      .filter(Boolean),
+  ];
   movimientosPendientesRevision.forEach((movimiento) => {
     resultados.push(
       crearResultado({ movimiento, estado: "PENDIENTE_REVISION" }),
@@ -804,6 +1034,21 @@ const obtenerUltimaConciliacionCaja = async (cargaId, options = {}) =>
   ControlFinancieroConciliacionCaja.findOne({
     where: { cargaId },
     order: [["createdAt", "DESC"], ["id", "DESC"]],
+    transaction: options.transaction,
+  });
+
+const listarConciliacionesManualesActivas = (cargaId, options = {}) =>
+  ControlFinancieroConciliacionManualCaja.findAll({
+    where: { cargaId, activo: true },
+    include: [
+      {
+        model: ControlFinancieroConciliacionManualCajaDetalle,
+        as: "detalles",
+        where: { activo: true },
+        required: false,
+      },
+    ],
+    order: [["id", "ASC"]],
     transaction: options.transaction,
   });
 
@@ -906,11 +1151,15 @@ const conciliarCargaCaja = async ({
           transaction,
         })
       : [];
+    const relacionesManuales = await listarConciliacionesManualesActivas(id, {
+      transaction,
+    });
     const calculo = construirResultadosConciliacionCaja({
       registros,
       cierres,
       movimientos,
       clientes,
+      relacionesManuales,
     });
     const conciliacion = await ControlFinancieroConciliacionCaja.create(
       {
@@ -982,6 +1231,607 @@ const listarHistorialConciliacionCaja = async (cargaId, limite = 20) => {
     limit,
   });
   return ejecuciones.map(serializarConciliacionCaja);
+};
+
+const assertPositiveId = (value, message) => {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id < 1) {
+    throw errorServicio(message);
+  }
+  return id;
+};
+
+const limpiarObservacion = (value, label = "La observacion") => {
+  const observacion = String(value || "").trim();
+  if (observacion.length > MAX_OBSERVACION_MANUAL) {
+    throw errorServicio(`${label} no puede superar 1000 caracteres.`);
+  }
+  return observacion;
+};
+
+const obtenerItemReporte = (resultado) => ({
+  origen: "REPORTE",
+  registroReporteId: Number(resultado.controlFinancieroRegistroId) || null,
+  movimientoCajaId: null,
+  cliente: resultado.clienteReporte || "-",
+  monto: Number(resultado.montoReporte || 0),
+  fecha: resultado.fechaReporteRegistro || null,
+  tipo: "Reporte",
+  contrato: resultado.auditoria?.reporte?.contrato || null,
+  cobrador: resultado.auditoria?.reporte?.usuarioCobrador || null,
+  vendedor: resultado.auditoria?.reporte?.vendedor || null,
+  agencia: resultado.auditoria?.reporte?.agencia || null,
+  archivoOrigen: resultado.auditoria?.reporte?.archivoOrigen || null,
+});
+
+const obtenerItemCierre = (resultado) => ({
+  origen: "CIERRE",
+  registroReporteId: null,
+  movimientoCajaId: Number(resultado.movimientoCajaId) || null,
+  cliente: resultado.clienteCierre || resultado.entidadCierre || "-",
+  monto: Number(resultado.montoCierre || 0),
+  fecha: resultado.fechaCierre || null,
+  tipo: "Cierre",
+  cierreId: Number(resultado.cierreId) || null,
+  clienteId: Number(resultado.clienteId) || null,
+  entidad: resultado.entidadCierre || null,
+  responsable: resultado.auditoria?.cierre?.responsable || null,
+  formaPago: resultado.auditoria?.cierre?.formaPago || null,
+  recibo: resultado.auditoria?.cierre?.recibo || null,
+  agenciaId: Number(resultado.auditoria?.cierre?.agenciaId) || null,
+});
+
+const textoBusquedaManual = (item) =>
+  [
+    item.cliente,
+    item.monto,
+    item.fecha,
+    item.recibo,
+    item.cierreId,
+    item.contrato,
+    item.agencia,
+    item.agenciaId,
+    item.formaPago,
+    item.responsable,
+    item.archivoOrigen,
+  ]
+    .map((value) => String(value || "").toLocaleLowerCase("es"))
+    .join(" ");
+
+const puntuarSugerenciaManual = (seleccionado, candidato) => {
+  const similitudNombre = calcularSimilitudNombres(
+    seleccionado.cliente,
+    candidato.cliente,
+  );
+  const mismoMonto =
+    aCentavos(seleccionado.monto) !== null &&
+    aCentavos(seleccionado.monto) === aCentavos(candidato.monto);
+  const mismaFecha =
+    Boolean(seleccionado.fecha) && seleccionado.fecha === candidato.fecha;
+  const mismoCierre =
+    Boolean(seleccionado.cierreId) &&
+    Number(seleccionado.cierreId) === Number(candidato.cierreId);
+  const mismaAgencia =
+    Boolean(seleccionado.agencia || seleccionado.agenciaId) &&
+    normalizarNombre(seleccionado.agencia || seleccionado.agenciaId) ===
+      normalizarNombre(candidato.agencia || candidato.agenciaId);
+  const mismaFormaPago =
+    Boolean(seleccionado.formaPago) &&
+    seleccionado.formaPago === candidato.formaPago;
+  const mismoRecibo =
+    Boolean(seleccionado.recibo) && seleccionado.recibo === candidato.recibo;
+
+  return {
+    mismoMonto,
+    similitudNombre,
+    mismaFecha,
+    mismoCierre,
+    mismaAgencia,
+    mismaFormaPago,
+    mismoRecibo,
+  };
+};
+
+const ordenarSugerenciasManual = (seleccionado, candidatos) =>
+  candidatos
+    .map((candidato) => ({
+      ...candidato,
+      score: puntuarSugerenciaManual(seleccionado, candidato),
+    }))
+    .sort((left, right) => {
+      const puntajeBooleano = (item) =>
+        Number(item.score.mismoMonto) * 1000 +
+        Number(item.score.mismaFecha) * 100 +
+        Number(item.score.mismoCierre) * 20 +
+        Number(item.score.mismaAgencia) * 10 +
+        Number(item.score.mismaFormaPago) * 5 +
+        Number(item.score.mismoRecibo) * 3;
+      return (
+        puntajeBooleano(right) - puntajeBooleano(left) ||
+        right.score.similitudNombre - left.score.similitudNombre ||
+        String(left.cliente || "").localeCompare(String(right.cliente || ""), "es") ||
+        Number(left.registroReporteId || left.movimientoCajaId || 0) -
+          Number(right.registroReporteId || right.movimientoCajaId || 0)
+      );
+    });
+
+const obtenerItemsDisponiblesManual = (resultados) => ({
+  registrosReporte: resultados
+    .filter(
+      (resultado) =>
+        resultado.estado === "NO_EN_CIERRE" &&
+        resultado.controlFinancieroRegistroId,
+    )
+    .map(obtenerItemReporte),
+  movimientosCierre: resultados
+    .filter(
+      (resultado) =>
+        resultado.estado === "SOLO_EN_CIERRE" && resultado.movimientoCajaId,
+    )
+    .map(obtenerItemCierre),
+});
+
+const normalizarIdsSeleccionados = (values, message) => {
+  const fuente = Array.isArray(values)
+    ? values
+    : values === null || values === undefined
+      ? []
+      : [values];
+  const ids = ordenarNumeros(fuente);
+  if (!ids.length) {
+    throw errorServicio(message);
+  }
+  return ids;
+};
+
+const buscarCombinacionesPorMonto = ({
+  seleccionado,
+  candidatos,
+  montoObjetivoCentavos,
+  maxElementos = 3,
+  maxCandidatos = 30,
+}) => {
+  if (!Number.isInteger(montoObjetivoCentavos) || montoObjetivoCentavos <= 0) {
+    return [];
+  }
+
+  const candidatosOrdenados = ordenarSugerenciasManual(
+    seleccionado,
+    candidatos,
+  )
+    .filter((item) => {
+      const monto = aCentavos(item.monto);
+      return Number.isInteger(monto) && monto > 0 && monto <= montoObjetivoCentavos;
+    })
+    .slice(0, maxCandidatos);
+  const combinaciones = [];
+
+  const buscar = (inicio, acumulados, totalCentavos) => {
+    if (totalCentavos === montoObjetivoCentavos && acumulados.length > 1) {
+      combinaciones.push([...acumulados]);
+      return combinaciones.length >= 5;
+    }
+    if (
+      totalCentavos >= montoObjetivoCentavos ||
+      acumulados.length >= maxElementos
+    ) {
+      return false;
+    }
+
+    for (let index = inicio; index < candidatosOrdenados.length; index += 1) {
+      const candidato = candidatosOrdenados[index];
+      const monto = aCentavos(candidato.monto);
+      acumulados.push(candidato);
+      const detener = buscar(index + 1, acumulados, totalCentavos + monto);
+      acumulados.pop();
+      if (detener) return true;
+    }
+    return false;
+  };
+
+  buscar(0, [], 0);
+
+  return combinaciones.map((items) => ({
+    lado: items[0]?.origen || null,
+    total: desdeCentavos(montoObjetivoCentavos),
+    items,
+  }));
+};
+
+const listarSugerenciasConciliacionCajaManual = async ({
+  cargaId,
+  origen,
+  registroReporteId,
+  movimientoCajaId,
+  busqueda,
+}) => {
+  const id = assertPositiveId(cargaId, "Carga de control financiero no valida.");
+  const origenNormalizado = String(origen || "").trim().toUpperCase();
+  const ultima = await obtenerUltimaConciliacionCaja(id);
+  if (!ultima) {
+    throw errorServicio(
+      "La carga aun no tiene una conciliacion de caja.",
+      409,
+      "CONCILIACION_CAJA_NO_EXISTE",
+    );
+  }
+
+  const conciliacion = serializarConciliacionCaja(ultima);
+  const resultados = conciliacion.resultados || [];
+  const esReporte = origenNormalizado === "REPORTE";
+  const esCierre = origenNormalizado === "CIERRE";
+  if (!esReporte && !esCierre) {
+    throw errorServicio("El origen de la conciliacion manual no es valido.");
+  }
+
+  const disponibles = obtenerItemsDisponiblesManual(resultados);
+  const seleccionado = esReporte
+    ? disponibles.registrosReporte.find(
+        (item) => Number(item.registroReporteId) === Number(registroReporteId),
+      )
+    : disponibles.movimientosCierre.find(
+        (item) => Number(item.movimientoCajaId) === Number(movimientoCajaId),
+      );
+
+  if (!seleccionado) {
+    throw errorServicio(
+      "El registro seleccionado ya no esta disponible para conciliacion manual.",
+      409,
+      "REGISTRO_NO_DISPONIBLE",
+    );
+  }
+
+  const termino = String(busqueda || "").trim().toLocaleLowerCase("es");
+  const filtrar = (items) =>
+    termino ? items.filter((item) => textoBusquedaManual(item).includes(termino)) : items;
+  const registrosReporte = filtrar(disponibles.registrosReporte);
+  const movimientosCierre = filtrar(disponibles.movimientosCierre);
+  const montoObjetivoCentavos = aCentavos(seleccionado.monto);
+  const sugerenciasCombinaciones = buscarCombinacionesPorMonto({
+    seleccionado,
+    candidatos: esReporte ? movimientosCierre : registrosReporte,
+    montoObjetivoCentavos,
+  });
+
+  return {
+    conciliacionId: conciliacion.id,
+    origen: origenNormalizado,
+    seleccionado,
+    seleccionInicial: {
+      registroReporteIds: esReporte ? [Number(seleccionado.registroReporteId)] : [],
+      movimientoCajaIds: esCierre ? [Number(seleccionado.movimientoCajaId)] : [],
+    },
+    registrosReporte: ordenarSugerenciasManual(seleccionado, registrosReporte),
+    movimientosCierre: ordenarSugerenciasManual(seleccionado, movimientosCierre),
+    sugerenciasCombinaciones,
+  };
+};
+
+const validarDisponibilidadEnUltimaConciliacion = async ({
+  cargaId,
+  registroReporteIds,
+  movimientoCajaIds,
+  transaction,
+}) => {
+  const ultima = await obtenerUltimaConciliacionCaja(cargaId, { transaction });
+  if (!ultima) {
+    throw errorServicio(
+      "Ejecuta primero la conciliacion de caja antes de conciliar manualmente.",
+      409,
+      "CONCILIACION_CAJA_NO_EXISTE",
+    );
+  }
+
+  const { registrosReporte, movimientosCierre } = obtenerItemsDisponiblesManual(
+    serializarConciliacionCaja(ultima).resultados || [],
+  );
+  const reportesDisponibles = new Set(
+    registrosReporte.map((item) => Number(item.registroReporteId)),
+  );
+  const movimientosDisponibles = new Set(
+    movimientosCierre.map((item) => Number(item.movimientoCajaId)),
+  );
+  const faltaReporte = registroReporteIds.some(
+    (registroId) => !reportesDisponibles.has(registroId),
+  );
+  const faltaMovimiento = movimientoCajaIds.some(
+    (movimientoId) => !movimientosDisponibles.has(movimientoId),
+  );
+
+  if (faltaReporte || faltaMovimiento) {
+    throw errorServicio(
+      "Los registros seleccionados ya no estan disponibles para conciliacion manual.",
+      409,
+      "REGISTROS_NO_DISPONIBLES",
+    );
+  }
+};
+
+const crearConciliacionManualCaja = async ({
+  cargaId,
+  registroReporteIds,
+  movimientoCajaIds,
+  registroReporteId,
+  movimientoCajaId,
+  observacion,
+  usuarioId,
+}) => {
+  const id = assertPositiveId(cargaId, "Carga de control financiero no valida.");
+  const reporteIds = normalizarIdsSeleccionados(
+    registroReporteIds || registroReporteId,
+    "Selecciona al menos un registro del reporte.",
+  );
+  const movimientoIds = normalizarIdsSeleccionados(
+    movimientoCajaIds || movimientoCajaId,
+    "Selecciona al menos un movimiento del cierre.",
+  );
+  const usuario = assertPositiveId(
+    usuarioId,
+    "No se pudo identificar al usuario que concilia manualmente.",
+  );
+  const observacionLimpia = limpiarObservacion(observacion);
+
+  await sequelize.transaction(async (transaction) => {
+    await sequelize.query(
+      "SELECT pg_advisory_xact_lock(hashtext('conciliacion_caja'), :cargaId)",
+      { replacements: { cargaId: id }, transaction },
+    );
+
+    const carga = await ControlFinancieroCarga.findByPk(id, {
+      attributes: ["id", "estado"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!carga) {
+      throw errorServicio(
+        "Carga de control financiero no encontrada.",
+        404,
+        "CARGA_NO_ENCONTRADA",
+      );
+    }
+    if (plano(carga).estado !== "ACTIVA") {
+      throw errorServicio(
+        "Solo se pueden crear conciliaciones manuales en cargas activas.",
+        409,
+        "CARGA_NO_ACTIVA",
+      );
+    }
+
+    const registros = await ControlFinancieroRegistro.findAll({
+      where: { id: { [Op.in]: reporteIds } },
+      attributes: ["id", "cargaId", "tipoRegistro", "pagosCuotas"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (registros.length !== reporteIds.length) {
+      throw errorServicio(
+        "Uno o mas registros del reporte no existen.",
+        404,
+        "REGISTRO_REPORTE_NO_ENCONTRADO",
+      );
+    }
+    registros.map(plano).forEach((registro) => {
+      if (Number(registro.cargaId) !== id) {
+        throw errorServicio(
+          "Todos los registros del reporte deben pertenecer a la carga seleccionada.",
+          404,
+          "REGISTRO_REPORTE_NO_ENCONTRADO",
+        );
+      }
+      if (registro.tipoRegistro !== "CAJA") {
+        throw errorServicio(
+          "La conciliacion manual de caja solo aplica a registros CAJA.",
+          400,
+          "REGISTRO_REPORTE_INVALIDO",
+        );
+      }
+    });
+
+    const movimientos = await MovimientoCaja.findAll({
+      where: { id: { [Op.in]: movimientoIds } },
+      attributes: ["id", "cierreId", "detalle", "valor"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (movimientos.length !== movimientoIds.length) {
+      throw errorServicio(
+        "Uno o mas movimientos de cierre no existen.",
+        404,
+        "MOVIMIENTO_CAJA_NO_ENCONTRADO",
+      );
+    }
+    movimientos.map(plano).forEach((movimiento) => {
+      if (normalizarNombre(movimiento.detalle) !== "CUOTA") {
+        throw errorServicio(
+          "La conciliacion manual de caja solo aplica a movimientos CUOTA.",
+          400,
+          "MOVIMIENTO_CAJA_INVALIDO",
+        );
+      }
+    });
+
+    const cierreIds = ordenarNumeros(
+      movimientos.map((movimiento) => plano(movimiento).cierreId),
+    );
+    const cierres = await CierreCaja.findAll({
+      where: { id: { [Op.in]: cierreIds } },
+      attributes: ["id", "estadoCierre"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (
+      cierres.length !== cierreIds.length ||
+      cierres
+        .map(plano)
+        .some(
+          (cierre) =>
+            !ESTADOS_CIERRE_CONCILIABLES.includes(cierre.estadoCierre),
+        )
+    ) {
+      throw errorServicio(
+        "Todos los movimientos deben pertenecer a cierres cerrados.",
+        409,
+        "CIERRE_NO_CONCILIABLE",
+      );
+    }
+
+    const existente = await ControlFinancieroConciliacionManualCajaDetalle.findOne({
+      where: {
+        activo: true,
+        [Op.or]: [
+          { tipo: "REPORTE", registroReporteId: { [Op.in]: reporteIds } },
+          { tipo: "CIERRE", movimientoCajaId: { [Op.in]: movimientoIds } },
+        ],
+      },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (existente) {
+      throw errorServicio(
+        "Uno de los registros ya tiene una conciliacion manual activa.",
+        409,
+        "CONCILIACION_MANUAL_DUPLICADA",
+      );
+    }
+
+    await validarDisponibilidadEnUltimaConciliacion({
+      cargaId: id,
+      registroReporteIds: reporteIds,
+      movimientoCajaIds: movimientoIds,
+      transaction,
+    });
+
+    const conciliacionManual = await ControlFinancieroConciliacionManualCaja.create(
+      {
+        cargaId: id,
+        observacion: observacionLimpia || null,
+        activo: true,
+        relacionadoPor: usuario,
+        relacionadoEn: new Date(),
+      },
+      { transaction },
+    );
+    const conciliacionManualId = plano(conciliacionManual).id;
+    const registrosPorId = new Map(
+      registros.map((registro) => [Number(plano(registro).id), plano(registro)]),
+    );
+    const movimientosPorId = new Map(
+      movimientos.map((movimiento) => [
+        Number(plano(movimiento).id),
+        plano(movimiento),
+      ]),
+    );
+
+    await ControlFinancieroConciliacionManualCajaDetalle.bulkCreate(
+      [
+        ...reporteIds.map((registroId) => ({
+          conciliacionManualId,
+          tipo: "REPORTE",
+          registroReporteId: registroId,
+          movimientoCajaId: null,
+          monto: desdeCentavos(
+            aCentavos(registrosPorId.get(registroId)?.pagosCuotas) || 0,
+          ),
+          activo: true,
+        })),
+        ...movimientoIds.map((movimientoId) => ({
+          conciliacionManualId,
+          tipo: "CIERRE",
+          registroReporteId: null,
+          movimientoCajaId: movimientoId,
+          monto: desdeCentavos(
+            aCentavos(movimientosPorId.get(movimientoId)?.valor) || 0,
+          ),
+          activo: true,
+        })),
+      ],
+      { transaction },
+    );
+  });
+
+  return {
+    conciliacion: await conciliarCargaCaja({
+      cargaId: id,
+      origen: "CONCILIACION_MANUAL",
+      usuarioId: usuario,
+    }),
+  };
+};
+
+const deshacerConciliacionManualCaja = async ({
+  cargaId,
+  conciliacionManualId,
+  motivoDeshacer,
+  usuarioId,
+}) => {
+  const id = assertPositiveId(cargaId, "Carga de control financiero no valida.");
+  const conciliacionPk = assertPositiveId(
+    conciliacionManualId,
+    "La conciliacion manual no es valida.",
+  );
+  const usuario = assertPositiveId(
+    usuarioId,
+    "No se pudo identificar al usuario que deshace la conciliacion manual.",
+  );
+  const motivo = limpiarObservacion(motivoDeshacer, "El motivo de deshacer");
+  if (!motivo) {
+    throw errorServicio("El motivo de deshacer es obligatorio.");
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    await sequelize.query(
+      "SELECT pg_advisory_xact_lock(hashtext('conciliacion_caja'), :cargaId)",
+      { replacements: { cargaId: id }, transaction },
+    );
+
+    const conciliacionManual =
+      await ControlFinancieroConciliacionManualCaja.findByPk(conciliacionPk, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+    if (
+      !conciliacionManual ||
+      Number(plano(conciliacionManual).cargaId) !== id
+    ) {
+      throw errorServicio(
+        "Conciliacion manual no encontrada.",
+        404,
+        "CONCILIACION_MANUAL_NO_ENCONTRADA",
+      );
+    }
+    if (plano(conciliacionManual).activo === false) {
+      throw errorServicio(
+        "La conciliacion manual ya fue deshecha.",
+        409,
+        "CONCILIACION_MANUAL_INACTIVA",
+      );
+    }
+
+    await conciliacionManual.update(
+      {
+        activo: false,
+        deshechoPor: usuario,
+        deshechoEn: new Date(),
+        motivoDeshacer: motivo,
+      },
+      { transaction },
+    );
+    await ControlFinancieroConciliacionManualCajaDetalle.update(
+      { activo: false },
+      {
+        where: { conciliacionManualId: conciliacionPk },
+        transaction,
+      },
+    );
+  });
+
+  return {
+    conciliacion: await conciliarCargaCaja({
+      cargaId: id,
+      origen: "DESHACER_CONCILIACION_MANUAL",
+      usuarioId: usuario,
+    }),
+  };
 };
 
 const patronesFechaReporte = (fecha) => {
@@ -1061,7 +1911,10 @@ module.exports = {
   conciliarCargaCaja,
   conciliarCargasCajaPorFecha,
   construirResultadosConciliacionCaja,
+  crearConciliacionManualCaja,
+  deshacerConciliacionManualCaja,
   listarHistorialConciliacionCaja,
+  listarSugerenciasConciliacionCajaManual,
   obtenerConciliacionCajaCarga,
   prepararMovimientosCierre,
   prepararRegistrosReporte,

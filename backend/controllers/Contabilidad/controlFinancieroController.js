@@ -10,7 +10,10 @@ const {
 } = require("../../services/conciliacionEntradasService");
 const {
   conciliarCargaCaja,
+  crearConciliacionManualCaja,
+  deshacerConciliacionManualCaja,
   listarHistorialConciliacionCaja,
+  listarSugerenciasConciliacionCajaManual,
   obtenerConciliacionCajaCarga,
 } = require("../../services/conciliacionCuotasCajaService");
 const {
@@ -772,6 +775,72 @@ exports.obtenerHistorialConciliacionCaja = async (req, res) => {
       error,
       res,
       "No se pudo cargar el historial de conciliacion de caja.",
+    );
+  }
+};
+
+exports.listarSugerenciasConciliacionManualCaja = async (req, res) => {
+  try {
+    const resultado = await listarSugerenciasConciliacionCajaManual({
+      cargaId: req.params.cargaId,
+      origen: req.query.origen,
+      registroReporteId: req.query.registroReporteId,
+      movimientoCajaId: req.query.movimientoCajaId,
+      busqueda: req.query.busqueda,
+    });
+    return res.json({ ok: true, ...resultado });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudieron cargar las sugerencias de conciliacion manual.",
+    );
+  }
+};
+
+exports.crearConciliacionManualCaja = async (req, res) => {
+  try {
+    const resultado = await crearConciliacionManualCaja({
+      cargaId: req.params.cargaId,
+      registroReporteIds: req.body?.registroReporteIds,
+      movimientoCajaIds: req.body?.movimientoCajaIds,
+      registroReporteId: req.body?.registroReporteId,
+      movimientoCajaId: req.body?.movimientoCajaId,
+      observacion: req.body?.observacion,
+      usuarioId: req.user?.id,
+    });
+    return res.json({
+      ok: true,
+      message: "La conciliacion manual de caja fue confirmada.",
+      conciliacion: resultado.conciliacion,
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo confirmar la conciliacion manual de caja.",
+    );
+  }
+};
+
+exports.deshacerConciliacionManualCaja = async (req, res) => {
+  try {
+    const resultado = await deshacerConciliacionManualCaja({
+      cargaId: req.params.cargaId,
+      conciliacionManualId: req.params.conciliacionManualId,
+      motivoDeshacer: req.body?.motivo,
+      usuarioId: req.user?.id,
+    });
+    return res.json({
+      ok: true,
+      message: "La conciliacion manual de caja fue deshecha.",
+      conciliacion: resultado.conciliacion,
+    });
+  } catch (error) {
+    return responderErrorConciliacion(
+      error,
+      res,
+      "No se pudo deshacer la conciliacion manual de caja.",
     );
   }
 };

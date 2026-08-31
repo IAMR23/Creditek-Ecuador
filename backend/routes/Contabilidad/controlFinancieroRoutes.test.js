@@ -24,6 +24,11 @@ jest.mock("../../controllers/Contabilidad/controlFinancieroController", () => ({
     res.json({ accion: "responsables" }),
   actualizarPagoEntrada: (req, res) =>
     res.json({ accion: "actualizar-pago", registroId: req.params.registroId }),
+  actualizarGestionCajaNoEnCierre: (req, res) =>
+    res.json({
+      accion: "actualizar-gestion-caja",
+      registroId: req.params.registroId,
+    }),
   obtenerConciliacionEntradas: (req, res) =>
     res.json({ accion: "obtener-conciliacion", cargaId: req.params.cargaId }),
   reconciliarEntradas: (req, res) =>
@@ -38,6 +43,25 @@ jest.mock("../../controllers/Contabilidad/controlFinancieroController", () => ({
     res.json({ accion: "obtener-conciliacion-caja", cargaId: req.params.cargaId }),
   obtenerHistorialConciliacionCaja: (req, res) =>
     res.json({ accion: "historial-conciliacion-caja", cargaId: req.params.cargaId }),
+  listarSugerenciasConciliacionManualCaja: (req, res) =>
+    res.json({
+      accion: "sugerencias-conciliacion-manual-caja",
+      cargaId: req.params.cargaId,
+      origen: req.query.origen,
+    }),
+  crearConciliacionManualCaja: (req, res) =>
+    res.json({
+      accion: "crear-conciliacion-manual-caja",
+      cargaId: req.params.cargaId,
+      registroReporteIds: req.body.registroReporteIds,
+      movimientoCajaIds: req.body.movimientoCajaIds,
+    }),
+  deshacerConciliacionManualCaja: (req, res) =>
+    res.json({
+      accion: "deshacer-conciliacion-manual-caja",
+      cargaId: req.params.cargaId,
+      conciliacionManualId: req.params.conciliacionManualId,
+    }),
   reconciliarCaja: (req, res) =>
     res.json({ accion: "reconciliar-caja", cargaId: req.params.cargaId }),
 }));
@@ -137,6 +161,42 @@ describe("controlFinancieroRoutes conciliacion de entradas", () => {
     expect(consulta.body.accion).toBe("obtener-conciliacion-caja");
     expect(historial.body.accion).toBe("historial-conciliacion-caja");
     expect(reconciliar.body.accion).toBe("reconciliar-caja");
+  });
+
+  test("expone conciliacion manual de caja en la misma ruta protegida", async () => {
+    const app = crearApp();
+    const sugerencias = await request(app)
+      .get(
+        "/api/contabilidad/control-financiero/cargas/25/conciliacion-caja/manual/sugerencias?origen=REPORTE&registroReporteId=1",
+      )
+      .expect(200);
+    const crear = await request(app)
+      .post("/api/contabilidad/control-financiero/cargas/25/conciliacion-caja/manual")
+      .send({ registroReporteIds: [1], movimientoCajaIds: [101] })
+      .expect(200);
+    const deshacer = await request(app)
+      .patch(
+        "/api/contabilidad/control-financiero/cargas/25/conciliacion-caja/manual/900/deshacer",
+      )
+      .send({ motivo: "Error" })
+      .expect(200);
+
+    expect(sugerencias.body).toEqual({
+      accion: "sugerencias-conciliacion-manual-caja",
+      cargaId: "25",
+      origen: "REPORTE",
+    });
+    expect(crear.body).toEqual({
+      accion: "crear-conciliacion-manual-caja",
+      cargaId: "25",
+      registroReporteIds: [1],
+      movimientoCajaIds: [101],
+    });
+    expect(deshacer.body).toEqual({
+      accion: "deshacer-conciliacion-manual-caja",
+      cargaId: "25",
+      conciliacionManualId: "900",
+    });
   });
 
   test("expone la cobertura de reportes antes de la ruta de detalle", async () => {

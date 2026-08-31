@@ -8,7 +8,16 @@ const Usuario = require("../models/Usuario");
 const { Op } = require("sequelize");
 
 const MAX_VALOR = 9999999999.99;
-const SECCIONES = ["ENTRADAS", "CAJAS", "TRANSFERENCIAS", "DESCUENTOS"];
+const SECCIONES = [
+  "ENTRADAS",
+  "CAJAS",
+  "TRANSFERENCIAS",
+  "DESCUENTOS",
+  "JEFES",
+  "MULTAS_FACTURACION",
+  "OTROS",
+];
+const SECCIONES_CON_FECHA = new Set(["JEFES"]);
 const TIPOS_VENTA_CONTROL_FINANCIERO = ["VENTA_TV", "VENTA_CELULAR"];
 
 const crearError = (message, statusCode = 400) => {
@@ -43,6 +52,28 @@ const normalizarObservacion = (value) => {
   return observacion;
 };
 
+const normalizarFecha = (value, { requerida = false } = {}) => {
+  const fecha = String(value || "").trim();
+  if (!fecha) {
+    if (requerida) {
+      throw crearError("La fecha es requerida");
+    }
+    return null;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw crearError("La fecha debe tener formato YYYY-MM-DD");
+  }
+
+  const parsed = new Date(`${fecha}T00:00:00Z`);
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== fecha
+  ) {
+    throw crearError("La fecha no es valida");
+  }
+  return fecha;
+};
+
 const normalizarSeccion = (value) => {
   const seccion = String(value || "").trim().toUpperCase();
   if (!SECCIONES.includes(seccion)) {
@@ -58,6 +89,7 @@ const serializarEntrada = (value) => {
     origen: entrada.origen || "MANUAL",
     valor: Number(entrada.valor || 0),
     observacion: entrada.observacion || "",
+    fecha: entrada.fecha || "",
   };
 };
 
@@ -178,8 +210,16 @@ const filtrarCajasNoEnCierre = async (registros) => {
 };
 
 const ordenarPorActividad = (a, b) => {
-  const tiempoA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-  const tiempoB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+  const baseA =
+    a.seccion === "JEFES" && a.fecha
+      ? `${a.fecha}T12:00:00Z`
+      : a.updatedAt || a.createdAt || 0;
+  const baseB =
+    b.seccion === "JEFES" && b.fecha
+      ? `${b.fecha}T12:00:00Z`
+      : b.updatedAt || b.createdAt || 0;
+  const tiempoA = new Date(baseA).getTime();
+  const tiempoB = new Date(baseB).getTime();
   const fechaA = Number.isNaN(tiempoA) ? 0 : tiempoA;
   const fechaB = Number.isNaN(tiempoB) ? 0 : tiempoB;
   if (fechaA !== fechaB) return fechaB - fechaA;
@@ -347,7 +387,7 @@ const obtenerRegistros = async (seccionValue) => {
 
 const crearRegistro = async (
   seccionValue,
-  { usuarioId: usuarioIdValue, valor, observacion },
+  { usuarioId: usuarioIdValue, valor, observacion, fecha },
   registradoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
@@ -355,6 +395,9 @@ const crearRegistro = async (
   const registradoPorId = normalizarId(registradoPor, "El usuario registrador");
   const valorNormalizado = normalizarValor(valor);
   const observacionNormalizada = normalizarObservacion(observacion);
+  const fechaNormalizada = normalizarFecha(fecha, {
+    requerida: SECCIONES_CON_FECHA.has(seccion),
+  });
 
   const usuario = await Usuario.findOne({
     where: { id: usuarioId, activo: true },
@@ -368,6 +411,7 @@ const crearRegistro = async (
     usuarioId,
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
+    fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
     seccion,
     registradoPorId,
   });
@@ -377,7 +421,7 @@ const crearRegistro = async (
 const actualizarRegistro = async (
   seccionValue,
   idValue,
-  { usuarioId: usuarioIdValue, valor, observacion },
+  { usuarioId: usuarioIdValue, valor, observacion, fecha },
   actualizadoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
@@ -389,6 +433,9 @@ const actualizarRegistro = async (
   );
   const valorNormalizado = normalizarValor(valor);
   const observacionNormalizada = normalizarObservacion(observacion);
+  const fechaNormalizada = normalizarFecha(fecha, {
+    requerida: SECCIONES_CON_FECHA.has(seccion),
+  });
 
   if (Number(registro.usuarioId) !== usuarioId) {
     const usuario = await Usuario.findOne({
@@ -404,6 +451,7 @@ const actualizarRegistro = async (
     usuarioId,
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
+    fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
     actualizadoPorId,
     ultimaAccion: "EDITADO",
   });
@@ -450,6 +498,7 @@ module.exports = {
   crearEntrada,
   crearRegistro,
   normalizarObservacion,
+  normalizarFecha,
   normalizarSeccion,
   normalizarValor,
   obtenerEntradas,

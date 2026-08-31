@@ -6,19 +6,36 @@ jest.mock("../config/db", () => ({
 }));
 
 jest.mock("../models/Cliente", () => ({ findAll: jest.fn() }));
-jest.mock("../models/CierreCaja/CierreCaja", () => ({ findAll: jest.fn() }));
-jest.mock("../models/CierreCaja/MovimientoCaja", () => ({ findAll: jest.fn() }));
+jest.mock("../models/CierreCaja/CierreCaja", () => ({
+  findAll: jest.fn(),
+  findByPk: jest.fn(),
+}));
+jest.mock("../models/CierreCaja/MovimientoCaja", () => ({
+  findAll: jest.fn(),
+  findByPk: jest.fn(),
+}));
 jest.mock("../models/ControlFinancieroCarga", () => ({
   findAll: jest.fn(),
   findByPk: jest.fn(),
 }));
 jest.mock("../models/ControlFinancieroRegistro", () => ({
   findAll: jest.fn(),
+  findByPk: jest.fn(),
 }));
 jest.mock("../models/ControlFinancieroConciliacionCaja", () => ({
   create: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
+}));
+jest.mock("../models/ControlFinancieroConciliacionManualCaja", () => ({
+  create: jest.fn(),
+  findAll: jest.fn(),
+  findByPk: jest.fn(),
+}));
+jest.mock("../models/ControlFinancieroConciliacionManualCajaDetalle", () => ({
+  bulkCreate: jest.fn(),
+  findOne: jest.fn(),
+  update: jest.fn(),
 }));
 
 const { Op } = require("sequelize");
@@ -31,9 +48,17 @@ const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro")
 const ControlFinancieroConciliacionCaja = require(
   "../models/ControlFinancieroConciliacionCaja",
 );
+const ControlFinancieroConciliacionManualCaja = require(
+  "../models/ControlFinancieroConciliacionManualCaja",
+);
+const ControlFinancieroConciliacionManualCajaDetalle = require(
+  "../models/ControlFinancieroConciliacionManualCajaDetalle",
+);
 const {
   conciliarCargaCaja,
   construirResultadosConciliacionCaja,
+  crearConciliacionManualCaja,
+  deshacerConciliacionManualCaja,
 } = require("./conciliacionCuotasCajaService");
 const {
   normalizarFechaCalendario,
@@ -43,6 +68,7 @@ const fecha = "2026-08-25";
 
 const registro = (id, cliente, monto, fechaRegistro = "8/25/26 10:00 AM") => ({
   id,
+  cargaId: 25,
   tipoRegistro: "CAJA",
   fecha: fechaRegistro,
   cliente,
@@ -74,12 +100,14 @@ const calcular = ({
   movimientos = [],
   cierres = [{ id: 10, fecha, agenciaId: 2, estadoCierre: "CERRADO" }],
   clientes = [],
+  relacionesManuales = [],
 } = {}) =>
   construirResultadosConciliacionCaja({
     registros,
     movimientos,
     cierres,
     clientes,
+    relacionesManuales,
   });
 
 describe("conciliacionCuotasCajaService matching deterministico", () => {
@@ -160,6 +188,153 @@ describe("conciliacionCuotasCajaService matching deterministico", () => {
 
     expect(clienteDiferente.resultados[0].estado).toBe("NO_EN_CIERRE");
     expect(sinCierre.resultados[0].estado).toBe("NO_EN_CIERRE");
+  });
+
+  test("consume primero una conciliacion manual y evita SOLO_EN_CIERRE residual", () => {
+    const calculo = calcular({
+      registros: [registro(1, "MARIA GABRIELA BAQUE", 12.13)],
+      movimientos: [movimiento(101, "MARIA GABRIELA ROJAS BAQUE", 12.13)],
+      relacionesManuales: [
+        conciliacionManual({ id: 900, reporteIds: [1], movimientoIds: [101] }),
+      ],
+    });
+
+    expect(calculo.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 1,
+        montoDiferente: 0,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "MANUAL",
+        movimientoCajaId: 101,
+        diferencia: 0,
+        conciliacionManualId: "900",
+        conciliacionManual: expect.objectContaining({ id: "900" }),
+        registrosReporte: expect.arrayContaining([
+          expect.objectContaining({ registroReporteId: 1 }),
+        ]),
+        movimientosCierre: expect.arrayContaining([
+          expect.objectContaining({ movimientoCajaId: 101 }),
+        ]),
+      }),
+    );
+  });
+
+  test("soporta 2 reportes contra 1 cierre con total igual", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "LUCIA NATALIA VELASCO GRACIA", 0.6),
+        registro(2, "LUCIA NATALIA VELASCO GRACIA", 25.4),
+      ],
+      movimientos: [movimiento(101, "LUCIA GARCIA", 26)],
+      relacionesManuales: [
+        conciliacionManual({
+          id: 901,
+          reporteIds: [1, 2],
+          movimientoIds: [101],
+        }),
+      ],
+    });
+
+    expect(calculo.resultados).toHaveLength(1);
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        tipoCoincidencia: "MANUAL",
+        montoReporte: 26,
+        montoCierre: 26,
+        diferencia: 0,
+      }),
+    );
+    expect(calculo.resultados[0].registrosReporte).toHaveLength(2);
+    expect(calculo.resultados[0].movimientosCierre).toHaveLength(1);
+    expect(calculo.resumen.noEnCierre).toBe(0);
+    expect(calculo.resumen.soloEnCierre).toBe(0);
+  });
+
+  test("soporta 1 reporte contra 2 cierres con total igual", () => {
+    const calculo = calcular({
+      registros: [registro(1, "ANA RUIZ", 30)],
+      movimientos: [
+        movimiento(101, "ANA RUIZ", 10),
+        movimiento(102, "ANA RUIZ", 20),
+      ],
+      relacionesManuales: [
+        conciliacionManual({
+          id: 902,
+          reporteIds: [1],
+          movimientoIds: [101, 102],
+        }),
+      ],
+    });
+
+    expect(calculo.resultados).toHaveLength(1);
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        montoReporte: 30,
+        montoCierre: 30,
+        diferencia: 0,
+      }),
+    );
+    expect(calculo.resultados[0].movimientosCierre).toHaveLength(2);
+  });
+
+  test("soporta N contra M con total igual", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "CARLA MORA", 12),
+        registro(2, "CARLA MORA", 18),
+      ],
+      movimientos: [
+        movimiento(101, "CARLA MORA", 5),
+        movimiento(102, "CARLA MORA", 25),
+      ],
+      relacionesManuales: [
+        conciliacionManual({
+          id: 903,
+          reporteIds: [1, 2],
+          movimientoIds: [101, 102],
+        }),
+      ],
+    });
+
+    expect(calculo.resultados).toHaveLength(1);
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "COINCIDE",
+        totalReporte: 30,
+        totalCierre: 30,
+      }),
+    );
+  });
+
+  test("la conciliacion manual conserva diferencias de monto", () => {
+    const calculo = calcular({
+      registros: [
+        registro(1, "MARIA GABRIELA BAQUE", 10),
+        registro(2, "MARIA GABRIELA BAQUE", 15),
+      ],
+      movimientos: [movimiento(101, "MARIA GABRIELA ROJAS BAQUE", 24.5)],
+      relacionesManuales: [
+        conciliacionManual({ id: 904, reporteIds: [1, 2], movimientoIds: [101] }),
+      ],
+    });
+
+    expect(calculo.resultados[0]).toEqual(
+      expect.objectContaining({
+        estado: "MONTO_DIFERENTE",
+        tipoCoincidencia: "MANUAL",
+        montoReporte: 25,
+        montoCierre: 24.5,
+        diferencia: 0.5,
+      }),
+    );
   });
 
   test("caso 6: movimiento CUOTA sin reporte queda SOLO_EN_CIERRE", () => {
@@ -924,7 +1099,7 @@ describe("conciliacionCuotasCajaService persistencia", () => {
     jest.clearAllMocks();
     sequelize.query.mockResolvedValue([]);
     sequelize.transaction.mockImplementation(async (callback) =>
-      callback({ id: "transaction" }),
+      callback({ id: "transaction", LOCK: { UPDATE: "UPDATE" } }),
     );
     ControlFinancieroCarga.findByPk.mockResolvedValue({
       id: 25,
@@ -941,6 +1116,15 @@ describe("conciliacionCuotasCajaService persistencia", () => {
       movimiento(101, "JUAN PEREZ", 25),
     ]);
     Cliente.findAll.mockResolvedValue([]);
+    ControlFinancieroConciliacionManualCaja.findAll.mockResolvedValue([]);
+    ControlFinancieroConciliacionManualCajaDetalle.findOne.mockResolvedValue(null);
+    ControlFinancieroConciliacionManualCajaDetalle.bulkCreate.mockResolvedValue([]);
+    ControlFinancieroConciliacionManualCajaDetalle.update.mockResolvedValue([1]);
+    ControlFinancieroConciliacionManualCaja.create.mockResolvedValue({
+      id: 900,
+      cargaId: 25,
+      activo: true,
+    });
     ControlFinancieroConciliacionCaja.create.mockImplementation(
       async (payload) => ({ id: 90, createdAt: new Date(), ...payload }),
     );
@@ -975,4 +1159,231 @@ describe("conciliacionCuotasCajaService persistencia", () => {
     );
     expect(conciliacion.resumen.coinciden).toBe(1);
   });
+
+  test("crea conciliacion manual por grupo y devuelve conciliacion recalculada", async () => {
+    ControlFinancieroRegistro.findAll
+      .mockResolvedValueOnce([registro(1, "MARIA GABRIELA BAQUE", 12.13)])
+      .mockResolvedValueOnce([registro(1, "MARIA GABRIELA BAQUE", 12.13)]);
+    MovimientoCaja.findAll
+      .mockResolvedValueOnce([
+        movimiento(101, "MARIA GABRIELA ROJAS BAQUE", 12.13),
+      ])
+      .mockResolvedValueOnce([
+        movimiento(101, "MARIA GABRIELA ROJAS BAQUE", 12.13),
+      ]);
+    CierreCaja.findAll
+      .mockResolvedValueOnce([{ id: 10, estadoCierre: "CERRADO" }])
+      .mockResolvedValueOnce([
+        { id: 10, fecha, agenciaId: 2, estadoCierre: "CERRADO" },
+      ]);
+    ControlFinancieroConciliacionCaja.findOne.mockResolvedValue({
+      id: 88,
+      cargaId: 25,
+      resultados: [
+        { estado: "NO_EN_CIERRE", controlFinancieroRegistroId: 1 },
+        { estado: "SOLO_EN_CIERRE", movimientoCajaId: 101 },
+      ],
+    });
+    ControlFinancieroConciliacionManualCaja.findAll.mockResolvedValue([
+      conciliacionManual({ id: 900, reporteIds: [1], movimientoIds: [101] }),
+    ]);
+
+    const resultado = await crearConciliacionManualCaja({
+      cargaId: 25,
+      registroReporteIds: [1],
+      movimientoCajaIds: [101],
+      observacion: "Pago verificado",
+      usuarioId: 7,
+    });
+
+    expect(ControlFinancieroConciliacionManualCaja.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cargaId: 25,
+        observacion: "Pago verificado",
+        activo: true,
+        relacionadoPor: 7,
+      }),
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    expect(
+      ControlFinancieroConciliacionManualCajaDetalle.bulkCreate,
+    ).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          conciliacionManualId: 900,
+          tipo: "REPORTE",
+          registroReporteId: 1,
+        }),
+        expect.objectContaining({
+          conciliacionManualId: 900,
+          tipo: "CIERRE",
+          movimientoCajaId: 101,
+        }),
+      ]),
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    expect(resultado.conciliacion.resumen).toEqual(
+      expect.objectContaining({
+        coinciden: 1,
+        noEnCierre: 0,
+        soloEnCierre: 0,
+      }),
+    );
+  });
+
+  test("rechaza reutilizar un registro reporte consumido", async () => {
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      registro(1, "JUAN PEREZ", 25),
+    ]);
+    MovimientoCaja.findAll.mockResolvedValue([
+      movimiento(101, "JUAN PEREZ", 25),
+    ]);
+    CierreCaja.findAll.mockResolvedValue([{ id: 10, estadoCierre: "CERRADO" }]);
+    ControlFinancieroConciliacionManualCajaDetalle.findOne.mockResolvedValue({
+      id: 1,
+      tipo: "REPORTE",
+      registroReporteId: 1,
+      activo: true,
+    });
+
+    await expect(
+      crearConciliacionManualCaja({
+        cargaId: 25,
+        registroReporteIds: [1],
+        movimientoCajaIds: [101],
+        usuarioId: 7,
+      }),
+    ).rejects.toMatchObject({ code: "CONCILIACION_MANUAL_DUPLICADA" });
+  });
+
+  test("rechaza reutilizar un movimiento caja consumido", async () => {
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      registro(1, "JUAN PEREZ", 25),
+    ]);
+    MovimientoCaja.findAll.mockResolvedValue([
+      movimiento(101, "JUAN PEREZ", 25),
+    ]);
+    CierreCaja.findAll.mockResolvedValue([{ id: 10, estadoCierre: "CERRADO" }]);
+    ControlFinancieroConciliacionManualCajaDetalle.findOne.mockResolvedValue({
+      id: 2,
+      tipo: "CIERRE",
+      movimientoCajaId: 101,
+      activo: true,
+    });
+
+    await expect(
+      crearConciliacionManualCaja({
+        cargaId: 25,
+        registroReporteIds: [1],
+        movimientoCajaIds: [101],
+        usuarioId: 7,
+      }),
+    ).rejects.toMatchObject({ code: "CONCILIACION_MANUAL_DUPLICADA" });
+  });
+
+  test("deshace el grupo completo y recalcula", async () => {
+    const update = jest.fn();
+    ControlFinancieroConciliacionManualCaja.findByPk.mockResolvedValue({
+      id: 900,
+      cargaId: 25,
+      activo: true,
+      update,
+    });
+    ControlFinancieroConciliacionManualCaja.findAll.mockResolvedValue([]);
+
+    const resultado = await deshacerConciliacionManualCaja({
+      cargaId: 25,
+      conciliacionManualId: 900,
+      motivoDeshacer: "Error de seleccion",
+      usuarioId: 7,
+    });
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activo: false,
+        deshechoPor: 7,
+        motivoDeshacer: "Error de seleccion",
+      }),
+      expect.objectContaining({ transaction: expect.any(Object) }),
+    );
+    expect(ControlFinancieroConciliacionManualCajaDetalle.update).toHaveBeenCalledWith(
+      { activo: false },
+      expect.objectContaining({
+        where: { conciliacionManualId: 900 },
+        transaction: expect.any(Object),
+      }),
+    );
+    expect(resultado.conciliacion).toBeTruthy();
+  });
+
+  test("serializa dos peticiones concurrentes con lock transaccional", async () => {
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      registro(1, "JUAN PEREZ", 25),
+    ]);
+    MovimientoCaja.findAll.mockResolvedValue([
+      movimiento(101, "JUAN PEREZ", 25),
+    ]);
+    CierreCaja.findAll.mockResolvedValue([{ id: 10, estadoCierre: "CERRADO" }]);
+    ControlFinancieroConciliacionCaja.findOne.mockResolvedValue({
+      id: 88,
+      resultados: [
+        { estado: "NO_EN_CIERRE", controlFinancieroRegistroId: 1 },
+        { estado: "SOLO_EN_CIERRE", movimientoCajaId: 101 },
+      ],
+    });
+
+    await crearConciliacionManualCaja({
+      cargaId: 25,
+      registroReporteIds: [1],
+      movimientoCajaIds: [101],
+      usuarioId: 7,
+    });
+
+    expect(sequelize.query).toHaveBeenCalledWith(
+      "SELECT pg_advisory_xact_lock(hashtext('conciliacion_caja'), :cargaId)",
+      expect.objectContaining({
+        replacements: { cargaId: 25 },
+        transaction: expect.any(Object),
+      }),
+    );
+    expect(ControlFinancieroConciliacionManualCajaDetalle.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ activo: true }),
+        lock: "UPDATE",
+      }),
+    );
+  });
+});
+
+const conciliacionManual = ({
+  id = 900,
+  cargaId = 25,
+  reporteIds = [],
+  movimientoIds = [],
+  activo = true,
+}) => ({
+  id,
+  cargaId,
+  observacion: "Grupo verificado",
+  activo,
+  relacionadoPor: 7,
+  relacionadoEn: "2026-08-31T12:00:00.000Z",
+  detalles: [
+    ...reporteIds.map((registroReporteId, index) => ({
+      id: id * 10 + index,
+      conciliacionManualId: id,
+      tipo: "REPORTE",
+      registroReporteId,
+      movimientoCajaId: null,
+      activo,
+    })),
+    ...movimientoIds.map((movimientoCajaId, index) => ({
+      id: id * 10 + 100 + index,
+      conciliacionManualId: id,
+      tipo: "CIERRE",
+      registroReporteId: null,
+      movimientoCajaId,
+      activo,
+    })),
+  ],
 });

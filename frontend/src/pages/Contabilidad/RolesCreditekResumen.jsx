@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Calculator,
   FileSpreadsheet,
+  FileText,
   RefreshCw,
   Save,
   Search,
@@ -21,6 +22,7 @@ const CAMPOS_MANUALES = [
   "planmovi",
   "prestamo",
   "mecanica",
+  "pagosLentes",
 ];
 const CAMPOS_CALCULADOS = [
   "descuentosMeta",
@@ -28,7 +30,9 @@ const CAMPOS_CALCULADOS = [
   "entradas",
   "descuentos",
 ];
-const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica"];
+const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica", "pagosLentes"];
+const CAMPOS_INGRESOS = ["ingresosComisiones"];
+const CAMPOS_NOMINA_MANUALES = ["sueldo"];
 const CAMPOS_ANTICIPOS = [
   "adelantosTransfer",
   "descuentosMeta",
@@ -38,6 +42,7 @@ const CAMPOS_ANTICIPOS = [
   ...CAMPOS_MANUALES.filter((campo) => campo !== "adelantosTransfer"),
 ].filter((campo) => !CAMPOS_PRESTAMOS.includes(campo));
 const CAMPOS_VALORES = [...CAMPOS_ANTICIPOS, ...CAMPOS_PRESTAMOS];
+const CAMPOS_GUARDADO = [...CAMPOS_MANUALES, ...CAMPOS_NOMINA_MANUALES];
 const CAMPOS_MANUALES_FINALES = CAMPOS_MANUALES.filter(
   (campo) =>
     campo !== "adelantosTransfer" && !CAMPOS_PRESTAMOS.includes(campo),
@@ -132,6 +137,12 @@ const sumanPrestamosFila = (row, drafts) =>
 const totalDescuentosFila = (row, drafts) =>
   redondear(totalAnticiposFila(row, drafts) + sumanPrestamosFila(row, drafts));
 
+const totalNominaFila = (row, drafts) =>
+  redondear(numero(row.ingresosComisiones) - totalDescuentosFila(row, drafts));
+
+const totalPagarNominaFila = (row, drafts) =>
+  redondear(totalNominaFila(row, drafts) + numero(valorCampo(row, "sueldo", drafts)));
+
 const InputValor = ({
   row,
   campo,
@@ -166,12 +177,114 @@ const InputValor = ({
   </div>
 );
 
+const limpiarPdf = (value) =>
+  String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, " ")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+
+const textoPdf = (text, x, y, size = 8) =>
+  `BT /F1 ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td (${limpiarPdf(text)}) Tj ET\n`;
+
+const descargarPdfTabla = ({ titulo, subtitulo, columnas, filas, archivo }) => {
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const margin = 28;
+  const rowHeight = 18;
+  const headerY = pageHeight - 86;
+  const rowsPerPage = 24;
+  const pages = [];
+
+  for (let index = 0; index < Math.max(filas.length, 1); index += rowsPerPage) {
+    pages.push(filas.slice(index, index + rowsPerPage));
+  }
+
+  const objects = {};
+  const pageIds = [];
+  let nextId = 4;
+
+  pages.forEach((pageRows, pageIndex) => {
+    let content = "";
+    content += "0.2 w\n";
+    content += textoPdf(titulo, margin, pageHeight - 34, 15);
+    content += textoPdf(subtitulo, margin, pageHeight - 54, 9);
+    content += textoPdf(`Pagina ${pageIndex + 1} de ${pages.length}`, pageWidth - 104, pageHeight - 34, 8);
+
+    let x = margin;
+    columnas.forEach((column) => {
+      content += textoPdf(column.label, x + 2, headerY, 7);
+      x += column.width;
+    });
+    content += `${margin} ${headerY - 5} m ${pageWidth - margin} ${headerY - 5} l S\n`;
+
+    pageRows.forEach((row, rowIndex) => {
+      const y = headerY - 24 - rowIndex * rowHeight;
+      let currentX = margin;
+      columnas.forEach((column) => {
+        const rawValue = column.getValue(row);
+        const value = column.money ? formatoDinero.format(numero(rawValue)) : rawValue;
+        const maxChars = Math.max(8, Math.floor(column.width / 4.6));
+        const text = String(value ?? "").slice(0, maxChars);
+        const textX =
+          column.align === "right"
+            ? currentX + column.width - Math.min(column.width - 4, text.length * 4.2) - 2
+            : currentX + 2;
+        content += textoPdf(text, textX, y, 7);
+        currentX += column.width;
+      });
+    });
+
+    if (!pageRows.length) {
+      content += textoPdf("No hay registros para mostrar.", margin, headerY - 30, 9);
+    }
+
+    const contentId = nextId++;
+    const pageId = nextId++;
+    objects[contentId] = `<< /Length ${content.length} >>\nstream\n${content}endstream`;
+    objects[pageId] =
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] ` +
+      `/Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`;
+    pageIds.push(pageId);
+  });
+
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objects[2] = `<< /Type /Pages /Count ${pageIds.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`;
+  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+
+  const orderedIds = Object.keys(objects).map(Number).sort((a, b) => a - b);
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  orderedIds.forEach((id) => {
+    offsets[id] = pdf.length;
+    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${orderedIds.length + 1}\n0000000000 65535 f \n`;
+  orderedIds.forEach((id) => {
+    pdf += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${orderedIds.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  const blob = new Blob([pdf], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = archivo;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 export default function RolesCreditekResumen() {
   const [anio, setAnio] = useState(ahora.getFullYear());
   const [mes, setMes] = useState(ahora.getMonth() + 1);
   const [rows, setRows] = useState([]);
+  const [ingresosRows, setIngresosRows] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [busqueda, setBusqueda] = useState("");
+  const [tabActiva, setTabActiva] = useState("egresos");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const draftsRef = useRef(drafts);
@@ -187,7 +300,9 @@ export default function RolesCreditekResumen() {
         "/api/contabilidad/roles-creditek-resumen",
         { params: { anio, mes } },
       );
-      setRows(Array.isArray(data.registros) ? data.registros : []);
+      const registros = Array.isArray(data.registros) ? data.registros : [];
+      setRows(registros);
+      setIngresosRows(Array.isArray(data.ingresos) ? data.ingresos : registros);
       setDrafts({});
     } catch (error) {
       Swal.fire(
@@ -223,7 +338,7 @@ export default function RolesCreditekResumen() {
 
   const cambiarManual = (row, campo, value) => {
     const esCalculado = CAMPOS_CALCULADOS.includes(campo);
-    if (!CAMPOS_MANUALES.includes(campo) && !esCalculado) return;
+    if (!CAMPOS_GUARDADO.includes(campo) && !esCalculado) return;
     const valorNormalizado = value.replace(/,/g, ".");
     if (esCalculado && valorNormalizado === "") {
       setDrafts((actuales) => ({
@@ -254,6 +369,12 @@ export default function RolesCreditekResumen() {
         usuarioId: row.usuarioId,
         ...Object.fromEntries(
           CAMPOS_MANUALES.map((campo) => [
+            campo,
+            numero(valorCampo(row, campo, drafts)),
+          ]),
+        ),
+        ...Object.fromEntries(
+          CAMPOS_NOMINA_MANUALES.map((campo) => [
             campo,
             numero(valorCampo(row, campo, drafts)),
           ]),
@@ -310,15 +431,35 @@ export default function RolesCreditekResumen() {
     );
   }, [busqueda, rows]);
 
+  const ingresosFiltrados = useMemo(() => {
+    const query = normalizarTexto(busqueda);
+    if (!query) return ingresosRows;
+    return ingresosRows.filter(
+      (row) =>
+        normalizarTexto(row.nombre).includes(query) ||
+        normalizarTexto(row.cargo).includes(query) ||
+        String(row.usuarioId).includes(query),
+    );
+  }, [busqueda, ingresosRows]);
+
   const totales = useMemo(() => {
     const resultado = Object.fromEntries(
       [
+        ...CAMPOS_INGRESOS,
         ...CAMPOS_VALORES,
         "totalAnticipos",
         "sumanPrestamos",
         "totalDescuentos",
+        "sueldo",
+        "totalNomina",
+        "totalPagarNomina",
       ].map((campo) => [campo, 0]),
     );
+    ingresosFiltrados.forEach((row) => {
+      CAMPOS_INGRESOS.forEach((campo) => {
+        resultado[campo] += numero(row[campo]);
+      });
+    });
     rowsFiltradas.forEach((row) => {
       CAMPOS_VALORES.forEach((campo) => {
         resultado[campo] += numero(valorCampo(row, campo, drafts));
@@ -326,15 +467,27 @@ export default function RolesCreditekResumen() {
       resultado.totalAnticipos += totalAnticiposFila(row, drafts);
       resultado.sumanPrestamos += sumanPrestamosFila(row, drafts);
       resultado.totalDescuentos += totalDescuentosFila(row, drafts);
+      resultado.sueldo += numero(valorCampo(row, "sueldo", drafts));
+      resultado.totalNomina += totalNominaFila(row, drafts);
+      resultado.totalPagarNomina += totalPagarNominaFila(row, drafts);
     });
     Object.keys(resultado).forEach((campo) => {
       resultado[campo] = redondear(resultado[campo]);
     });
     return resultado;
-  }, [drafts, rowsFiltradas]);
+  }, [drafts, ingresosFiltrados, rowsFiltradas]);
 
   const exportarExcel = () => {
-    const data = [
+    const ingresosData = [
+      ["INGRESOS CREDITEK"],
+      ["PERSONAL", "TOTAL COMISIONES SEMANA + MENSUAL"],
+      ...ingresosFiltrados.map((row) => [
+        row.nombre,
+        numero(row.ingresosComisiones),
+      ]),
+      ["TOTAL", totales.ingresosComisiones],
+    ];
+    const egresosData = [
       ["EGRESOS CREDITEK"],
       [
         "PERSONAL",
@@ -351,6 +504,7 @@ export default function RolesCreditekResumen() {
         "PLANMOVI",
         "PRESTAMO",
         "MECANICA",
+        "PAGOS DE LENTES",
         "SUMAN PRESTAMOS",
         "TOTAL DESCUENTOS",
       ],
@@ -375,18 +529,188 @@ export default function RolesCreditekResumen() {
         totales.totalDescuentos,
       ],
     ];
-    const sheet = XLSX.utils.aoa_to_sheet(data);
-    sheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 15 } }];
-    sheet["!cols"] = [
-      { wch: 30 },
-      ...Array.from({ length: 15 }, () => ({ wch: 18 })),
+    const nominaData = [
+      ["NOMINA CREDITEK"],
+      ["PERSONAL", "INGRESOS", "EGRESOS", "NOMINA", "SUELDO", "TOTAL"],
+      ...rowsFiltradas.map((row) => [
+        row.nombre,
+        numero(row.ingresosComisiones),
+        totalDescuentosFila(row, drafts),
+        totalNominaFila(row, drafts),
+        numero(valorCampo(row, "sueldo", drafts)),
+        totalPagarNominaFila(row, drafts),
+      ]),
+      [
+        "TOTAL",
+        totales.ingresosComisiones,
+        totales.totalDescuentos,
+        totales.totalNomina,
+        totales.sueldo,
+        totales.totalPagarNomina,
+      ],
     ];
+
+    const ingresosSheet = XLSX.utils.aoa_to_sheet(ingresosData);
+    ingresosSheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+    ingresosSheet["!cols"] = [{ wch: 30 }, { wch: 28 }];
+
+    const egresosSheet = XLSX.utils.aoa_to_sheet(egresosData);
+    egresosSheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 16 } }];
+    egresosSheet["!cols"] = [
+      { wch: 30 },
+      ...Array.from({ length: 16 }, () => ({ wch: 18 })),
+    ];
+    const nominaSheet = XLSX.utils.aoa_to_sheet(nominaData);
+    nominaSheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+    nominaSheet["!cols"] = [
+      { wch: 30 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 16 },
+    ];
+
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, "Resumen");
+    XLSX.utils.book_append_sheet(workbook, ingresosSheet, "Ingresos");
+    XLSX.utils.book_append_sheet(workbook, egresosSheet, "Egresos");
+    XLSX.utils.book_append_sheet(workbook, nominaSheet, "Nomina");
     XLSX.writeFile(
       workbook,
       `Roles_Creditek_${anio}_${String(mes).padStart(2, "0")}.xlsx`,
     );
+  };
+
+  const exportarPdf = () => {
+    const periodoLabel = `${MESES[mes - 1]} ${anio}`;
+    const baseFile = `Roles_Creditek_${tabActiva}_${anio}_${String(mes).padStart(2, "0")}.pdf`;
+
+    if (tabActiva === "ingresos") {
+      descargarPdfTabla({
+        titulo: "Ingresos Creditek",
+        subtitulo: periodoLabel,
+        archivo: baseFile,
+        columnas: [
+          { label: "Personal", width: 520, getValue: (row) => row.nombre },
+          {
+            label: "Ingresos",
+            width: 260,
+            align: "right",
+            money: true,
+            getValue: (row) => row.ingresosComisiones,
+          },
+        ],
+        filas: [
+          ...ingresosFiltrados,
+          { nombre: "TOTAL", ingresosComisiones: totales.ingresosComisiones },
+        ],
+      });
+      return;
+    }
+
+    if (tabActiva === "nomina") {
+      descargarPdfTabla({
+        titulo: "Nomina Creditek",
+        subtitulo: periodoLabel,
+        archivo: baseFile,
+        columnas: [
+          { label: "Personal", width: 250, getValue: (row) => row.nombre },
+          {
+            label: "Ingresos",
+            width: 106,
+            align: "right",
+            money: true,
+            getValue: (row) => row.ingresosComisiones,
+          },
+          {
+            label: "Egresos",
+            width: 106,
+            align: "right",
+            money: true,
+            getValue: (row) =>
+              row.esTotal ? row.totalDescuentos : totalDescuentosFila(row, drafts),
+          },
+          {
+            label: "Nomina",
+            width: 106,
+            align: "right",
+            money: true,
+            getValue: (row) =>
+              row.esTotal ? row.totalNomina : totalNominaFila(row, drafts),
+          },
+          {
+            label: "Sueldo",
+            width: 106,
+            align: "right",
+            money: true,
+            getValue: (row) => valorCampo(row, "sueldo", drafts),
+          },
+          {
+            label: "Total",
+            width: 106,
+            align: "right",
+            money: true,
+            getValue: (row) =>
+              row.esTotal
+                ? row.totalPagarNomina
+                : totalPagarNominaFila(row, drafts),
+          },
+        ],
+        filas: [
+          ...rowsFiltradas,
+          {
+            nombre: "TOTAL",
+            esTotal: true,
+            ingresosComisiones: totales.ingresosComisiones,
+            totalDescuentos: totales.totalDescuentos,
+            totalNomina: totales.totalNomina,
+            sueldo: totales.sueldo,
+            totalPagarNomina: totales.totalPagarNomina,
+          },
+        ],
+      });
+      return;
+    }
+
+    descargarPdfTabla({
+      titulo: "Egresos Creditek",
+      subtitulo: periodoLabel,
+      archivo: baseFile,
+      columnas: [
+        { label: "Personal", width: 98, getValue: (row) => row.nombre },
+        ...CAMPOS_ANTICIPOS.map((campo) => ({
+          label: campo,
+          width: 40,
+          align: "right",
+          getValue: (row) => valorCampo(row, campo, drafts),
+        })),
+        {
+          label: "Anticipos",
+          width: 48,
+          align: "right",
+          getValue: (row) => totalAnticiposFila(row, drafts),
+        },
+        ...CAMPOS_PRESTAMOS.map((campo) => ({
+          label: campo,
+          width: 40,
+          align: "right",
+          getValue: (row) => valorCampo(row, campo, drafts),
+        })),
+        {
+          label: "Prestamos",
+          width: 48,
+          align: "right",
+          getValue: (row) => sumanPrestamosFila(row, drafts),
+        },
+        {
+          label: "Descuentos",
+          width: 52,
+          align: "right",
+          getValue: (row) => totalDescuentosFila(row, drafts),
+        },
+      ],
+      filas: rowsFiltradas,
+    });
   };
 
   const cambios = Object.keys(drafts).length;
@@ -444,10 +768,18 @@ export default function RolesCreditekResumen() {
               <button
                 type="button"
                 onClick={exportarExcel}
-                disabled={!rowsFiltradas.length || loading}
+                disabled={!(rowsFiltradas.length || ingresosFiltrados.length) || loading}
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               >
-                <FileSpreadsheet size={17} /> Exportar
+                <FileSpreadsheet size={17} /> Excel
+              </button>
+              <button
+                type="button"
+                onClick={exportarPdf}
+                disabled={!(rowsFiltradas.length || ingresosFiltrados.length) || loading}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-800 px-3 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50"
+              >
+                <FileText size={17} /> PDF
               </button>
               <button
                 type="button"
@@ -463,10 +795,29 @@ export default function RolesCreditekResumen() {
         </header>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-2 text-xs font-semibold">
-            
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">{rowsFiltradas.length} colaboradores</span>
+          <div className="flex flex-col gap-3 border-b border-slate-200 p-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              {[
+                { id: "ingresos", label: "Ingresos" },
+                { id: "egresos", label: "Egresos" },
+                { id: "nomina", label: "Nomina" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTabActiva(tab.id)}
+                  className={`h-9 rounded-lg border px-4 text-sm font-bold transition ${
+                    tabActiva === tab.id
+                      ? "border-emerald-700 bg-emerald-700 text-white shadow-sm"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
+                {tabActiva === "ingresos" ? ingresosFiltrados.length : rowsFiltradas.length} colaboradores
+              </span>
             </div>
             <label className="relative block sm:w-72">
               <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -480,8 +831,85 @@ export default function RolesCreditekResumen() {
             </label>
           </div>
 
+          {tabActiva === "ingresos" ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[2450px] border-separate border-spacing-0 text-sm">
+            <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr className="text-xs font-bold uppercase tracking-wide text-slate-700">
+                  <th className="sticky left-0 z-20 w-64 border-b border-r border-slate-300 bg-slate-100 px-4 py-3 text-left">Personal</th>
+                  <th className="w-64 border-b border-slate-300 bg-emerald-700 px-4 py-3 text-right text-white">Total Comisiones Semana + Mensual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="2" className="px-4 py-14 text-center font-semibold text-slate-500">Calculando resumen del periodo...</td></tr>
+                ) : ingresosFiltrados.length === 0 ? (
+                  <tr><td colSpan="2" className="px-4 py-14 text-center text-slate-500">No hay colaboradores para mostrar.</td></tr>
+                ) : ingresosFiltrados.map((row, index) => (
+                  <tr key={row.usuarioId} className={index % 2 ? "bg-slate-50/60" : "bg-white"}>
+                    <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-inherit px-4 py-2.5 font-bold text-slate-800">{row.nombre}</td>
+                    <td className="border-b border-slate-200 bg-emerald-50/60 px-4 py-2.5 text-right text-base font-extrabold text-emerald-900">{formatoDinero.format(numero(row.ingresosComisiones))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {!loading && ingresosFiltrados.length > 0 && (
+                <tfoot>
+                  <tr className="font-extrabold text-white">
+                    <td className="sticky bottom-0 left-0 z-30 border-r border-emerald-800 bg-emerald-800 px-4 py-3 text-left uppercase">Total</td>
+                    <td className="sticky bottom-0 z-20 bg-emerald-700 px-4 py-3 text-right text-base">{formatoDinero.format(totales.ingresosComisiones)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          ) : tabActiva === "nomina" ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1240px] border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr className="text-xs font-bold uppercase tracking-wide text-slate-700">
+                  <th className="sticky left-0 z-20 w-72 border-b border-r border-slate-300 bg-slate-100 px-4 py-3 text-left">Personal</th>
+                  <th className="w-44 border-b border-r border-slate-300 bg-emerald-700 px-4 py-3 text-right text-white">Ingresos</th>
+                  <th className="w-44 border-b border-r border-slate-300 bg-rose-100 px-4 py-3 text-right text-rose-900">Egresos</th>
+                  <th className="w-44 border-b border-r border-slate-300 bg-blue-700 px-4 py-3 text-right text-white">Nomina</th>
+                  <th className="w-44 border-b border-r border-slate-300 bg-amber-100 px-4 py-3 text-right text-amber-900">Sueldo</th>
+                  <th className="w-44 border-b border-slate-300 bg-green-500 px-4 py-3 text-right text-slate-950">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="6" className="px-4 py-14 text-center font-semibold text-slate-500">Calculando resumen del periodo...</td></tr>
+                ) : rowsFiltradas.length === 0 ? (
+                  <tr><td colSpan="6" className="px-4 py-14 text-center text-slate-500">No hay colaboradores para mostrar.</td></tr>
+                ) : rowsFiltradas.map((row, index) => (
+                  <tr key={row.usuarioId} className={index % 2 ? "bg-slate-50/60" : "bg-white"}>
+                    <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-inherit px-4 py-2.5 font-bold text-slate-800">{row.nombre}</td>
+                    <td className="border-b border-r border-slate-200 bg-emerald-50/60 px-4 py-2.5 text-right text-base font-extrabold text-emerald-900">{formatoDinero.format(numero(row.ingresosComisiones))}</td>
+                    <td className="border-b border-r border-slate-200 bg-rose-50/60 px-4 py-2.5 text-right text-base font-extrabold text-rose-900">{formatoDinero.format(totalDescuentosFila(row, drafts))}</td>
+                    <td className="border-b border-r border-slate-200 bg-blue-50/70 px-4 py-2.5 text-right text-base font-extrabold text-blue-900">{formatoDinero.format(totalNominaFila(row, drafts))}</td>
+                    <td className="border-b border-r border-slate-200 px-2 py-1.5">
+                      <InputValor row={row} campo="sueldo" drafts={drafts} onChange={cambiarManual} disabled={saving} />
+                    </td>
+                    <td className="border-b border-slate-200 bg-green-50 px-4 py-2.5 text-right text-base font-extrabold text-green-900">{formatoDinero.format(totalPagarNominaFila(row, drafts))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {!loading && rowsFiltradas.length > 0 && (
+                <tfoot>
+                  <tr className="font-extrabold text-white">
+                    <td className="sticky bottom-0 left-0 z-30 border-r border-blue-800 bg-blue-800 px-4 py-3 text-left uppercase">Total</td>
+                    <td className="sticky bottom-0 z-20 border-r border-emerald-800 bg-emerald-700 px-4 py-3 text-right text-base">{formatoDinero.format(totales.ingresosComisiones)}</td>
+                    <td className="sticky bottom-0 z-20 border-r border-rose-800 bg-rose-700 px-4 py-3 text-right text-base">{formatoDinero.format(totales.totalDescuentos)}</td>
+                    <td className="sticky bottom-0 z-20 border-r border-blue-800 bg-blue-700 px-4 py-3 text-right text-base">{formatoDinero.format(totales.totalNomina)}</td>
+                    <td className="sticky bottom-0 z-20 border-r border-amber-600 bg-amber-500 px-4 py-3 text-right text-base text-slate-950">{formatoDinero.format(totales.sueldo)}</td>
+                    <td className="sticky bottom-0 z-20 bg-green-500 px-4 py-3 text-right text-base text-slate-950">{formatoDinero.format(totales.totalPagarNomina)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[2580px] border-separate border-spacing-0 text-sm">
               <thead>
                 <tr className="text-xs font-bold uppercase tracking-wide text-slate-700">
                   <th rowSpan="2" className="sticky left-0 z-20 w-64 border-b border-r border-slate-300 bg-slate-100 px-4 py-3 text-left">Personal</th>
@@ -489,7 +917,7 @@ export default function RolesCreditekResumen() {
                   <th colSpan="4" className="border-b border-r border-slate-300 bg-blue-100 px-3 py-2 text-center text-blue-900">Valores calculados</th>
                   <th colSpan="4" className="border-b border-r border-slate-300 bg-amber-100 px-3 py-2 text-center text-amber-900">Valores manuales</th>
                   <th rowSpan="2" className="w-40 border-b border-r border-slate-300 bg-blue-700 px-3 py-3 text-right text-white">Total anticipos</th>
-                  <th colSpan="3" className="border-b border-r border-slate-300 bg-emerald-100 px-3 py-2 text-center text-emerald-900">Prestamos a la empresa</th>
+                  <th colSpan="4" className="border-b border-r border-slate-300 bg-emerald-100 px-3 py-2 text-center text-emerald-900">Prestamos a la empresa</th>
                   <th rowSpan="2" className="w-40 border-b border-r border-slate-300 bg-emerald-100 px-3 py-3 text-right text-emerald-950">Suman prestamos</th>
                   <th rowSpan="2" className="sticky right-0 z-20 w-44 border-b border-slate-300 bg-green-500 px-3 py-3 text-right text-slate-950">Total descuentos</th>
                 </tr>
@@ -506,16 +934,16 @@ export default function RolesCreditekResumen() {
                   {["Deuda Jimena", "Atrasos", "Dias no laborables", "Multas facturacion"].map((label) => (
                     <th key={label} className="w-40 border-b border-r border-slate-300 bg-amber-50 px-3 py-3 text-right">{label}</th>
                   ))}
-                  {["Planmovi", "Prestamo", "Mecanica"].map((label) => (
+                  {["Planmovi", "Prestamo", "Mecanica", "Pagos de lentes"].map((label) => (
                     <th key={label} className="w-40 border-b border-r border-slate-300 bg-emerald-50 px-3 py-3 text-right">{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="16" className="px-4 py-14 text-center font-semibold text-slate-500">Calculando resumen del periodo...</td></tr>
+                  <tr><td colSpan="17" className="px-4 py-14 text-center font-semibold text-slate-500">Calculando resumen del periodo...</td></tr>
                 ) : rowsFiltradas.length === 0 ? (
-                  <tr><td colSpan="16" className="px-4 py-14 text-center text-slate-500">No hay colaboradores para mostrar.</td></tr>
+                  <tr><td colSpan="17" className="px-4 py-14 text-center text-slate-500">No hay colaboradores para mostrar.</td></tr>
                 ) : rowsFiltradas.map((row, index) => (
                   <tr key={row.usuarioId} className={index % 2 ? "bg-slate-50/60" : "bg-white"}>
                     <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-inherit px-4 py-2.5 font-bold text-slate-800">{row.nombre}</td>
@@ -568,6 +996,7 @@ export default function RolesCreditekResumen() {
               )}
             </table>
           </div>
+          )}
         </section>
       </div>
     </div>

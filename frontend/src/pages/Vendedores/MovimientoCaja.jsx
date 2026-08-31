@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import api from "../../api/client";
-import ClienteAutocomplete from "../../components/clientes/ClienteAutocomplete";
 import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
 import { getHoyLocal } from "../../utils/dateUtils";
 import { useAuthUser } from "../../utils/useAuthUser";
@@ -80,7 +79,7 @@ const construirSnapshotMovimiento = (fila) => ({
   responsable: fila.responsable || "",
   detalle: fila.detalle || "",
   entidad: fila.entidad || "",
-  clienteId: Number(fila.clienteId) || null,
+  clienteId: null,
   valor: convertirNumeroDosDecimales(fila.valor),
   formaPago: fila.formaPago || null,
   recibo: fila.recibo ? Number(fila.recibo) : null,
@@ -427,18 +426,6 @@ export default function MovimientoCaja() {
       newRows[index] = field === "entidad"
         ? { ...newRows[index], entidad: value, clienteId: null }
         : { ...newRows[index], [field]: value };
-      return newRows;
-    });
-  };
-
-  const handleClienteSeleccionado = (index, cliente) => {
-    setRows((prev) => {
-      const newRows = [...prev];
-      newRows[index] = {
-        ...newRows[index],
-        entidad: cliente.texto,
-        clienteId: cliente.id,
-      };
       return newRows;
     });
   };
@@ -916,14 +903,12 @@ export default function MovimientoCaja() {
                   </td>
 
                   <td>
-                    <ClienteAutocomplete
+                    <input
                       disabled={controlesBloqueados}
                       value={row.entidad}
-                      clienteId={row.clienteId}
-                      dropdownId={`clientes-caja-${i}`}
-                      onChange={(value) => handleChange(i, "entidad", value)}
-                      onSelect={(cliente) => handleClienteSeleccionado(i, cliente)}
-                      onRowKeyDown={(event) => handleFilaKeyDown(event, i, row)}
+                      onChange={(e) => handleChange(i, "entidad", e.target.value)}
+                      onKeyDown={(e) => handleFilaKeyDown(e, i, row)}
+                      className="w-full p-1"
                     />
                   </td>
 

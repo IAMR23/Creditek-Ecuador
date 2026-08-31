@@ -64,7 +64,36 @@ const SECCIONES = [
     totalTone: "text-amber-700",
     buttonTone: "bg-amber-600 hover:bg-amber-700 focus:ring-amber-200",
   },
+  {
+    id: "jefes",
+    label: "Jefes",
+    icon: UserRound,
+    active: "border-violet-600 bg-violet-50 text-violet-800",
+    iconTone: "bg-violet-100 text-violet-700",
+    totalTone: "text-violet-700",
+    buttonTone: "bg-violet-700 hover:bg-violet-800 focus:ring-violet-200",
+  },
+  {
+    id: "multas_facturacion",
+    label: "Multas facturacion",
+    icon: BadgePercent,
+    active: "border-rose-600 bg-rose-50 text-rose-800",
+    iconTone: "bg-rose-100 text-rose-700",
+    totalTone: "text-rose-700",
+    buttonTone: "bg-rose-700 hover:bg-rose-800 focus:ring-rose-200",
+  },
+  {
+    id: "otros",
+    label: "Otros",
+    icon: CircleDollarSign,
+    active: "border-slate-700 bg-slate-100 text-slate-950",
+    iconTone: "bg-slate-100 text-slate-700",
+    totalTone: "text-slate-800",
+    buttonTone: "bg-slate-800 hover:bg-slate-900 focus:ring-slate-200",
+  },
 ];
+
+const SECCION_CON_FECHA = "jefes";
 
 const ACCIONES = {
   CREADO: "Creado",
@@ -116,6 +145,8 @@ const normalizarValor = (value) => {
   return Number.isFinite(numero) ? numero : 0;
 };
 
+const requiereFechaRegistro = (seccionId) => seccionId === SECCION_CON_FECHA;
+
 const fechaHora = (value) => {
   if (!value) return "-";
   const fecha = new Date(value);
@@ -146,6 +177,7 @@ export default function EgresosCreditek() {
   const [usuarioId, setUsuarioId] = useState("");
   const [valor, setValor] = useState("");
   const [observacion, setObservacion] = useState("");
+  const [fechaRegistro, setFechaRegistro] = useState(fechaEcuadorIso(new Date()));
   const [busqueda, setBusqueda] = useState("");
   const [periodo, setPeriodo] = useState("todos");
   const [fechaFiltro, setFechaFiltro] = useState("");
@@ -154,6 +186,7 @@ export default function EgresosCreditek() {
     usuarioId: "",
     valor: "",
     observacion: "",
+    fecha: "",
     estadoPagoEntrada: "PENDIENTE",
   });
   const [actualizandoId, setActualizandoId] = useState(null);
@@ -166,16 +199,19 @@ export default function EgresosCreditek() {
     const inicioSieteDias = moverFechaIso(hoy, -6);
 
     return registros.filter((registro) => {
-      const fechaRegistro = fechaEcuadorIso(registro.createdAt);
-      if (periodo === "hoy") return fechaRegistro === hoy;
+      const fechaBase =
+        requiereFechaRegistro(seccionActiva) && registro.fecha
+          ? registro.fecha
+          : fechaEcuadorIso(registro.createdAt);
+      if (periodo === "hoy") return fechaBase === hoy;
       if (periodo === "7dias") {
-        return fechaRegistro >= inicioSieteDias && fechaRegistro <= hoy;
+        return fechaBase >= inicioSieteDias && fechaBase <= hoy;
       }
-      if (periodo === "mes") return fechaRegistro.startsWith(hoy.slice(0, 7));
-      if (periodo === "fecha") return fechaRegistro === fechaFiltro;
+      if (periodo === "mes") return fechaBase.startsWith(hoy.slice(0, 7));
+      if (periodo === "fecha") return fechaBase === fechaFiltro;
       return true;
     });
-  }, [fechaFiltro, periodo, registros]);
+  }, [fechaFiltro, periodo, registros, seccionActiva]);
 
   const total = useMemo(
     () =>
@@ -196,6 +232,10 @@ export default function EgresosCreditek() {
   const seccion =
     SECCIONES.find((item) => item.id === seccionActiva) || SECCIONES[0];
   const SeccionIcon = seccion.icon;
+  const seccionRequiereFecha = requiereFechaRegistro(seccionActiva);
+  const historialGridClass = seccionRequiereFecha
+    ? "lg:grid-cols-[minmax(0,1fr)_110px_110px_92px_minmax(0,1.1fr)_minmax(180px,1.1fr)_84px]"
+    : "lg:grid-cols-[minmax(0,1fr)_110px_92px_minmax(0,1.15fr)_minmax(180px,1.1fr)_84px]";
   const editandoControlFinanciero =
     registroEditando && esRegistroControlFinanciero(registroEditando);
 
@@ -207,6 +247,7 @@ export default function EgresosCreditek() {
       [
         registro.usuario?.nombre,
         registro.observacion,
+        registro.fecha,
         registro.registradoPor?.nombre,
         registro.actualizadoPor?.nombre,
         ACCIONES[registro.ultimaAccion],
@@ -272,6 +313,7 @@ export default function EgresosCreditek() {
     setRegistros([]);
     setValor("");
     setObservacion("");
+    setFechaRegistro(fechaEcuadorIso(new Date()));
     setBusqueda("");
     await cargar(seccionId);
   };
@@ -287,16 +329,26 @@ export default function EgresosCreditek() {
       Swal.fire("Valor no valido", "Ingresa un valor mayor a cero.", "warning");
       return;
     }
+    if (seccionRequiereFecha && !fechaRegistro) {
+      Swal.fire("Fecha requerida", "Ingresa la fecha del registro.", "warning");
+      return;
+    }
 
     try {
       setSaving(true);
       const { data } = await api.post(
         `/api/contabilidad/egresos-creditek/${seccionActiva}`,
-        { usuarioId: Number(usuarioId), valor, observacion },
+        {
+          usuarioId: Number(usuarioId),
+          valor,
+          observacion,
+          ...(seccionRequiereFecha ? { fecha: fechaRegistro } : {}),
+        },
       );
       setRegistros((actuales) => [data.registro, ...actuales]);
       setValor("");
       setObservacion("");
+      setFechaRegistro(fechaEcuadorIso(new Date()));
       setBusqueda("");
       Swal.fire({
         icon: "success",
@@ -321,6 +373,7 @@ export default function EgresosCreditek() {
       usuarioId: String(registro.usuarioId || ""),
       valor: Number(registro.valor || 0).toFixed(2),
       observacion: registro.observacion || "",
+      fecha: registro.fecha || fechaEcuadorIso(new Date()),
       estadoPagoEntrada: registro.estadoPagoEntrada || "PENDIENTE",
     });
   };
@@ -342,6 +395,11 @@ export default function EgresosCreditek() {
     }
     if (!esVinculado && valorNumerico <= 0) {
       Swal.fire("Valor no válido", "Ingresa un valor mayor a cero.", "warning");
+      return;
+    }
+
+    if (!esVinculado && seccionRequiereFecha && !edicion.fecha) {
+      Swal.fire("Fecha requerida", "Ingresa la fecha del registro.", "warning");
       return;
     }
 
@@ -394,6 +452,7 @@ export default function EgresosCreditek() {
             usuarioId: Number(edicion.usuarioId),
             valor: edicion.valor,
             observacion: edicion.observacion,
+            ...(seccionRequiereFecha ? { fecha: edicion.fecha } : {}),
           },
         );
         setRegistros((actuales) =>
@@ -804,7 +863,7 @@ export default function EgresosCreditek() {
         </header>
 
         <nav
-          className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm sm:grid-cols-4"
+          className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm sm:grid-cols-4 xl:grid-cols-7"
           aria-label="Secciones de Egresos Creditek"
         >
           {SECCIONES.map((item) => {
@@ -846,7 +905,11 @@ export default function EgresosCreditek() {
 
             <form
               onSubmit={guardar}
-              className="grid gap-3 p-4 sm:grid-cols-2 sm:items-end sm:p-5 lg:grid-cols-[minmax(220px,1fr)_180px_minmax(240px,1.25fr)_auto]"
+              className={`grid gap-3 p-4 sm:grid-cols-2 sm:items-end sm:p-5 ${
+                seccionRequiereFecha
+                  ? "lg:grid-cols-[minmax(220px,1fr)_160px_170px_minmax(240px,1.2fr)_auto]"
+                  : "lg:grid-cols-[minmax(220px,1fr)_180px_minmax(240px,1.25fr)_auto]"
+              }`}
             >
               <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700">
                 Usuario
@@ -885,6 +948,19 @@ export default function EgresosCreditek() {
                   />
                 </span>
               </label>
+
+              {seccionRequiereFecha && (
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Fecha
+                  <input
+                    type="date"
+                    value={fechaRegistro}
+                    onChange={(event) => setFechaRegistro(event.target.value)}
+                    disabled={saving || actualizandoId !== null}
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  />
+                </label>
+              )}
 
               <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2 lg:col-span-1">
                 Observación
@@ -1101,9 +1177,10 @@ export default function EgresosCreditek() {
             renderTablaEntradas()
           ) : (
             <div>
-              <div className="hidden grid-cols-[minmax(0,1fr)_110px_92px_minmax(0,1.15fr)_minmax(180px,1.1fr)_84px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase text-slate-500 lg:grid">
+              <div className={`hidden gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase text-slate-500 lg:grid ${historialGridClass}`}>
                 <span>Usuario</span>
                 <span className="text-right">Valor</span>
+                {seccionRequiereFecha && <span>Fecha</span>}
                 <span>Estado</span>
                 <span>Observación</span>
                 <span>Trazabilidad</span>
@@ -1113,7 +1190,7 @@ export default function EgresosCreditek() {
                 {registrosFiltrados.map((registro) => (
                   <article
                     key={registro.id}
-                    className={`grid min-w-0 gap-x-4 gap-y-3 px-4 py-3.5 text-sm transition-colors sm:grid-cols-2 sm:px-5 lg:grid-cols-[minmax(0,1fr)_110px_92px_minmax(0,1.15fr)_minmax(180px,1.1fr)_84px] lg:items-center ${
+                    className={`grid min-w-0 gap-x-4 gap-y-3 px-4 py-3.5 text-sm transition-colors sm:grid-cols-2 sm:px-5 lg:items-center ${historialGridClass} ${
                       registro.activo === false
                         ? "bg-slate-50/80"
                         : "hover:bg-slate-50"
@@ -1172,6 +1249,14 @@ export default function EgresosCreditek() {
                         {money.format(Number(registro.valor || 0))}
                       </p>
                     </div>
+                    {seccionRequiereFecha && (
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Fecha</p>
+                        <p className="font-semibold text-slate-700">
+                          {registro.fecha || "-"}
+                        </p>
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Estado</p>
                       <span
@@ -1378,6 +1463,24 @@ export default function EgresosCreditek() {
                     />
                   </span>
                 </label>
+
+                {seccionRequiereFecha && (
+                  <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                    Fecha
+                    <input
+                      type="date"
+                      value={edicion.fecha}
+                      onChange={(event) =>
+                        setEdicion((actual) => ({
+                          ...actual,
+                          fecha: event.target.value,
+                        }))
+                      }
+                      disabled={actualizandoId !== null}
+                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                    />
+                  </label>
+                )}
 
                 <div className="grid content-end gap-1.5 text-xs font-semibold text-slate-700">
                   {editandoControlFinanciero ? "Estado de pago" : "Estado"}

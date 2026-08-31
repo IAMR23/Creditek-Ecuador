@@ -68,6 +68,8 @@ const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
 const ControlFinancieroConciliacionEntrada = require('./ControlFinancieroConciliacionEntrada');
 const ControlFinancieroConciliacionCaja = require('./ControlFinancieroConciliacionCaja');
+const ControlFinancieroConciliacionManualCaja = require('./ControlFinancieroConciliacionManualCaja');
+const ControlFinancieroConciliacionManualCajaDetalle = require('./ControlFinancieroConciliacionManualCajaDetalle');
 const NotificacionPersonal = require('./NotificacionPersonal');
 const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
@@ -1103,6 +1105,76 @@ Usuario.hasMany(ControlFinancieroConciliacionCaja, {
 ControlFinancieroConciliacionCaja.belongsTo(Usuario, {
   foreignKey: "ejecutadoPor",
   as: "ejecutor",
+});
+
+ControlFinancieroCarga.hasMany(ControlFinancieroConciliacionManualCaja, {
+  foreignKey: "cargaId",
+  as: "conciliacionesCajaManual",
+  onDelete: "RESTRICT",
+});
+
+ControlFinancieroConciliacionManualCaja.belongsTo(ControlFinancieroCarga, {
+  foreignKey: "cargaId",
+  as: "carga",
+});
+
+ControlFinancieroConciliacionManualCaja.hasMany(
+  ControlFinancieroConciliacionManualCajaDetalle,
+  {
+    foreignKey: "conciliacionManualId",
+    as: "detalles",
+    onDelete: "RESTRICT",
+  },
+);
+
+ControlFinancieroConciliacionManualCajaDetalle.belongsTo(
+  ControlFinancieroConciliacionManualCaja,
+  {
+    foreignKey: "conciliacionManualId",
+    as: "conciliacionManual",
+  },
+);
+
+ControlFinancieroRegistro.hasMany(ControlFinancieroConciliacionManualCajaDetalle, {
+  foreignKey: "registroReporteId",
+  as: "conciliacionesCajaManualDetalleReporte",
+  onDelete: "RESTRICT",
+});
+
+ControlFinancieroConciliacionManualCajaDetalle.belongsTo(ControlFinancieroRegistro, {
+  foreignKey: "registroReporteId",
+  as: "registroReporte",
+});
+
+MovimientoCaja.hasMany(ControlFinancieroConciliacionManualCajaDetalle, {
+  foreignKey: "movimientoCajaId",
+  as: "conciliacionesCajaManualDetalle",
+  onDelete: "RESTRICT",
+});
+
+ControlFinancieroConciliacionManualCajaDetalle.belongsTo(MovimientoCaja, {
+  foreignKey: "movimientoCajaId",
+  as: "movimientoCaja",
+});
+
+Usuario.hasMany(ControlFinancieroConciliacionManualCaja, {
+  foreignKey: "relacionadoPor",
+  as: "conciliacionesCajaManualCreadas",
+});
+
+ControlFinancieroConciliacionManualCaja.belongsTo(Usuario, {
+  foreignKey: "relacionadoPor",
+  as: "usuarioRelaciono",
+});
+
+Usuario.hasMany(ControlFinancieroConciliacionManualCaja, {
+  foreignKey: "deshechoPor",
+  as: "conciliacionesCajaManualDeshechas",
+});
+
+ControlFinancieroConciliacionManualCaja.belongsTo(Usuario, {
+  foreignKey: "deshechoPor",
+  as: "usuarioDeshizo",
 });
 
 Usuario.hasMany(AuditoriaVentaPdf, {

@@ -74,6 +74,18 @@ const RolCreditekAjuste = sequelize.define(
       defaultValue: 0,
       validate: { min: 0 },
     },
+    pagosLentes: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+      validate: { min: 0 },
+    },
+    sueldo: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: false,
+      defaultValue: 0,
+      validate: { min: 0 },
+    },
     descuentosMetaManual: {
       type: DataTypes.DECIMAL(12, 2),
       allowNull: true,

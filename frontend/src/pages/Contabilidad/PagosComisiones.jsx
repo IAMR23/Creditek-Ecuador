@@ -363,7 +363,7 @@ const buildExcelRows = ({ rows, weeks, sectionLabel }) =>
       "Valor comision semanal": Number(mensual.valorComisionSemanal || 0),
       "Valor comision mensual": Number(mensual.valorComisionMensual || 0),
       "Total comisiones": Number(mensual.totalComisionesSemanaMensual || 0),
-      "Total no cumple metas": mensual.totalNoCumpleMetas || 0,
+      "Total no cumple metas": Number(mensual.totalValorDescontar || 0),
     };
   });
 
@@ -2665,7 +2665,7 @@ function MonthlyValues({ values, total = false }) {
           : "0.00"}
       </td>
       <td className="border border-slate-950 bg-blue-700 px-2 py-1.5 text-white">
-        {values.totalNoCumpleMetas || 0}
+        {formatMoney(values.totalValorDescontar || 0)}
       </td>
     </>
   );

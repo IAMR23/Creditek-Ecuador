@@ -1090,6 +1090,63 @@ const ensureControlFinancieroPreSyncSchema = async (queryInterface) => {
   `);
 };
 
+const ensureControlFinancieroConciliacionManualCajaSchema = async (tables) => {
+  if (
+    !tables.includes("control_financiero_conciliaciones_manual") ||
+    !tables.includes("control_financiero_conciliaciones_manual_detalle")
+  ) {
+    return;
+  }
+
+  await sequelize.query(`
+    ALTER TABLE control_financiero_conciliaciones_manual
+    ADD COLUMN IF NOT EXISTS "relacionAnteriorId" BIGINT NULL;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'control_financiero_conciliaciones_manual_detalle_lado_chk'
+      ) THEN
+        ALTER TABLE control_financiero_conciliaciones_manual_detalle
+        ADD CONSTRAINT control_financiero_conciliaciones_manual_detalle_lado_chk
+        CHECK (
+          (
+            tipo = 'REPORTE'
+            AND "registroReporteId" IS NOT NULL
+            AND "movimientoCajaId" IS NULL
+          )
+          OR
+          (
+            tipo = 'CIERRE'
+            AND "movimientoCajaId" IS NOT NULL
+            AND "registroReporteId" IS NULL
+          )
+        );
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'control_financiero_conciliaciones_manual_detalle_tipo_chk'
+      ) THEN
+        ALTER TABLE control_financiero_conciliaciones_manual_detalle
+        ADD CONSTRAINT control_financiero_conciliaciones_manual_detalle_tipo_chk
+        CHECK (tipo IN ('REPORTE', 'CIERRE'));
+      END IF;
+    END $$;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS cf_conc_manual_detalle_reporte_activo_uq
+    ON control_financiero_conciliaciones_manual_detalle ("registroReporteId")
+    WHERE activo IS TRUE AND tipo = 'REPORTE';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS cf_conc_manual_detalle_cierre_activo_uq
+    ON control_financiero_conciliaciones_manual_detalle ("movimientoCajaId")
+    WHERE activo IS TRUE AND tipo = 'CIERRE';
+  `);
+};
+
 const ensureConsejoEjecutivoPreSyncSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("consejo_ejecutivo_planes")) return;
@@ -1197,6 +1254,8 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
     "planmovi",
     "prestamo",
     "mecanica",
+    "pagosLentes",
+    "sueldo",
   ];
 
   for (const columnName of columnasValor) {
@@ -1239,6 +1298,89 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
   await sequelize.query(`
     CREATE INDEX IF NOT EXISTS roles_creditek_ajustes_periodo_idx
     ON roles_creditek_ajustes (anio, mes);
+  `);
+};
+
+const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("egresos_creditek_entradas")) return;
+
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "observacion",
+    {
+      type: Sequelize.TEXT,
+      allowNull: true,
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "fecha",
+    {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "seccion",
+    {
+      type: Sequelize.STRING(30),
+      allowNull: false,
+      defaultValue: "ENTRADAS",
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "activo",
+    {
+      type: Sequelize.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "ultimaAccion",
+    {
+      type: Sequelize.STRING(20),
+      allowNull: false,
+      defaultValue: "CREADO",
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "actualizadoPorId",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: { model: "usuarios", key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+  );
+  await sequelize.query(`
+    UPDATE egresos_creditek_entradas
+    SET seccion = COALESCE(seccion, 'ENTRADAS'),
+        activo = COALESCE(activo, TRUE),
+        "ultimaAccion" = COALESCE("ultimaAccion", 'CREADO')
+    WHERE seccion IS NULL
+       OR activo IS NULL
+       OR "ultimaAccion" IS NULL;
+  `);
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_seccion_idx
+    ON egresos_creditek_entradas (seccion);
+  `);
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_fecha_idx
+    ON egresos_creditek_entradas (fecha);
   `);
 };
 
@@ -1336,76 +1478,11 @@ const connectDB = async () => {
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
     await ensureReporteCajaUsuarioAgenciaPreSyncSchema(queryInterface);
+    await ensureEgresosCreditekEntradasPreSyncSchema(queryInterface);
     await sequelize.sync({});
 
     const tables = await queryInterface.showAllTables();
-
-    if (tables.includes("egresos_creditek_entradas")) {
-      await addColumnIfMissing(
-        queryInterface,
-        "egresos_creditek_entradas",
-        "observacion",
-        {
-          type: Sequelize.TEXT,
-          allowNull: true,
-        },
-      );
-      await addColumnIfMissing(
-        queryInterface,
-        "egresos_creditek_entradas",
-        "seccion",
-        {
-          type: Sequelize.STRING(30),
-          allowNull: false,
-          defaultValue: "ENTRADAS",
-        },
-      );
-      await addColumnIfMissing(
-        queryInterface,
-        "egresos_creditek_entradas",
-        "activo",
-        {
-          type: Sequelize.BOOLEAN,
-          allowNull: false,
-          defaultValue: true,
-        },
-      );
-      await addColumnIfMissing(
-        queryInterface,
-        "egresos_creditek_entradas",
-        "ultimaAccion",
-        {
-          type: Sequelize.STRING(20),
-          allowNull: false,
-          defaultValue: "CREADO",
-        },
-      );
-      await addColumnIfMissing(
-        queryInterface,
-        "egresos_creditek_entradas",
-        "actualizadoPorId",
-        {
-          type: Sequelize.INTEGER,
-          allowNull: true,
-          references: { model: "usuarios", key: "id" },
-          onUpdate: "CASCADE",
-          onDelete: "SET NULL",
-        },
-      );
-      await sequelize.query(`
-        UPDATE egresos_creditek_entradas
-        SET seccion = COALESCE(seccion, 'ENTRADAS'),
-            activo = COALESCE(activo, TRUE),
-            "ultimaAccion" = COALESCE("ultimaAccion", 'CREADO')
-        WHERE seccion IS NULL
-           OR activo IS NULL
-           OR "ultimaAccion" IS NULL;
-      `);
-      await sequelize.query(`
-        CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_seccion_idx
-        ON egresos_creditek_entradas (seccion);
-      `);
-    }
+    await ensureControlFinancieroConciliacionManualCajaSchema(tables);
 
     await ensureCierreCajaSchema(queryInterface, tables);
     await ensureMovimientoCajaSchema(queryInterface, tables);

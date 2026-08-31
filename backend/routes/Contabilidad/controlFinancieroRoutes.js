@@ -41,6 +41,18 @@ router.get(
   "/cargas/:cargaId/conciliacion-caja/historial",
   controller.obtenerHistorialConciliacionCaja,
 );
+router.get(
+  "/cargas/:cargaId/conciliacion-caja/manual/sugerencias",
+  controller.listarSugerenciasConciliacionManualCaja,
+);
+router.post(
+  "/cargas/:cargaId/conciliacion-caja/manual",
+  controller.crearConciliacionManualCaja,
+);
+router.patch(
+  "/cargas/:cargaId/conciliacion-caja/manual/:conciliacionManualId/deshacer",
+  controller.deshacerConciliacionManualCaja,
+);
 router.post(
   "/cargas/:cargaId/reconciliar-caja",
   controller.reconciliarCaja,

@@ -15,7 +15,10 @@ import {
   RefreshCw,
   Save,
   Search,
+  Link2,
   Smartphone,
+  Undo2,
+  X,
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
@@ -619,6 +622,408 @@ function GestionCajaNoEnCierre({
   );
 }
 
+const getItemConciliacionKey = (item) =>
+  item?.origen === "CIERRE"
+    ? `CIERRE-${item.movimientoCajaId}`
+    : `REPORTE-${item?.registroReporteId}`;
+
+const itemContieneBusqueda = (item, busqueda) => {
+  const termino = busqueda.trim().toLocaleLowerCase("es");
+  if (!termino) return true;
+  return [
+    item.cliente,
+    item.monto,
+    item.fecha,
+    item.recibo,
+    item.cierreId,
+    item.contrato,
+    item.agencia,
+    item.agenciaId,
+    item.formaPago,
+    item.responsable,
+    item.archivoOrigen,
+  ].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase("es")
+      .includes(termino),
+  );
+};
+
+function ResumenItemConciliacionManual({ item }) {
+  if (!item) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-bold uppercase text-slate-500">
+            {item.origen === "CIERRE" ? "CIERRE" : "REPORTE"}
+          </p>
+          <p className="mt-1 font-semibold text-slate-900">
+            {item.cliente || "-"}
+          </p>
+        </div>
+        <p className="text-sm font-bold text-slate-900">
+          {money.format(Number(item.monto || 0))}
+        </p>
+      </div>
+      <div className="mt-2 grid gap-1 text-xs text-slate-600 sm:grid-cols-2">
+        <span>Fecha: {formatFechaCorta(item.fecha)}</span>
+        {item.cierreId && <span>Cierre: {item.cierreId}</span>}
+        {item.formaPago && <span>Forma de pago: {item.formaPago}</span>}
+        {item.recibo && <span>Recibo: {item.recibo}</span>}
+        {item.agencia && <span>Agencia: {item.agencia}</span>}
+        {item.agenciaId && <span>Agencia ID: {item.agenciaId}</span>}
+        {item.contrato && <span>Contrato: {item.contrato}</span>}
+        {item.responsable && <span>Responsable: {item.responsable}</span>}
+        {item.cobrador && <span>Cobrador: {item.cobrador}</span>}
+        {item.archivoOrigen && <span>Archivo: {item.archivoOrigen}</span>}
+      </div>
+    </div>
+  );
+}
+
+function ConciliacionManualCajaModal({
+  abierto,
+  cargando,
+  confirmando,
+  data,
+  onCerrar,
+  onConfirmar,
+}) {
+  const [busqueda, setBusqueda] = useState("");
+  const [registroReporteIds, setRegistroReporteIds] = useState([]);
+  const [movimientoCajaIds, setMovimientoCajaIds] = useState([]);
+  const [observacion, setObservacion] = useState("");
+
+  useEffect(() => {
+    setBusqueda("");
+    setRegistroReporteIds(data?.seleccionInicial?.registroReporteIds || []);
+    setMovimientoCajaIds(data?.seleccionInicial?.movimientoCajaIds || []);
+    setObservacion("");
+  }, [data]);
+
+  if (!abierto) return null;
+
+  const seleccionado = data?.seleccionado || null;
+  const registrosReporte = (data?.registrosReporte || []).filter((item) =>
+    itemContieneBusqueda(item, busqueda),
+  );
+  const movimientosCierre = (data?.movimientosCierre || []).filter((item) =>
+    itemContieneBusqueda(item, busqueda),
+  );
+  const registrosPorId = new Map(
+    (data?.registrosReporte || []).map((item) => [
+      Number(item.registroReporteId),
+      item,
+    ]),
+  );
+  const movimientosPorId = new Map(
+    (data?.movimientosCierre || []).map((item) => [
+      Number(item.movimientoCajaId),
+      item,
+    ]),
+  );
+  const totalReporte = registroReporteIds.reduce(
+    (total, id) => total + Number(registrosPorId.get(Number(id))?.monto || 0),
+    0,
+  );
+  const totalCierre = movimientoCajaIds.reduce(
+    (total, id) => total + Number(movimientosPorId.get(Number(id))?.monto || 0),
+    0,
+  );
+  const diferencia = totalReporte - totalCierre;
+
+  const toggleId = (id, values, setter) => {
+    const numericId = Number(id);
+    setter(
+      values.includes(numericId)
+        ? values.filter((item) => item !== numericId)
+        : [...values, numericId],
+    );
+  };
+
+  const aplicarSugerencia = (sugerencia) => {
+    if (sugerencia.lado === "REPORTE") {
+      setRegistroReporteIds([
+        ...new Set([
+          ...registroReporteIds,
+          ...sugerencia.items.map((item) => Number(item.registroReporteId)),
+        ]),
+      ]);
+    }
+    if (sugerencia.lado === "CIERRE") {
+      setMovimientoCajaIds([
+        ...new Set([
+          ...movimientoCajaIds,
+          ...sugerencia.items.map((item) => Number(item.movimientoCajaId)),
+        ]),
+      ]);
+    }
+  };
+
+  const renderFila = (item, checked, onToggle) => {
+    const key = getItemConciliacionKey(item);
+    const similitud = Math.round(Number(item.score?.similitudNombre || 0) * 100);
+    return (
+      <label
+        key={key}
+        className="flex cursor-pointer gap-3 px-3 py-3 hover:bg-slate-50"
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          className="mt-1"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold text-slate-900">{item.cliente || "-"}</p>
+            <p className="font-bold">{money.format(Number(item.monto || 0))}</p>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+            <span>Fecha: {formatFechaCorta(item.fecha)}</span>
+            {item.score && <span>Similitud: {similitud}%</span>}
+            {item.score?.mismoMonto && (
+              <span className="font-semibold text-green-700">Mismo monto</span>
+            )}
+            {item.cierreId && <span>Cierre: {item.cierreId}</span>}
+            {item.recibo && <span>Recibo: {item.recibo}</span>}
+            {item.formaPago && <span>{item.formaPago}</span>}
+            {(item.agencia || item.agenciaId) && (
+              <span>Agencia: {item.agencia || item.agenciaId}</span>
+            )}
+            {item.contrato && <span>Contrato: {item.contrato}</span>}
+          </div>
+        </div>
+      </label>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Conciliación manual de caja
+            </h2>
+            <p className="text-xs text-slate-500">
+              Agrupa registros del reporte y movimientos del cierre.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCerrar}
+            className="inline-flex size-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-800"
+            aria-label="Cerrar conciliación manual"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {cargando ? (
+          <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-slate-500">
+            <RefreshCw size={17} className="animate-spin" />
+            Cargando posibles coincidencias...
+          </div>
+        ) : (
+          <div className="max-h-[calc(90vh-80px)] overflow-y-auto p-5">
+            <div className="grid gap-3 lg:grid-cols-3">
+              <ResumenItemConciliacionManual item={seleccionado} />
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-[11px] font-bold uppercase text-slate-500">
+                  Total reporte
+                </p>
+                <p className="mt-1 text-xl font-bold text-slate-900">
+                  {money.format(totalReporte)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3">
+                <p className="text-[11px] font-bold uppercase text-slate-500">
+                  Total cierre
+                </p>
+                <p className="mt-1 text-xl font-bold text-slate-900">
+                  {money.format(totalCierre)}
+                </p>
+                <p
+                  className={`mt-1 text-sm font-bold ${
+                    Math.abs(diferencia) <= 0.01
+                      ? "text-green-700"
+                      : "text-red-700"
+                  }`}
+                >
+                  Diferencia: {money.format(diferencia)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-slate-800">
+                Componentes
+              </p>
+              <label className="relative block sm:w-80">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  type="search"
+                  value={busqueda}
+                  onChange={(event) => setBusqueda(event.target.value)}
+                  placeholder="Buscar nombre, monto, recibo o fecha"
+                  className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-green-400"
+                />
+              </label>
+            </div>
+
+            {data?.sugerenciasCombinaciones?.length ? (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-bold uppercase text-amber-700">
+                  Sugerencias
+                </p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {data.sugerenciasCombinaciones.map((sugerencia, index) => (
+                    <button
+                      key={`${sugerencia.lado}-${index}`}
+                      type="button"
+                      onClick={() => aplicarSugerencia(sugerencia)}
+                      className="rounded-lg border border-amber-200 bg-white p-3 text-left text-xs hover:bg-amber-100"
+                    >
+                      <p className="font-bold text-slate-800">
+                        {sugerencia.lado === "REPORTE"
+                          ? "CombinaciÃ³n reporte"
+                          : "CombinaciÃ³n cierre"}{" "}
+                        {money.format(Number(sugerencia.total || 0))}
+                      </p>
+                      <ul className="mt-1 space-y-1 text-slate-600">
+                        {sugerencia.items.map((item) => (
+                          <li key={getItemConciliacionKey(item)}>
+                            {item.cliente || "-"} -{" "}
+                            {money.format(Number(item.monto || 0))}
+                          </li>
+                        ))}
+                      </ul>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-3 grid gap-4 lg:grid-cols-2">
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-bold uppercase text-slate-600">
+                    Registros reporte
+                  </p>
+                  <p className="text-xs font-bold text-slate-800">
+                    {money.format(totalReporte)}
+                  </p>
+                </div>
+                <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                  {registrosReporte.length ? (
+                    registrosReporte.map((item) =>
+                      renderFila(
+                        item,
+                        registroReporteIds.includes(
+                          Number(item.registroReporteId),
+                        ),
+                        () =>
+                          toggleId(
+                            item.registroReporteId,
+                            registroReporteIds,
+                            setRegistroReporteIds,
+                          ),
+                      ),
+                    )
+                  ) : (
+                    <p className="px-3 py-8 text-center text-sm text-slate-500">
+                      No hay registros disponibles.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-bold uppercase text-slate-600">
+                    Movimientos cierre
+                  </p>
+                  <p className="text-xs font-bold text-slate-800">
+                    {money.format(totalCierre)}
+                  </p>
+                </div>
+                <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                  {movimientosCierre.length ? (
+                    movimientosCierre.map((item) =>
+                      renderFila(
+                        item,
+                        movimientoCajaIds.includes(Number(item.movimientoCajaId)),
+                        () =>
+                          toggleId(
+                            item.movimientoCajaId,
+                            movimientoCajaIds,
+                            setMovimientoCajaIds,
+                          ),
+                      ),
+                    )
+                  ) : (
+                    <p className="px-3 py-8 text-center text-sm text-slate-500">
+                      No hay movimientos disponibles.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <label className="mt-4 grid gap-1 text-xs font-semibold text-slate-600">
+              Observación opcional
+              <textarea
+                value={observacion}
+                onChange={(event) => setObservacion(event.target.value)}
+                maxLength={1000}
+                rows={3}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-700 outline-none focus:border-green-400"
+              />
+            </label>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={onCerrar}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onConfirmar({
+                    registroReporteIds,
+                    movimientoCajaIds,
+                    observacion,
+                  })
+                }
+                disabled={
+                  confirmando ||
+                  !registroReporteIds.length ||
+                  !movimientoCajaIds.length
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Link2 size={16} />
+                {confirmando
+                  ? "Confirmando..."
+                  : "Confirmar conciliación manual"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VistaConciliacionCaja({
   conciliacion,
   error,
@@ -626,8 +1031,11 @@ function VistaConciliacionCaja({
   registrosCaja,
   onReconciliar,
   onGuardarGestionCaja,
+  onAbrirConciliacionManual,
+  onDeshacerConciliacionManual,
   reconciliando,
   guardandoGestionId,
+  deshaciendoRelacionId,
   usuariosResponsables,
   editable,
 }) {
@@ -787,6 +1195,26 @@ function VistaConciliacionCaja({
               const registroCaja = registrosCajaPorId.get(
                 Number(resultado.controlFinancieroRegistroId),
               );
+              const registrosManual = Array.isArray(resultado.registrosReporte)
+                ? resultado.registrosReporte
+                : [];
+              const movimientosManual = Array.isArray(resultado.movimientosCierre)
+                ? resultado.movimientosCierre
+                : [];
+              const esManual =
+                resultado.tipoCoincidencia === "MANUAL" ||
+                Boolean(
+                  resultado.conciliacionManualId ||
+                    resultado.conciliacionManual?.id,
+                );
+              const conciliacionManualId =
+                resultado.conciliacionManualId || resultado.conciliacionManual?.id;
+              const puedeConciliarManual =
+                editable &&
+                ((resultado.estado === "NO_EN_CIERRE" &&
+                  resultado.controlFinancieroRegistroId) ||
+                  (resultado.estado === "SOLO_EN_CIERRE" &&
+                    resultado.movimientoCajaId));
               return (
                 <tr key={resultado.id} className="border-t border-slate-100 align-top hover:bg-slate-50">
                   <td className="whitespace-nowrap px-3 py-3">{formatFechaCorta(resultado.fechaReporteRegistro || resultado.fechaCierre)}</td>
@@ -812,24 +1240,67 @@ function VistaConciliacionCaja({
                   <td className="whitespace-nowrap px-3 py-3 text-right font-medium">{resultado.controlFinancieroRegistroId ? money.format(resultado.montoReporte) : "-"}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-right font-medium">{resultado.movimientoCajaId ? money.format(resultado.montoCierre) : "-"}</td>
                   <td className={`whitespace-nowrap px-3 py-3 text-right font-bold ${Math.abs(resultado.diferencia) <= 0.01 ? "text-green-700" : "text-red-700"}`}>{money.format(resultado.diferencia)}</td>
-                  <td className="px-3 py-3"><EstadoConciliacionBadge estado={resultado.estado} /></td>
                   <td className="px-3 py-3">
-                    {resultado.estado === "NO_EN_CIERRE" &&
-                    resultado.controlFinancieroRegistroId ? (
-                      <GestionCajaNoEnCierre
-                        editable={editable}
-                        guardando={
-                          guardandoGestionId ===
-                          resultado.controlFinancieroRegistroId
-                        }
-                        onGuardar={onGuardarGestionCaja}
-                        registro={registroCaja}
-                        resultado={resultado}
-                        usuariosResponsables={usuariosResponsables}
-                      />
-                    ) : (
-                      <span className="text-xs text-slate-400">-</span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <EstadoConciliacionBadge estado={resultado.estado} />
+                      {esManual && (
+                        <span className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-[10px] font-bold text-cyan-700">
+                          MANUAL
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="grid gap-2">
+                      {resultado.estado === "NO_EN_CIERRE" &&
+                      resultado.controlFinancieroRegistroId ? (
+                        <GestionCajaNoEnCierre
+                          editable={editable}
+                          guardando={
+                            guardandoGestionId ===
+                            resultado.controlFinancieroRegistroId
+                          }
+                          onGuardar={onGuardarGestionCaja}
+                          registro={registroCaja}
+                          resultado={resultado}
+                          usuariosResponsables={usuariosResponsables}
+                        />
+                      ) : null}
+                      {puedeConciliarManual && (
+                        <button
+                          type="button"
+                          onClick={() => onAbrirConciliacionManual(resultado)}
+                          className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-green-200 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-50"
+                        >
+                          <Link2 size={15} />
+                          Conciliar manualmente
+                        </button>
+                      )}
+                      {esManual && conciliacionManualId && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onDeshacerConciliacionManual(
+                              conciliacionManualId,
+                            )
+                          }
+                          disabled={
+                            deshaciendoRelacionId ===
+                            conciliacionManualId
+                          }
+                          className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Undo2 size={15} />
+                          {deshaciendoRelacionId ===
+                          conciliacionManualId
+                            ? "Deshaciendo..."
+                            : "Deshacer conciliación manual"}
+                        </button>
+                      )}
+                      {!puedeConciliarManual && !esManual && (
+                        <span className="text-xs text-slate-400">-</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3">
                     <details className="min-w-56 text-xs text-slate-600">
@@ -837,22 +1308,71 @@ function VistaConciliacionCaja({
                       <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                         <div>
                           <p className="font-bold text-slate-800">REPORTE</p>
-                          <p>Registro: {resultado.controlFinancieroRegistroId || "-"}</p>
-                          <p>Fecha original: {reporte?.fechaOriginal || "-"}</p>
-                          <p>Contrato: {reporte?.contrato || "-"}</p>
-                          <p>Cobrador: {reporte?.usuarioCobrador || "-"}</p>
-                          <p>Agencia: {reporte?.agencia || "-"}</p>
-                          <p>Archivo: {reporte?.archivoOrigen || "-"}</p>
+                          {registrosManual.length ? (
+                            <div className="mt-1 space-y-1">
+                              {registrosManual.map((item) => (
+                                <div
+                                  key={item.registroReporteId}
+                                  className="rounded border border-slate-100 p-2"
+                                >
+                                  <p className="font-semibold text-slate-700">
+                                    {money.format(Number(item.monto || 0))} -{" "}
+                                    {item.cliente || "-"}
+                                  </p>
+                                  <p>Registro: {item.registroReporteId || "-"}</p>
+                                  <p>Fecha original: {item.fechaOriginal || "-"}</p>
+                                  <p>Contrato: {item.contrato || "-"}</p>
+                                  <p>Cobrador: {item.usuarioCobrador || "-"}</p>
+                                  <p>Agencia: {item.agencia || "-"}</p>
+                                  <p>Archivo: {item.archivoOrigen || "-"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <>
+                              <p>Registro: {resultado.controlFinancieroRegistroId || "-"}</p>
+                              <p>Fecha original: {reporte?.fechaOriginal || "-"}</p>
+                              <p>Contrato: {reporte?.contrato || "-"}</p>
+                              <p>Cobrador: {reporte?.usuarioCobrador || "-"}</p>
+                              <p>Agencia: {reporte?.agencia || "-"}</p>
+                              <p>Archivo: {reporte?.archivoOrigen || "-"}</p>
+                            </>
+                          )}
                         </div>
                         <div className="border-t border-slate-100 pt-2">
                           <p className="font-bold text-slate-800">CIERRE</p>
-                          <p>Cierre: {resultado.cierreId || "-"}</p>
-                          <p>Movimiento: {resultado.movimientoCajaId || "-"}</p>
-                          <p>Cliente ID: {resultado.clienteId || "-"}</p>
-                          <p>Entidad: {cierre?.entidad || "-"}</p>
-                          <p>Responsable: {cierre?.responsable || "-"}</p>
-                          <p>Forma de pago: {cierre?.formaPago || "-"}</p>
-                          <p>Agencia ID: {cierre?.agenciaId || "-"}</p>
+                          {movimientosManual.length ? (
+                            <div className="mt-1 space-y-1">
+                              {movimientosManual.map((item) => (
+                                <div
+                                  key={item.movimientoCajaId}
+                                  className="rounded border border-slate-100 p-2"
+                                >
+                                  <p className="font-semibold text-slate-700">
+                                    {money.format(Number(item.monto || 0))} -{" "}
+                                    {item.cliente || item.entidad || "-"}
+                                  </p>
+                                  <p>Cierre: {item.cierreId || "-"}</p>
+                                  <p>Movimiento: {item.movimientoCajaId || "-"}</p>
+                                  <p>Cliente ID: {item.clienteId || "-"}</p>
+                                  <p>Entidad: {item.entidad || "-"}</p>
+                                  <p>Responsable: {item.responsable || "-"}</p>
+                                  <p>Forma de pago: {item.formaPago || "-"}</p>
+                                  <p>Agencia ID: {item.agenciaId || "-"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <>
+                              <p>Cierre: {resultado.cierreId || "-"}</p>
+                              <p>Movimiento: {resultado.movimientoCajaId || "-"}</p>
+                              <p>Cliente ID: {resultado.clienteId || "-"}</p>
+                              <p>Entidad: {cierre?.entidad || "-"}</p>
+                              <p>Responsable: {cierre?.responsable || "-"}</p>
+                              <p>Forma de pago: {cierre?.formaPago || "-"}</p>
+                              <p>Agencia ID: {cierre?.agenciaId || "-"}</p>
+                            </>
+                          )}
                         </div>
                       </div>
                     </details>
@@ -1383,6 +1903,16 @@ export default function ControlFinanciero() {
   const [conciliacionCaja, setConciliacionCaja] = useState(null);
   const [errorConciliacionCaja, setErrorConciliacionCaja] = useState("");
   const [reconciliandoCaja, setReconciliandoCaja] = useState(false);
+  const [modalConciliacionManualCaja, setModalConciliacionManualCaja] =
+    useState({
+      abierto: false,
+      cargando: false,
+      data: null,
+    });
+  const [confirmandoConciliacionManualCaja, setConfirmandoConciliacionManualCaja] =
+    useState(false);
+  const [deshaciendoConciliacionManualCajaId, setDeshaciendoConciliacionManualCajaId] =
+    useState(null);
 
   const cargarConciliacionEntradas = useCallback(async (cargaId) => {
     if (!cargaId) {
@@ -1741,6 +2271,166 @@ export default function ControlFinanciero() {
       );
     } finally {
       setReconciliandoCaja(false);
+    }
+  };
+
+  const cerrarModalConciliacionManualCaja = () => {
+    if (confirmandoConciliacionManualCaja) return;
+    setModalConciliacionManualCaja({
+      abierto: false,
+      cargando: false,
+      data: null,
+    });
+  };
+
+  const abrirConciliacionManualCaja = async (resultado) => {
+    if (!cargaSeleccionada?.id) return;
+    const esReporte = resultado.estado === "NO_EN_CIERRE";
+    const esCierre = resultado.estado === "SOLO_EN_CIERRE";
+    if (!esReporte && !esCierre) return;
+
+    setModalConciliacionManualCaja({
+      abierto: true,
+      cargando: true,
+      data: null,
+    });
+
+    try {
+      const params = esReporte
+        ? {
+            origen: "REPORTE",
+            registroReporteId: resultado.controlFinancieroRegistroId,
+          }
+        : {
+            origen: "CIERRE",
+            movimientoCajaId: resultado.movimientoCajaId,
+          };
+      const { data } = await api.get(
+        `/api/contabilidad/control-financiero/cargas/${cargaSeleccionada.id}/conciliacion-caja/manual/sugerencias`,
+        { params },
+      );
+      setModalConciliacionManualCaja({
+        abierto: true,
+        cargando: false,
+        data,
+      });
+    } catch (error) {
+      setModalConciliacionManualCaja({
+        abierto: false,
+        cargando: false,
+        data: null,
+      });
+      Swal.fire(
+        "Error",
+        getErrorMessage(
+          error,
+          "No se pudieron cargar las sugerencias de conciliación manual.",
+        ),
+        "error",
+      );
+    }
+  };
+
+  const confirmarConciliacionManualCaja = async ({
+    registroReporteIds,
+    movimientoCajaIds,
+    observacion,
+  }) => {
+    if (
+      !cargaSeleccionada?.id ||
+      !registroReporteIds?.length ||
+      !movimientoCajaIds?.length ||
+      confirmandoConciliacionManualCaja
+    ) {
+      return;
+    }
+
+    try {
+      setConfirmandoConciliacionManualCaja(true);
+      const { data } = await api.post(
+        `/api/contabilidad/control-financiero/cargas/${cargaSeleccionada.id}/conciliacion-caja/manual`,
+        {
+          registroReporteIds,
+          movimientoCajaIds,
+          observacion: String(observacion || "").trim(),
+        },
+      );
+      setConciliacionCaja(data.conciliacion || null);
+      setErrorConciliacionCaja("");
+      setModalConciliacionManualCaja({
+        abierto: false,
+        cargando: false,
+        data: null,
+      });
+      await Swal.fire(
+        "Conciliación manual confirmada",
+        "Se generó una nueva ejecución de conciliación de caja.",
+        "success",
+      );
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        getErrorMessage(
+          error,
+          "No se pudo confirmar la conciliación manual de caja.",
+        ),
+        "error",
+      );
+    } finally {
+      setConfirmandoConciliacionManualCaja(false);
+    }
+  };
+
+  const deshacerConciliacionManualCaja = async (conciliacionManualId) => {
+    if (!cargaSeleccionada?.id || !conciliacionManualId) return;
+
+    const confirmacion = await Swal.fire({
+      title: "Deshacer conciliación manual",
+      icon: "warning",
+      input: "textarea",
+      inputLabel: "Motivo de deshacer",
+      inputPlaceholder: "Indica por qué se deshace esta conciliación...",
+      inputAttributes: {
+        maxlength: "1000",
+        "aria-label": "Motivo de deshacer conciliación manual",
+      },
+      inputValidator: (value) =>
+        String(value || "").trim()
+          ? undefined
+          : "El motivo de deshacer es obligatorio.",
+      showCancelButton: true,
+      confirmButtonText: "Deshacer conciliación manual",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      reverseButtons: true,
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      setDeshaciendoConciliacionManualCajaId(conciliacionManualId);
+      const { data } = await api.patch(
+        `/api/contabilidad/control-financiero/cargas/${cargaSeleccionada.id}/conciliacion-caja/manual/${conciliacionManualId}/deshacer`,
+        { motivo: String(confirmacion.value || "").trim() },
+      );
+      setConciliacionCaja(data.conciliacion || null);
+      setErrorConciliacionCaja("");
+      await Swal.fire(
+        "Conciliación manual deshecha",
+        "Los registros volvieron al algoritmo normal de conciliación.",
+        "success",
+      );
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        getErrorMessage(
+          error,
+          "No se pudo deshacer la conciliación manual de caja.",
+        ),
+        "error",
+      );
+    } finally {
+      setDeshaciendoConciliacionManualCajaId(null);
     }
   };
 
@@ -2439,8 +3129,15 @@ export default function ControlFinanciero() {
                     registrosCaja={registros.caja}
                     onReconciliar={reconciliarCaja}
                     onGuardarGestionCaja={guardarGestionCaja}
+                    onAbrirConciliacionManual={abrirConciliacionManualCaja}
+                    onDeshacerConciliacionManual={
+                      deshacerConciliacionManualCaja
+                    }
                     reconciliando={reconciliandoCaja}
                     guardandoGestionId={guardandoPagoId}
+                    deshaciendoRelacionId={
+                      deshaciendoConciliacionManualCajaId
+                    }
                     usuariosResponsables={usuariosResponsables}
                     editable={cargaSeleccionada?.estado === "ACTIVA"}
                   />
@@ -2467,6 +3164,14 @@ export default function ControlFinanciero() {
           </>
         )}
       </div>
+      <ConciliacionManualCajaModal
+        abierto={modalConciliacionManualCaja.abierto}
+        cargando={modalConciliacionManualCaja.cargando}
+        confirmando={confirmandoConciliacionManualCaja}
+        data={modalConciliacionManualCaja.data}
+        onCerrar={cerrarModalConciliacionManualCaja}
+        onConfirmar={confirmarConciliacionManualCaja}
+      />
     </div>
   );
 }
