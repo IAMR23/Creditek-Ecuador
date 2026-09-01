@@ -564,6 +564,9 @@ const normalizeWeeklySellerIds = (sellerIds = []) =>
 const getWeeklyTeamKey = (leaderId, weekStart) =>
   `${Number(leaderId)}:${String(weekStart).slice(0, 10)}`;
 
+const LOGISTICS_DELIVERY_RATE = 1;
+const LOGISTICS_MANAGER_JUNIOR_BONUS_RATE = 0.5;
+
 const buildWeeklyTeamsMap = (rows = []) =>
   rows.reduce((map, row) => {
     const item = row?.get ? row.get({ plain: true }) : row;
@@ -609,7 +612,7 @@ const getLogisticsProfile = (usuarioPayload = {}) => {
     return {
       tipo: "ENCARGADO",
       cargo: managerPosition.cargo || "ENCARGADO DE LOGISTICA",
-      tarifaPorEntrega: 1,
+      tarifaPorEntrega: LOGISTICS_DELIVERY_RATE,
     };
   }
 
@@ -623,7 +626,7 @@ const getLogisticsProfile = (usuarioPayload = {}) => {
   return {
     tipo: "JUNIOR",
     cargo: driverPosition?.cargo || "REPARTIDOR",
-    tarifaPorEntrega: 0.5,
+    tarifaPorEntrega: LOGISTICS_DELIVERY_RATE,
   };
 };
 
@@ -654,11 +657,18 @@ const buildLogisticsCommissionRows = ({ usuarios = [], asignaciones = [], weeks 
       ...merged,
       ...profile,
       esEncargadoLogistica: profile.tipo === "ENCARGADO",
+      tarifaBonoJunior:
+        profile.tipo === "ENCARGADO"
+          ? LOGISTICS_MANAGER_JUNIOR_BONUS_RATE
+          : 0,
       semanas: Object.fromEntries(
         weeks.map((week) => [
           week.startDate,
           {
             entregas: 0,
+            entregasJuniors: 0,
+            comisionEntregasPropias: 0,
+            bonoJuniors: 0,
             totalComisiones: 0,
             semanaFutura: isFutureCommercialWeek(week),
           },
@@ -668,6 +678,9 @@ const buildLogisticsCommissionRows = ({ usuarios = [], asignaciones = [], weeks 
   });
 
   const asignacionesContadas = new Set();
+  const entregasJuniorsPorSemana = new Map(
+    weeks.map((week) => [week.startDate, new Set()]),
+  );
   asignaciones.forEach((asignacion) => {
     const usuarioId = Number(asignacion?.usuarioId);
     const entregaId = Number(asignacion?.entregaId);
@@ -681,10 +694,30 @@ const buildLogisticsCommissionRows = ({ usuarios = [], asignaciones = [], weeks 
 
     asignacionesContadas.add(uniqueKey);
     values.entregas += 1;
-    values.totalComisiones = round(
-      values.entregas * persona.tarifaPorEntrega,
-      2,
-    );
+    if (!persona.esEncargadoLogistica) {
+      entregasJuniorsPorSemana.get(weekKey)?.add(entregaId);
+    }
+  });
+
+  personasPorId.forEach((persona) => {
+    weeks.forEach((week) => {
+      const values = persona.semanas[week.startDate];
+      values.entregasJuniors = persona.esEncargadoLogistica
+        ? entregasJuniorsPorSemana.get(week.startDate)?.size || 0
+        : 0;
+      values.comisionEntregasPropias = round(
+        values.entregas * persona.tarifaPorEntrega,
+        2,
+      );
+      values.bonoJuniors = round(
+        values.entregasJuniors * persona.tarifaBonoJunior,
+        2,
+      );
+      values.totalComisiones = round(
+        values.comisionEntregasPropias + values.bonoJuniors,
+        2,
+      );
+    });
   });
 
   return [...personasPorId.values()]
@@ -693,15 +726,37 @@ const buildLogisticsCommissionRows = ({ usuarios = [], asignaciones = [], weeks 
         (total, week) => total + persona.semanas[week.startDate].entregas,
         0,
       );
-      const totalPagar = round(totalEntregas * persona.tarifaPorEntrega, 2);
+      const totalEntregasJuniors = weeks.reduce(
+        (total, week) =>
+          total + persona.semanas[week.startDate].entregasJuniors,
+        0,
+      );
+      const totalComisionEntregasPropias = round(
+        totalEntregas * persona.tarifaPorEntrega,
+        2,
+      );
+      const totalBonoJuniors = round(
+        totalEntregasJuniors * persona.tarifaBonoJunior,
+        2,
+      );
+      const totalPagar = round(
+        totalComisionEntregasPropias + totalBonoJuniors,
+        2,
+      );
       return {
         ...persona,
         total: {
           entregas: totalEntregas,
+          entregasJuniors: totalEntregasJuniors,
+          comisionEntregasPropias: totalComisionEntregasPropias,
+          bonoJuniors: totalBonoJuniors,
           totalComisiones: totalPagar,
         },
         resumenMensual: {
           totalEntregas,
+          totalEntregasJuniors,
+          totalComisionEntregasPropias,
+          totalBonoJuniors,
           totalPagar,
         },
       };

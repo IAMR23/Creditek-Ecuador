@@ -376,19 +376,33 @@ const buildLogisticsExcelRows = ({ rows, weeks }) =>
       Jerarquia: row.esEncargadoLogistica ? "Encargado" : "Junior",
       "Cargo o rol": row.cargo || "",
       Agencias: (row.agencias || []).join(", "),
-      "Tarifa por entrega": Number(row.tarifaPorEntrega || 0),
+      "Tarifa por entrega propia": Number(row.tarifaPorEntrega || 0),
+      "Bono por entrega de junior": Number(row.tarifaBonoJunior || 0),
     };
 
     weeks.forEach((week, weekIndex) => {
       const values = row.semanas?.[week.startDate] || {};
       const prefix = `S${weekIndex + 1} ${week.label}`;
-      base[`${prefix} entregas`] = Number(values.entregas || 0);
-      base[`${prefix} valor`] = Number(values.totalComisiones || 0);
+      base[`${prefix} entregas propias`] = Number(values.entregas || 0);
+      base[`${prefix} comision propia`] = Number(
+        values.comisionEntregasPropias || 0,
+      );
+      base[`${prefix} entregas juniors`] = Number(
+        values.entregasJuniors || 0,
+      );
+      base[`${prefix} bono juniors`] = Number(values.bonoJuniors || 0);
+      base[`${prefix} valor total`] = Number(values.totalComisiones || 0);
     });
 
     return {
       ...base,
-      "Total entregas": Number(row.resumenMensual?.totalEntregas || 0),
+      "Total entregas propias": Number(row.resumenMensual?.totalEntregas || 0),
+      "Total entregas juniors": Number(
+        row.resumenMensual?.totalEntregasJuniors || 0,
+      ),
+      "Total bono juniors": Number(
+        row.resumenMensual?.totalBonoJuniors || 0,
+      ),
       "A recibir": Number(row.resumenMensual?.totalPagar || 0),
     };
   });
@@ -2080,7 +2094,7 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
   return (
     <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse text-center text-sm text-slate-950">
+        <table className="w-full min-w-[1260px] border-collapse text-center text-sm text-slate-950">
           <thead>
             <tr className="bg-slate-100">
               <th className="sticky left-0 z-20 min-w-[240px] border border-slate-300 bg-slate-100 px-3 py-3 text-left font-black">
@@ -2090,7 +2104,10 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
                 CARGO / ROL
               </th>
               <th className="min-w-[120px] border border-slate-300 px-3 py-3 font-black">
-                TARIFA
+                TARIFA PROPIA
+              </th>
+              <th className="min-w-[130px] border border-slate-300 px-3 py-3 font-black">
+                BONO / JUNIOR
               </th>
               {weeks.map((week, index) => (
                 <th
@@ -2101,7 +2118,13 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
                 </th>
               ))}
               <th className="min-w-[120px] border border-slate-300 bg-amber-100 px-3 py-3 font-black">
-                ENTREGAS
+                ENTREGAS PROPIAS
+              </th>
+              <th className="min-w-[130px] border border-slate-300 bg-cyan-100 px-3 py-3 font-black">
+                ENTREGAS JUNIORS
+              </th>
+              <th className="min-w-[130px] border border-slate-300 bg-cyan-700 px-3 py-3 font-black text-white">
+                BONO JUNIORS
               </th>
               <th className="min-w-[130px] border border-slate-300 bg-emerald-700 px-3 py-3 font-black text-white">
                 A RECIBIR
@@ -2137,6 +2160,11 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
                 <td className="border border-slate-300 px-3 py-3 font-black text-emerald-700">
                   {formatCurrency(row.tarifaPorEntrega)}
                 </td>
+                <td className="border border-slate-300 px-3 py-3 font-black text-cyan-700">
+                  {row.esEncargadoLogistica
+                    ? formatCurrency(row.tarifaBonoJunior)
+                    : "-"}
+                </td>
                 {weeks.map((week) => {
                   const values = row.semanas?.[week.startDate] || {};
                   return (
@@ -2149,11 +2177,22 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
                       ) : (
                         <>
                           <span className="block text-lg font-black">
-                            {values.entregas || 0}
+                            {values.entregas || 0} propias
                           </span>
                           <span className="block text-xs font-semibold text-emerald-700">
-                            {formatCurrency(values.totalComisiones)}
+                            {formatCurrency(values.comisionEntregasPropias)}
                           </span>
+                          {row.esEncargadoLogistica ? (
+                            <span className="mt-1 block text-xs font-semibold text-cyan-700">
+                              + {values.entregasJuniors || 0} juniors /{" "}
+                              {formatCurrency(values.bonoJuniors)}
+                            </span>
+                          ) : null}
+                          {row.esEncargadoLogistica ? (
+                            <span className="block text-xs font-black text-slate-800">
+                              Total {formatCurrency(values.totalComisiones)}
+                            </span>
+                          ) : null}
                         </>
                       )}
                     </td>
@@ -2161,6 +2200,12 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
                 })}
                 <td className="border border-slate-300 bg-amber-50 px-3 py-3 text-lg font-black">
                   {row.resumenMensual?.totalEntregas || 0}
+                </td>
+                <td className="border border-slate-300 bg-cyan-50 px-3 py-3 text-lg font-black">
+                  {row.resumenMensual?.totalEntregasJuniors || 0}
+                </td>
+                <td className="border border-slate-300 bg-cyan-700 px-3 py-3 text-lg font-black text-white">
+                  {formatCurrency(row.resumenMensual?.totalBonoJuniors)}
                 </td>
                 <td className="border border-slate-300 bg-emerald-700 px-3 py-3 text-lg font-black text-white">
                   {formatCurrency(row.resumenMensual?.totalPagar)}
@@ -2171,6 +2216,7 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
               <td className="sticky left-0 z-10 border border-slate-700 bg-slate-900 px-3 py-3 text-left">
                 TOTAL
               </td>
+              <td className="border border-slate-700 px-3 py-3" />
               <td className="border border-slate-700 px-3 py-3" />
               <td className="border border-slate-700 px-3 py-3" />
               {weeks.map((week) => (
@@ -2190,6 +2236,23 @@ function LogisticsCommissionTable({ rows, weeks, loading }) {
               ))}
               <td className="border border-slate-700 px-3 py-3 text-lg">
                 {totalEntregas}
+              </td>
+              <td className="border border-slate-700 px-3 py-3 text-lg">
+                {rows.reduce(
+                  (total, row) =>
+                    total +
+                    Number(row.resumenMensual?.totalEntregasJuniors || 0),
+                  0,
+                )}
+              </td>
+              <td className="border border-slate-700 bg-cyan-700 px-3 py-3 text-lg">
+                {formatCurrency(
+                  rows.reduce(
+                    (total, row) =>
+                      total + Number(row.resumenMensual?.totalBonoJuniors || 0),
+                    0,
+                  ),
+                )}
               </td>
               <td className="border border-slate-700 bg-emerald-700 px-3 py-3 text-lg">
                 {formatCurrency(totalPagar)}

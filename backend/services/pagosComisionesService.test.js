@@ -175,17 +175,77 @@ describe("pagosComisionesService", () => {
       usuarioId: 1,
       esEncargadoLogistica: true,
       tarifaPorEntrega: 1,
-      resumenMensual: { totalEntregas: 2, totalPagar: 2 },
+      tarifaBonoJunior: 0.5,
+      resumenMensual: {
+        totalEntregas: 2,
+        totalEntregasJuniors: 3,
+        totalComisionEntregasPropias: 2,
+        totalBonoJuniors: 1.5,
+        totalPagar: 3.5,
+      },
     });
     expect(rows.find((row) => row.usuarioId === 2)).toMatchObject({
-      tarifaPorEntrega: 0.5,
-      resumenMensual: { totalEntregas: 2, totalPagar: 1 },
+      tarifaPorEntrega: 1,
+      resumenMensual: { totalEntregas: 2, totalPagar: 2 },
     });
     expect(rows.find((row) => row.usuarioId === 3)).toMatchObject({
       cargo: "REPARTIDOR",
-      tarifaPorEntrega: 0.5,
-      resumenMensual: { totalEntregas: 1, totalPagar: 0.5 },
+      tarifaPorEntrega: 1,
+      resumenMensual: { totalEntregas: 1, totalPagar: 1 },
     });
+    expect(rows[0].semanas["2026-07-02"]).toMatchObject({
+      entregas: 1,
+      entregasJuniors: 1,
+      comisionEntregasPropias: 1,
+      bonoJuniors: 0.5,
+      totalComisiones: 1.5,
+    });
+    expect(rows[0].semanas["2026-07-09"]).toMatchObject({
+      entregas: 1,
+      entregasJuniors: 2,
+      comisionEntregasPropias: 1,
+      bonoJuniors: 1,
+      totalComisiones: 2,
+    });
+  });
+
+  test("cuenta una sola vez el bono del encargado por entrega de juniors", () => {
+    const rows = buildLogisticsCommissionRows({
+      usuarios: [
+        {
+          usuarioId: 1,
+          nombre: "Encargado",
+          activo: true,
+          posicionesPago: [{ cargo: "ENCARGADO DE LOGISTICA" }],
+        },
+        {
+          usuarioId: 2,
+          nombre: "Junior uno",
+          activo: true,
+          roles: ["Repartidor"],
+        },
+        {
+          usuarioId: 3,
+          nombre: "Junior dos",
+          activo: true,
+          posicionesPago: [{ cargo: "CHOFER" }],
+        },
+      ],
+      asignaciones: [
+        { usuarioId: 2, entregaId: 50, fecha: "2026-07-03" },
+        { usuarioId: 3, entregaId: 50, fecha: "2026-07-03" },
+      ],
+      weeks: [{ startDate: "2026-07-02", endDate: "2026-07-08" }],
+    });
+
+    expect(rows[0].resumenMensual).toMatchObject({
+      totalEntregas: 0,
+      totalEntregasJuniors: 1,
+      totalBonoJuniors: 0.5,
+      totalPagar: 0.5,
+    });
+    expect(rows.find((row) => row.usuarioId === 2).resumenMensual.totalPagar).toBe(1);
+    expect(rows.find((row) => row.usuarioId === 3).resumenMensual.totalPagar).toBe(1);
   });
 
   test("prioriza la tarifa del encargado aunque tambien tenga rol repartidor", () => {

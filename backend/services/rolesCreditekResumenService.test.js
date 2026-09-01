@@ -54,6 +54,7 @@ describe("rolesCreditekResumenService", () => {
       { usuarioId: 4, seccion: "CAJAS", valor: "20.00" },
       { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
       { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
+      { usuarioId: 4, seccion: "MULTAS_FACTURACION", valor: "4.00" },
     ]);
     ControlFinancieroRegistro.findAll
       .mockResolvedValueOnce([{ responsablePagoEntradaId: 4, entradas: "5.00" }])
@@ -65,7 +66,7 @@ describe("rolesCreditekResumenService", () => {
         deudaJimena: "1.00",
         atrasos: "2.00",
         diasNoLaborables: "3.00",
-        multasFacturacion: "4.00",
+        multasFacturacionManual: null,
         planmovi: "6.00",
         prestamo: "7.00",
         mecanica: "8.00",
@@ -110,6 +111,8 @@ describe("rolesCreditekResumenService", () => {
         atrasos: 2,
         diasNoLaborables: 3,
         multasFacturacion: 4,
+        multasFacturacionCalculado: 4,
+        multasFacturacionManual: null,
         totalAnticipos: 84,
         planmovi: 6,
         prestamo: 7,
@@ -186,6 +189,7 @@ describe("rolesCreditekResumenService", () => {
       { usuarioId: 4, seccion: "CAJAS", valor: "20.00" },
       { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
       { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
+      { usuarioId: 4, seccion: "MULTAS_FACTURACION", valor: "4.00" },
     ]);
     ControlFinancieroRegistro.findAll
       .mockResolvedValueOnce([{ responsablePagoEntradaId: 4, entradas: "5.00" }])
@@ -197,6 +201,7 @@ describe("rolesCreditekResumenService", () => {
         cajaGeneralManual: "44.00",
         entradasManual: null,
         descuentosManual: "0.00",
+        multasFacturacionManual: "6.00",
       },
     ]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
@@ -225,8 +230,11 @@ describe("rolesCreditekResumenService", () => {
         descuentos: 0,
         descuentosCalculado: 2,
         descuentosManual: 0,
-        totalAnticipos: 88,
-        totalDescuentos: 88,
+        multasFacturacion: 6,
+        multasFacturacionCalculado: 4,
+        multasFacturacionManual: 6,
+        totalAnticipos: 94,
+        totalDescuentos: 94,
       }),
     ]);
   });
@@ -304,7 +312,7 @@ describe("rolesCreditekResumenService", () => {
             deudaJimena: "10,25",
             atrasos: 2,
             diasNoLaborables: 0,
-            multasFacturacion: "5.50",
+            multasFacturacionManual: "5.50",
             planmovi: 1,
             prestamo: "2,50",
             mecanica: 3,
@@ -328,7 +336,7 @@ describe("rolesCreditekResumenService", () => {
       deudaJimena: 10.25,
       atrasos: 2,
       diasNoLaborables: 0,
-      multasFacturacion: 5.5,
+      multasFacturacionManual: 5.5,
       planmovi: 1,
       prestamo: 2.5,
       mecanica: 3,

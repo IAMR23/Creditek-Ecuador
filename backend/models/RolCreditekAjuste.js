@@ -106,6 +106,11 @@ const RolCreditekAjuste = sequelize.define(
       allowNull: true,
       validate: { min: 0 },
     },
+    multasFacturacionManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

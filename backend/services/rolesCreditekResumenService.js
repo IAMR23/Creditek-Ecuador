@@ -15,7 +15,6 @@ const CAMPOS_MANUALES = [
   "deudaJimena",
   "atrasos",
   "diasNoLaborables",
-  "multasFacturacion",
   "planmovi",
   "prestamo",
   "mecanica",
@@ -26,6 +25,7 @@ const CAMPOS_CALCULADOS = [
   "cajaGeneral",
   "entradas",
   "descuentos",
+  "multasFacturacion",
 ];
 const CAMPOS_CALCULADOS_MANUALES = CAMPOS_CALCULADOS.map(
   (campo) => `${campo}Manual`,
@@ -302,6 +302,7 @@ const obtenerResumen = async (periodoValue) => {
     CAJAS: "cajaGeneral",
     ENTRADAS: "entradas",
     DESCUENTOS: "descuentos",
+    MULTAS_FACTURACION: "multasFacturacion",
   };
   egresos.forEach((row) => {
     const campo = camposSeccion[String(row.seccion || "").toUpperCase()];
@@ -362,6 +363,7 @@ const obtenerResumen = async (periodoValue) => {
       cajaGeneral: redondear(automaticos.cajaGeneral),
       entradas: redondear(automaticos.entradas),
       descuentos: redondear(automaticos.descuentos),
+      multasFacturacion: redondear(automaticos.multasFacturacion),
     };
     const valores = {
       ...valoresCalculados,

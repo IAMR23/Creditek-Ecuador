@@ -1,6 +1,5 @@
 const { Op } = require("sequelize");
 const Entrega = require("../../models/Entrega");
-const UsuarioAgenciaEntrega = require("../../models/UsuarioAgenciaEntrega");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
 
 exports.getDashboardEntregas = async (req, res) => {
@@ -73,10 +72,7 @@ const includeMotorizado = {
         ...whereBase,
         [Op.and]: [
           {
-            [Op.or]: [
-              { FechaHoraLlamada: null },
-              { FechaHoraLlamada: "" },
-            ],
+            FechaHoraLlamada: null,
           },
           {
             [Op.or]: [

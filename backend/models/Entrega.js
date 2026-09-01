@@ -53,7 +53,7 @@ const Entrega = sequelize.define(
       allowNull: true,
     },
     FechaHoraLlamada: {
-      type: DataTypes.STRING,
+      type: DataTypes.DATE,
       allowNull: true,
     },
     fotoLogistica: {

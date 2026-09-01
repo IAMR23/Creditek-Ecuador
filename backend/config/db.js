@@ -1276,7 +1276,13 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
     "cajaGeneralManual",
     "entradasManual",
     "descuentosManual",
+    "multasFacturacionManual",
   ];
+  const columnasActuales = await queryInterface.describeTable(
+    "roles_creditek_ajustes",
+  );
+  const debeMigrarMultasFacturacion =
+    !columnasActuales.multasFacturacionManual;
 
   for (const columnName of columnasCalculadasManuales) {
     await addColumnIfMissing(
@@ -1288,6 +1294,15 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
         allowNull: true,
       },
     );
+  }
+
+  if (debeMigrarMultasFacturacion) {
+    await sequelize.query(`
+      UPDATE roles_creditek_ajustes
+      SET "multasFacturacionManual" = "multasFacturacion"
+      WHERE "multasFacturacionManual" IS NULL
+        AND "multasFacturacion" <> 0;
+    `);
   }
 
   await sequelize.query(`

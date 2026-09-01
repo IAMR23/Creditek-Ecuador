@@ -18,7 +18,6 @@ const CAMPOS_MANUALES = [
   "deudaJimena",
   "atrasos",
   "diasNoLaborables",
-  "multasFacturacion",
   "planmovi",
   "prestamo",
   "mecanica",
@@ -29,6 +28,7 @@ const CAMPOS_CALCULADOS = [
   "cajaGeneral",
   "entradas",
   "descuentos",
+  "multasFacturacion",
 ];
 const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica", "pagosLentes"];
 const CAMPOS_INGRESOS = ["ingresosComisiones"];
@@ -47,6 +47,23 @@ const CAMPOS_MANUALES_FINALES = CAMPOS_MANUALES.filter(
   (campo) =>
     campo !== "adelantosTransfer" && !CAMPOS_PRESTAMOS.includes(campo),
 );
+const ETIQUETAS_CAMPOS = {
+  adelantosTransfer: "Adelantos transfer",
+  descuentosMeta: "Descuentos por meta",
+  cajaGeneral: "Caja general",
+  entradas: "Entradas",
+  descuentos: "Descuentos",
+  multasFacturacion: "Multas facturacion",
+  deudaJimena: "Deuda Jimena",
+  atrasos: "Atrasos",
+  diasNoLaborables: "Dias no laborables",
+  planmovi: "Planmovi",
+  prestamo: "Prestamo",
+  mecanica: "Mecanica",
+  pagosLentes: "Pagos de lentes",
+};
+const TOTAL_COLUMNAS_EGRESOS =
+  1 + CAMPOS_ANTICIPOS.length + 1 + CAMPOS_PRESTAMOS.length + 1 + 1;
 const MESES = [
   "Enero",
   "Febrero",
@@ -491,20 +508,13 @@ export default function RolesCreditekResumen() {
       ["EGRESOS CREDITEK"],
       [
         "PERSONAL",
-        "ADELANTOS TRANSFER",
-        "DESCUENTOS POR META",
-        "CAJA GENERAL",
-        "ENTRADAS",
-        "DESCUENTOS",
-        "DEUDA JIMENA",
-        "ATRASOS",
-        "DIAS NO LABORABLES",
-        "MULTAS FACTURACION",
+        ...CAMPOS_ANTICIPOS.map((campo) =>
+          ETIQUETAS_CAMPOS[campo].toUpperCase(),
+        ),
         "TOTAL ANTICIPOS",
-        "PLANMOVI",
-        "PRESTAMO",
-        "MECANICA",
-        "PAGOS DE LENTES",
+        ...CAMPOS_PRESTAMOS.map((campo) =>
+          ETIQUETAS_CAMPOS[campo].toUpperCase(),
+        ),
         "SUMAN PRESTAMOS",
         "TOTAL DESCUENTOS",
       ],
@@ -679,7 +689,7 @@ export default function RolesCreditekResumen() {
       columnas: [
         { label: "Personal", width: 98, getValue: (row) => row.nombre },
         ...CAMPOS_ANTICIPOS.map((campo) => ({
-          label: campo,
+          label: ETIQUETAS_CAMPOS[campo],
           width: 40,
           align: "right",
           getValue: (row) => valorCampo(row, campo, drafts),
@@ -691,7 +701,7 @@ export default function RolesCreditekResumen() {
           getValue: (row) => totalAnticiposFila(row, drafts),
         },
         ...CAMPOS_PRESTAMOS.map((campo) => ({
-          label: campo,
+          label: ETIQUETAS_CAMPOS[campo],
           width: 40,
           align: "right",
           getValue: (row) => valorCampo(row, campo, drafts),
@@ -914,8 +924,8 @@ export default function RolesCreditekResumen() {
                 <tr className="text-xs font-bold uppercase tracking-wide text-slate-700">
                   <th rowSpan="2" className="sticky left-0 z-20 w-64 border-b border-r border-slate-300 bg-slate-100 px-4 py-3 text-left">Personal</th>
                   <th className="border-b border-r border-slate-300 bg-amber-100 px-3 py-2 text-center text-amber-900">Valor manual</th>
-                  <th colSpan="4" className="border-b border-r border-slate-300 bg-blue-100 px-3 py-2 text-center text-blue-900">Valores calculados</th>
-                  <th colSpan="4" className="border-b border-r border-slate-300 bg-amber-100 px-3 py-2 text-center text-amber-900">Valores manuales</th>
+                  <th colSpan={CAMPOS_CALCULADOS.length} className="border-b border-r border-slate-300 bg-blue-100 px-3 py-2 text-center text-blue-900">Valores calculados</th>
+                  <th colSpan={CAMPOS_MANUALES_FINALES.length} className="border-b border-r border-slate-300 bg-amber-100 px-3 py-2 text-center text-amber-900">Valores manuales</th>
                   <th rowSpan="2" className="w-40 border-b border-r border-slate-300 bg-blue-700 px-3 py-3 text-right text-white">Total anticipos</th>
                   <th colSpan="4" className="border-b border-r border-slate-300 bg-emerald-100 px-3 py-2 text-center text-emerald-900">Prestamos a la empresa</th>
                   <th rowSpan="2" className="w-40 border-b border-r border-slate-300 bg-emerald-100 px-3 py-3 text-right text-emerald-950">Suman prestamos</th>
@@ -923,34 +933,29 @@ export default function RolesCreditekResumen() {
                 </tr>
                 <tr className="text-[11px] font-bold uppercase leading-tight text-slate-700">
                   <th className="w-40 border-b border-r border-slate-300 bg-amber-50 px-3 py-3 text-right">Adelantos transfer</th>
-                  {[
-                    "Descuentos por meta",
-                    "Caja general",
-                    "Entradas",
-                    "Descuentos",
-                  ].map((label) => (
-                    <th key={label} className="w-36 border-b border-r border-slate-300 bg-blue-50 px-3 py-3 text-right">{label}</th>
+                  {CAMPOS_CALCULADOS.map((campo) => (
+                    <th key={campo} className="w-36 border-b border-r border-slate-300 bg-blue-50 px-3 py-3 text-right">{ETIQUETAS_CAMPOS[campo]}</th>
                   ))}
-                  {["Deuda Jimena", "Atrasos", "Dias no laborables", "Multas facturacion"].map((label) => (
-                    <th key={label} className="w-40 border-b border-r border-slate-300 bg-amber-50 px-3 py-3 text-right">{label}</th>
+                  {CAMPOS_MANUALES_FINALES.map((campo) => (
+                    <th key={campo} className="w-40 border-b border-r border-slate-300 bg-amber-50 px-3 py-3 text-right">{ETIQUETAS_CAMPOS[campo]}</th>
                   ))}
-                  {["Planmovi", "Prestamo", "Mecanica", "Pagos de lentes"].map((label) => (
-                    <th key={label} className="w-40 border-b border-r border-slate-300 bg-emerald-50 px-3 py-3 text-right">{label}</th>
+                  {CAMPOS_PRESTAMOS.map((campo) => (
+                    <th key={campo} className="w-40 border-b border-r border-slate-300 bg-emerald-50 px-3 py-3 text-right">{ETIQUETAS_CAMPOS[campo]}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="17" className="px-4 py-14 text-center font-semibold text-slate-500">Calculando resumen del periodo...</td></tr>
+                  <tr><td colSpan={TOTAL_COLUMNAS_EGRESOS} className="px-4 py-14 text-center font-semibold text-slate-500">Calculando resumen del periodo...</td></tr>
                 ) : rowsFiltradas.length === 0 ? (
-                  <tr><td colSpan="17" className="px-4 py-14 text-center text-slate-500">No hay colaboradores para mostrar.</td></tr>
+                  <tr><td colSpan={TOTAL_COLUMNAS_EGRESOS} className="px-4 py-14 text-center text-slate-500">No hay colaboradores para mostrar.</td></tr>
                 ) : rowsFiltradas.map((row, index) => (
                   <tr key={row.usuarioId} className={index % 2 ? "bg-slate-50/60" : "bg-white"}>
                     <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-inherit px-4 py-2.5 font-bold text-slate-800">{row.nombre}</td>
                     <td className="border-b border-r border-slate-200 px-2 py-1.5">
                       <InputValor row={row} campo="adelantosTransfer" drafts={drafts} onChange={cambiarManual} disabled={saving} />
                     </td>
-                    {["descuentosMeta", "cajaGeneral", "entradas", "descuentos"].map((campo) => (
+                    {CAMPOS_CALCULADOS.map((campo) => (
                       <td key={campo} className="border-b border-r border-slate-200 bg-blue-50/40 px-2 py-1.5">
                         <InputValor
                           row={row}

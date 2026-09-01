@@ -1,7 +1,6 @@
 jest.mock("../../models/Entrega", () => ({
   count: jest.fn(),
 }));
-jest.mock("../../models/UsuarioAgenciaEntrega", () => ({}));
 jest.mock("../../models/UsuarioAgencia", () => ({}));
 
 const { Op } = require("sequelize");
@@ -41,7 +40,7 @@ describe("getDashboardEntregas", () => {
     expect(opcionesProcesosCompletos.where.procesoCompleto).toBeUndefined();
     expect(opcionesProcesosCompletos.where[Op.and]).toEqual([
       {
-        [Op.or]: [{ FechaHoraLlamada: null }, { FechaHoraLlamada: "" }],
+        FechaHoraLlamada: null,
       },
       {
         [Op.or]: [{ fotoFechaLlamada: null }, { fotoFechaLlamada: "" }],
