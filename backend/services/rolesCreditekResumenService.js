@@ -24,8 +24,11 @@ const CAMPOS_CALCULADOS = [
   "descuentosMeta",
   "cajaGeneral",
   "entradas",
+  "transferencias",
   "descuentos",
+  "jefes",
   "multasFacturacion",
+  "otros",
 ];
 const CAMPOS_CALCULADOS_MANUALES = CAMPOS_CALCULADOS.map(
   (campo) => `${campo}Manual`,
@@ -38,11 +41,14 @@ const CAMPOS_ANTICIPOS = [
   "descuentosMeta",
   "cajaGeneral",
   "entradas",
+  "transferencias",
   "descuentos",
+  "jefes",
+  "multasFacturacion",
+  "otros",
   "deudaJimena",
   "atrasos",
   "diasNoLaborables",
-  "multasFacturacion",
 ];
 const MAX_VALOR = 9999999999.99;
 
@@ -234,7 +240,6 @@ const obtenerResumen = async (periodoValue) => {
   const [
     usuarios,
     egresos,
-    entradasControl,
     cajasControlValues,
     ajustes,
     reporteComisiones,
@@ -248,27 +253,15 @@ const obtenerResumen = async (periodoValue) => {
       EgresoCreditekEntrada.findAll({
         where: {
           activo: true,
-          createdAt: { [Op.gte]: inicio, [Op.lt]: fin },
+          [Op.or]: [
+            { fecha: { [Op.between]: [fechaInicio, fechaFin] } },
+            {
+              fecha: null,
+              createdAt: { [Op.gte]: inicio, [Op.lt]: fin },
+            },
+          ],
         },
         attributes: ["usuarioId", "seccion", "valor"],
-      }),
-      ControlFinancieroRegistro.findAll({
-        where: {
-          tipoRegistro: { [Op.in]: ["VENTA_TV", "VENTA_CELULAR"] },
-          entradas: { [Op.gt]: 0 },
-          responsablePagoEntradaId: { [Op.ne]: null },
-          fecha: { [Op.between]: [fechaInicio, fechaFin] },
-        },
-        attributes: ["responsablePagoEntradaId", "entradas"],
-        include: [
-          {
-            model: ControlFinancieroCarga,
-            as: "carga",
-            attributes: [],
-            where: { estado: "ACTIVA" },
-            required: true,
-          },
-        ],
       }),
       ControlFinancieroRegistro.findAll({
         where: {
@@ -301,21 +294,16 @@ const obtenerResumen = async (periodoValue) => {
   const camposSeccion = {
     CAJAS: "cajaGeneral",
     ENTRADAS: "entradas",
+    TRANSFERENCIAS: "transferencias",
     DESCUENTOS: "descuentos",
+    JEFES: "jefes",
     MULTAS_FACTURACION: "multasFacturacion",
+    OTROS: "otros",
   };
   egresos.forEach((row) => {
     const campo = camposSeccion[String(row.seccion || "").toUpperCase()];
     if (campo) acumular(valoresPorUsuario, row.usuarioId, campo, row.valor);
   });
-  entradasControl.forEach((row) =>
-    acumular(
-      valoresPorUsuario,
-      row.responsablePagoEntradaId,
-      "entradas",
-      row.entradas,
-    ),
-  );
   const cajasControl = await filtrarCajasNoEnCierre(cajasControlValues);
   cajasControl.forEach((row) => {
     const item = typeof row?.toJSON === "function" ? row.toJSON() : row;
@@ -359,11 +347,12 @@ const obtenerResumen = async (periodoValue) => {
       serializarAjuste();
     const valoresCalculados = {
       ingresosComisiones: redondear(automaticos.ingresosComisiones),
-      descuentosMeta: redondear(automaticos.descuentosMeta),
-      cajaGeneral: redondear(automaticos.cajaGeneral),
-      entradas: redondear(automaticos.entradas),
-      descuentos: redondear(automaticos.descuentos),
-      multasFacturacion: redondear(automaticos.multasFacturacion),
+      ...Object.fromEntries(
+        CAMPOS_CALCULADOS.map((campo) => [
+          campo,
+          redondear(automaticos[campo]),
+        ]),
+      ),
     };
     const valores = {
       ...valoresCalculados,
@@ -430,11 +419,14 @@ const obtenerResumen = async (periodoValue) => {
       descuentosMeta: 0,
       cajaGeneral: 0,
       entradas: 0,
+      transferencias: 0,
       descuentos: 0,
+      jefes: 0,
       deudaJimena: 0,
       atrasos: 0,
       diasNoLaborables: 0,
       multasFacturacion: 0,
+      otros: 0,
       planmovi: 0,
       prestamo: 0,
       mecanica: 0,

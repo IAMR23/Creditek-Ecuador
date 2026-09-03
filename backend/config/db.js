@@ -1275,8 +1275,11 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
     "descuentosMetaManual",
     "cajaGeneralManual",
     "entradasManual",
+    "transferenciasManual",
     "descuentosManual",
+    "jefesManual",
     "multasFacturacionManual",
+    "otrosManual",
   ];
   const columnasActuales = await queryInterface.describeTable(
     "roles_creditek_ajustes",

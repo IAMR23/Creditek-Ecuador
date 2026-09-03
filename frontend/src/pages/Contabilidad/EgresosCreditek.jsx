@@ -6,20 +6,27 @@ import {
   CalendarDays,
   CircleDollarSign,
   Clock3,
+  FileSpreadsheet,
+  FileText,
   ListChecks,
   Pencil,
   Plus,
-  Power,
   RefreshCw,
-  RotateCcw,
   Save,
   Search,
+  Trash2,
   UserRound,
   WalletCards,
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import {
+  descargarExcelEgresosCreditek,
+  descargarExcelRubroEgresosCreditek,
+  descargarPdfEgresosCreditek,
+  SECCIONES_REPORTE_EGRESOS,
+} from "../../utils/egresosCreditekExport";
 
 const money = new Intl.NumberFormat("es-EC", {
   style: "currency",
@@ -93,7 +100,7 @@ const SECCIONES = [
   },
 ];
 
-const SECCION_CON_FECHA = "jefes";
+const SECCIONES_CON_FECHA = new Set(SECCIONES.map((seccion) => seccion.id));
 
 const ACCIONES = {
   CREADO: "Creado",
@@ -145,7 +152,8 @@ const normalizarValor = (value) => {
   return Number.isFinite(numero) ? numero : 0;
 };
 
-const requiereFechaRegistro = (seccionId) => seccionId === SECCION_CON_FECHA;
+const requiereFechaRegistro = (seccionId) =>
+  SECCIONES_CON_FECHA.has(seccionId);
 
 const fechaHora = (value) => {
   if (!value) return "-";
@@ -158,17 +166,12 @@ const fechaHora = (value) => {
   });
 };
 
-const ORIGEN_CONTROL_FINANCIERO_ENTRADA = "CONTROL_FINANCIERO";
 const ORIGEN_CONTROL_FINANCIERO_CAJA = "CONTROL_FINANCIERO_CAJA";
-
-const esEntradaControlFinanciero = (registro) =>
-  registro?.origen === ORIGEN_CONTROL_FINANCIERO_ENTRADA;
 
 const esCajaControlFinanciero = (registro) =>
   registro?.origen === ORIGEN_CONTROL_FINANCIERO_CAJA;
 
-const esRegistroControlFinanciero = (registro) =>
-  esEntradaControlFinanciero(registro) || esCajaControlFinanciero(registro);
+const esRegistroControlFinanciero = esCajaControlFinanciero;
 
 export default function EgresosCreditek() {
   const [usuarios, setUsuarios] = useState([]);
@@ -192,6 +195,7 @@ export default function EgresosCreditek() {
   const [actualizandoId, setActualizandoId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exportando, setExportando] = useState(null);
 
   const registrosPeriodo = useMemo(() => {
     if (periodo === "todos") return registros;
@@ -233,9 +237,8 @@ export default function EgresosCreditek() {
     SECCIONES.find((item) => item.id === seccionActiva) || SECCIONES[0];
   const SeccionIcon = seccion.icon;
   const seccionRequiereFecha = requiereFechaRegistro(seccionActiva);
-  const historialGridClass = seccionRequiereFecha
-    ? "lg:grid-cols-[minmax(0,1fr)_110px_110px_92px_minmax(0,1.1fr)_minmax(180px,1.1fr)_84px]"
-    : "lg:grid-cols-[minmax(0,1fr)_110px_92px_minmax(0,1.15fr)_minmax(180px,1.1fr)_84px]";
+  const historialGridClass =
+    "xl:grid-cols-[minmax(180px,1.15fr)_110px_120px_100px_minmax(180px,1.15fr)_minmax(190px,1fr)_88px]";
   const editandoControlFinanciero =
     registroEditando && esRegistroControlFinanciero(registroEditando);
 
@@ -330,7 +333,7 @@ export default function EgresosCreditek() {
       return;
     }
     if (seccionRequiereFecha && !fechaRegistro) {
-      Swal.fire("Fecha requerida", "Ingresa la fecha del registro.", "warning");
+      Swal.fire("Fecha requerida", "Ingresa la fecha de la sanción.", "warning");
       return;
     }
 
@@ -399,7 +402,7 @@ export default function EgresosCreditek() {
     }
 
     if (!esVinculado && seccionRequiereFecha && !edicion.fecha) {
-      Swal.fire("Fecha requerida", "Ingresa la fecha del registro.", "warning");
+      Swal.fire("Fecha requerida", "Ingresa la fecha de la sanción.", "warning");
       return;
     }
 
@@ -479,44 +482,38 @@ export default function EgresosCreditek() {
     }
   };
 
-  const cambiarEstado = async (registro) => {
-    if (actualizandoId !== null) return;
-    const reactivar = registro.activo === false;
-    const accion = reactivar ? "reactivar" : "desactivar";
+  const eliminarRegistro = async (registro) => {
+    if (actualizandoId !== null || esRegistroControlFinanciero(registro)) return;
     const confirmacion = await Swal.fire({
-      title: `${reactivar ? "Reactivar" : "Desactivar"} registro`,
-      text: reactivar
-        ? "El valor volverá a incluirse en el total de la sección."
-        : "El registro seguirá visible, pero su valor se excluirá del total.",
+      title: "Eliminar registro",
+      html: `Se eliminará definitivamente el registro de <strong>${registro.usuario?.nombre || `Usuario #${registro.usuarioId}`}</strong> por <strong>${money.format(Number(registro.valor || 0))}</strong>. Esta acción no se puede deshacer.`,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: `Sí, ${accion}`,
+      confirmButtonText: "Sí, eliminar",
       cancelButtonText: "Cancelar",
-      confirmButtonColor: reactivar ? "#047857" : "#be123c",
+      confirmButtonColor: "#be123c",
+      focusCancel: true,
     });
     if (!confirmacion.isConfirmed) return;
 
     try {
       setActualizandoId(registro.id);
-      const { data } = await api.patch(
-        `/api/contabilidad/egresos-creditek/${seccionActiva}/${registro.id}/estado`,
-        { activo: reactivar },
+      await api.delete(
+        `/api/contabilidad/egresos-creditek/${seccionActiva}/${registro.id}`,
       );
       setRegistros((actuales) =>
-        actuales.map((item) =>
-          item.id === data.registro.id ? data.registro : item,
-        ),
+        actuales.filter((item) => item.id !== registro.id),
       );
       Swal.fire({
         icon: "success",
-        title: reactivar ? "Registro reactivado" : "Registro desactivado",
+        title: "Registro eliminado",
         timer: 1300,
         showConfirmButton: false,
       });
     } catch (error) {
       Swal.fire(
         "Error",
-        error.response?.data?.message || "No se pudo cambiar el estado.",
+        error.response?.data?.message || "No se pudo eliminar el registro.",
         "error",
       );
     } finally {
@@ -524,319 +521,52 @@ export default function EgresosCreditek() {
     }
   };
 
-  const renderOpcionUsuarioActual = (registro) =>
-    registro.usuario &&
-    !usuarios.some((usuario) => usuario.id === registro.usuarioId) ? (
-      <option value={registro.usuarioId}>
-        {registro.usuario.nombre} (inactivo)
-      </option>
-    ) : null;
+  const descargarReporte = async (formato) => {
+    if (exportando) return;
 
-  const renderTablaEntradas = () => (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
-              <th className="px-4 py-2.5">Origen</th>
-              <th className="px-3 py-2.5">Contrato</th>
-              <th className="px-3 py-2.5">Cliente</th>
-              <th className="px-3 py-2.5">Vendedor</th>
-              <th className="px-3 py-2.5">Modelo</th>
-              <th className="px-3 py-2.5">Responsable</th>
-              <th className="px-3 py-2.5 text-right">Valor</th>
-              <th className="px-3 py-2.5">Estado</th>
-              <th className="px-3 py-2.5">Observacion</th>
-              <th className="px-3 py-2.5">Actualizado</th>
-              <th className="px-4 py-2.5 text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {registrosFiltrados.map((registro) => {
-              const editando = registroEditando?.id === registro.id;
-              const esVinculado = esRegistroControlFinanciero(registro);
-              const bloqueado =
-                actualizandoId !== null && actualizandoId !== registro.id;
+    try {
+      setExportando(formato);
+      if (formato === "excel-hoja") {
+        const rubro = SECCIONES_REPORTE_EGRESOS.find(
+          (item) => item.id === seccionActiva,
+        );
+        const { data } = await api.get(
+          `/api/contabilidad/egresos-creditek/${seccionActiva}`,
+        );
+        await descargarExcelRubroEgresosCreditek({
+          ...rubro,
+          registros: Array.isArray(data?.registros) ? data.registros : [],
+        });
+        return;
+      }
 
-              return (
-                <tr
-                  key={registro.id}
-                  className={`align-top transition-colors ${
-                    registro.activo === false
-                      ? "bg-slate-50/80"
-                      : "hover:bg-slate-50"
-                  } ${editando ? "bg-cyan-50/40" : ""}`}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1.5">
-                      <span
-                        className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          esVinculado
-                            ? "border-cyan-200 bg-cyan-50 text-cyan-700"
-                            : "border-slate-200 bg-slate-50 text-slate-600"
-                        }`}
-                      >
-                        {esVinculado ? "Control financiero" : "Manual"}
-                      </span>
-                      {esVinculado && (
-                        <span className="inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
-                          {registro.tipoProductoEntrada}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="max-w-32 px-3 py-3 text-xs font-semibold text-slate-700">
-                    <span className="block truncate">
-                      {registro.contrato || "-"}
-                    </span>
-                  </td>
-                  <td className="max-w-44 px-3 py-3 text-xs text-slate-600">
-                    <span className="block truncate">
-                      {registro.cliente || "-"}
-                    </span>
-                  </td>
-                  <td className="max-w-40 px-3 py-3 text-xs text-slate-600">
-                    <span className="block truncate">
-                      {registro.vendedor || "-"}
-                    </span>
-                  </td>
-                  <td className="max-w-44 px-3 py-3 text-xs text-slate-600">
-                    <span className="block truncate">
-                      {registro.modelo || "-"}
-                    </span>
-                  </td>
-                  <td className="w-56 px-3 py-3">
-                    {editando ? (
-                      <select
-                        value={edicion.usuarioId}
-                        onChange={(event) =>
-                          setEdicion((actual) => ({
-                            ...actual,
-                            usuarioId: event.target.value,
-                          }))
-                        }
-                        disabled={actualizandoId !== null}
-                        className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                      >
-                        <option value="">Seleccionar responsable</option>
-                        {renderOpcionUsuarioActual(registro)}
-                        {usuarios.map((usuario) => (
-                          <option key={usuario.id} value={usuario.id}>
-                            {usuario.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md ${seccion.iconTone}`}
-                        >
-                          <UserRound size={14} />
-                        </span>
-                        <span className="truncate font-semibold text-slate-900">
-                          {registro.usuario?.nombre ||
-                            (esVinculado
-                              ? "Sin responsable"
-                              : `Usuario #${registro.usuarioId}`)}
-                        </span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="w-32 px-3 py-3 text-right">
-                    {editando && !esVinculado ? (
-                      <span className="relative block">
-                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2 text-xs font-semibold text-slate-400">
-                          $
-                        </span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={edicion.valor}
-                          onChange={(event) => {
-                            const next = event.target.value;
-                            if (/^\d*([.,]\d{0,2})?$/.test(next)) {
-                              setEdicion((actual) => ({
-                                ...actual,
-                                valor: next,
-                              }));
-                            }
-                          }}
-                          disabled={actualizandoId !== null}
-                          className="h-9 w-full rounded-md border border-slate-300 bg-white pl-6 pr-2 text-right text-xs font-bold text-slate-950 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                        />
-                      </span>
-                    ) : (
-                      <span
-                        className={`font-bold tabular-nums ${
-                          registro.activo === false
-                            ? "text-slate-400 line-through"
-                            : "text-slate-950"
-                        }`}
-                      >
-                        {money.format(Number(registro.valor || 0))}
-                      </span>
-                    )}
-                  </td>
-                  <td className="w-36 px-3 py-3">
-                    {editando && esVinculado ? (
-                      <select
-                        value={edicion.estadoPagoEntrada}
-                        onChange={(event) =>
-                          setEdicion((actual) => ({
-                            ...actual,
-                            estadoPagoEntrada: event.target.value,
-                          }))
-                        }
-                        disabled={actualizandoId !== null}
-                        className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs font-bold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                      >
-                        <option value="PENDIENTE">PENDIENTE</option>
-                        <option value="PAGADO">PAGADO</option>
-                      </select>
-                    ) : (
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${
-                          esVinculado
-                            ? registro.estadoPagoEntrada === "PAGADO"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-amber-200 bg-amber-50 text-amber-700"
-                            : registro.activo === false
-                              ? "border-slate-300 bg-slate-100 text-slate-600"
-                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        }`}
-                      >
-                        {esVinculado
-                          ? registro.estadoPagoEntrada || "PENDIENTE"
-                          : registro.activo === false
-                            ? "Inactivo"
-                            : "Activo"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="w-64 px-3 py-3">
-                    {editando ? (
-                      <textarea
-                        value={edicion.observacion}
-                        onChange={(event) =>
-                          setEdicion((actual) => ({
-                            ...actual,
-                            observacion: event.target.value,
-                          }))
-                        }
-                        disabled={actualizandoId !== null}
-                        maxLength={1000}
-                        rows={2}
-                        placeholder="Observacion"
-                        className="min-h-16 w-full resize-y rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                      />
-                    ) : (
-                      <span className="block max-w-64 break-words text-xs leading-5 text-slate-600">
-                        {registro.observacion || "Sin observacion"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="w-44 px-3 py-3 text-[11px] leading-4 text-slate-500">
-                    <span className="block truncate">
-                      {registro.actualizadoPor?.nombre ||
-                        registro.registradoPor?.nombre ||
-                        "-"}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1.5">
-                      <Clock3 size={12} className="shrink-0" />
-                      <span className="truncate">
-                        {fechaHora(registro.updatedAt || registro.createdAt)}
-                      </span>
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      {editando ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => guardarEdicion()}
-                            disabled={actualizandoId !== null}
-                            className={`inline-flex size-8 items-center justify-center rounded-md text-white shadow-sm disabled:opacity-60 ${seccion.buttonTone}`}
-                            title="Guardar cambios"
-                            aria-label="Guardar cambios"
-                          >
-                            {actualizandoId === registro.id ? (
-                              <RefreshCw size={15} className="animate-spin" />
-                            ) : (
-                              <Save size={15} />
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setRegistroEditando(null)}
-                            disabled={actualizandoId !== null}
-                            className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:opacity-50"
-                            title="Cancelar"
-                            aria-label="Cancelar edicion"
-                          >
-                            <X size={15} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => abrirEdicion(registro)}
-                            disabled={actualizandoId !== null || bloqueado}
-                            className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                            title="Editar en tabla"
-                            aria-label="Editar en tabla"
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          {!esVinculado && (
-                            <button
-                              type="button"
-                              onClick={() => cambiarEstado(registro)}
-                              disabled={actualizandoId !== null || bloqueado}
-                              className={`inline-flex size-8 items-center justify-center rounded-md border bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                registro.activo === false
-                                  ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                  : "border-rose-200 text-rose-700 hover:bg-rose-50"
-                              }`}
-                              title={
-                                registro.activo === false
-                                  ? "Reactivar registro"
-                                  : "Desactivar registro"
-                              }
-                              aria-label={
-                                registro.activo === false
-                                  ? "Reactivar registro"
-                                  : "Desactivar registro"
-                              }
-                            >
-                              {registro.activo === false ? (
-                                <RotateCcw size={15} />
-                              ) : (
-                                <Power size={15} />
-                              )}
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
-        <span className="text-xs font-semibold uppercase text-slate-500">
-          Total activo
-        </span>
-        <span className={`text-lg font-bold tabular-nums ${seccion.totalTone}`}>
-          {money.format(total)}
-        </span>
-      </div>
-    </div>
-  );
+      const respuestas = await Promise.all(
+        SECCIONES_REPORTE_EGRESOS.map((item) =>
+          api.get(`/api/contabilidad/egresos-creditek/${item.id}`),
+        ),
+      );
+      const datosSecciones = SECCIONES_REPORTE_EGRESOS.map((item, index) => ({
+        ...item,
+        registros: Array.isArray(respuestas[index]?.data?.registros)
+          ? respuestas[index].data.registros
+          : [],
+      }));
+
+      if (formato === "excel") {
+        await descargarExcelEgresosCreditek(datosSecciones);
+      } else {
+        descargarPdfEgresosCreditek(datosSecciones);
+      }
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo generar el reporte de egresos.",
+        "error",
+      );
+    } finally {
+      setExportando(null);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 px-3 py-4 sm:px-5 lg:px-6">
@@ -850,20 +580,64 @@ export default function EgresosCreditek() {
               Egresos Creditek
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => cargar(seccionActiva)}
-            disabled={loading || saving || actualizandoId !== null}
-            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
-            title="Actualizar registros"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Actualizar
-          </button>
+          <div className="grid w-full grid-cols-2 gap-2 self-start sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+            <button
+              type="button"
+              onClick={() => descargarReporte("excel")}
+              disabled={loading || saving || actualizandoId !== null || exportando !== null}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Descargar las siete secciones en Excel"
+            >
+              {exportando === "excel" ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <FileSpreadsheet size={16} />
+              )}
+              Excel general
+            </button>
+            <button
+              type="button"
+              onClick={() => descargarReporte("excel-hoja")}
+              disabled={loading || saving || actualizandoId !== null || exportando !== null}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-cyan-200 bg-white px-3 text-sm font-semibold text-cyan-700 shadow-sm transition-colors hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title={`Descargar solamente la hoja de ${seccion.label}`}
+            >
+              {exportando === "excel-hoja" ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <FileSpreadsheet size={16} />
+              )}
+              Excel hoja actual
+            </button>
+            <button
+              type="button"
+              onClick={() => descargarReporte("pdf")}
+              disabled={loading || saving || actualizandoId !== null || exportando !== null}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Descargar las siete secciones en PDF"
+            >
+              {exportando === "pdf" ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <FileText size={16} />
+              )}
+              PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => cargar(seccionActiva)}
+              disabled={loading || saving || actualizandoId !== null || exportando !== null}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Actualizar registros"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              Actualizar
+            </button>
+          </div>
         </header>
 
         <nav
-          className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm sm:grid-cols-4 xl:grid-cols-7"
+          className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
           aria-label="Secciones de Egresos Creditek"
         >
           {SECCIONES.map((item) => {
@@ -875,7 +649,7 @@ export default function EgresosCreditek() {
                 type="button"
                 onClick={() => cambiarSeccion(item.id)}
                 disabled={loading || saving || actualizandoId !== null}
-                className={`inline-flex h-11 min-w-0 items-center justify-center gap-2 rounded-md border px-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                className={`inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-md border px-2 py-2 text-center text-xs font-semibold leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm ${
                   activa
                     ? item.active
                     : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950"
@@ -883,7 +657,7 @@ export default function EgresosCreditek() {
                 aria-current={activa ? "page" : undefined}
               >
                 <Icon size={17} className="shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="whitespace-normal">{item.label}</span>
               </button>
             );
           })}
@@ -905,13 +679,9 @@ export default function EgresosCreditek() {
 
             <form
               onSubmit={guardar}
-              className={`grid gap-3 p-4 sm:grid-cols-2 sm:items-end sm:p-5 ${
-                seccionRequiereFecha
-                  ? "lg:grid-cols-[minmax(220px,1fr)_160px_170px_minmax(240px,1.2fr)_auto]"
-                  : "lg:grid-cols-[minmax(220px,1fr)_180px_minmax(240px,1.25fr)_auto]"
-              }`}
+              className="grid gap-3 p-4 sm:grid-cols-2 sm:items-end sm:p-5 lg:grid-cols-12"
             >
-              <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700">
+              <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-3">
                 Usuario
                 <select
                   value={usuarioId}
@@ -928,7 +698,7 @@ export default function EgresosCreditek() {
                 </select>
               </label>
 
-              <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+              <label className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
                 Valor
                 <span className="relative block">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-semibold text-slate-400">
@@ -950,8 +720,8 @@ export default function EgresosCreditek() {
               </label>
 
               {seccionRequiereFecha && (
-                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-                  Fecha
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
+                  Fecha de sanción
                   <input
                     type="date"
                     value={fechaRegistro}
@@ -962,7 +732,7 @@ export default function EgresosCreditek() {
                 </label>
               )}
 
-              <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2 lg:col-span-1">
+              <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2 lg:col-span-3">
                 Observación
                 <input
                   type="text"
@@ -978,7 +748,7 @@ export default function EgresosCreditek() {
               <button
                 type="submit"
                 disabled={saving || loading || actualizandoId !== null}
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2 lg:col-span-1 ${seccion.buttonTone}`}
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2 lg:col-span-2 ${seccion.buttonTone}`}
               >
                 {saving ? (
                   <RefreshCw size={17} className="animate-spin" />
@@ -1013,10 +783,10 @@ export default function EgresosCreditek() {
                 <p className="text-xs text-slate-500">{inactivos} inactivos</p>
               </div>
               <div className="px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase text-slate-500">Último registro</p>
+                <p className="text-[11px] font-semibold uppercase text-slate-500">Última sanción</p>
                 <p className="mt-1 truncate text-xs font-semibold text-slate-700">
                   {registrosPeriodo[0]
-                    ? fechaHora(registrosPeriodo[0].createdAt)
+                    ? registrosPeriodo[0].fecha || fechaHora(registrosPeriodo[0].createdAt)
                     : "Sin actividad"}
                 </p>
               </div>
@@ -1099,8 +869,8 @@ export default function EgresosCreditek() {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-              Fecha
+            <label className="flex w-full items-center justify-between gap-2 text-xs font-semibold text-slate-600 sm:w-auto sm:justify-start">
+              Fecha sanción
               <input
                 type="date"
                 value={fechaFiltro}
@@ -1124,8 +894,10 @@ export default function EgresosCreditek() {
               {[0, 1, 2, 3].map((item) => (
                 <div
                   key={item}
-                  className="grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-3 lg:grid-cols-5"
+                  className="grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-7"
                 >
+                  <span className="h-4 rounded bg-slate-100" />
+                  <span className="h-4 rounded bg-slate-100" />
                   <span className="h-4 rounded bg-slate-100" />
                   <span className="h-4 rounded bg-slate-100" />
                   <span className="h-4 rounded bg-slate-100" />
@@ -1141,7 +913,7 @@ export default function EgresosCreditek() {
               </span>
               <p className="mt-3 text-sm font-semibold text-slate-700">Sin registros</p>
               <p className="mt-1 text-xs text-slate-500">
-                No existen movimientos en {seccion.label.toLowerCase()}.
+                No existen sanciones registradas en {seccion.label.toLowerCase()}.
               </p>
             </div>
           ) : registrosPeriodo.length === 0 ? (
@@ -1173,14 +945,12 @@ export default function EgresosCreditek() {
                 Limpiar búsqueda
               </button>
             </div>
-          ) : seccionActiva === "entradas" ? (
-            renderTablaEntradas()
           ) : (
             <div>
-              <div className={`hidden gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase text-slate-500 lg:grid ${historialGridClass}`}>
+              <div className={`hidden gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase text-slate-500 xl:grid ${historialGridClass}`}>
                 <span>Usuario</span>
                 <span className="text-right">Valor</span>
-                {seccionRequiereFecha && <span>Fecha</span>}
+                {seccionRequiereFecha && <span>Fecha sanción</span>}
                 <span>Estado</span>
                 <span>Observación</span>
                 <span>Trazabilidad</span>
@@ -1190,14 +960,14 @@ export default function EgresosCreditek() {
                 {registrosFiltrados.map((registro) => (
                   <article
                     key={registro.id}
-                    className={`grid min-w-0 gap-x-4 gap-y-3 px-4 py-3.5 text-sm transition-colors sm:grid-cols-2 sm:px-5 lg:items-center ${historialGridClass} ${
+                    className={`grid min-w-0 gap-x-4 gap-y-3 px-4 py-3.5 text-sm transition-colors sm:grid-cols-2 sm:px-5 xl:items-center ${historialGridClass} ${
                       registro.activo === false
                         ? "bg-slate-50/80"
                         : "hover:bg-slate-50"
                     }`}
                   >
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Usuario</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Usuario</p>
                       <p className="flex min-w-0 items-center gap-2 font-semibold text-slate-900">
                         <span className={`inline-flex size-7 shrink-0 items-center justify-center rounded-md ${seccion.iconTone}`}>
                           <UserRound size={14} />
@@ -1238,7 +1008,7 @@ export default function EgresosCreditek() {
                       )}
                     </div>
                     <div className="min-w-0 sm:text-right">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Valor</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Valor</p>
                       <p
                         className={`font-bold tabular-nums ${
                           registro.activo === false
@@ -1251,14 +1021,15 @@ export default function EgresosCreditek() {
                     </div>
                     {seccionRequiereFecha && (
                       <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Fecha</p>
-                        <p className="font-semibold text-slate-700">
+                        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Fecha sanción</p>
+                        <p className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                          <CalendarDays size={13} className="shrink-0 text-slate-400" />
                           {registro.fecha || "-"}
                         </p>
                       </div>
                     )}
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Estado</p>
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Estado</p>
                       <span
                         className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${
                           esRegistroControlFinanciero(registro)
@@ -1277,8 +1048,8 @@ export default function EgresosCreditek() {
                             : "Activo"}
                       </span>
                     </div>
-                    <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Observación</p>
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Observación</p>
                       <p className="break-words text-xs leading-5 text-slate-600">
                         {registro.observacion || "Sin observación"}
                       </p>
@@ -1288,8 +1059,8 @@ export default function EgresosCreditek() {
                         </p>
                       )}
                     </div>
-                    <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Trazabilidad</p>
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Trazabilidad</p>
                       <div className="space-y-1 text-[11px] leading-4 text-slate-500">
                         <p className="truncate">
                           <span className="font-semibold text-slate-700">Creado</span>
@@ -1315,40 +1086,34 @@ export default function EgresosCreditek() {
                         )}
                       </div>
                     </div>
-                    <div className="min-w-0 sm:col-span-2 lg:col-span-1">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 lg:hidden">Acciones</p>
-                      <div className="mt-1 flex items-center gap-1 lg:mt-0 lg:justify-end">
+                    <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Acciones</p>
+                      <div className="mt-1 flex items-center gap-1 xl:mt-0 xl:justify-end">
                         <button
-                        type="button"
-                        onClick={() => abrirEdicion(registro)}
-                        disabled={actualizandoId !== null}
-                        className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Editar registro"
-                        aria-label="Editar registro"
-                      >
-                        <Pencil size={15} />
+                          type="button"
+                          onClick={() => abrirEdicion(registro)}
+                          disabled={actualizandoId !== null}
+                          className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Editar registro"
+                          aria-label="Editar registro"
+                        >
+                          <Pencil size={15} />
                         </button>
                         {!esRegistroControlFinanciero(registro) && (
-                        <button
-                        type="button"
-                        onClick={() => cambiarEstado(registro)}
-                        disabled={actualizandoId !== null}
-                        className={`inline-flex size-8 items-center justify-center rounded-md border bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          registro.activo === false
-                            ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                            : "border-rose-200 text-rose-700 hover:bg-rose-50"
-                        }`}
-                        title={registro.activo === false ? "Reactivar registro" : "Desactivar registro"}
-                        aria-label={registro.activo === false ? "Reactivar registro" : "Desactivar registro"}
-                      >
-                        {actualizandoId === registro.id ? (
-                          <RefreshCw size={15} className="animate-spin" />
-                        ) : registro.activo === false ? (
-                          <RotateCcw size={15} />
-                        ) : (
-                          <Power size={15} />
-                        )}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => eliminarRegistro(registro)}
+                            disabled={actualizandoId !== null}
+                            className="inline-flex size-8 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Eliminar registro"
+                            aria-label="Eliminar registro"
+                          >
+                            {actualizandoId === registro.id ? (
+                              <RefreshCw size={15} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={15} />
+                            )}
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1366,14 +1131,14 @@ export default function EgresosCreditek() {
         </section>
       </div>
 
-      {registroEditando && seccionActiva !== "entradas" && (
+      {registroEditando && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="editar-egreso-titulo"
         >
-          <section className="w-full max-w-lg overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+          <section className="w-full max-w-xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
             <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
                 <span className={`inline-flex size-9 shrink-0 items-center justify-center rounded-md ${seccion.iconTone}`}>
@@ -1466,7 +1231,7 @@ export default function EgresosCreditek() {
 
                 {seccionRequiereFecha && (
                   <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-                    Fecha
+                    Fecha de sanción
                     <input
                       type="date"
                       value={edicion.fecha}
@@ -1476,8 +1241,12 @@ export default function EgresosCreditek() {
                           fecha: event.target.value,
                         }))
                       }
-                      disabled={actualizandoId !== null}
-                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                      disabled={actualizandoId !== null || editandoControlFinanciero}
+                      className={`h-10 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${
+                        editandoControlFinanciero
+                          ? "bg-slate-50 text-slate-500"
+                          : "bg-white text-slate-900"
+                      }`}
                     />
                   </label>
                 )}
@@ -1531,7 +1300,7 @@ export default function EgresosCreditek() {
                 </label>
               </div>
 
-              <footer className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+              <footer className="grid grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex sm:items-center sm:justify-end sm:px-5">
                 <button
                   type="button"
                   onClick={() => setRegistroEditando(null)}

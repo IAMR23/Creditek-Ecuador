@@ -9,8 +9,8 @@ import {
   Search,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import * as XLSX from "xlsx";
 import { api } from "../../api/client";
+import { descargarExcelResumenRoles } from "../../utils/rolesCreditekResumenExcel";
 
 const ahora = new Date();
 const CAMPOS_MANUALES = [
@@ -27,18 +27,18 @@ const CAMPOS_CALCULADOS = [
   "descuentosMeta",
   "cajaGeneral",
   "entradas",
+  "transferencias",
   "descuentos",
+  "jefes",
   "multasFacturacion",
+  "otros",
 ];
 const CAMPOS_PRESTAMOS = ["planmovi", "prestamo", "mecanica", "pagosLentes"];
 const CAMPOS_INGRESOS = ["ingresosComisiones"];
 const CAMPOS_NOMINA_MANUALES = ["sueldo"];
 const CAMPOS_ANTICIPOS = [
   "adelantosTransfer",
-  "descuentosMeta",
-  "cajaGeneral",
-  "entradas",
-  "descuentos",
+  ...CAMPOS_CALCULADOS,
   ...CAMPOS_MANUALES.filter((campo) => campo !== "adelantosTransfer"),
 ].filter((campo) => !CAMPOS_PRESTAMOS.includes(campo));
 const CAMPOS_VALORES = [...CAMPOS_ANTICIPOS, ...CAMPOS_PRESTAMOS];
@@ -52,8 +52,11 @@ const ETIQUETAS_CAMPOS = {
   descuentosMeta: "Descuentos por meta",
   cajaGeneral: "Caja general",
   entradas: "Entradas",
+  transferencias: "Transferencias",
   descuentos: "Descuentos",
+  jefes: "Jefes",
   multasFacturacion: "Multas facturacion",
+  otros: "Otros",
   deudaJimena: "Deuda Jimena",
   atrasos: "Atrasos",
   diasNoLaborables: "Dias no laborables",
@@ -304,6 +307,7 @@ export default function RolesCreditekResumen() {
   const [tabActiva, setTabActiva] = useState("egresos");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(null);
   const draftsRef = useRef(drafts);
 
   useEffect(() => {
@@ -494,101 +498,67 @@ export default function RolesCreditekResumen() {
     return resultado;
   }, [drafts, ingresosFiltrados, rowsFiltradas]);
 
-  const exportarExcel = () => {
-    const ingresosData = [
-      ["INGRESOS CREDITEK"],
-      ["PERSONAL", "TOTAL COMISIONES SEMANA + MENSUAL"],
-      ...ingresosFiltrados.map((row) => [
-        row.nombre,
-        numero(row.ingresosComisiones),
-      ]),
-      ["TOTAL", totales.ingresosComisiones],
-    ];
-    const egresosData = [
-      ["EGRESOS CREDITEK"],
-      [
-        "PERSONAL",
-        ...CAMPOS_ANTICIPOS.map((campo) =>
-          ETIQUETAS_CAMPOS[campo].toUpperCase(),
+  const exportarExcel = async (seccionId = null) => {
+    if (exportandoExcel) return;
+
+    const anticiposColumns = [
+      "adelantosTransfer",
+      ...CAMPOS_CALCULADOS,
+      ...CAMPOS_MANUALES_FINALES,
+    ].map((campo) => ({
+      key: campo,
+      label: ETIQUETAS_CAMPOS[campo],
+      calculated: CAMPOS_CALCULADOS.includes(campo),
+    }));
+    const prestamosColumns = CAMPOS_PRESTAMOS.map((campo) => ({
+      key: campo,
+      label: ETIQUETAS_CAMPOS[campo],
+    }));
+    const payload = {
+      anio,
+      mes,
+      period: `${MESES[mes - 1]} ${anio}`,
+      anticiposColumns,
+      prestamosColumns,
+      ingresos: ingresosFiltrados.map((row) => ({
+        nombre: row.nombre,
+        ingresos: numero(row.ingresosComisiones),
+      })),
+      egresos: rowsFiltradas.map((row) => ({
+        nombre: row.nombre,
+        anticipos: anticiposColumns.map(({ key }) =>
+          numero(valorCampo(row, key, drafts)),
         ),
-        "TOTAL ANTICIPOS",
-        ...CAMPOS_PRESTAMOS.map((campo) =>
-          ETIQUETAS_CAMPOS[campo].toUpperCase(),
-        ),
-        "SUMAN PRESTAMOS",
-        "TOTAL DESCUENTOS",
-      ],
-      ...rowsFiltradas.map((row) => [
-        row.nombre,
-        ...CAMPOS_ANTICIPOS.map((campo) =>
+        totalAnticipos: totalAnticiposFila(row, drafts),
+        prestamos: CAMPOS_PRESTAMOS.map((campo) =>
           numero(valorCampo(row, campo, drafts)),
         ),
-        totalAnticiposFila(row, drafts),
-        ...CAMPOS_PRESTAMOS.map((campo) =>
-          numero(valorCampo(row, campo, drafts)),
-        ),
-        sumanPrestamosFila(row, drafts),
-        totalDescuentosFila(row, drafts),
-      ]),
-      [
-        "TOTAL",
-        ...CAMPOS_ANTICIPOS.map((campo) => totales[campo]),
-        totales.totalAnticipos,
-        ...CAMPOS_PRESTAMOS.map((campo) => totales[campo]),
-        totales.sumanPrestamos,
-        totales.totalDescuentos,
-      ],
-    ];
-    const nominaData = [
-      ["NOMINA CREDITEK"],
-      ["PERSONAL", "INGRESOS", "EGRESOS", "NOMINA", "SUELDO", "TOTAL"],
-      ...rowsFiltradas.map((row) => [
-        row.nombre,
-        numero(row.ingresosComisiones),
-        totalDescuentosFila(row, drafts),
-        totalNominaFila(row, drafts),
-        numero(valorCampo(row, "sueldo", drafts)),
-        totalPagarNominaFila(row, drafts),
-      ]),
-      [
-        "TOTAL",
-        totales.ingresosComisiones,
-        totales.totalDescuentos,
-        totales.totalNomina,
-        totales.sueldo,
-        totales.totalPagarNomina,
-      ],
-    ];
+        sumanPrestamos: sumanPrestamosFila(row, drafts),
+        totalDescuentos: totalDescuentosFila(row, drafts),
+      })),
+      nomina: rowsFiltradas.map((row) => ({
+        nombre: row.nombre,
+        ingresos: numero(row.ingresosComisiones),
+        egresos: totalDescuentosFila(row, drafts),
+        nomina: totalNominaFila(row, drafts),
+        sueldo: numero(valorCampo(row, "sueldo", drafts)),
+        total: totalPagarNominaFila(row, drafts),
+      })),
+    };
+    const exportKey = seccionId || "general";
 
-    const ingresosSheet = XLSX.utils.aoa_to_sheet(ingresosData);
-    ingresosSheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-    ingresosSheet["!cols"] = [{ wch: 30 }, { wch: 28 }];
-
-    const egresosSheet = XLSX.utils.aoa_to_sheet(egresosData);
-    egresosSheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 16 } }];
-    egresosSheet["!cols"] = [
-      { wch: 30 },
-      ...Array.from({ length: 16 }, () => ({ wch: 18 })),
-    ];
-    const nominaSheet = XLSX.utils.aoa_to_sheet(nominaData);
-    nominaSheet["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
-    nominaSheet["!cols"] = [
-      { wch: 30 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 16 },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, ingresosSheet, "Ingresos");
-    XLSX.utils.book_append_sheet(workbook, egresosSheet, "Egresos");
-    XLSX.utils.book_append_sheet(workbook, nominaSheet, "Nomina");
-    XLSX.writeFile(
-      workbook,
-      `Roles_Creditek_${anio}_${String(mes).padStart(2, "0")}.xlsx`,
-    );
+    try {
+      setExportandoExcel(exportKey);
+      await descargarExcelResumenRoles(payload, seccionId);
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error?.message || "No se pudo generar el archivo Excel.",
+        "error",
+      );
+    } finally {
+      setExportandoExcel(null);
+    }
   };
 
   const exportarPdf = () => {
@@ -777,11 +747,40 @@ export default function RolesCreditekResumen() {
               </button>
               <button
                 type="button"
-                onClick={exportarExcel}
-                disabled={!(rowsFiltradas.length || ingresosFiltrados.length) || loading}
+                onClick={() => exportarExcel()}
+                disabled={
+                  !(rowsFiltradas.length || ingresosFiltrados.length) ||
+                  loading ||
+                  Boolean(exportandoExcel)
+                }
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               >
-                <FileSpreadsheet size={17} /> Excel
+                {exportandoExcel === "general" ? (
+                  <RefreshCw size={17} className="animate-spin" />
+                ) : (
+                  <FileSpreadsheet size={17} />
+                )}
+                Excel general
+              </button>
+              <button
+                type="button"
+                onClick={() => exportarExcel(tabActiva)}
+                disabled={
+                  loading ||
+                  Boolean(exportandoExcel) ||
+                  (tabActiva === "ingresos"
+                    ? !ingresosFiltrados.length
+                    : !rowsFiltradas.length)
+                }
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                title={`Descargar solamente la seccion de ${tabActiva}`}
+              >
+                {exportandoExcel === tabActiva ? (
+                  <RefreshCw size={17} className="animate-spin" />
+                ) : (
+                  <FileSpreadsheet size={17} />
+                )}
+                Excel {tabActiva === "nomina" ? "Nomina" : tabActiva[0].toUpperCase() + tabActiva.slice(1)}
               </button>
               <button
                 type="button"
@@ -919,7 +918,7 @@ export default function RolesCreditekResumen() {
           </div>
           ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[2580px] border-separate border-spacing-0 text-sm">
+            <table className="w-full min-w-[3120px] border-separate border-spacing-0 text-sm">
               <thead>
                 <tr className="text-xs font-bold uppercase tracking-wide text-slate-700">
                   <th rowSpan="2" className="sticky left-0 z-20 w-64 border-b border-r border-slate-300 bg-slate-100 px-4 py-3 text-left">Personal</th>

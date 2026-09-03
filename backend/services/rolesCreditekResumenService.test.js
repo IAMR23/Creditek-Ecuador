@@ -50,15 +50,15 @@ describe("rolesCreditekResumenService", () => {
       { id: 4, nombre: "Ana Perez", activo: true },
     ]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([
-      { usuarioId: 4, seccion: "TRANSFERENCIAS", valor: "999.00" },
+      { usuarioId: 4, seccion: "TRANSFERENCIAS", valor: "5.00" },
       { usuarioId: 4, seccion: "CAJAS", valor: "20.00" },
       { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
       { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
+      { usuarioId: 4, seccion: "JEFES", valor: "6.00" },
       { usuarioId: 4, seccion: "MULTAS_FACTURACION", valor: "4.00" },
+      { usuarioId: 4, seccion: "OTROS", valor: "7.00" },
     ]);
-    ControlFinancieroRegistro.findAll
-      .mockResolvedValueOnce([{ responsablePagoEntradaId: 4, entradas: "5.00" }])
-      .mockResolvedValueOnce([]);
+    ControlFinancieroRegistro.findAll.mockResolvedValueOnce([]);
     RolCreditekAjuste.findAll.mockResolvedValue([
       {
         usuarioId: 4,
@@ -90,6 +90,17 @@ describe("rolesCreditekResumenService", () => {
 
     const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
 
+    expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          activo: true,
+          [Op.or]: expect.arrayContaining([
+            { fecha: { [Op.between]: ["2026-08-01", "2026-08-31"] } },
+            expect.objectContaining({ fecha: null }),
+          ]),
+        }),
+      }),
+    );
     expect(resultado.registros).toEqual([
       expect.objectContaining({
         usuarioId: 4,
@@ -101,36 +112,45 @@ describe("rolesCreditekResumenService", () => {
         cajaGeneral: 20,
         cajaGeneralCalculado: 20,
         cajaGeneralManual: null,
-        entradas: 35,
-        entradasCalculado: 35,
+        entradas: 30,
+        entradasCalculado: 30,
         entradasManual: null,
+        transferencias: 5,
+        transferenciasCalculado: 5,
+        transferenciasManual: null,
         descuentos: 2,
         descuentosCalculado: 2,
         descuentosManual: null,
+        jefes: 6,
+        jefesCalculado: 6,
+        jefesManual: null,
         deudaJimena: 1,
         atrasos: 2,
         diasNoLaborables: 3,
         multasFacturacion: 4,
         multasFacturacionCalculado: 4,
         multasFacturacionManual: null,
-        totalAnticipos: 84,
+        otros: 7,
+        otrosCalculado: 7,
+        otrosManual: null,
+        totalAnticipos: 97,
         planmovi: 6,
         prestamo: 7,
         mecanica: 8,
         pagosLentes: 9,
         sueldo: 50,
         sumanPrestamos: 30,
-        totalDescuentos: 114,
-        totalNomina: 9.45,
-        totalPagarNomina: 59.45,
+        totalDescuentos: 127,
+        totalNomina: -3.55,
+        totalPagarNomina: 46.45,
       }),
     ]);
-    expect(resultado.totales.totalAnticipos).toBe(84);
+    expect(resultado.totales.totalAnticipos).toBe(97);
     expect(resultado.totales.ingresosComisiones).toBe(123.45);
     expect(resultado.totales.sumanPrestamos).toBe(30);
-    expect(resultado.totales.totalDescuentos).toBe(114);
-    expect(resultado.totales.totalNomina).toBe(9.45);
-    expect(resultado.totales.totalPagarNomina).toBe(59.45);
+    expect(resultado.totales.totalDescuentos).toBe(127);
+    expect(resultado.totales.totalNomina).toBe(-3.55);
+    expect(resultado.totales.totalPagarNomina).toBe(46.45);
     expect(resultado.totales.sueldo).toBe(50);
     expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({
       year: 2026,
@@ -191,9 +211,7 @@ describe("rolesCreditekResumenService", () => {
       { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
       { usuarioId: 4, seccion: "MULTAS_FACTURACION", valor: "4.00" },
     ]);
-    ControlFinancieroRegistro.findAll
-      .mockResolvedValueOnce([{ responsablePagoEntradaId: 4, entradas: "5.00" }])
-      .mockResolvedValueOnce([]);
+    ControlFinancieroRegistro.findAll.mockResolvedValueOnce([]);
     RolCreditekAjuste.findAll.mockResolvedValue([
       {
         usuarioId: 4,
@@ -224,8 +242,8 @@ describe("rolesCreditekResumenService", () => {
         cajaGeneral: 44,
         cajaGeneralCalculado: 20,
         cajaGeneralManual: 44,
-        entradas: 35,
-        entradasCalculado: 35,
+        entradas: 30,
+        entradasCalculado: 30,
         entradasManual: null,
         descuentos: 0,
         descuentosCalculado: 2,
@@ -233,8 +251,8 @@ describe("rolesCreditekResumenService", () => {
         multasFacturacion: 6,
         multasFacturacionCalculado: 4,
         multasFacturacionManual: 6,
-        totalAnticipos: 94,
-        totalDescuentos: 94,
+        totalAnticipos: 89,
+        totalDescuentos: 89,
       }),
     ]);
   });
@@ -243,16 +261,14 @@ describe("rolesCreditekResumenService", () => {
     Usuario.findAll.mockResolvedValue([
       { id: 4, nombre: "Ana Perez", activo: true },
     ]);
-    ControlFinancieroRegistro.findAll
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: 77,
-          cargaId: 9,
-          responsablePagoEntradaId: 4,
-          pagosCuotas: "14.00",
-        },
-      ]);
+    ControlFinancieroRegistro.findAll.mockResolvedValueOnce([
+      {
+        id: 77,
+        cargaId: 9,
+        responsablePagoEntradaId: 4,
+        pagosCuotas: "14.00",
+      },
+    ]);
     ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([
       {
         toJSON: () => ({
@@ -271,7 +287,7 @@ describe("rolesCreditekResumenService", () => {
 
     const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
 
-    expect(ControlFinancieroRegistro.findAll.mock.calls[1][0]).toEqual(
+    expect(ControlFinancieroRegistro.findAll.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         where: expect.not.objectContaining({
           fecha: expect.anything(),
@@ -321,7 +337,10 @@ describe("rolesCreditekResumenService", () => {
             descuentosMetaManual: "",
             cajaGeneralManual: 999,
             entradasManual: null,
+            transferenciasManual: "12.00",
             descuentosManual: "4,25",
+            jefesManual: "",
+            otrosManual: null,
           },
         ],
       },
@@ -345,7 +364,10 @@ describe("rolesCreditekResumenService", () => {
       descuentosMetaManual: null,
       cajaGeneralManual: 999,
       entradasManual: null,
+      transferenciasManual: 12,
       descuentosManual: 4.25,
+      jefesManual: null,
+      otrosManual: null,
       actualizadoPorId: 7,
     };
     expect(RolCreditekAjuste.findOrCreate).toHaveBeenCalledWith(

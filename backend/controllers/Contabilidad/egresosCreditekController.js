@@ -80,11 +80,24 @@ const cambiarEstadoRegistro = async (req, res) => {
   }
 };
 
+const eliminarRegistro = async (req, res) => {
+  try {
+    const registro = await egresosCreditekService.eliminarRegistro(
+      req.params.seccion,
+      req.params.id,
+    );
+    res.json({ message: "Registro eliminado definitivamente", registro });
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
 module.exports = {
   actualizarRegistro,
   cambiarEstadoRegistro,
   crearEntrada,
   crearRegistro,
+  eliminarRegistro,
   obtenerEntradas,
   obtenerSeccion,
 };
