@@ -16,6 +16,11 @@ const normalizarNumero = (...valores) => {
 
 const redondear2 = (valor) => Number((Number(valor) || 0).toFixed(2));
 
+const CLAVES_OBSERVACION_JAVIER = new Set([
+  "javier",
+  "darwin javier cacoango toapanta",
+]);
+
 const calcularResumenMargen = (ventas = [], rango = {}) => {
   let totalMargen = 0;
   let totalCosto = 0;
@@ -117,6 +122,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     normalizarTexto(valor)
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
       .toLowerCase();
 
   const crearFechaLocal = (fechaInput) => {
@@ -202,7 +208,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
 
     const observacionValor = v.observacion ?? v.observaciones;
     const observacionNormalizada = normalizarClave(observacionValor);
-    const esObservacionJavier = observacionNormalizada === "javier";
+    const esObservacionJavier =
+      CLAVES_OBSERVACION_JAVIER.has(observacionNormalizada);
 
     const margen = normalizarNumero(v.margen);
     const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);

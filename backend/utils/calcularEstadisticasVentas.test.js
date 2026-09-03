@@ -100,6 +100,36 @@ describe("calcularEstadisticasVentas", () => {
     expect(estadisticas.precioVendedorPromedio).toBe(100.17);
   });
 
+  test("detecta ventas de Javier por observacion corta y nombre completo", () => {
+    const estadisticas = calcularEstadisticasVentas(
+      [
+        {
+          fecha: "2026-08-06",
+          vendedor: "Vendedor 1",
+          observacion: "javier",
+        },
+        {
+          fecha: "2026-08-07",
+          vendedor: "Vendedor 2",
+          observacion: "DARWIN JAVIER CACOANGO TOAPANTA",
+        },
+        {
+          fecha: "2026-08-08",
+          vendedor: "Vendedor 3",
+          observacion: "otro",
+        },
+      ],
+      "2026-08-06",
+    );
+
+    expect(estadisticas.indicadorEngancheJavierTotal).toBe(2);
+    expect(estadisticas.indicadorEngancheJavierPorSemana["Semana 1"]).toBe(2);
+    expect(estadisticas.indicadorEngancheJavierPorVendedor).toEqual({
+      "Vendedor 1": 1,
+      "Vendedor 2": 1,
+    });
+  });
+
   test("devuelve precio vendedor promedio 0 cuando no hay ventas", () => {
     const estadisticas = calcularEstadisticasVentas([]);
 
