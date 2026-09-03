@@ -225,6 +225,7 @@ connectDB()
     app.use("/api/gerencia/facturas-fisicas", require("./routes/Gerencia/facturasFisicasRoutes"));
     app.use("/api/gerencia/facturas-ia", require("./routes/Gerencia/facturasIaRoutes"));
     app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));
+    app.use("/api/marketing/copa-creditek", require("./routes/Marketing/copaCreditekRoutes"));
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
     app.use("/api/gerencia/consejo-ejecutivo/planes", require("./routes/Gerencia/consejoEjecutivoPlanesRoutes"));
     app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));

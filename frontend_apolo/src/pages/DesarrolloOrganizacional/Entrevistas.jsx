@@ -890,9 +890,6 @@ export default function Entrevistas({ modo = "entrevista" }) {
             onEvaluate={(interview) =>
               navigate(`/${isTrainingMode ? "capacitacion" : "seleccionados"}/${interview.id}/evaluacion-desempeno`)
             }
-            onTrainingTest={(interview) =>
-              navigate(`/capacitacion/${interview.id}/prueba-capacitacion`)
-            }
             checkingUserCandidateId={checkingUserCandidateId}
             userExistsCandidateIds={userExistsCandidateIds}
             onStatusChange={changeStatus}

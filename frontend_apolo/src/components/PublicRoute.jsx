@@ -5,6 +5,9 @@ import { AuthContext } from "../context/AuthContext";
 export default function PublicRoute({ children }) {
   const auth = useContext(AuthContext);
   if (auth?.initializing) return null;
-  if (auth?.isAuthenticated) return <Navigate to="/usuarios" replace />;
+  if (auth?.isAuthenticated) {
+    const role = String(auth?.user?.rol?.nombre || "").trim().toUpperCase();
+    return <Navigate to={role === "USUARIO" ? "/evaluacion" : "/usuarios"} replace />;
+  }
   return children;
 }

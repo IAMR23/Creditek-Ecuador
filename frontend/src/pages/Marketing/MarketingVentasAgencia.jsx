@@ -1,112 +1,407 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
-import { API_URL } from "../../../config";
-import HoraLocal from "../../components/HoraLocal";
+import { useCallback, useEffect, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import Swal from "sweetalert2";
+import { api } from "../../api/client";
+import CopaCreditekConfiguracion from "./CopaCreditek/CopaCreditekConfiguracion";
+import CopaCreditekMarcador from "./CopaCreditek/CopaCreditekMarcador";
+
+const STORAGE_KEY = "copaCreditekFiltros";
+
+const formatearFechaLocal = (fecha) => {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${anio}-${mes}-${dia}`;
+};
+
+const obtenerSemanaActualLocal = () => {
+  const hoy = new Date();
+  const desplazamientoLunes = (hoy.getDay() + 6) % 7;
+  const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  inicio.setDate(inicio.getDate() - desplazamientoLunes);
+  const fin = new Date(inicio);
+  fin.setDate(fin.getDate() + 6);
+  return {
+    fechaInicio: formatearFechaLocal(inicio),
+    fechaFin: formatearFechaLocal(fin),
+  };
+};
+
+const cargarFiltrosIniciales = () => {
+  const semanaActual = obtenerSemanaActualLocal();
+  try {
+    const guardados = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (guardados?.fechaInicio && guardados?.fechaFin) {
+      return {
+        fechaInicio: guardados.fechaInicio,
+        fechaFin: guardados.fechaFin,
+      };
+    }
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(semanaActual));
+  return semanaActual;
+};
+
+const obtenerMensajeError = (error, predeterminado) =>
+  error.response?.data?.message || error.message || predeterminado;
 
 export default function MarketingVentasAgencia() {
-  const [fechaInicio, setFechaInicio] = useState("2025-12-01");
-  const [fechaFin, setFechaFin] = useState("2025-12-18");
-  const [ventas, setVentas] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [tabActiva, setTabActiva] = useState("marcador");
+  const [filtros, setFiltros] = useState(cargarFiltrosIniciales);
+  const [copa, setCopa] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [imagenLista, setImagenLista] = useState(null);
+  const [copiando, setCopiando] = useState(false);
+  const [guardandoId, setGuardandoId] = useState(null);
+  const [estadoGuardado, setEstadoGuardado] = useState({ tipo: "", mensaje: "" });
+  const posterRef = useRef(null);
 
-  const obtenerVentas = async () => {
+  const periodoValido =
+    filtros.fechaInicio &&
+    filtros.fechaFin &&
+    filtros.fechaInicio <= filtros.fechaFin;
+  const datosDelPeriodoActual =
+    copa?.fechaInicio === filtros.fechaInicio &&
+    copa?.fechaFin === filtros.fechaFin;
+
+  const cargarCopa = useCallback(async () => {
+    if (!periodoValido) {
+      setError("La fecha de inicio no puede ser mayor que la fecha de fin.");
+      setLoading(false);
+      return null;
+    }
+
+    setLoading(true);
+    setError("");
     try {
-      setLoading(true);
-      const response = await axios.get(
-        `${API_URL}/admin/ventastotales/agencias`,
-        {
-          params: { fechaInicio, fechaFin },
-        }
+      const { data } = await api.get("/api/marketing/copa-creditek", {
+        params: filtros,
+      });
+      setCopa(data);
+      return data;
+    } catch (requestError) {
+      setError(
+        obtenerMensajeError(requestError, "No se pudo consultar la Copa Creditek."),
       );
-
-      setVentas(response.data.ventasPorAgencia || {});
-    } catch (error) {
-      console.error("Error al obtener ventas por agencia", error);
+      return null;
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtros, periodoValido]);
 
   useEffect(() => {
-    obtenerVentas();
-  }, []);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtros));
+    cargarCopa();
+  }, [filtros, cargarCopa]);
+
+  const cambiarFecha = (campo) => (event) => {
+    setFiltros((actuales) => ({
+      ...actuales,
+      [campo]: event.target.value,
+    }));
+  };
+
+  const copiarImagen = async () => {
+    if (
+      !posterRef.current ||
+      !imagenLista ||
+      !copa ||
+      loading ||
+      !datosDelPeriodoActual
+    ) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Copa no disponible",
+        text: "Espera a que la imagen y los datos terminen de cargar.",
+      });
+      return;
+    }
+
+    setCopiando(true);
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error(
+          "Este navegador no permite copiar imágenes. Usa Chrome o Edge mediante HTTPS.",
+        );
+      }
+
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const canvas = await html2canvas(posterRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false,
+        onclone: (documentoClonado) => {
+          documentoClonado
+            .querySelectorAll(
+              "[data-copa-bloque-vendedores], [data-copa-fila-vendedor], [data-copa-nombre-vendedor], [data-copa-resultado-vendedor]",
+            )
+            .forEach((elemento) => {
+              elemento.style.overflow = "visible";
+            });
+        },
+      });
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((resultado) => {
+          if (resultado) resolve(resultado);
+          else reject(new Error("No se pudo generar la imagen PNG."));
+        }, "image/png");
+      });
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+
+      await Swal.fire({
+        icon: "success",
+        title: "Imagen copiada",
+        text: "La Copa Creditek está lista para pegarse en WhatsApp u otra aplicación.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (captureError) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo copiar la Copa",
+        text: captureError.message || "Intenta nuevamente.",
+      });
+    } finally {
+      setCopiando(false);
+    }
+  };
+
+  const guardarVendedor = async (vendedor, valores) => {
+    setGuardandoId(vendedor.usuarioId);
+    setEstadoGuardado({ tipo: "", mensaje: "" });
+    try {
+      await api.patch(
+        `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/configuracion`,
+        {
+          alias: valores.alias,
+          equipoCopa: valores.equipoCopa,
+          mostrarEnMarcador: valores.mostrarEnMarcador,
+        },
+      );
+      await api.put(
+        `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/meta`,
+        { ...filtros, meta: valores.meta },
+      );
+
+      if (valores.ventasManual === "") {
+        if (vendedor.ventasManual !== null) {
+          await api.delete(
+            `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/ventas-manual`,
+            { params: filtros },
+          );
+        }
+      } else {
+        await api.put(
+          `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/ventas-manual`,
+          { ...filtros, ventasManual: valores.ventasManual },
+        );
+      }
+
+      await cargarCopa();
+      setEstadoGuardado({
+        tipo: "exito",
+        mensaje: `Configuración de ${vendedor.nombreCorto} guardada.`,
+      });
+    } catch (saveError) {
+      setEstadoGuardado({
+        tipo: "error",
+        mensaje: obtenerMensajeError(
+          saveError,
+          "No se pudo guardar la configuración.",
+        ),
+      });
+      await cargarCopa();
+      throw saveError;
+    } finally {
+      setGuardandoId(null);
+    }
+  };
+
+  const guardarTodosLosVendedores = async (vendedores) => {
+    setGuardandoId("todos");
+    setEstadoGuardado({ tipo: "", mensaje: "" });
+    try {
+      const { data } = await api.put(
+        "/api/marketing/copa-creditek/configuracion-completa",
+        {
+          ...filtros,
+          vendedores,
+        },
+      );
+      await cargarCopa();
+      setEstadoGuardado({
+        tipo: "exito",
+        mensaje: `${data.actualizados || vendedores.length} vendedores guardados correctamente.`,
+      });
+    } catch (saveError) {
+      setEstadoGuardado({
+        tipo: "error",
+        mensaje: obtenerMensajeError(
+          saveError,
+          "No se pudo guardar la configuración completa.",
+        ),
+      });
+      throw saveError;
+    } finally {
+      setGuardandoId(null);
+    }
+  };
+
+  const restaurarAutomatico = async (vendedor) => {
+    setGuardandoId(vendedor.usuarioId);
+    setEstadoGuardado({ tipo: "", mensaje: "" });
+    try {
+      await api.delete(
+        `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/ventas-manual`,
+        { params: filtros },
+      );
+      await cargarCopa();
+      setEstadoGuardado({
+        tipo: "exito",
+        mensaje: `Las ventas de ${vendedor.nombreCorto} vuelven a ser automáticas.`,
+      });
+    } catch (restoreError) {
+      setEstadoGuardado({
+        tipo: "error",
+        mensaje: obtenerMensajeError(
+          restoreError,
+          "No se pudo restaurar el valor automático.",
+        ),
+      });
+    } finally {
+      setGuardandoId(null);
+    }
+  };
 
   return (
-    <>
-      <h2 className="text-xl font-bold mb-4">Ventas por Agencia (Marketing)</h2>
-      <div className="flex gap-4 mb-4 flex-wrap">
+    <section className="mx-auto w-full max-w-[1400px] p-3 sm:p-5">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <label className="block text-sm">Fecha inicio</label>
-          <input
-            type="date"
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            className="border p-2 rounded"
-          />
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-700">
+            Marcador oficial
+          </p>
+          <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">
+            Copa Creditek 2026
+          </h1>
         </div>
 
-        <div>
-          <label className="block text-sm">Fecha fin</label>
-          <input
-            type="date"
-            value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            className="border p-2 rounded"
-          />
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <label className="text-sm font-semibold text-slate-700">
+            Fecha inicio
+            <input
+              type="date"
+              value={filtros.fechaInicio}
+              onChange={cambiarFecha("fechaInicio")}
+              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 font-normal"
+            />
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Fecha fin
+            <input
+              type="date"
+              value={filtros.fechaFin}
+              onChange={cambiarFecha("fechaFin")}
+              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 font-normal"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={cargarCopa}
+            disabled={loading || !periodoValido}
+            className="rounded-lg bg-blue-700 px-4 py-2 font-bold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Actualizar
+          </button>
+          <button
+            type="button"
+            onClick={copiarImagen}
+            disabled={
+              copiando ||
+              loading ||
+              !imagenLista ||
+              !copa ||
+              !datosDelPeriodoActual ||
+              tabActiva !== "marcador"
+            }
+            className="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {copiando ? "Copiando imagen..." : "Copiar imagen"}
+          </button>
         </div>
-
-        <button
-          onClick={obtenerVentas}
-          className="bg-blue-600 text-white px-4 rounded mt-5"
-        >
-          Buscar
-        </button>
       </div>
 
-      <div className="relative w-[70vh] h-[70vh] overflow-hidden bg-red-400">
-        {/* IMAGEN */}
-        <img
-          src="./CopaCreditek.jpg"
-          alt="Fondo marketing"
-          className="absolute inset-0 w-full h-full object-contain"
+      <div className="mb-5 flex gap-2 border-b border-slate-200" role="tablist">
+        {[
+          ["marcador", "Marcador"],
+          ["configuracion", "Configuración"],
+        ].map(([id, etiqueta]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tabActiva === id}
+            onClick={() => setTabActiva(id)}
+            className={`border-b-2 px-4 py-3 text-sm font-extrabold uppercase tracking-wide transition ${
+              tabActiva === id
+                ? "border-blue-700 text-blue-700"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      )}
+      {loading && !copa && (
+        <p className="py-10 text-center font-semibold text-slate-600">
+          Cargando Copa...
+        </p>
+      )}
+      {loading && copa && (
+        <p className="mb-3 text-sm font-semibold text-blue-700">
+          Actualizando marcador...
+        </p>
+      )}
+      {imagenLista === false && tabActiva === "marcador" && (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          No se pudo cargar /CopaCreditek2026.webp. Verifica que la plantilla
+          oficial exista en frontend/public/.
+        </div>
+      )}
+
+      {tabActiva === "marcador" && copa && (
+        <CopaCreditekMarcador
+          copa={copa}
+          posterRef={posterRef}
+          onImageReady={setImagenLista}
         />
+      )}
 
-        {/* CONTENIDO ENCIMA DE LA IMAGEN */}
-        <div className="relative z-10 grid grid-rows-4 h-full">
-          {/* PARTE 1 */}
-          <div className="flex items-end relative">
-               <HoraLocal />
-          </div>
-       
-          {/* PARTE 2 */}
-          <div></div>
-
-          {/* PARTE 3 → CONTENIDO */}
-          <div className="flex justify-center items-start w-full  overflow-hidden ">
-            <div className="backdrop-blur rounded-lg p-4 shadow-lg w-full   overflow-y-auto">
-              {loading ? (
-                <p>Cargando...</p>
-              ) : Object.keys(ventas).length === 0 ? (
-                <p className="text-center ">No hay datos</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {Object.entries(ventas).map(([agencia, total]) => (
-                    <div
-                      key={agencia}
-                      className="bg-white rounded-lg flex justify-center items-center shadow-md p-4 border hover:shadow-lg transition"
-                    >
-                      <p className="text-4xl font-extrabold ">{total}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* PARTE 4 */}
-          <div></div>
-        </div>
-      </div>
-    </>
+      {tabActiva === "configuracion" && copa && (
+        <CopaCreditekConfiguracion
+          vendedores={copa.vendedores || []}
+          guardandoId={guardandoId}
+          estadoGuardado={estadoGuardado}
+          accionesDeshabilitadas={loading || !datosDelPeriodoActual}
+          onGuardar={guardarVendedor}
+          onGuardarTodos={guardarTodosLosVendedores}
+          onRestaurarAutomatico={restaurarAutomatico}
+        />
+      )}
+    </section>
   );
 }

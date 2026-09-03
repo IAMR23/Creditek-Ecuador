@@ -1,0 +1,571 @@
+---
+const provinces = [
+  "Azuay",
+  "Bolívar",
+  "Cañar",
+  "Carchi",
+  "Chimborazo",
+  "Cotopaxi",
+  "El Oro",
+  "Esmeraldas",
+  "Galápagos",
+  "Guayas",
+  "Imbabura",
+  "Loja",
+  "Los Ríos",
+  "Manabí",
+  "Morona Santiago",
+  "Napo",
+  "Orellana",
+  "Pastaza",
+  "Pichincha",
+  "Santa Elena",
+  "Santo Domingo de los Tsáchilas",
+  "Sucumbíos",
+  "Tungurahua",
+  "Zamora Chinchipe",
+];
+---
+
+<section
+  id="solicitud-credito"
+  class="relative isolate overflow-hidden bg-gradient-to-b from-gray-50 via-white to-gray-50 px-4 py-20 sm:px-6 lg:py-28"
+  aria-labelledby="credit-form-title"
+>
+  <div
+    class="pointer-events-none absolute -left-24 top-10 -z-10 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl"
+    aria-hidden="true"
+  ></div>
+  <div
+    class="pointer-events-none absolute -right-24 bottom-10 -z-10 h-72 w-72 rounded-full bg-orange-200/40 blur-3xl"
+    aria-hidden="true"
+  ></div>
+
+  <div class="mx-auto max-w-5xl">
+    <div
+      class="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl shadow-emerald-950/10"
+    >
+      <header
+        class="relative overflow-hidden border-b border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 px-5 py-8 sm:px-10 sm:py-10"
+      >
+        <div
+          class="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-orange-500"
+          aria-hidden="true"
+        ></div>
+
+        <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div class="max-w-2xl">
+            <p class="mb-3 text-sm font-extrabold tracking-[0.18em] text-emerald-700">
+              SOLICITUD DE CRÉDITO
+            </p>
+            <h2
+              id="credit-form-title"
+              class="text-3xl font-extrabold leading-tight text-gray-900 sm:text-4xl"
+            >
+              Solicita tu crédito con Creditek
+            </h2>
+            <p class="mt-3 text-base leading-relaxed text-gray-600 sm:text-lg">
+              Completa tus datos y solicita tu crédito en pocos minutos.
+            </p>
+            <span
+              class="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3.5 py-2 text-sm font-semibold text-emerald-800 shadow-sm"
+            >
+              <span aria-hidden="true">🇪🇨</span>
+              Aplica solo para Ecuador
+            </span>
+          </div>
+
+          <div
+            class="flex h-20 w-36 shrink-0 items-center justify-center self-start rounded-2xl border border-white bg-white/90 p-3 shadow-md sm:self-center"
+          >
+            <img
+              src="/Creditek/logo.png"
+              alt="Creditek"
+              class="max-h-full w-auto object-contain"
+              loading="lazy"
+            />
+          </div>
+        </div>
+      </header>
+
+      <form id="credit-application-form" class="px-5 py-8 sm:px-10 sm:py-10" novalidate>
+        <div class="mb-8 flex items-center gap-4 border-b border-gray-100 pb-7">
+          <span
+            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-base font-extrabold text-white shadow-lg shadow-emerald-600/20"
+            aria-hidden="true"
+          >
+            01
+          </span>
+          <div>
+            <h3 class="text-xl font-bold text-gray-900 sm:text-2xl">Completa tus datos</h3>
+            <p class="mt-1 text-sm text-gray-500">Todos los campos son obligatorios</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2">
+          <div class="field-group">
+            <label for="fullName" class="mb-2 block text-sm font-bold text-gray-800">
+              Nombre completo
+            </label>
+            <input
+              id="fullName"
+              name="fullName"
+              type="text"
+              autocomplete="name"
+              placeholder="Ej. Pepito Perez"
+              required
+              aria-describedby="fullName-error"
+              class="form-control"
+            />
+            <p id="fullName-error" class="field-error" aria-live="polite"></p>
+          </div>
+
+          <div class="field-group">
+            <label for="cedula" class="mb-2 block text-sm font-bold text-gray-800">
+              Número de cédula
+            </label>
+            <input
+              id="cedula"
+              name="cedula"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="10"
+              pattern="[0-9]{10}"
+              placeholder="1700000000"
+              required
+              aria-describedby="cedula-error"
+              class="form-control"
+            />
+            <p id="cedula-error" class="field-error" aria-live="polite"></p>
+          </div>
+
+          <div class="field-group md:col-span-2">
+            <label for="phone" class="mb-2 block text-sm font-bold text-gray-800">
+              Número de WhatsApp
+            </label>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              inputmode="tel"
+              autocomplete="tel"
+              maxlength="10"
+              pattern="09[0-9]{8}"
+              placeholder="Ej. 0999999999"
+              required
+              aria-describedby="phone-help phone-error"
+              class="form-control"
+            />
+            <p id="phone-help" class="mt-2 text-sm text-gray-500">
+              Un asesor podrá comunicarse contigo por este número.
+            </p>
+            <p id="phone-error" class="field-error" aria-live="polite"></p>
+          </div>
+
+          <fieldset class="field-group min-w-0 md:col-span-2" aria-describedby="productType-error">
+            <legend class="mb-3 text-sm font-bold text-gray-800">
+              ¿Qué producto necesitas?
+            </legend>
+
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label class="product-option">
+                <input
+                  class="peer sr-only"
+                  type="radio"
+                  name="productType"
+                  value="Celular"
+                  required
+                />
+                <span class="product-card">
+                  <span class="product-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <rect x="7" y="2" width="10" height="20" rx="2"></rect>
+                      <path d="M10 5h4M11 18h2"></path>
+                    </svg>
+                  </span>
+                  <span class="font-bold text-gray-800">Celular</span>
+                  <span class="selection-check" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                      <path d="m5 10 3 3 7-7"></path>
+                    </svg>
+                  </span>
+                </span>
+              </label>
+
+              <label class="product-option">
+                <input
+                  class="peer sr-only"
+                  type="radio"
+                  name="productType"
+                  value="Tablet"
+                  required
+                />
+                <span class="product-card">
+                  <span class="product-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                      <path d="M11 18h2"></path>
+                    </svg>
+                  </span>
+                  <span class="font-bold text-gray-800">Tablet</span>
+                  <span class="selection-check" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                      <path d="m5 10 3 3 7-7"></path>
+                    </svg>
+                  </span>
+                </span>
+              </label>
+
+              <label class="product-option">
+                <input
+                  class="peer sr-only"
+                  type="radio"
+                  name="productType"
+                  value="Televisor"
+                  required
+                />
+                <span class="product-card">
+                  <span class="product-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <rect x="2" y="4" width="20" height="14" rx="2"></rect>
+                      <path d="m8 22 4-4 4 4"></path>
+                    </svg>
+                  </span>
+                  <span class="font-bold text-gray-800">Televisor</span>
+                  <span class="selection-check" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor">
+                      <path d="m5 10 3 3 7-7"></path>
+                    </svg>
+                  </span>
+                </span>
+              </label>
+            </div>
+            <p id="productType-error" class="field-error" aria-live="polite"></p>
+          </fieldset>
+
+          <div class="field-group md:col-span-2">
+            <label for="province" class="mb-2 block text-sm font-bold text-gray-800">
+              Provincia
+            </label>
+            <div class="relative">
+              <select
+                id="province"
+                name="province"
+                required
+                aria-describedby="province-error"
+                class="form-control appearance-none pr-12"
+              >
+                <option value="">Selecciona tu provincia</option>
+                {provinces.map((province) => <option value={province}>{province}</option>)}
+              </select>
+              <svg
+                class="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500"
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path d="m6 8 4 4 4-4"></path>
+              </svg>
+            </div>
+            <p id="province-error" class="field-error" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div class="mt-8">
+          <button
+            type="submit"
+            class="group flex w-full items-center justify-center gap-3 rounded-xl bg-emerald-600 px-6 py-4 text-base font-extrabold text-white shadow-lg shadow-emerald-600/25 transition duration-200 hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300 active:translate-y-0 active:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:shadow-none sm:text-lg"
+          >
+            Aplicar a mi crédito
+            <span
+              class="text-xl text-orange-300 transition-transform duration-200 group-hover:translate-x-1"
+              aria-hidden="true"
+            >→</span>
+          </button>
+
+          <p class="mt-4 flex items-center justify-center gap-2 text-center text-sm text-gray-500">
+            <svg
+              class="h-4 w-4 shrink-0 text-emerald-600"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+              <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+            </svg>
+            Usaremos tus datos únicamente para gestionar tu solicitud.
+          </p>
+          <p
+            id="form-status"
+            class="mt-4 hidden rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("#credit-application-form");
+
+  if (form) {
+    const fullName = form.elements.namedItem("fullName") as HTMLInputElement;
+    const cedula = form.elements.namedItem("cedula") as HTMLInputElement;
+    const phone = form.elements.namedItem("phone") as HTMLInputElement;
+    const province = form.elements.namedItem("province") as HTMLSelectElement;
+    const productInputs = Array.from(
+      form.querySelectorAll<HTMLInputElement>('input[name="productType"]'),
+    );
+    const status = form.querySelector<HTMLElement>("#form-status");
+
+    const errors = {
+      fullName: "Ingresa tu nombre completo",
+      cedula: "Ingresa una cédula de 10 dígitos",
+      phone: "Ingresa un WhatsApp válido",
+      productType: "Selecciona un producto",
+      province: "Selecciona una provincia",
+    };
+
+    const clearStatus = () => {
+      if (!status) return;
+      status.classList.add("hidden");
+      status.textContent = "";
+    };
+
+    const setError = (field: HTMLElement, errorId: string, message = "") => {
+      const error = form.querySelector<HTMLElement>(`#${errorId}`);
+      field.setAttribute("aria-invalid", message ? "true" : "false");
+      if (!error) return;
+      error.textContent = message;
+      error.classList.toggle("is-visible", Boolean(message));
+    };
+
+    const validateFullName = () => {
+      const valid = fullName.value.trim().length > 0;
+      setError(fullName, "fullName-error", valid ? "" : errors.fullName);
+      return valid;
+    };
+
+    const validateCedula = () => {
+      const valid = /^[0-9]{10}$/.test(cedula.value);
+      setError(cedula, "cedula-error", valid ? "" : errors.cedula);
+      return valid;
+    };
+
+    const validatePhone = () => {
+      const valid = /^09[0-9]{8}$/.test(phone.value);
+      setError(phone, "phone-error", valid ? "" : errors.phone);
+      return valid;
+    };
+
+    const validateProduct = () => {
+      const selected = productInputs.find((input) => input.checked);
+      const fieldset = productInputs[0]?.closest("fieldset");
+      if (fieldset) {
+        setError(fieldset, "productType-error", selected ? "" : errors.productType);
+      }
+      return Boolean(selected);
+    };
+
+    const validateProvince = () => {
+      const valid = province.value !== "";
+      setError(province, "province-error", valid ? "" : errors.province);
+      return valid;
+    };
+
+    const keepOnlyDigits = (input: HTMLInputElement) => {
+      input.value = input.value.replace(/\D/g, "").slice(0, 10);
+    };
+
+    cedula.addEventListener("input", () => {
+      keepOnlyDigits(cedula);
+      if (cedula.getAttribute("aria-invalid") === "true") validateCedula();
+    });
+    phone.addEventListener("input", () => {
+      keepOnlyDigits(phone);
+      if (phone.getAttribute("aria-invalid") === "true") validatePhone();
+    });
+    fullName.addEventListener("input", () => {
+      if (fullName.getAttribute("aria-invalid") === "true") validateFullName();
+    });
+
+    fullName.addEventListener("blur", validateFullName);
+    cedula.addEventListener("blur", validateCedula);
+    phone.addEventListener("blur", validatePhone);
+    province.addEventListener("change", validateProvince);
+    productInputs.forEach((input) => input.addEventListener("change", validateProduct));
+    form.addEventListener("input", clearStatus);
+    form.addEventListener("change", clearStatus);
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const results = [
+        validateFullName(),
+        validateCedula(),
+        validatePhone(),
+        validateProduct(),
+        validateProvince(),
+      ];
+
+      clearStatus();
+
+      if (results.every(Boolean)) {
+        // TODO: integración con GoHighLevel en siguiente fase
+        if (status) {
+          status.textContent = "Tus datos están completos. La solicitud aún no ha sido enviada.";
+          status.classList.remove("hidden");
+        }
+        return;
+      }
+
+      const firstInvalid = form.querySelector<HTMLElement>('[aria-invalid="true"]');
+      if (firstInvalid instanceof HTMLFieldSetElement) {
+        productInputs[0]?.focus();
+      } else {
+        firstInvalid?.focus();
+      }
+    });
+  }
+</script>
+
+<style>
+  .form-control {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(209 213 219);
+    background: white;
+    padding: 0.875rem 1rem;
+    color: rgb(17 24 39);
+    outline: none;
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  }
+
+  .form-control::placeholder {
+    color: rgb(156 163 175);
+  }
+
+  .form-control:hover {
+    border-color: rgb(156 163 175);
+  }
+
+  .form-control:focus {
+    border-color: rgb(5 150 105);
+    box-shadow: 0 0 0 4px rgb(167 243 208 / 0.55);
+  }
+
+  .form-control[aria-invalid="true"] {
+    border-color: rgb(220 38 38);
+    background-color: rgb(254 242 242);
+    box-shadow: 0 0 0 3px rgb(254 202 202 / 0.55);
+  }
+
+  .field-error {
+    display: none;
+    margin-top: 0.5rem;
+    color: rgb(185 28 28);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .field-error.is-visible {
+    display: block;
+  }
+
+  .product-option {
+    display: block;
+    min-width: 0;
+    cursor: pointer;
+  }
+
+  .product-card {
+    position: relative;
+    display: flex;
+    min-height: 6.5rem;
+    align-items: center;
+    gap: 0.875rem;
+    border: 1px solid rgb(209 213 219);
+    border-radius: 0.875rem;
+    background: white;
+    padding: 1rem;
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  }
+
+  .product-option:hover .product-card {
+    border-color: rgb(110 231 183);
+    transform: translateY(-1px);
+  }
+
+  .product-option input:focus-visible + .product-card {
+    outline: none;
+    box-shadow: 0 0 0 4px rgb(167 243 208 / 0.65);
+  }
+
+  .product-option input:checked + .product-card {
+    border-color: rgb(5 150 105);
+    background: rgb(236 253 245);
+    box-shadow: 0 0 0 1px rgb(5 150 105);
+  }
+
+  .product-icon {
+    display: flex;
+    height: 3rem;
+    width: 3rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+    background: rgb(236 253 245);
+    color: rgb(5 150 105);
+  }
+
+  .product-icon svg {
+    height: 1.75rem;
+    width: 1.75rem;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .selection-check {
+    position: absolute;
+    right: 0.75rem;
+    top: 0.75rem;
+    display: flex;
+    height: 1.4rem;
+    width: 1.4rem;
+    transform: scale(0.7);
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgb(209 213 219);
+    border-radius: 9999px;
+    background: white;
+    color: white;
+    opacity: 0.7;
+    transition: all 150ms ease;
+  }
+
+  .selection-check svg {
+    height: 0.95rem;
+    width: 0.95rem;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .product-option input:checked + .product-card .selection-check {
+    transform: scale(1);
+    border-color: rgb(234 88 12);
+    background: rgb(234 88 12);
+    opacity: 1;
+  }
+
+  fieldset[aria-invalid="true"] .product-card {
+    border-color: rgb(252 165 165);
+  }
+</style>

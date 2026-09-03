@@ -5,7 +5,6 @@ import {
   ChevronRight,
   ChevronUp,
   ClipboardCheck,
-  ClipboardList,
   EllipsisVertical,
   FileDown,
   PhoneCall,
@@ -194,7 +193,6 @@ function InterviewActions({
   downloadingContractId,
   onCreateUser,
   onEvaluate,
-  onTrainingTest,
   checkingUserCandidateId,
   userExistsCandidateIds,
   onStatusChange,
@@ -215,7 +213,6 @@ function InterviewActions({
   const referenceCount = getReferenceCount(interview);
   const referencesExpanded = expandedReferencesId === interview.id;
   const currentStatus = getInterviewStatus(interview);
-  const trainingTestEnabled = trainingMode && currentStatus === "CAPACITACION";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -266,23 +263,6 @@ function InterviewActions({
             <ClipboardCheck size={14} />
             Evaluación
           </button>
-          {trainingMode && (
-            <button
-              type="button"
-              onClick={() => onTrainingTest(interview)}
-              disabled={!trainingTestEnabled}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs font-extrabold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label={`Realizar prueba de ${getCandidateName(interview)}`}
-              title={
-                trainingTestEnabled
-                  ? "Realizar prueba de capacitacion"
-                  : "Disponible solo para postulantes en capacitacion"
-              }
-            >
-              <ClipboardList size={14} />
-              Realizar prueba
-            </button>
-          )}
         </>
       )}
       <button

@@ -104,7 +104,7 @@ const QUESTION_BANK = [
       { value: "C", text: "$550" },
       { value: "D", text: "$600" },
     ],
-    answer: "C",
+    answer: "A",
   },
   {
     id: "q09",

@@ -1,3 +1,4 @@
+import { useContext } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import Usuarios from "./pages/Admin/Usuarios.jsx";
@@ -14,6 +15,21 @@ import Notificaciones from "./pages/Admin/Notificaciones.jsx";
 import Login from "./pages/Login.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import PublicRoute from "./components/PublicRoute.jsx";
+import { AuthContext } from "./context/AuthContext.jsx";
+import Pruebas from "./pages/Pruebas/Pruebas.jsx";
+import AdminEvaluacion from "./pages/Pruebas/AdminEvaluacion.jsx";
+
+function Evaluacion() {
+  const auth = useContext(AuthContext);
+  const role = String(auth?.user?.rol?.nombre || "").trim().toUpperCase();
+  return role === "ADMIN" ? <AdminEvaluacion /> : <Pruebas />;
+}
+
+function HomeRedirect() {
+  const auth = useContext(AuthContext);
+  const role = String(auth?.user?.rol?.nombre || "").trim().toUpperCase();
+  return <Navigate to={role === "USUARIO" ? "/evaluacion" : "/usuarios"} replace />;
+}
 
 export default function App() {
   return (
@@ -36,7 +52,15 @@ export default function App() {
               <main className="flex-1 md:ml-64">
                 <div className="p-6 lg:p-10">
                   <Routes>
-                    <Route path="/" element={<Navigate to="/usuarios" replace />} />
+                    <Route path="/" element={<HomeRedirect />} />
+                    <Route
+                      path="/evaluacion"
+                      element={
+                        <ProtectedRoute allowedRoles={["USUARIO", "ADMIN"]}>
+                          <Evaluacion />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route path="/usuarios" element={<Usuarios />} />
                     <Route path="/agencias" element={<Agencias />} />
                     <Route path="/roles" element={<Roles />} />
@@ -76,7 +100,7 @@ export default function App() {
                       path="/descartados"
                       element={<Postulaciones key="descartados" modo="descartado" />}
                     />
-                    <Route path="*" element={<Navigate to="/usuarios" replace />} />
+                    <Route path="*" element={<HomeRedirect />} />
                   </Routes>
                 </div>
               </main>

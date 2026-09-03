@@ -351,7 +351,7 @@ test("guarda y califica la prueba de capacitacion", async () => {
     q05: "B",
     q06: "C",
     q07: "C",
-    q08: "C",
+    q08: "A",
     q09: "C",
     q10: "C",
     q16: "A",

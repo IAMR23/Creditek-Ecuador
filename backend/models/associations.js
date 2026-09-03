@@ -49,6 +49,8 @@ const PrecioVenta = require('./PrecioVenta');
 const PresupuestoMarketing = require('./Marketing/PresupuestoMarketing');
 const GastoMarketing = require('./Marketing/GastoMarketing');
 require('./Marketing/PautaMarketing');
+const CopaCreditekVendedorConfiguracion = require('./Marketing/CopaCreditekVendedorConfiguracion');
+const CopaCreditekSemanaVendedor = require('./Marketing/CopaCreditekSemanaVendedor');
 const ConciliacionLote = require('./ConciliacionLote');
 const ConciliacionPdfImportacion = require('./ConciliacionPdfImportacion');
 const ConciliacionModeloTv = require('./ConciliacionModeloTv');
@@ -244,6 +246,23 @@ Agencia.belongsToMany(Usuario, {
   through: UsuarioAgencia,
   foreignKey: "agenciaId",
   as: "usuarios",
+});
+
+Usuario.hasOne(CopaCreditekVendedorConfiguracion, {
+  foreignKey: "usuarioId",
+  as: "configuracionCopaCreditek",
+});
+CopaCreditekVendedorConfiguracion.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
+});
+Usuario.hasMany(CopaCreditekSemanaVendedor, {
+  foreignKey: "usuarioId",
+  as: "semanasCopaCreditek",
+});
+CopaCreditekSemanaVendedor.belongsTo(Usuario, {
+  foreignKey: "usuarioId",
+  as: "usuario",
 });
 
 // Relaciones directas para include desde UsuarioAgencia

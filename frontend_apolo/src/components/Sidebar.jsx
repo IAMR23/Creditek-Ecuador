@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Bell,
   Building2,
+  ClipboardCheck,
   ClipboardList,
   FileText,
   GraduationCap,
@@ -18,9 +19,13 @@ import { AuthContext } from "../context/AuthContext";
 import { api } from "../api/client";
 
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
+const normalizeRole = (value) => String(value || "").trim().toUpperCase();
 
 export default function Sidebar() {
   const auth = useContext(AuthContext);
+  const role = normalizeRole(auth?.user?.rol?.nombre);
+  const isUser = role === "USUARIO";
+  const isAdmin = role === "ADMIN";
   const [notificaciones90Dias, setNotificaciones90Dias] = useState(0);
   const [resumenPostulaciones, setResumenPostulaciones] = useState({
     totalGeneral: 0,
@@ -41,44 +46,29 @@ export default function Sidebar() {
     ].join(" ");
 
   useEffect(() => {
+    if (isUser) return undefined;
     let active = true;
-
     const cargarResumen = async () => {
       try {
         const res = await api.get("/api/postulaciones/resumen");
-        if (!active) return;
-        setResumenPostulaciones(
-          res.data?.data || {
-            totalGeneral: 0,
-            total: 0,
-            noLeidas: 0,
-            entrevistas: 0,
-            seleccionados: 0,
-            capacitacion: 0,
-            descartados: 0,
-          }
-        );
+        if (active) setResumenPostulaciones((current) => res.data?.data || current);
       } catch {
-        if (!active) return;
+        // El menú conserva los últimos contadores disponibles.
       }
     };
-
     cargarResumen();
-
     const intervalId = window.setInterval(cargarResumen, 30000);
-    const onUpdated = () => cargarResumen();
-    window.addEventListener(POSTULACIONES_EVENT, onUpdated);
-
+    window.addEventListener(POSTULACIONES_EVENT, cargarResumen);
     return () => {
       active = false;
       window.clearInterval(intervalId);
-      window.removeEventListener(POSTULACIONES_EVENT, onUpdated);
+      window.removeEventListener(POSTULACIONES_EVENT, cargarResumen);
     };
-  }, []);
+  }, [isUser]);
 
   useEffect(() => {
+    if (isUser) return undefined;
     let active = true;
-
     const cargarNotificaciones = async () => {
       try {
         const response = await api.get("/usuarios/notificaciones-90-dias", {
@@ -89,130 +79,57 @@ export default function Sidebar() {
         if (active) setNotificaciones90Dias(0);
       }
     };
-
     cargarNotificaciones();
     const intervalId = window.setInterval(cargarNotificaciones, 60000);
-
     return () => {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [isUser]);
 
   return (
     <aside className="w-full bg-white/80 backdrop-blur border-r border-slate-200 flex flex-col md:fixed md:inset-y-0 md:left-0 md:z-40 md:h-screen md:w-64 md:overflow-y-auto">
       <div className="p-5 border-b border-slate-200">
         <div className="flex items-baseline gap-3">
           <div className="text-2xl font-extrabold tracking-tight">
-            <span className="text-black">A</span>
-            <span className="text-orange-500">B</span>
-            <span className="text-black">S</span>
+            <span className="text-black">A</span><span className="text-orange-500">B</span><span className="text-black">S</span>
           </div>
           <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">
-          ABS
-        </div>
+        <div className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">ABS</div>
       </div>
 
       <nav className="p-3 flex flex-col gap-2">
-        <NavLink to="/dashboard" className={linkClass}>
-          <LayoutDashboard size={18} />
-          Dashboard
-        </NavLink>
-
-        <NavLink to="/agencias" className={linkClass}>
-          <Building2 size={18} />
-          Agencias
-        </NavLink>
-
-        <NavLink to="/roles" className={linkClass}>
-          <Shield size={18} />
-          Roles
-        </NavLink>
-
-        <NavLink to="/usuarios" className={linkClass}>
-          <Users size={18} />
-          Usuarios
-        </NavLink>
-
-        <NavLink to="/notificaciones" className={linkClass}>
-          <Bell size={18} />
-          <span className="flex-1">Notificaciones</span>
-          {notificaciones90Dias > 0 && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800">
-              {notificaciones90Dias}
-            </span>
-          )}
-        </NavLink>
-
-        <NavLink to="/usuarios-agencias" className={linkClass}>
-          <UsersRound size={18} />
-          Usuarios/Agencias
-        </NavLink>
-
-        <NavLink to="/control-asistencia" className={linkClass}>
-          <ClipboardList size={18} />
-          Movimientos de Terminales
-        </NavLink>
-
-        <NavLink to="/postulaciones" className={linkClass}>
-          <FileText size={18} />
-          <span className="flex flex-1 items-center gap-2">
-            Postulaciones
-            {resumenPostulaciones.noLeidas > 0 ? (
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-            ) : null}
-          </span>
-          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">
-            {resumenPostulaciones.total}
-          </span>
-        </NavLink>
-
-        <NavLink to="/entrevistas" className={linkClass}>
-          <UserCheck size={18} />
-          <span className="flex-1">Entrevistas</span>
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
-            {resumenPostulaciones.entrevistas}
-          </span>
-        </NavLink>
-
-        <NavLink to="/seleccionados" className={linkClass}>
-          <BadgeCheck size={18} />
-          <span className="flex-1">Seleccionados</span>
-          <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-bold text-teal-700">
-            {resumenPostulaciones.seleccionados || 0}
-          </span>
-        </NavLink>
-
-        <NavLink to="/capacitacion" className={linkClass}>
-          <GraduationCap size={18} />
-          <span className="flex-1">Capacitación</span>
-          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">
-            {resumenPostulaciones.capacitacion || 0}
-          </span>
-        </NavLink>
-
-        <NavLink to="/descartados" className={linkClass}>
-          <Archive size={18} />
-          <span className="flex-1">Descartados</span>
-          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">
-            {resumenPostulaciones.descartados}
-          </span>
-        </NavLink>
+        {isUser ? (
+          <NavLink to="/evaluacion" className={linkClass}><ClipboardCheck size={18} /> Evaluación</NavLink>
+        ) : (
+          <>
+            <NavLink to="/dashboard" className={linkClass}><LayoutDashboard size={18} /> Dashboard</NavLink>
+            {isAdmin && <NavLink to="/evaluacion" className={linkClass}><ClipboardCheck size={18} /> Evaluación</NavLink>}
+            <NavLink to="/agencias" className={linkClass}><Building2 size={18} /> Agencias</NavLink>
+            <NavLink to="/roles" className={linkClass}><Shield size={18} /> Roles</NavLink>
+            <NavLink to="/usuarios" className={linkClass}><Users size={18} /> Usuarios</NavLink>
+            <NavLink to="/notificaciones" className={linkClass}>
+              <Bell size={18} /><span className="flex-1">Notificaciones</span>
+              {notificaciones90Dias > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800">{notificaciones90Dias}</span>}
+            </NavLink>
+            <NavLink to="/usuarios-agencias" className={linkClass}><UsersRound size={18} /> Usuarios/Agencias</NavLink>
+            <NavLink to="/control-asistencia" className={linkClass}><ClipboardList size={18} /> Movimientos de Terminales</NavLink>
+            <NavLink to="/postulaciones" className={linkClass}>
+              <FileText size={18} /><span className="flex flex-1 items-center gap-2">Postulaciones{resumenPostulaciones.noLeidas > 0 && <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />}</span>
+              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">{resumenPostulaciones.total}</span>
+            </NavLink>
+            <NavLink to="/entrevistas" className={linkClass}><UserCheck size={18} /><span className="flex-1">Entrevistas</span><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">{resumenPostulaciones.entrevistas}</span></NavLink>
+            <NavLink to="/seleccionados" className={linkClass}><BadgeCheck size={18} /><span className="flex-1">Seleccionados</span><span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-bold text-teal-700">{resumenPostulaciones.seleccionados || 0}</span></NavLink>
+            <NavLink to="/capacitacion" className={linkClass}><GraduationCap size={18} /><span className="flex-1">Capacitación</span><span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-bold text-violet-700">{resumenPostulaciones.capacitacion || 0}</span></NavLink>
+            <NavLink to="/descartados" className={linkClass}><Archive size={18} /><span className="flex-1">Descartados</span><span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">{resumenPostulaciones.descartados}</span></NavLink>
+          </>
+        )}
       </nav>
 
       <div className="mt-auto p-3 border-t border-slate-200">
-        <div className="text-xs text-slate-500 px-3 pb-2 truncate">
-          {auth?.user?.email || ""}
-        </div>
-        <button
-          type="button"
-          onClick={auth?.logout}
-          className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 hover:bg-slate-50"
-        >
-          Cerrar sesión
-        </button>
+        <div className="text-xs text-slate-500 px-3 pb-2 truncate">{auth?.user?.email || ""}</div>
+        <button type="button" onClick={auth?.logout} className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 hover:bg-slate-50">Cerrar sesión</button>
       </div>
     </aside>
   );

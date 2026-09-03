@@ -340,6 +340,19 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
         AND "tipoContenido" IS NOT NULL;
     `);
   }
+
+  if (tables.includes("copa_creditek_vendedores_configuracion")) {
+    await addColumnIfMissing(
+      queryInterface,
+      "copa_creditek_vendedores_configuracion",
+      "mostrarEnMarcador",
+      {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
+    );
+  }
 };
 
 const ensureSistemasTareasSchema = async (queryInterface, tables) => {
