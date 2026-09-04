@@ -149,9 +149,14 @@ exports.actualizarMeta = async (req, res) => {
       return res.status(400).json({ ok: false, message: meta.mensaje });
     }
 
+    await CopaCreditekVendedorConfiguracion.upsert({
+      usuarioId,
+      meta: meta.valor,
+    });
+
     const semana = await obtenerOCrearSemana(usuarioId, fechaInicio, fechaFin);
     await semana.update({ meta: meta.valor });
-    return res.json({ ok: true, semana });
+    return res.json({ ok: true, semana, meta: meta.valor });
   } catch (error) {
     return manejarError(res, error, "No se pudo guardar la meta semanal.");
   }
@@ -254,6 +259,7 @@ exports.guardarConfiguracionCompleta = async (req, res) => {
             alias: fila.alias,
             equipoCopa: fila.equipoCopa,
             mostrarEnMarcador: fila.mostrarEnMarcador,
+            meta: fila.meta,
           },
           { transaction },
         );

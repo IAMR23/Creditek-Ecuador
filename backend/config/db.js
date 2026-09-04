@@ -342,6 +342,11 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
   }
 
   if (tables.includes("copa_creditek_vendedores_configuracion")) {
+    const columnasConfiguracionCopa = await queryInterface.describeTable(
+      "copa_creditek_vendedores_configuracion",
+    );
+    const debeMigrarMetaCopa = !columnasConfiguracionCopa.meta;
+
     await addColumnIfMissing(
       queryInterface,
       "copa_creditek_vendedores_configuracion",
@@ -352,6 +357,88 @@ const ensureMarketingSchema = async (queryInterface, tables) => {
         defaultValue: true,
       },
     );
+
+    await addColumnIfMissing(
+      queryInterface,
+      "copa_creditek_vendedores_configuracion",
+      "meta",
+      {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+    );
+
+    await sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'copa_creditek_vendedores_meta_chk'
+        ) THEN
+          ALTER TABLE copa_creditek_vendedores_configuracion
+            ADD CONSTRAINT copa_creditek_vendedores_meta_chk CHECK (meta >= 0);
+        END IF;
+      END $$;
+    `);
+
+    if (
+      debeMigrarMetaCopa &&
+      tables.includes("copa_creditek_semanas_vendedores")
+    ) {
+      await sequelize.query(`
+        WITH ultima_meta AS (
+          SELECT DISTINCT ON ("usuarioId")
+            "usuarioId",
+            meta
+          FROM copa_creditek_semanas_vendedores
+          WHERE meta IS NOT NULL
+            AND meta > 0
+          ORDER BY
+            "usuarioId",
+            "updatedAt" DESC NULLS LAST,
+            "fechaFin" DESC,
+            "fechaInicio" DESC,
+            id DESC
+        )
+        INSERT INTO copa_creditek_vendedores_configuracion (
+          "usuarioId",
+          meta,
+          "createdAt",
+          "updatedAt"
+        )
+        SELECT
+          "usuarioId",
+          meta,
+          NOW(),
+          NOW()
+        FROM ultima_meta
+        ON CONFLICT ("usuarioId") DO NOTHING;
+
+        WITH ultima_meta AS (
+          SELECT DISTINCT ON ("usuarioId")
+            "usuarioId",
+            meta
+          FROM copa_creditek_semanas_vendedores
+          WHERE meta IS NOT NULL
+            AND meta > 0
+          ORDER BY
+            "usuarioId",
+            "updatedAt" DESC NULLS LAST,
+            "fechaFin" DESC,
+            "fechaInicio" DESC,
+            id DESC
+        )
+        UPDATE copa_creditek_vendedores_configuracion AS configuracion
+        SET
+          meta = ultima_meta.meta,
+          "updatedAt" = NOW()
+        FROM ultima_meta
+        WHERE configuracion."usuarioId" = ultima_meta."usuarioId"
+          AND COALESCE(configuracion.meta, 0) = 0;
+      `);
+    }
   }
 };
 

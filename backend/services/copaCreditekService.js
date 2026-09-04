@@ -192,6 +192,10 @@ const construirMarcador = ({
       semana?.ventasManual === null || semana?.ventasManual === undefined
         ? null
         : Number(semana.ventasManual);
+    const metaConfigurada =
+      configuracion?.meta === null || configuracion?.meta === undefined
+        ? null
+        : Number(configuracion.meta);
     const alias = String(configuracion?.alias || "").trim() || null;
     const nombreCorto = nombreCortoPersona(usuario.nombre);
     const mostrarEnMarcador = configuracion?.mostrarEnMarcador !== false;
@@ -207,7 +211,7 @@ const construirMarcador = ({
       equipoConfigurado: equipoConfigurado || null,
       alias,
       mostrarEnMarcador,
-      meta: Number(semana?.meta || 0),
+      meta: metaConfigurada ?? Number(semana?.meta || 0),
       ventasCalculadas,
       ventasManual,
       ventasMostradas:

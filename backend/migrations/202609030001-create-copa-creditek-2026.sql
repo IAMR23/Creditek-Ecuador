@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS copa_creditek_vendedores_configuracion (
   alias VARCHAR(50),
   "equipoCopa" VARCHAR(40),
   "mostrarEnMarcador" BOOLEAN NOT NULL DEFAULT TRUE,
+  meta INTEGER NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   CONSTRAINT copa_creditek_vendedores_equipo_chk CHECK (
@@ -22,6 +23,9 @@ CREATE TABLE IF NOT EXISTS copa_creditek_vendedores_configuracion (
   ),
   CONSTRAINT copa_creditek_vendedores_alias_chk CHECK (
     alias IS NULL OR LENGTH(BTRIM(alias)) BETWEEN 1 AND 50
+  ),
+  CONSTRAINT copa_creditek_vendedores_meta_chk CHECK (
+    meta >= 0
   )
 );
 
@@ -30,6 +34,76 @@ ON copa_creditek_vendedores_configuracion ("usuarioId");
 
 ALTER TABLE copa_creditek_vendedores_configuracion
   ADD COLUMN IF NOT EXISTS "mostrarEnMarcador" BOOLEAN NOT NULL DEFAULT TRUE;
+
+DO $$
+DECLARE
+  meta_column_existed BOOLEAN;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'copa_creditek_vendedores_configuracion'
+      AND column_name = 'meta'
+  )
+  INTO meta_column_existed;
+
+  ALTER TABLE copa_creditek_vendedores_configuracion
+    ADD COLUMN IF NOT EXISTS meta INTEGER NOT NULL DEFAULT 0;
+
+  IF NOT meta_column_existed
+     AND to_regclass('public.copa_creditek_semanas_vendedores') IS NOT NULL THEN
+    WITH ultima_meta AS (
+      SELECT DISTINCT ON ("usuarioId")
+        "usuarioId",
+        meta
+      FROM copa_creditek_semanas_vendedores
+      WHERE meta IS NOT NULL
+        AND meta > 0
+      ORDER BY
+        "usuarioId",
+        "updatedAt" DESC NULLS LAST,
+        "fechaFin" DESC,
+        "fechaInicio" DESC,
+        id DESC
+    )
+    INSERT INTO copa_creditek_vendedores_configuracion (
+      "usuarioId",
+      meta,
+      "createdAt",
+      "updatedAt"
+    )
+    SELECT
+      "usuarioId",
+      meta,
+      NOW(),
+      NOW()
+    FROM ultima_meta
+    ON CONFLICT ("usuarioId") DO NOTHING;
+
+    WITH ultima_meta AS (
+      SELECT DISTINCT ON ("usuarioId")
+        "usuarioId",
+        meta
+      FROM copa_creditek_semanas_vendedores
+      WHERE meta IS NOT NULL
+        AND meta > 0
+      ORDER BY
+        "usuarioId",
+        "updatedAt" DESC NULLS LAST,
+        "fechaFin" DESC,
+        "fechaInicio" DESC,
+        id DESC
+    )
+    UPDATE copa_creditek_vendedores_configuracion AS configuracion
+    SET
+      meta = ultima_meta.meta,
+      "updatedAt" = NOW()
+    FROM ultima_meta
+    WHERE configuracion."usuarioId" = ultima_meta."usuarioId"
+      AND COALESCE(configuracion.meta, 0) = 0;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS copa_creditek_semanas_vendedores (
   id SERIAL PRIMARY KEY,
@@ -78,6 +152,14 @@ BEGIN
       ADD CONSTRAINT copa_creditek_vendedores_alias_chk CHECK (
         alias IS NULL OR LENGTH(BTRIM(alias)) BETWEEN 1 AND 50
       );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'copa_creditek_vendedores_meta_chk'
+  ) THEN
+    ALTER TABLE copa_creditek_vendedores_configuracion
+      ADD CONSTRAINT copa_creditek_vendedores_meta_chk CHECK (meta >= 0);
   END IF;
 
   IF NOT EXISTS (

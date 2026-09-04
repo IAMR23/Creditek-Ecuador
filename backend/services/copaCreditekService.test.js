@@ -120,19 +120,32 @@ describe("Copa Creditek", () => {
     expect(nuevaAurora.total).toBe(0);
   });
 
-  test("utiliza la meta configurada para el período exacto", () => {
+  test("utiliza la meta configurada para el vendedor", () => {
     const marcador = crearMarcador({
+      configuraciones: [{ usuarioId: 1, meta: 14 }],
+    });
+    expect(marcador.vendedores[0].meta).toBe(14);
+  });
+
+  test("conserva la meta configurada aunque cambie el período", () => {
+    const marcador = crearMarcador({
+      configuraciones: [{ usuarioId: 1, meta: 14 }],
       semanas: [
         {
           usuarioId: 1,
           fechaInicio: FECHA_INICIO,
           fechaFin: FECHA_FIN,
-          meta: 14,
-          ventasManual: null,
+          meta: 7,
+          ventasManual: 9,
         },
       ],
+      fechaInicio: "2026-09-08",
+      fechaFin: "2026-09-14",
     });
-    expect(marcador.vendedores[0].meta).toBe(14);
+    expect(marcador.vendedores[0]).toMatchObject({
+      meta: 14,
+      ventasManual: null,
+    });
   });
 
   test("el alias tiene prioridad sobre el nombre corto", () => {

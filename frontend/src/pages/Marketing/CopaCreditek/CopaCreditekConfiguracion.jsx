@@ -163,8 +163,8 @@ export default function CopaCreditekConfiguracion({
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        Los valores manuales solo cambian este marcador y este período. No
-        modifican ventas, auditoría ni reportes comerciales.
+        La meta, alias, equipo y visibilidad se conservan aunque cambies fechas.
+        Las ventas manuales solo cambian este marcador y este periodo.
       </div>
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end sm:justify-between">
         <div className="flex w-full max-w-4xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">

@@ -47,6 +47,26 @@ const cargarFiltrosIniciales = () => {
 const obtenerMensajeError = (error, predeterminado) =>
   error.response?.data?.message || error.message || predeterminado;
 
+const crearBlobDesdeCanvas = (canvas) =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((resultado) => {
+      if (resultado) resolve(resultado);
+      else reject(new Error("No se pudo generar la imagen PNG."));
+    }, "image/png");
+  });
+
+const esErrorFocoPortapapeles = (error) => {
+  const mensaje = String(error?.message || error || "").toLowerCase();
+  const nombre = String(error?.name || "").toLowerCase();
+  return (
+    nombre.includes("notallowed") ||
+    mensaje.includes("document is not focused") ||
+    mensaje.includes("focus") ||
+    mensaje.includes("user activation") ||
+    mensaje.includes("gesto")
+  );
+};
+
 export default function MarketingVentasAgencia() {
   const [tabActiva, setTabActiva] = useState("marcador");
   const [filtros, setFiltros] = useState(cargarFiltrosIniciales);
@@ -121,6 +141,7 @@ export default function MarketingVentasAgencia() {
     }
 
     setCopiando(true);
+    let blobPromesa = null;
     try {
       if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
         throw new Error(
@@ -128,33 +149,32 @@ export default function MarketingVentasAgencia() {
         );
       }
 
-      if (document.fonts?.ready) await document.fonts.ready;
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      window.focus();
+      blobPromesa = (async () => {
+        if (document.fonts?.ready) await document.fonts.ready;
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        );
 
-      const canvas = await html2canvas(posterRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: null,
-        logging: false,
-        onclone: (documentoClonado) => {
-          documentoClonado
-            .querySelectorAll(
-              "[data-copa-bloque-vendedores], [data-copa-fila-vendedor], [data-copa-nombre-vendedor], [data-copa-resultado-vendedor]",
-            )
-            .forEach((elemento) => {
-              elemento.style.overflow = "visible";
-            });
-        },
-      });
-      const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob((resultado) => {
-          if (resultado) resolve(resultado);
-          else reject(new Error("No se pudo generar la imagen PNG."));
-        }, "image/png");
-      });
-
+        const canvas = await html2canvas(posterRef.current, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: null,
+          logging: false,
+          onclone: (documentoClonado) => {
+            documentoClonado
+              .querySelectorAll(
+                "[data-copa-bloque-vendedores], [data-copa-fila-vendedor], [data-copa-nombre-vendedor], [data-copa-resultado-vendedor]",
+              )
+              .forEach((elemento) => {
+                elemento.style.overflow = "visible";
+              });
+          },
+        });
+        return crearBlobDesdeCanvas(canvas);
+      })();
       await navigator.clipboard.write([
-        new ClipboardItem({ "image/png": blob }),
+        new ClipboardItem({ "image/png": blobPromesa }),
       ]);
 
       await Swal.fire({
@@ -165,6 +185,43 @@ export default function MarketingVentasAgencia() {
         showConfirmButton: false,
       });
     } catch (captureError) {
+      if (blobPromesa && esErrorFocoPortapapeles(captureError)) {
+        try {
+          const blob = await blobPromesa;
+          const resultado = await Swal.fire({
+            icon: "info",
+            title: "Imagen lista",
+            text: "Toca Copiar ahora para completar la copia.",
+            confirmButtonText: "Copiar ahora",
+            showCancelButton: true,
+            cancelButtonText: "Cancelar",
+            allowOutsideClick: false,
+            didOpen: () => {
+              Swal.getConfirmButton()?.focus();
+            },
+            preConfirm: async () => {
+              window.focus();
+              await navigator.clipboard.write([
+                new ClipboardItem({ "image/png": blob }),
+              ]);
+            },
+          });
+
+          if (resultado.isConfirmed) {
+            await Swal.fire({
+              icon: "success",
+              title: "Imagen copiada",
+              text: "La Copa Creditek estÃ¡ lista para pegarse en WhatsApp u otra aplicaciÃ³n.",
+              timer: 1800,
+              showConfirmButton: false,
+            });
+            return;
+          }
+        } catch (retryError) {
+          captureError = retryError;
+        }
+      }
+
       await Swal.fire({
         icon: "error",
         title: "No se pudo copiar la Copa",

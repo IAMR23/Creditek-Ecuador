@@ -6,9 +6,16 @@ export const POSTER_LAYOUT = {
     { equipo: "Sangolquí", left: 87.5, top: 31, color: "#ffffff" },
   ],
   vendedores: {
-    Caupicho: { left: 4, top: 50, width: 28, height: 14.5, color: "#00ec8b" },
-    "Sangolquí": { left: 37.5, top: 50, width: 28, height: 20, color: "#bfe9ff" },
-    "Nueva Aurora": { left: 70, top: 49.5, width: 25, height: 15, color: "#ffffff" },
-    "Martha Bucaram": { left: 4, top: 70, width: 28, height: 18, color: "#ff2638" },
+    Caupicho: { left: 3.5, top: 40.5, width: 31, height: 22, color: "#00ec8b" },
+    "Sangolquí": { left: 36.5, top: 40.5, width: 30, height: 22, color: "#bfe9ff" },
+    "Nueva Aurora": { left: 68.5, top: 40.5, width: 29, height: 22, color: "#ffffff" },
+    "Martha Bucaram": {
+      left: 3.5,
+      top: 63.5,
+      width: 33,
+      height: 25,
+      color: "#ff2638",
+      paddingTop: 35,
+    },
   },
 };

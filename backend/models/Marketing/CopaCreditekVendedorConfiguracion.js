@@ -33,6 +33,12 @@ const CopaCreditekVendedorConfiguracion = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    meta: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      validate: { min: 0, isInt: true },
+    },
   },
   {
     tableName: "copa_creditek_vendedores_configuracion",
