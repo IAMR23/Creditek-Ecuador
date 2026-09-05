@@ -62,13 +62,13 @@ describe("egresosCreditekService", () => {
     });
   });
 
-  test("lista entradas manuales sin consultar control financiero", async () => {
+  test("lista prestamos manuales sin consultar control financiero", async () => {
     Usuario.findAll.mockResolvedValue([{ id: 2, nombre: "Ana" }]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([
       { id: 8, usuarioId: 2, valor: "10.00", createdAt: "2026-08-10" },
     ]);
 
-    const resultado = await obtenerRegistros("entradas");
+    const resultado = await obtenerRegistros("prestamos");
 
     expect(ControlFinancieroRegistro.findAll).not.toHaveBeenCalled();
     expect(resultado.registros).toEqual([
@@ -108,7 +108,8 @@ describe("egresosCreditekService", () => {
       valor: 38.71,
       observacion: "Adelanto de caja",
       fecha: "2026-08-15",
-      seccion: "ENTRADAS",
+      seccion: "ANTICIPOS",
+      tipo: "ENTRADAS",
       registradoPorId: 7,
     });
     expect(resultado).toEqual(
@@ -124,9 +125,9 @@ describe("egresosCreditekService", () => {
     expect(EgresoCreditekEntrada.create).not.toHaveBeenCalled();
   });
 
-  test("exige fecha de sancion en todos los rubros", async () => {
+  test("exige fecha de sancion en prestamos y anticipos", async () => {
     await expect(
-      crearRegistro("otros", { usuarioId: 3, valor: "10" }, 7),
+      crearRegistro("prestamos", { usuarioId: 3, valor: "10" }, 7),
     ).rejects.toMatchObject({
       statusCode: 400,
       message: expect.stringContaining("fecha"),
@@ -159,13 +160,13 @@ describe("egresosCreditekService", () => {
   test("lista solamente los registros de la seccion solicitada", async () => {
     Usuario.findAll.mockResolvedValue([{ id: 2, nombre: "Raul" }]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([
-      { id: 20, seccion: "CAJAS", valor: "25.50" },
+      { id: 20, seccion: "ANTICIPOS", tipo: "CAJAS", valor: "25.50" },
     ]);
 
-    const resultado = await obtenerRegistros("cajas");
+    const resultado = await obtenerRegistros("anticipos");
 
     expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { seccion: "CAJAS" } }),
+      expect.objectContaining({ where: { seccion: "ANTICIPOS" } }),
     );
     expect(ControlFinancieroRegistro.findAll).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -178,8 +179,8 @@ describe("egresosCreditekService", () => {
     );
     expect(resultado).toEqual(
       expect.objectContaining({
-        seccion: "CAJAS",
-        registros: [expect.objectContaining({ id: 20, valor: 25.5 })],
+        seccion: "ANTICIPOS",
+        registros: [expect.objectContaining({ id: 20, tipo: "CAJAS", valor: 25.5 })],
         total: 25.5,
       }),
     );
@@ -228,7 +229,7 @@ describe("egresosCreditekService", () => {
       },
     ]);
 
-    const resultado = await obtenerRegistros("cajas");
+    const resultado = await obtenerRegistros("anticipos");
 
     expect(resultado.registros).toEqual([
       expect.objectContaining({
@@ -237,26 +238,28 @@ describe("egresosCreditekService", () => {
         usuarioId: 2,
         valor: 14,
         observacion: "No consta en cierre",
-        seccion: "CAJAS",
+        seccion: "ANTICIPOS",
+        tipo: "CAJAS",
       }),
     ]);
     expect(resultado.total).toBe(14);
   });
 
-  test("guarda transferencias en su propia seccion", async () => {
+  test("guarda transferencias como tipo dentro de anticipos", async () => {
     Usuario.findOne.mockResolvedValue({ id: 3 });
     EgresoCreditekEntrada.create.mockResolvedValue({ id: 21 });
     EgresoCreditekEntrada.findByPk.mockResolvedValue({
       id: 21,
       usuarioId: 3,
       valor: "10.00",
-      seccion: "TRANSFERENCIAS",
+      seccion: "ANTICIPOS",
+      tipo: "TRANSFERENCIAS",
       registradoPorId: 7,
     });
 
     await crearRegistro(
-      "transferencias",
-      { usuarioId: 3, valor: "10", fecha: "2026-08-20" },
+      "anticipos",
+      { usuarioId: 3, valor: "10", fecha: "2026-08-20", tipo: "transferencias" },
       7,
     );
 
@@ -265,9 +268,22 @@ describe("egresosCreditekService", () => {
       valor: 10,
       observacion: null,
       fecha: "2026-08-20",
-      seccion: "TRANSFERENCIAS",
+      seccion: "ANTICIPOS",
+      tipo: "TRANSFERENCIAS",
       registradoPorId: 7,
     });
+  });
+
+  test("rechaza tipos desconocidos antes de consultar usuarios", async () => {
+    await expect(
+      crearRegistro(
+        "anticipos",
+        { usuarioId: 3, valor: "10", fecha: "2026-08-20", tipo: "bonos" },
+        7,
+      ),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(Usuario.findOne).not.toHaveBeenCalled();
+    expect(EgresoCreditekEntrada.create).not.toHaveBeenCalled();
   });
 
   test("rechaza secciones desconocidas antes de consultar la base", async () => {
@@ -285,7 +301,7 @@ describe("egresosCreditekService", () => {
       { id: 31, valor: "15.00", activo: false },
     ]);
 
-    const resultado = await obtenerRegistros("descuentos");
+    const resultado = await obtenerRegistros("prestamos");
 
     expect(resultado.registros).toHaveLength(2);
     expect(resultado.total).toBe(40);
@@ -307,25 +323,27 @@ describe("egresosCreditekService", () => {
     });
 
     const resultado = await actualizarRegistro(
-      "cajas",
+      "anticipos",
       32,
       {
         usuarioId: 3,
         valor: "22,50",
         observacion: " Ajuste ",
         fecha: "2026-08-21",
+        tipo: "cajas",
       },
       7,
     );
 
     expect(EgresoCreditekEntrada.findOne).toHaveBeenCalledWith({
-      where: { id: 32, seccion: "CAJAS" },
+      where: { id: 32, seccion: "ANTICIPOS" },
     });
     expect(registro.update).toHaveBeenCalledWith({
       usuarioId: 3,
       valor: 22.5,
       observacion: "Ajuste",
       fecha: "2026-08-21",
+      tipo: "CAJAS",
       actualizadoPorId: 7,
       ultimaAccion: "EDITADO",
     });
@@ -345,13 +363,14 @@ describe("egresosCreditekService", () => {
 
     await expect(
       actualizarRegistro(
-        "transferencias",
+        "anticipos",
         33,
         {
           usuarioId: 4,
           valor: "10",
           observacion: "",
           fecha: "2026-08-22",
+          tipo: "transferencias",
         },
         7,
       ),
@@ -373,7 +392,7 @@ describe("egresosCreditekService", () => {
     });
 
     const resultado = await cambiarEstadoRegistro(
-      "entradas",
+      "anticipos",
       34,
       false,
       9,
@@ -396,10 +415,10 @@ describe("egresosCreditekService", () => {
     };
     EgresoCreditekEntrada.findOne.mockResolvedValue(registro);
 
-    const resultado = await eliminarRegistro("entradas", 36);
+    const resultado = await eliminarRegistro("anticipos", 36);
 
     expect(EgresoCreditekEntrada.findOne).toHaveBeenCalledWith({
-      where: { id: 36, seccion: "ENTRADAS" },
+      where: { id: 36, seccion: "ANTICIPOS" },
     });
     expect(registro.destroy).toHaveBeenCalledTimes(1);
     expect(resultado).toEqual({ id: 36 });
@@ -409,7 +428,7 @@ describe("egresosCreditekService", () => {
     EgresoCreditekEntrada.findOne.mockResolvedValue({ id: 35 });
 
     await expect(
-      cambiarEstadoRegistro("entradas", 35, "false", 9),
+      cambiarEstadoRegistro("anticipos", 35, "false", 9),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 });

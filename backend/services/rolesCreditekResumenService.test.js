@@ -9,6 +9,11 @@ jest.mock("../models/ControlFinancieroConciliacionCaja", () => ({
 }));
 jest.mock("../models/ControlFinancieroRegistro", () => ({ findAll: jest.fn() }));
 jest.mock("../models/EgresoCreditekEntrada", () => ({ findAll: jest.fn() }));
+jest.mock("../models/NominaBeneficio", () => ({
+  NominaBeneficio: {},
+}));
+jest.mock("../models/NominaEmpleado", () => ({}));
+jest.mock("../models/RolPago", () => ({}));
 jest.mock("../models/RolCreditekAjuste", () => ({
   findAll: jest.fn(),
   findOrCreate: jest.fn(),
@@ -47,16 +52,40 @@ describe("rolesCreditekResumenService", () => {
 
   test("consolida valores automaticos, manuales y total por colaborador", async () => {
     Usuario.findAll.mockResolvedValue([
-      { id: 4, nombre: "Ana Perez", activo: true },
+      {
+        id: 4,
+        cedula: "0102030405",
+        nombre: "Ana Perez",
+        activo: true,
+        fechaIngreso: "2026-01-15",
+        fechaSalida: null,
+        rolPagoId: 2,
+        rolPago: {
+          id: 2,
+          cargo: "VENDEDOR",
+          sueldoBase: "482.00",
+          sueldoExtra: "68.00",
+        },
+        nominaEmpleados: [
+          {
+            id: 8,
+            rolPagoId: 2,
+            sueldo: "550.00",
+            cargo: "VENDEDOR NUEVA AURORA",
+            estado: "ACTIVO",
+            beneficios: [{ tipoBeneficio: "FONDOS_RESERVA", activo: true }],
+          },
+        ],
+      },
     ]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([
-      { usuarioId: 4, seccion: "TRANSFERENCIAS", valor: "5.00" },
-      { usuarioId: 4, seccion: "CAJAS", valor: "20.00" },
-      { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
-      { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
-      { usuarioId: 4, seccion: "JEFES", valor: "6.00" },
-      { usuarioId: 4, seccion: "MULTAS_FACTURACION", valor: "4.00" },
-      { usuarioId: 4, seccion: "OTROS", valor: "7.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "TRANSFERENCIAS", valor: "5.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "CAJAS", valor: "20.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "ENTRADAS", valor: "30.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "DESCUENTOS", valor: "2.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "JEFES", valor: "6.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "MULTAS_FACTURACION", valor: "4.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "OTROS", valor: "7.00" },
     ]);
     ControlFinancieroRegistro.findAll.mockResolvedValueOnce([]);
     RolCreditekAjuste.findAll.mockResolvedValue([
@@ -104,6 +133,14 @@ describe("rolesCreditekResumenService", () => {
     expect(resultado.registros).toEqual([
       expect.objectContaining({
         usuarioId: 4,
+        cedula: "0102030405",
+        fechaIngreso: "2026-01-15",
+        fechaSalida: null,
+        cargo: "VENDEDOR",
+        rolPagoId: 2,
+        rolPagoSueldoBase: 482,
+        rolPagoSueldoExtra: 68,
+        fondoReservaActivo: true,
         ingresosComisiones: 123.45,
         adelantosTransfer: 10,
         descuentosMeta: 7,
@@ -206,10 +243,10 @@ describe("rolesCreditekResumenService", () => {
       { id: 4, nombre: "Ana Perez", activo: true },
     ]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([
-      { usuarioId: 4, seccion: "CAJAS", valor: "20.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "CAJAS", valor: "20.00" },
       { usuarioId: 4, seccion: "ENTRADAS", valor: "30.00" },
-      { usuarioId: 4, seccion: "DESCUENTOS", valor: "2.00" },
-      { usuarioId: 4, seccion: "MULTAS_FACTURACION", valor: "4.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "DESCUENTOS", valor: "2.00" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "MULTAS_FACTURACION", valor: "4.00" },
     ]);
     ControlFinancieroRegistro.findAll.mockResolvedValueOnce([]);
     RolCreditekAjuste.findAll.mockResolvedValue([

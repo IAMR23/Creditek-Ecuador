@@ -185,6 +185,7 @@ export default function MarketingVentasAgencia() {
         showConfirmButton: false,
       });
     } catch (captureError) {
+      let errorFinal = captureError;
       if (blobPromesa && esErrorFocoPortapapeles(captureError)) {
         try {
           const blob = await blobPromesa;
@@ -218,14 +219,14 @@ export default function MarketingVentasAgencia() {
             return;
           }
         } catch (retryError) {
-          captureError = retryError;
+          errorFinal = retryError;
         }
       }
 
       await Swal.fire({
         icon: "error",
         title: "No se pudo copiar la Copa",
-        text: captureError.message || "Intenta nuevamente.",
+        text: errorFinal.message || "Intenta nuevamente.",
       });
     } finally {
       setCopiando(false);
@@ -248,20 +249,6 @@ export default function MarketingVentasAgencia() {
         `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/meta`,
         { ...filtros, meta: valores.meta },
       );
-
-      if (valores.ventasManual === "") {
-        if (vendedor.ventasManual !== null) {
-          await api.delete(
-            `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/ventas-manual`,
-            { params: filtros },
-          );
-        }
-      } else {
-        await api.put(
-          `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/ventas-manual`,
-          { ...filtros, ventasManual: valores.ventasManual },
-        );
-      }
 
       await cargarCopa();
       setEstadoGuardado({
@@ -308,32 +295,6 @@ export default function MarketingVentasAgencia() {
         ),
       });
       throw saveError;
-    } finally {
-      setGuardandoId(null);
-    }
-  };
-
-  const restaurarAutomatico = async (vendedor) => {
-    setGuardandoId(vendedor.usuarioId);
-    setEstadoGuardado({ tipo: "", mensaje: "" });
-    try {
-      await api.delete(
-        `/api/marketing/copa-creditek/vendedores/${vendedor.usuarioId}/periodo/ventas-manual`,
-        { params: filtros },
-      );
-      await cargarCopa();
-      setEstadoGuardado({
-        tipo: "exito",
-        mensaje: `Las ventas de ${vendedor.nombreCorto} vuelven a ser automáticas.`,
-      });
-    } catch (restoreError) {
-      setEstadoGuardado({
-        tipo: "error",
-        mensaje: obtenerMensajeError(
-          restoreError,
-          "No se pudo restaurar el valor automático.",
-        ),
-      });
     } finally {
       setGuardandoId(null);
     }
@@ -456,7 +417,6 @@ export default function MarketingVentasAgencia() {
           accionesDeshabilitadas={loading || !datosDelPeriodoActual}
           onGuardar={guardarVendedor}
           onGuardarTodos={guardarTodosLosVendedores}
-          onRestaurarAutomatico={restaurarAutomatico}
         />
       )}
     </section>

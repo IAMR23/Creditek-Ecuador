@@ -9,6 +9,10 @@ const { Op } = require("sequelize");
 
 const MAX_VALOR = 9999999999.99;
 const SECCIONES = [
+  "PRESTAMOS",
+  "ANTICIPOS",
+];
+const TIPOS_EGRESO = [
   "ENTRADAS",
   "CAJAS",
   "TRANSFERENCIAS",
@@ -81,6 +85,14 @@ const normalizarSeccion = (value) => {
   return seccion;
 };
 
+const normalizarTipo = (value) => {
+  const tipo = String(value || "ENTRADAS").trim().toUpperCase();
+  if (!TIPOS_EGRESO.includes(tipo)) {
+    throw crearError("El tipo solicitado no es valido");
+  }
+  return tipo;
+};
+
 const serializarEntrada = (value) => {
   const entrada = typeof value?.toJSON === "function" ? value.toJSON() : value;
   return {
@@ -89,6 +101,7 @@ const serializarEntrada = (value) => {
     valor: Number(entrada.valor || 0),
     observacion: entrada.observacion || "",
     fecha: entrada.fecha || "",
+    tipo: entrada.tipo || entrada.seccion || "ENTRADAS",
   };
 };
 
@@ -103,7 +116,8 @@ const serializarCajaControlFinanciero = (value) => {
     usuario: registro.responsablePagoEntrada || null,
     valor: Number(registro.pagosCuotas || 0),
     observacion: registro.observacionPagoEntrada || "",
-    seccion: "CAJAS",
+    seccion: "ANTICIPOS",
+    tipo: "CAJAS",
     activo: true,
     ultimaAccion: "CONTROL_FINANCIERO",
     estadoPagoEntrada: registro.estadoPagoEntrada || "PENDIENTE",
@@ -230,7 +244,7 @@ const obtenerRegistroCompleto = async (registro) => {
 
 const obtenerRegistros = async (seccionValue) => {
   const seccion = normalizarSeccion(seccionValue);
-  const incluirControlFinancieroCaja = seccion === "CAJAS";
+  const incluirControlFinancieroCaja = seccion === "ANTICIPOS";
   const [usuarios, registrosValues, registrosControlFinancieroCajaValues] =
     await Promise.all([
       Usuario.findAll({
@@ -308,10 +322,11 @@ const obtenerRegistros = async (seccionValue) => {
 
 const crearRegistro = async (
   seccionValue,
-  { usuarioId: usuarioIdValue, valor, observacion, fecha },
+  { usuarioId: usuarioIdValue, valor, observacion, fecha, tipo },
   registradoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
+  const tipoNormalizado = normalizarTipo(tipo);
   const usuarioId = normalizarId(usuarioIdValue, "El usuario");
   const registradoPorId = normalizarId(registradoPor, "El usuario registrador");
   const valorNormalizado = normalizarValor(valor);
@@ -334,6 +349,7 @@ const crearRegistro = async (
     observacion: observacionNormalizada || null,
     fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
     seccion,
+    tipo: tipoNormalizado,
     registradoPorId,
   });
   return obtenerRegistroCompleto(entrada);
@@ -342,11 +358,12 @@ const crearRegistro = async (
 const actualizarRegistro = async (
   seccionValue,
   idValue,
-  { usuarioId: usuarioIdValue, valor, observacion, fecha },
+  { usuarioId: usuarioIdValue, valor, observacion, fecha, tipo },
   actualizadoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
   const registro = await obtenerRegistroDeSeccion(seccion, idValue);
+  const tipoNormalizado = normalizarTipo(tipo);
   const usuarioId = normalizarId(usuarioIdValue, "El usuario");
   const actualizadoPorId = normalizarId(
     actualizadoPor,
@@ -373,6 +390,7 @@ const actualizarRegistro = async (
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
     fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
+    tipo: tipoNormalizado,
     actualizadoPorId,
     ultimaAccion: "EDITADO",
   });
@@ -414,12 +432,12 @@ const eliminarRegistro = async (seccionValue, idValue) => {
 };
 
 const obtenerEntradas = async () => {
-  const { usuarios, registros, total } = await obtenerRegistros("ENTRADAS");
+  const { usuarios, registros, total } = await obtenerRegistros("ANTICIPOS");
   return { usuarios, entradas: registros, total };
 };
 
 const crearEntrada = (payload, registradoPor) =>
-  crearRegistro("ENTRADAS", payload, registradoPor);
+  crearRegistro("ANTICIPOS", payload, registradoPor);
 
 module.exports = {
   actualizarRegistro,
@@ -430,6 +448,7 @@ module.exports = {
   normalizarObservacion,
   normalizarFecha,
   normalizarSeccion,
+  normalizarTipo,
   normalizarValor,
   obtenerEntradas,
   obtenerRegistros,

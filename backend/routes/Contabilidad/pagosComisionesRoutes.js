@@ -22,8 +22,16 @@ router.put(
   controller.guardarEquipoSemanalJefeComercial,
 );
 router.put(
+  "/jefes/:jefeComercialId/promedio-mensual/:year/:month",
+  controller.guardarPromedioMensualJefeComercial,
+);
+router.put(
   "/supervisores/:supervisorComercialId/equipos-semanales/:semanaInicio",
   controller.guardarEquipoSemanalSupervisorComercial,
+);
+router.put(
+  "/supervisores/:supervisorComercialId/promedio-mensual/:year/:month",
+  controller.guardarPromedioMensualSupervisorComercial,
 );
 router.put(
   "/vendedores/:usuarioId/multas/:semanaInicio",

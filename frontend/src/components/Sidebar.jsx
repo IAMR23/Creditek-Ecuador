@@ -58,6 +58,8 @@ export default function Sidebar({ auth }) {
       location.pathname === "/contabilidad/pagos-comisiones" ||
       location.pathname === "/contabilidad/descuentos-decimos" ||
       location.pathname === "/contabilidad/egresos-creditek" ||
+      location.pathname === "/contabilidad/roles-creditek-nomina" ||
+      location.pathname === "/contabilidad/rol-descuentos-creditek" ||
       location.pathname === "/contabilidad/roles-creditek-resumen",
     Auditoria: false,
     DesarrolloOrganizacional: true,
@@ -69,6 +71,8 @@ export default function Sidebar({ auth }) {
       location.pathname === "/contabilidad/pagos-comisiones" ||
       location.pathname === "/contabilidad/descuentos-decimos" ||
       location.pathname === "/contabilidad/egresos-creditek" ||
+      location.pathname === "/contabilidad/roles-creditek-nomina" ||
+      location.pathname === "/contabilidad/rol-descuentos-creditek" ||
       location.pathname === "/contabilidad/roles-creditek-resumen",
   });
 
@@ -208,11 +212,7 @@ export default function Sidebar({ auth }) {
         title: "Contabilidad",
         permission: "Contabilidad",
         items: [
-          {
-            label: "Nómina",
-            icon: <DollarSign size={20} />,
-            path: "/nomina",
-          },
+        
           {
             label: "Niveles Jerarquicos",
             icon: <DollarSign size={20} />,
@@ -259,9 +259,19 @@ export default function Sidebar({ auth }) {
                 path: "/contabilidad/egresos-creditek",
               },
               {
+                label: "Nomina",
+                icon: <FileSpreadsheet size={18} />,
+                path: "/contabilidad/roles-creditek-nomina",
+              },
+              {
                 label: "Resumen roles",
                 icon: <FileSpreadsheet size={18} />,
                 path: "/contabilidad/roles-creditek-resumen",
+              },
+              {
+                label: "Rol de descuentos Creditek",
+                icon: <LucideTicketPercent size={18} />,
+                path: "/contabilidad/rol-descuentos-creditek",
               },
             ],
           },

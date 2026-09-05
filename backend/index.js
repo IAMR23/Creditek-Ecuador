@@ -218,6 +218,7 @@ connectDB()
     app.use("/api/contabilidad/descuentos-decimos", require("./routes/Contabilidad/descuentosDecimosRoutes"));
     app.use("/api/contabilidad/egresos-creditek", require("./routes/Contabilidad/egresosCreditekRoutes"));
     app.use("/api/contabilidad/roles-creditek-resumen", require("./routes/Contabilidad/rolesCreditekResumenRoutes"));
+    app.use("/api/contabilidad/rol-descuentos-creditek", require("./routes/Contabilidad/rolDescuentosCreditekRoutes"));
     app.use("/api/contabilidad/metas-minimas-multas", require("./routes/Contabilidad/metaMinimaMultaRoutes"));
     app.use("/api/dashboard", require("./routes/dashboardMetaMinimaRoutes"));
     app.use("/api/gerencia", require("./routes/Gerencia/informesRoutes"));

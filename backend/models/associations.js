@@ -61,6 +61,8 @@ const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
 const PagoComisionEquipoSemanal = require('./PagoComisionEquipoSemanal');
+const PagoComisionPromedioJefe = require('./PagoComisionPromedioJefe');
+const PagoComisionPromedioSupervisor = require('./PagoComisionPromedioSupervisor');
 const ConfiguracionMesComision = require('./ConfiguracionMesComision');
 const PagoComisionPeriodo = require('./PagoComisionPeriodo');
 const MetaMinimaMultaConfiguracion = require('./MetaMinimaMultaConfiguracion');
@@ -78,6 +80,8 @@ const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 const DescuentoDecimo = require('./DescuentoDecimo');
 const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
 const RolCreditekAjuste = require('./RolCreditekAjuste');
+const RolDescuentoCreditek = require('./RolDescuentoCreditek');
+RolDescuentoCreditek.belongsTo(Usuario, { as: 'usuario', foreignKey: 'usuarioId' });
 const FacturaFisica = require('./FacturaFisica');
 const FacturaFisicaProductoOcr = require('./FacturaFisicaProductoOcr');
 const FacturaIaResultado = require('./FacturaIaResultado');
@@ -838,6 +842,38 @@ Usuario.hasMany(PagoComisionEquipoSemanal, {
   as: "equiposComisionesSemanalesActualizados",
 });
 PagoComisionEquipoSemanal.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(PagoComisionPromedioSupervisor, {
+  foreignKey: "supervisorComercialId",
+  as: "promediosComisionesSupervisor",
+});
+PagoComisionPromedioSupervisor.belongsTo(Usuario, {
+  foreignKey: "supervisorComercialId",
+  as: "supervisorComercial",
+});
+Usuario.hasMany(PagoComisionPromedioSupervisor, {
+  foreignKey: "actualizadoPorId",
+  as: "promediosComisionesSupervisorActualizados",
+});
+PagoComisionPromedioSupervisor.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(PagoComisionPromedioJefe, {
+  foreignKey: "jefeComercialId",
+  as: "promediosComisionesJefe",
+});
+PagoComisionPromedioJefe.belongsTo(Usuario, {
+  foreignKey: "jefeComercialId",
+  as: "jefeComercial",
+});
+Usuario.hasMany(PagoComisionPromedioJefe, {
+  foreignKey: "actualizadoPorId",
+  as: "promediosComisionesJefeActualizados",
+});
+PagoComisionPromedioJefe.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
 });

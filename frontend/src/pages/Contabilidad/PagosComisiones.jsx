@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import {
   AlertTriangle,
   BadgeDollarSign,
@@ -13,6 +13,7 @@ import {
   Lock,
   RefreshCw,
   Save,
+  Search,
   Truck,
   X,
 } from "lucide-react";
@@ -92,8 +93,28 @@ const emptyMonthlyValues = {
   totalPagar: 0,
 };
 
+const SHOW_GOAL_COMPLIANCE_SECTION = false;
+const WEEK_COLUMN_COUNT = SHOW_GOAL_COMPLIANCE_SECTION ? 4 : 3;
+const MONTHLY_COLUMN_COUNT = SHOW_GOAL_COMPLIANCE_SECTION ? 5 : 4;
+
 const getWeekValues = (row, week) => row?.semanas?.[week.startDate] || emptyWeekValues;
 const getMonthlyValues = (row) => row?.resumenMensual || emptyMonthlyValues;
+const getPenaltyWeekValues = (row, week) => {
+  const values = getWeekValues(row, week);
+  if (
+    values.semanaFutura ||
+    values.semanaLaborada === false ||
+    values.semanaCompletaParaDescuento === false
+  ) {
+    return { ...values, noCumpleMetas: 0, valorDescontar: 0 };
+  }
+  return values;
+};
+const getPenaltyTotal = (row, weeks) =>
+  roundMoney(weeks.reduce(
+    (sum, week) => sum + Number(getPenaltyWeekValues(row, week).valorDescontar || 0),
+    0,
+  ));
 const isPersonalNuevoEnReporte = (row, weeks) =>
   weeks.some((week) => getWeekValues(row, week).personalNuevo);
 const getFechaIngresoVisible = (row) =>
@@ -134,6 +155,13 @@ const formatDate = (value) => {
     year: "numeric",
   });
 };
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
 const toDateKey = (value) => (value ? String(value).slice(0, 10) : null);
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const parseDateKey = (value) => {
@@ -232,6 +260,7 @@ const getSeccionCargo = (vendedor) =>
   getSeccionPorCargo(vendedor.cargoComision || vendedor.cargo);
 
 const perteneceASeccion = (vendedor, seccion) => {
+  const seccionCargo = seccion === "SANCIONES" ? "VENDEDORES" : seccion;
   if (
     (seccion === "JEFES" || seccion === "SUPERVISORES") &&
     vendedor.activo === false
@@ -240,12 +269,15 @@ const perteneceASeccion = (vendedor, seccion) => {
   }
 
   return getCargosComerciales(vendedor).some(
-    (cargo) => getSeccionPorCargo(cargo) === seccion,
+    (cargo) => getSeccionPorCargo(cargo) === seccionCargo,
   );
 };
 
 const getVendedorParaSeccion = (vendedor, seccion) => {
-  if (seccion !== "VENDEDORES" || !vendedor.ventasPersonalesVendedor) {
+  if (
+    !["VENDEDORES", "SANCIONES"].includes(seccion) ||
+    !vendedor.ventasPersonalesVendedor
+  ) {
     return vendedor;
   }
 
@@ -313,14 +345,16 @@ const getVendedorParaSeccion = (vendedor, seccion) => {
 
 const SECCIONES = [
   { id: "VENDEDORES", label: "Vendedores" },
+  { id: "SANCIONES", label: "Sanción por no llegar a meta" },
   { id: "JEFES", label: "Jefes comerciales" },
   { id: "SUPERVISORES", label: "Supervisores" },
   { id: "LOGISTICA", label: "Logistica" },
 ];
 
 const EXPORT_OPTIONS = [
-  { value: "TODAS", label: "Las 4 secciones" },
+  { value: "TODAS", label: "Las 5 secciones" },
   { value: "VENDEDORES", label: "Vendedores" },
+  { value: "SANCIONES", label: "Sanción por no llegar a meta" },
   { value: "JEFES", label: "Jefes comerciales" },
   { value: "SUPERVISORES", label: "Supervisores" },
   { value: "LOGISTICA", label: "Logistica" },
@@ -331,80 +365,408 @@ const getRowsForSection = (vendedores, seccion) =>
     .filter((vendedor) => perteneceASeccion(vendedor, seccion))
     .map((vendedor) => getVendedorParaSeccion(vendedor, seccion));
 
-const buildExcelRows = ({ rows, weeks, sectionLabel }) =>
-  rows.map((row, index) => {
-    const mensual = getMonthlyValues(row);
-    const base = {
-      "#": index + 1,
-      Seccion: sectionLabel,
-      Colaborador: row.nombre || "",
-      Cargo: row.cargoComision || row.cargo || "",
-      "Cargos pago": getCargosPagoLabel(row),
-      Agencias: (row.agencias || []).join(", "),
-      "Doble cargo": row.tieneMultiplesCargos ? "SI" : "NO",
-      "Fecha ingreso": getFechaIngresoVisible(row) || "",
-      "Fecha salida": row.fechaSalida || "",
-    };
+const EXCEL_BORDER = {
+  top: { style: "thin", color: { argb: "FF000000" } },
+  left: { style: "thin", color: { argb: "FF000000" } },
+  bottom: { style: "thin", color: { argb: "FF000000" } },
+  right: { style: "thin", color: { argb: "FF000000" } },
+};
 
-    weeks.forEach((week, weekIndex) => {
-      const values = getWeekValues(row, week);
-      const prefix = `S${weekIndex + 1} ${week.label}`;
-      base[`${prefix} ventas`] = values.venden || 0;
-      base[`${prefix} valor vendido`] = Number(values.valorVendido || 0);
-      base[`${prefix} comision`] = Number(values.totalComisiones || 0);
-      base[`${prefix} no cumple metas`] = Number(values.valorDescontar || 0)
-        ? `${values.noCumpleMetas || 0} / Desc. ${formatMoney(values.valorDescontar)}`
-        : values.noCumpleMetas || 0;
+const EXCEL_WEEK_FILLS = [
+  "FFFFE4C4",
+  "FFFFFFFF",
+  "FFFFF2CC",
+  "FFFFFFFF",
+  "FFBFD2F3",
+  "FFEAD1DC",
+];
+
+const EXCEL_MONEY_FORMAT = '#,##0.00';
+const EXCEL_INTEGER_FORMAT = '0';
+
+const getExcelWeekLabel = (week) =>
+  String(week?.label || "")
+    .replace(/^S\d+\s+/i, "")
+    .trim()
+    .toUpperCase();
+
+const getSafeSheetName = (name) =>
+  String(name || "Reporte")
+    .replace(/[\\/?*[\]:]/g, " ")
+    .slice(0, 31);
+
+const downloadExcelBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const styleExcelCell = (cell, fill = "FFFFFFFF", font = {}) => {
+  cell.border = EXCEL_BORDER;
+  cell.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: fill },
+  };
+  cell.font = {
+    name: "Arial",
+    size: 10,
+    color: { argb: "FF000000" },
+    ...font,
+  };
+  cell.alignment = {
+    horizontal: "center",
+    vertical: "middle",
+    wrapText: true,
+  };
+};
+
+const getSalesWeekColumns = () => {
+  const columns = [
+    {
+      label: "Dispositivos vendidos",
+      width: 13,
+      numFmt: EXCEL_INTEGER_FORMAT,
+      getValue: (values) => Number(values.venden || 0),
+    },
+    {
+      label: "Monto vendido",
+      width: 15,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (values) => Number(values.valorVendido || 0),
+    },
+    {
+      label: "comision",
+      width: 14,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (values) => Number(values.totalComisiones || 0),
+    },
+  ];
+  if (SHOW_GOAL_COMPLIANCE_SECTION) {
+    columns.push({
+      label: "no cumple metas",
+      width: 16,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (values) => Number(values.valorDescontar || 0),
+    });
+  }
+  return columns;
+};
+
+const getSalesMonthlyColumns = () => {
+  const columns = [
+    {
+      label: "Ventas de Dispositivo Mensual",
+      width: 18,
+      numFmt: EXCEL_INTEGER_FORMAT,
+      getValue: (row) => Number(getMonthlyValues(row).ventasTvCelulaMensual || 0),
+    },
+    {
+      label: "VALOR COMISION SEMANAL VENDEDORES",
+      width: 18,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (row) => Number(getMonthlyValues(row).valorComisionSemanal || 0),
+    },
+    {
+      label: "Valor comision mensual",
+      width: 17,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (row) => Number(getMonthlyValues(row).valorComisionMensual || 0),
+    },
+    {
+      label: "TOTAL COMISIONES SEMANALES Y MENSUALES",
+      width: 20,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (row) =>
+        Number(getMonthlyValues(row).totalComisionesSemanaMensual || 0),
+    },
+  ];
+  if (SHOW_GOAL_COMPLIANCE_SECTION) {
+    columns.push({
+      label: "Total no cumple metas",
+      width: 18,
+      numFmt: EXCEL_MONEY_FORMAT,
+      getValue: (row) => Number(getMonthlyValues(row).totalValorDescontar || 0),
+    });
+  }
+  return columns;
+};
+
+const getLogisticsTables = (rows) => {
+  const managers = rows.filter((row) => row.esEncargadoLogistica);
+  const drivers = rows.filter((row) => !row.esEncargadoLogistica);
+  return (managers.length ? managers : [null]).map((manager) => ({
+    manager,
+    people: manager ? [manager, ...drivers] : drivers,
+    totalDeliveries: Number(manager?.resumenMensual?.totalEntregas || 0) +
+      drivers.reduce((sum, driver) => sum + Number(driver.resumenMensual?.totalEntregas || 0), 0),
+  }));
+};
+
+const getSalesCollaboratorStyle = (row, defaultFill) => {
+  const cargos = getCargosComerciales(row);
+  if (cargos.some((cargo) => cargo.includes("PISO"))) {
+    return {
+      fill: "FFFF0000",
+      font: { bold: true, color: { argb: "FFFFFFFF" } },
+    };
+  }
+  if (cargos.some((cargo) => cargo.includes("CALL CENTER"))) {
+    return {
+      fill: "FFFFFF00",
+      font: { bold: true, color: { argb: "FF000000" } },
+    };
+  }
+  return {
+    fill: defaultFill,
+    font: { bold: true },
+  };
+};
+
+const createGroupedExcelSheet = ({
+  workbook,
+  sheetName,
+  rows,
+  weeks,
+  weekColumns,
+  monthlyColumns,
+  getRowWeekValues,
+  getCollaboratorValue,
+  getCollaboratorStyle = (_row, defaultFill) => ({
+    fill: defaultFill,
+    font: { bold: true },
+  }),
+}) => {
+  const worksheet = workbook.addWorksheet(getSafeSheetName(sheetName));
+  const weeklyColumnCount = weekColumns.length;
+  const totalColumns = 1 + weeks.length * weeklyColumnCount + monthlyColumns.length;
+
+  worksheet.views = [{ state: "frozen", xSplit: 1, ySplit: 2 }];
+  worksheet.getColumn(1).width = 38;
+
+  worksheet.mergeCells(1, 1, 2, 1);
+  const collaboratorHeader = worksheet.getCell(1, 1);
+  collaboratorHeader.value = "Colaborador";
+  styleExcelCell(collaboratorHeader, "FFFFFFFF", { bold: true });
+
+  let currentColumn = 2;
+  weeks.forEach((week, weekIndex) => {
+    const startColumn = currentColumn;
+    const endColumn = currentColumn + weeklyColumnCount - 1;
+    const fill = EXCEL_WEEK_FILLS[weekIndex % EXCEL_WEEK_FILLS.length];
+
+    worksheet.mergeCells(1, startColumn, 1, endColumn);
+    const weekHeader = worksheet.getCell(1, startColumn);
+    weekHeader.value = getExcelWeekLabel(week);
+    styleExcelCell(weekHeader, fill, { bold: true });
+
+    weekColumns.forEach((column) => {
+      const headerCell = worksheet.getCell(2, currentColumn);
+      headerCell.value = column.label;
+      styleExcelCell(headerCell, fill, { bold: true });
+      worksheet.getColumn(currentColumn).width = column.width;
+      currentColumn += 1;
     });
 
-    return {
-      ...base,
-      "Ventas mensuales": mensual.ventasTvCelulaMensual || 0,
-      "Valor comision semanal": Number(mensual.valorComisionSemanal || 0),
-      "Valor comision mensual": Number(mensual.valorComisionMensual || 0),
-      "Total comisiones": Number(mensual.totalComisionesSemanaMensual || 0),
-      "Total no cumple metas": Number(mensual.totalValorDescontar || 0),
-    };
+    for (let column = startColumn; column <= endColumn; column += 1) {
+      styleExcelCell(worksheet.getCell(1, column), fill, { bold: true });
+    }
   });
 
-const buildLogisticsExcelRows = ({ rows, weeks }) =>
-  rows.map((row, index) => {
-    const base = {
-      "#": index + 1,
-      Seccion: "Logistica",
-      Colaborador: row.nombre || "",
-      Jerarquia: row.esEncargadoLogistica ? "Encargado" : "Junior",
-      "Cargo o rol": row.cargo || "",
-      Agencias: (row.agencias || []).join(", "),
-      "Tarifa por entrega propia": Number(row.tarifaPorEntrega || 0),
-      "Bono por entrega de junior": Number(row.tarifaBonoJunior || 0),
-    };
+  monthlyColumns.forEach((column, index) => {
+    worksheet.mergeCells(1, currentColumn, 2, currentColumn);
+    const fill = index % 2 === 0 ? "FFFCE4D6" : "FFE6B8B7";
+    const headerCell = worksheet.getCell(1, currentColumn);
+    headerCell.value = column.label;
+    styleExcelCell(headerCell, fill, { bold: true });
+    worksheet.getColumn(currentColumn).width = column.width;
+    currentColumn += 1;
+  });
 
-    weeks.forEach((week, weekIndex) => {
-      const values = row.semanas?.[week.startDate] || {};
-      const prefix = `S${weekIndex + 1} ${week.label}`;
-      base[`${prefix} entregas propias`] = Number(values.entregas || 0);
-      base[`${prefix} comision propia`] = Number(
-        values.comisionEntregasPropias || 0,
-      );
-      base[`${prefix} entregas juniors`] = Number(
-        values.entregasJuniors || 0,
-      );
-      base[`${prefix} bono juniors`] = Number(values.bonoJuniors || 0);
-      base[`${prefix} valor total`] = Number(values.totalComisiones || 0);
+  if (!rows.length) {
+    worksheet.mergeCells(3, 1, 3, totalColumns);
+    const emptyCell = worksheet.getCell(3, 1);
+    emptyCell.value = "Sin registros";
+    styleExcelCell(emptyCell, "FFFFFFFF", { italic: true });
+    return worksheet;
+  }
+
+  rows.forEach((row, rowIndex) => {
+    const worksheetRow = worksheet.addRow([]);
+    const fill = rowIndex % 2 === 0 ? "FFFFFFFF" : "FFFFECD4";
+    let columnIndex = 1;
+
+    const collaboratorCell = worksheetRow.getCell(columnIndex);
+    collaboratorCell.value = getCollaboratorValue(row);
+    const collaboratorStyle = getCollaboratorStyle(row, fill);
+    styleExcelCell(
+      collaboratorCell,
+      collaboratorStyle.fill,
+      collaboratorStyle.font,
+    );
+    collaboratorCell.alignment = {
+      horizontal: "left",
+      vertical: "middle",
+      wrapText: true,
+    };
+    columnIndex += 1;
+
+    weeks.forEach((week) => {
+      const values = getRowWeekValues(row, week);
+      weekColumns.forEach((column) => {
+        const cell = worksheetRow.getCell(columnIndex);
+        cell.value = values.semanaFutura ? "-" : column.getValue(values, row);
+        styleExcelCell(cell, fill, column.label.includes("comision") ? { bold: true } : {});
+        if (typeof cell.value === "number") cell.numFmt = column.numFmt;
+        columnIndex += 1;
+      });
     });
 
-    return {
-      ...base,
-      "Total entregas propias": Number(row.resumenMensual?.totalEntregas || 0),
-      "Total entregas juniors": Number(
-        row.resumenMensual?.totalEntregasJuniors || 0,
-      ),
-      "Total bono juniors": Number(
-        row.resumenMensual?.totalBonoJuniors || 0,
-      ),
-      "A recibir": Number(row.resumenMensual?.totalPagar || 0),
+    monthlyColumns.forEach((column) => {
+      const cell = worksheetRow.getCell(columnIndex);
+      cell.value = column.getValue(row);
+      styleExcelCell(cell, fill, column.label.toUpperCase().includes("TOTAL") ? { bold: true } : {});
+      cell.numFmt = column.numFmt;
+      columnIndex += 1;
+    });
+    worksheetRow.height = 28;
+  });
+
+  const totalRow = worksheet.addRow([]);
+  let columnIndex = 1;
+  const totalCell = totalRow.getCell(columnIndex);
+  totalCell.value = "TOTAL";
+  styleExcelCell(totalCell, "FFFF00FF", { bold: true });
+  columnIndex += 1;
+
+  weeks.forEach((week) => {
+    weekColumns.forEach((column) => {
+      const cell = totalRow.getCell(columnIndex);
+      cell.value = rows.reduce((sum, row) => {
+        const values = getRowWeekValues(row, week);
+        return values.semanaFutura ? sum : sum + Number(column.getValue(values, row) || 0);
+      }, 0);
+      styleExcelCell(cell, "FFFF00FF", { bold: true });
+      cell.numFmt = column.numFmt;
+      columnIndex += 1;
+    });
+  });
+
+  monthlyColumns.forEach((column) => {
+    const cell = totalRow.getCell(columnIndex);
+    cell.value = rows.reduce((sum, row) => sum + Number(column.getValue(row) || 0), 0);
+    styleExcelCell(cell, "FFFF00FF", { bold: true });
+    cell.numFmt = column.numFmt;
+    columnIndex += 1;
+  });
+
+  worksheet.autoFilter = {
+    from: { row: 2, column: 1 },
+    to: { row: 2, column: totalColumns },
+  };
+  return worksheet;
+};
+
+const createSalesExcelSheet = ({ workbook, rows, weeks, sectionLabel }) =>
+  createGroupedExcelSheet({
+    workbook,
+    sheetName: sectionLabel,
+    rows,
+    weeks,
+    weekColumns: getSalesWeekColumns(),
+    monthlyColumns: getSalesMonthlyColumns(),
+    getRowWeekValues: getWeekValues,
+    getCollaboratorValue: (row) =>
+      [row.nombre, row.cargoComision || row.cargo].filter(Boolean).join("\n"),
+    getCollaboratorStyle: getSalesCollaboratorStyle,
+  });
+
+const createLogisticsExcelSheet = ({ workbook, rows }) => {
+  const worksheet = workbook.addWorksheet("Logistica");
+  worksheet.getColumn(1).width = 36;
+  if (!rows.length) {
+    worksheet.addRow(["No hay personal activo de logística para el período seleccionado."]);
+    return worksheet;
+  }
+  getLogisticsTables(rows).forEach(({ manager, people, totalDeliveries }) => {
+    const addRow = (values, fills = [], bold = false) => {
+      const row = worksheet.addRow(values);
+      row.height = 25;
+      values.forEach((_value, index) => {
+        const cell = row.getCell(index + 1);
+        const fill = fills[index] || "FFFFFFFF";
+        styleExcelCell(cell, fill, {
+          bold,
+          color: { argb: fill === "FFFF0000" ? "FFFFFFFF" : "FF000000" },
+        });
+        if (index === 0) cell.alignment.horizontal = "left";
+        if (typeof cell.value === "number") cell.numFmt = '#,##0.##';
+        if (index > 0) worksheet.getColumn(index + 1).width = 22;
+      });
+      return row;
     };
+    addRow(["JEFE LOGISTICA", ...people.map((person) => person.nombre.toUpperCase())]);
+    addRow([
+      manager?.nombre.toUpperCase() || "SIN ENCARGADO ASIGNADO",
+      ...people.map((person) => Number(person.resumenMensual?.totalEntregas || 0)),
+    ], [], true);
+    if (manager) {
+      addRow([
+        manager.nombre.toUpperCase(),
+        Number(manager.resumenMensual?.totalEntregas || 0),
+        ...people.slice(1).map(() => null),
+      ], ["FF00FF00", "FF00FF00"], true);
+      const summary = addRow([
+        "SUMAN", totalDeliveries,
+        Number(manager.resumenMensual?.totalBonoJuniors || 0),
+        Number(manager.resumenMensual?.totalPagar || 0),
+      ], ["FFFFFF00", "FFFFFF00", "FFFFE699", "FFFF0000"], true);
+      ["Total de entregas", "Bono del encargado por entregas de choferes", "Total a pagar al encargado"]
+        .forEach((label, index) => { summary.getCell(index + 2).note = label; });
+      addRow(["", "Total entregas", "Bono del encargado ($)", "A recibir encargado ($)"]);
+    }
+    worksheet.addRow([]);
+  });
+  return worksheet;
+};
+
+const createPenaltiesExcelSheet = ({ workbook, rows, weeks }) =>
+  createGroupedExcelSheet({
+    workbook,
+    sheetName: "Sanción por no llegar a meta",
+    rows,
+    weeks,
+    weekColumns: [
+      {
+        label: "Unidades faltantes",
+        width: 16,
+        numFmt: EXCEL_INTEGER_FORMAT,
+        getValue: (values) => Number(values.noCumpleMetas || 0),
+      },
+      {
+        label: "Sanción a descontar",
+        width: 18,
+        numFmt: EXCEL_MONEY_FORMAT,
+        getValue: (values) => Number(values.valorDescontar || 0),
+      },
+    ],
+    monthlyColumns: [
+      {
+        label: "TOTAL SANCIONES DEL MES",
+        width: 20,
+        numFmt: EXCEL_MONEY_FORMAT,
+        getValue: (row) => getPenaltyTotal(row, weeks),
+      },
+    ],
+    getRowWeekValues: getPenaltyWeekValues,
+    getCollaboratorValue: (row) =>
+      [row.nombre, row.cargoComision || row.cargo].filter(Boolean).join("\n"),
+    getCollaboratorStyle: getSalesCollaboratorStyle,
   });
 
 export default function PagosComisiones() {
@@ -413,16 +775,22 @@ export default function PagosComisiones() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [vendedorFiltro, setVendedorFiltro] = useState("");
+  const [vendedorBusqueda, setVendedorBusqueda] = useState("");
+  const [colaboradoresOpen, setColaboradoresOpen] = useState(false);
   const [cargoFiltro, setCargoFiltro] = useState("");
   const [juniorId, setJuniorId] = useState("");
   const [jefeComercialId, setJefeComercialId] = useState("");
   const [guardandoJefe, setGuardandoJefe] = useState(false);
   const [guardandoEquipoSemanal, setGuardandoEquipoSemanal] = useState("");
+  const [guardandoPromedioJefe, setGuardandoPromedioJefe] = useState("");
+  const [guardandoPromedioSupervisor, setGuardandoPromedioSupervisor] = useState("");
   const [juniorSupervisorId, setJuniorSupervisorId] = useState("");
   const [supervisorComercialId, setSupervisorComercialId] = useState("");
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
   const [descuentosEditados, setDescuentosEditados] = useState({});
   const [guardandoDescuentos, setGuardandoDescuentos] = useState(false);
+  const [juniorSupervisorBusqueda, setJuniorSupervisorBusqueda] = useState("");
+  const [juniorSupervisorOpen, setJuniorSupervisorOpen] = useState(false);
   const [seccionActiva, setSeccionActiva] = useState("VENDEDORES");
   const [configOpen, setConfigOpen] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
@@ -449,6 +817,11 @@ export default function PagosComisiones() {
   const estadoPago = report?.estadoPago || null;
   const periodoPagado = Boolean(estadoPago?.pagado);
   const cantidadDescuentosEditados = Object.keys(descuentosEditados).length;
+  const mostrarGestionDescuentos = seccionActiva !== "LOGISTICA" && (
+    seccionActiva === "SANCIONES" ||
+    SHOW_GOAL_COMPLIANCE_SECTION ||
+    cantidadDescuentosEditados > 0
+  );
   const selectedMonthLabel =
     MONTHS.find((month) => Number(month.value) === Number(filters.month))?.label ||
     "";
@@ -567,6 +940,25 @@ export default function PagosComisiones() {
     [vendedoresSeccion, cargoFiltro],
   );
 
+  const colaboradoresCoincidentes = useMemo(() => {
+    const busqueda = normalizeSearchText(vendedorBusqueda);
+    return vendedoresPorCargo.filter((vendedor) => {
+      if (!busqueda) return true;
+      const texto = normalizeSearchText(
+        [
+          vendedor.nombre,
+          vendedor.cargoComision,
+          vendedor.cargo,
+          vendedor.rol,
+          getCargosPagoLabel(vendedor),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      return texto.includes(busqueda);
+    });
+  }, [vendedorBusqueda, vendedoresPorCargo]);
+
   const jefesComerciales = useMemo(
     () => vendedores.filter(
       (vendedor) =>
@@ -594,6 +986,25 @@ export default function PagosComisiones() {
       String(a.nombre || "").localeCompare(String(b.nombre || ""), "es"),
     );
   }, [report, vendedores]);
+
+  const juniorsSupervisorCoincidentes = useMemo(() => {
+    const busqueda = normalizeSearchText(juniorSupervisorBusqueda);
+    return vendedoresElegiblesEquipo.filter((vendedor) => {
+      if (!busqueda) return true;
+      const texto = normalizeSearchText(
+        [
+          vendedor.nombre,
+          vendedor.cargoComision,
+          vendedor.cargo,
+          vendedor.rol,
+          getCargosPagoLabel(vendedor),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      return texto.includes(busqueda);
+    });
+  }, [juniorSupervisorBusqueda, vendedoresElegiblesEquipo]);
 
   const supervisoresComerciales = useMemo(
     () => vendedores.filter(
@@ -649,6 +1060,10 @@ export default function PagosComisiones() {
     setSeccionActiva(seccion);
     setCargoFiltro("");
     setVendedorFiltro("");
+    setVendedorBusqueda("");
+    setColaboradoresOpen(false);
+    setJuniorSupervisorBusqueda("");
+    setJuniorSupervisorOpen(false);
   };
 
   const actualizarPeriodoComercial = (nextFilters) => {
@@ -787,7 +1202,7 @@ export default function PagosComisiones() {
     }
   };
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
     if (!report || !weeks.length) {
       Swal.fire("Sin datos", "Genere el reporte antes de exportar", "info");
       return;
@@ -795,7 +1210,14 @@ export default function PagosComisiones() {
 
     setExportandoExcel(true);
     try {
-      const workbook = XLSX.utils.book_new();
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "RVE - Pagos Comisiones";
+      workbook.company = "Creditek Ecuador";
+      workbook.subject = "Pagos de comisiones";
+      workbook.category = "Contabilidad";
+      workbook.created = new Date();
+      workbook.modified = new Date();
+
       const scopes =
         exportScope === "TODAS"
           ? SECCIONES.map((seccion) => seccion.id)
@@ -803,29 +1225,37 @@ export default function PagosComisiones() {
 
       scopes.forEach((scope) => {
         const section = SECCIONES.find((item) => item.id === scope);
-        const excelRows =
-          scope === "LOGISTICA"
-            ? buildLogisticsExcelRows({ rows: logistica, weeks: logisticaWeeks })
-            : buildExcelRows({
-                rows: getRowsForSection(vendedores, scope),
-                weeks,
-                sectionLabel: section?.label || scope,
-              });
-        const worksheet = XLSX.utils.json_to_sheet(excelRows);
-        worksheet["!cols"] = Object.keys(excelRows[0] || { Colaborador: "" }).map(
-          (key) => ({ wch: Math.min(Math.max(String(key).length + 2, 12), 34) }),
-        );
-        XLSX.utils.book_append_sheet(
+        if (scope === "SANCIONES") {
+          createPenaltiesExcelSheet({
+            workbook,
+            rows: getRowsForSection(vendedores, scope),
+            weeks,
+          });
+          return;
+        }
+        if (scope === "LOGISTICA") {
+          createLogisticsExcelSheet({
+            workbook,
+            rows: logistica,
+          });
+          return;
+        }
+
+        createSalesExcelSheet({
           workbook,
-          worksheet,
-          (section?.label || scope).slice(0, 31),
-        );
+          rows: getRowsForSection(vendedores, scope),
+          weeks,
+          sectionLabel: section?.label || scope,
+        });
       });
 
       const estado = periodoPagado ? "PAGADO" : "ABIERTO";
       const mes = selectedMonthLabel || filters.month;
-      XLSX.writeFile(
-        workbook,
+      const buffer = await workbook.xlsx.writeBuffer();
+      downloadExcelBlob(
+        new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
         `Pagos_Comisiones_${mes}_${filters.year}_${estado}.xlsx`,
       );
     } catch (error) {
@@ -989,6 +1419,58 @@ export default function PagosComisiones() {
       );
     } finally {
       setGuardandoEquipoSemanal("");
+    }
+  };
+
+  const guardarPromedioSupervisorMensual = async ({ supervisor, vendedorIds }) => {
+    const key = String(supervisor.usuarioId);
+    setGuardandoPromedioSupervisor(key);
+    try {
+      await api.put(
+        `${ENDPOINT}/supervisores/${supervisor.usuarioId}/promedio-mensual/${filters.year}/${filters.month}`,
+        { vendedorIds },
+      );
+      await fetchReport();
+      Swal.fire({
+        icon: "success",
+        title: "Promedio mensual guardado",
+        showConfirmButton: false,
+        timer: 1400,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo guardar el promedio mensual",
+        "error",
+      );
+    } finally {
+      setGuardandoPromedioSupervisor("");
+    }
+  };
+
+  const guardarPromedioJefeMensual = async ({ jefe, vendedorIds }) => {
+    const key = String(jefe.usuarioId);
+    setGuardandoPromedioJefe(key);
+    try {
+      await api.put(
+        `${ENDPOINT}/jefes/${jefe.usuarioId}/promedio-mensual/${filters.year}/${filters.month}`,
+        { vendedorIds },
+      );
+      await fetchReport();
+      Swal.fire({
+        icon: "success",
+        title: "Promedio mensual guardado",
+        showConfirmButton: false,
+        timer: 1400,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo guardar el promedio mensual",
+        "error",
+      );
+    } finally {
+      setGuardandoPromedioJefe("");
     }
   };
 
@@ -1304,14 +1786,20 @@ export default function PagosComisiones() {
           />
           <Metric
             label={
-              cantidadDescuentosEditados
+              seccionActiva === "SANCIONES"
+                ? `Total sanciones del mes${cantidadDescuentosEditados ? " (vista previa)" : ""}`
+                : cantidadDescuentosEditados
                 ? "A recibir (vista previa)"
                 : "A recibir"
             }
             value={
               seccionActiva === "LOGISTICA"
                 ? formatCurrency(totalLogistica.totalPagar)
-                : formatMoney(totalVisible.resumenMensual.totalPagar)
+                : seccionActiva === "SANCIONES"
+                  ? formatCurrency(vendedoresFiltrados.reduce(
+                      (sum, row) => sum + getPenaltyTotal(row, weeks), 0,
+                    ))
+                  : formatMoney(totalVisible.resumenMensual.totalPagar)
             }
           />
         </div>
@@ -1341,7 +1829,8 @@ export default function PagosComisiones() {
                       ? `Pagado${estadoPago?.pagadoAt ? ` el ${formatDate(estadoPago.pagadoAt)}` : ""}. El reporte esta congelado.`
                       : "Abierto. El reporte se recalcula con ventas, entregas, semanas y configuraciones actuales."}
                   </p>
-                {seccionActiva !== "LOGISTICA" && cantidadDescuentosEditados ? (
+                {mostrarGestionDescuentos &&
+                cantidadDescuentosEditados ? (
                   <p className="mt-1 text-xs font-semibold text-amber-700">
                     {cantidadDescuentosEditados} descuento(s) pendiente(s) de guardar.
                   </p>
@@ -1353,7 +1842,9 @@ export default function PagosComisiones() {
               className={`grid gap-3 sm:grid-cols-2 ${
                 seccionActiva === "LOGISTICA"
                   ? "2xl:grid-cols-[190px_auto]"
-                  : "2xl:grid-cols-[190px_auto_auto_auto]"
+                  : mostrarGestionDescuentos
+                    ? "2xl:grid-cols-[190px_auto_auto_auto]"
+                    : "2xl:grid-cols-[190px_auto_auto]"
               }`}
             >
               <select
@@ -1367,7 +1858,7 @@ export default function PagosComisiones() {
                   </option>
                 ))}
               </select>
-              {seccionActiva !== "LOGISTICA" ? (
+              {mostrarGestionDescuentos ? (
                 <button
                   type="button"
                   onClick={guardarValoresDescuento}
@@ -1419,24 +1910,58 @@ export default function PagosComisiones() {
           </div>
         </section>
 
-        {seccionActiva === "VENDEDORES" ? (
+        {seccionActiva !== "LOGISTICA" && seccionActiva !== "SUPERVISORES" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700">
-              Tipo de cargo
-              <select value={cargoFiltro} onChange={(event) => { setCargoFiltro(event.target.value); setVendedorFiltro(""); }} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Todos los cargos</option>
-                <option value="CALL_CENTER">Vendedor Call Center</option>
-                <option value="PISO">Vendedor de Piso</option>
-              </select>
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Colaborador
-              <select value={vendedorFiltro} onChange={(event) => setVendedorFiltro(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Todos los colaboradores del cargo</option>
-                {vendedoresPorCargo.map((vendedor) => <option key={vendedor.usuarioId} value={vendedor.usuarioId}>{vendedor.nombre}</option>)}
-              </select>
-            </label>
+          <div
+            className={`grid gap-3 ${
+              ["VENDEDORES", "SANCIONES"].includes(seccionActiva) ? "md:grid-cols-2" : "md:grid-cols-1"
+            }`}
+          >
+            {["VENDEDORES", "SANCIONES"].includes(seccionActiva) ? (
+              <label className="text-sm font-medium text-slate-700">
+                Tipo de cargo
+                <select
+                  value={cargoFiltro}
+                  onChange={(event) => {
+                    setCargoFiltro(event.target.value);
+                    setVendedorFiltro("");
+                    setVendedorBusqueda("");
+                    setColaboradoresOpen(false);
+                  }}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Todos los cargos</option>
+                  <option value="CALL_CENTER">Vendedor Call Center</option>
+                  <option value="PISO">Vendedor de Piso</option>
+                </select>
+              </label>
+            ) : null}
+            <CollaboratorSearchInput
+              options={colaboradoresCoincidentes}
+              searchValue={vendedorBusqueda}
+              selectedId={vendedorFiltro}
+              open={colaboradoresOpen}
+              placeholder={
+                seccionActiva === "VENDEDORES"
+                  ? "Todos los colaboradores del cargo"
+                  : "Todos los colaboradores de la seccion"
+              }
+              onOpenChange={setColaboradoresOpen}
+              onSearchChange={(value) => {
+                setVendedorBusqueda(value);
+                setVendedorFiltro("");
+                setColaboradoresOpen(true);
+              }}
+              onShowAll={() => {
+                setVendedorBusqueda("");
+                setColaboradoresOpen(true);
+              }}
+              onSelect={(vendedor) => {
+                setVendedorFiltro(String(vendedor.usuarioId));
+                setVendedorBusqueda(vendedor.nombre || "");
+                setColaboradoresOpen(false);
+              }}
+            />
           </div>
         </section>
         ) : null}
@@ -1502,21 +2027,30 @@ export default function PagosComisiones() {
               </p>
             </div>
             <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-              <label className="text-sm font-medium text-slate-700">
-                Vendedor junior
-                <select
-                  value={juniorSupervisorId}
-                  onChange={(event) => seleccionarJuniorSupervisor(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Seleccione un vendedor</option>
-                  {vendedoresElegiblesEquipo.map((vendedor) => (
-                    <option key={vendedor.usuarioId} value={vendedor.usuarioId}>
-                      {vendedor.nombre} - {vendedor.cargoComision || vendedor.cargo || vendedor.rol || "Vendedor"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <CollaboratorSearchInput
+                label="Vendedor junior"
+                options={juniorsSupervisorCoincidentes}
+                searchValue={juniorSupervisorBusqueda}
+                selectedId={juniorSupervisorId}
+                open={juniorSupervisorOpen}
+                placeholder="Seleccione un vendedor"
+                onOpenChange={setJuniorSupervisorOpen}
+                onSearchChange={(value) => {
+                  setJuniorSupervisorBusqueda(value);
+                  setJuniorSupervisorId("");
+                  setSupervisorComercialId("");
+                  setJuniorSupervisorOpen(true);
+                }}
+                onShowAll={() => {
+                  setJuniorSupervisorBusqueda("");
+                  setJuniorSupervisorOpen(true);
+                }}
+                onSelect={(vendedor) => {
+                  seleccionarJuniorSupervisor(String(vendedor.usuarioId));
+                  setJuniorSupervisorBusqueda(vendedor.nombre || "");
+                  setJuniorSupervisorOpen(false);
+                }}
+              />
               <label className="text-sm font-medium text-slate-700">
                 Supervisor
                 <select
@@ -1548,7 +2082,7 @@ export default function PagosComisiones() {
         {seccionActiva === "VENDEDORES" ? (
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] border-collapse text-center text-sm text-slate-950">
+            <table className="w-full min-w-[980px] border-collapse text-center text-sm text-slate-950">
               <thead>
                 <tr>
                   <th
@@ -1560,7 +2094,7 @@ export default function PagosComisiones() {
                   {weeks.map((week, index) => (
                     <th
                       key={week.startDate}
-                      colSpan={4}
+                      colSpan={WEEK_COLUMN_COUNT}
                       className={`border border-slate-950 px-3 py-2 text-lg font-black ${blockColors[index % blockColors.length]}`}
                     >
                       {week.label}
@@ -1578,7 +2112,7 @@ export default function PagosComisiones() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={1 + weeks.length * 4 + 5}
+                      colSpan={1 + weeks.length * WEEK_COLUMN_COUNT + MONTHLY_COLUMN_COUNT}
                       className="border border-slate-300 px-4 py-10 text-center text-slate-500"
                     >
                       Cargando reporte...
@@ -1659,7 +2193,7 @@ export default function PagosComisiones() {
                 ) : (
                   <tr>
                     <td
-                      colSpan={1 + weeks.length * 4 + 5}
+                      colSpan={1 + weeks.length * WEEK_COLUMN_COUNT + MONTHLY_COLUMN_COUNT}
                       className="border border-slate-300 px-4 py-10 text-center text-slate-500"
                     >
                       No hay registros en esta seccion para el mes seleccionado.
@@ -1686,10 +2220,20 @@ export default function PagosComisiones() {
             </table>
           </div>
         </section>
+        ) : seccionActiva === "SANCIONES" ? (
+          <SalesPenaltiesTable
+            rows={vendedoresFiltrados}
+            weeks={weeks}
+            loading={loading}
+            descuentosEditados={descuentosEditados}
+            onCambiarDescuento={cambiarValorDescuento}
+            onRestaurarDescuento={restaurarValorDescuento}
+            periodoPagado={periodoPagado}
+            guardando={guardandoDescuentos || pagandoPeriodo}
+          />
         ) : seccionActiva === "LOGISTICA" ? (
           <LogisticsCommissionTable
             rows={logistica}
-            weeks={logisticaWeeks}
             loading={loading}
           />
         ) : (
@@ -1699,7 +2243,11 @@ export default function PagosComisiones() {
             loading={loading}
             vendedoresDisponibles={vendedoresElegiblesEquipo}
             onGuardarEquipoSemanal={guardarEquipoSemanal}
+            onGuardarPromedioJefe={guardarPromedioJefeMensual}
+            onGuardarPromedioSupervisor={guardarPromedioSupervisorMensual}
             guardandoEquipoSemanal={guardandoEquipoSemanal}
+            guardandoPromedioJefe={guardandoPromedioJefe}
+            guardandoPromedioSupervisor={guardandoPromedioSupervisor}
             periodoPagado={periodoPagado}
             sectionLabel={
               SECCIONES.find((seccion) => seccion.id === seccionActiva)?.label || ""
@@ -1880,6 +2428,197 @@ export default function PagosComisiones() {
   );
 }
 
+function SalesPenaltyAmount({
+  vendedor,
+  week,
+  values,
+  descuentoEditado,
+  onCambiarDescuento,
+  onRestaurarDescuento,
+  periodoPagado,
+  guardando,
+}) {
+  const editable = Boolean(
+    onCambiarDescuento && !periodoPagado &&
+    !values.semanaFutura && values.semanaLaborada !== false &&
+    values.semanaCompletaParaDescuento && Number(values.valorMultaCalculado || 0) > 0,
+  );
+  const valorInput = descuentoEditado
+    ? descuentoEditado.valorDescontar
+    : Number(values.valorDescontar || 0).toFixed(2);
+  const invalido = parseValorDescuentoInput(valorInput) === null;
+
+  if (!editable) {
+    return (
+      <span className={`font-bold ${Number(values.valorDescontar || 0) > 0 ? "text-red-700" : "text-slate-600"}`}>
+        {formatCurrency(values.valorDescontar)}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <label className="flex items-center gap-1 font-bold text-red-700">
+        <span aria-hidden="true">$</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={valorInput}
+          disabled={guardando}
+          maxLength={13}
+          placeholder="0.00"
+          aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
+          aria-invalid={invalido}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (esFormatoValorDescuentoInputValido(value)) {
+              onCambiarDescuento({ vendedor, week, values, value });
+            }
+          }}
+          className={`w-28 rounded border bg-white px-2 py-1 text-center text-sm outline-none focus:ring-2 disabled:opacity-60 ${
+            invalido ? "border-red-600 focus:ring-red-200"
+              : descuentoEditado ? "border-amber-500 text-amber-800 focus:ring-amber-200"
+                : "border-slate-300 focus:ring-emerald-200"
+          }`}
+        />
+      </label>
+      {invalido ? <span className="text-[11px] text-red-700">Ingrese un valor válido, mayor o igual a 0.</span> : null}
+      {descuentoEditado ? <span className="text-[11px] font-semibold text-amber-700">Pendiente de guardar</span> : null}
+      {(values.descuentoModificado || descuentoEditado) && onRestaurarDescuento ? (
+        <button
+          type="button"
+          disabled={guardando}
+          onClick={() => onRestaurarDescuento({ vendedor, week, values })}
+          className="text-[11px] font-semibold text-emerald-700 underline disabled:opacity-60"
+        >
+          Usar sanción calculada
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function SalesPenaltiesTable({
+  rows,
+  weeks,
+  loading,
+  descuentosEditados = {},
+  onCambiarDescuento,
+  onRestaurarDescuento,
+  periodoPagado = false,
+  guardando = false,
+}) {
+  const total = roundMoney(rows.reduce((sum, row) => sum + getPenaltyTotal(row, weeks), 0));
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-4 py-3">
+        <h2 className="font-semibold text-slate-900">Sanción por no llegar a meta</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Valor a descontar por cada semana comercial, según la meta y la sanción configuradas.
+          {periodoPagado
+            ? " El período está pagado y sus valores no se pueden editar."
+            : " Edite el importe y pulse Guardar todo. Puede ingresar 0 para omitir la sanción."}
+          {Object.keys(descuentosEditados).length > 0
+            ? " Los totales muestran una vista previa de los cambios pendientes."
+            : " Los valores incluyen los ajustes guardados."}
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[780px] border-collapse text-center text-sm text-slate-950">
+          <thead>
+            <tr>
+              <th scope="col" className="sticky left-0 z-20 min-w-[240px] border border-slate-950 bg-white px-3 py-4 text-left font-black">
+                Vendedor
+              </th>
+              {weeks.map((week, index) => (
+                <th key={week.startDate} scope="col" className={`min-w-[160px] border border-slate-950 px-3 py-2 font-black ${blockColors[index % blockColors.length]}`}>
+                  {week.label}
+                </th>
+              ))}
+              <th scope="col" className="border border-slate-950 bg-indigo-100 px-3 py-2 font-black">
+                Total sanciones del mes
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading || !rows.length ? (
+              <tr>
+                <td colSpan={weeks.length + 2} className="px-4 py-10 text-slate-500">
+                  {loading ? "Cargando reporte..." : "No hay registros en esta sección para el mes seleccionado."}
+                </td>
+              </tr>
+            ) : rows.map((row, index) => (
+              <tr key={row.usuarioId} className={row.fechaSalida ? "bg-blue-50" : index % 2 === 0 ? "bg-white" : "bg-orange-100"}>
+                <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-inherit px-3 py-2 text-left font-medium">
+                  {row.nombre}
+                  <span className="block text-[11px] font-normal text-slate-500">{row.cargoComision || row.cargo}</span>
+                </th>
+                {weeks.map((week) => {
+                  const values = getPenaltyWeekValues(row, week);
+                  const estado = values.semanaFutura
+                    ? "Pendiente"
+                    : values.semanaLaborada === false
+                      ? "No laborada"
+                      : values.semanaCompletaParaDescuento === false
+                        ? "Semana parcial"
+                        : null;
+                  return (
+                    <td key={week.startDate} className="border border-slate-950 px-3 py-2">
+                      {estado ? <span className="text-xs text-slate-500">{estado}</span> : (
+                        <>
+                          <SalesPenaltyAmount
+                            vendedor={row}
+                            week={week}
+                            values={values}
+                            descuentoEditado={descuentosEditados[`${row.usuarioId}-${week.startDate}`]}
+                            onCambiarDescuento={onCambiarDescuento}
+                            onRestaurarDescuento={onRestaurarDescuento}
+                            periodoPagado={periodoPagado}
+                            guardando={guardando}
+                          />
+                          {Number(values.noCumpleMetas || 0) > 0 ? (
+                            <span className="block text-[11px] text-slate-600">
+                              {values.noCumpleMetas} unidad(es) faltante(s)
+                            </span>
+                          ) : null}
+                          {values.descuentoModificado && !descuentosEditados[`${row.usuarioId}-${week.startDate}`] ? (
+                            <span className="block text-[11px] text-slate-500">
+                              {values.multaOmitida ? "Sanción omitida" : "Valor ajustado"} · Calculado: {formatCurrency(values.valorMultaCalculado)}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="border border-slate-950 bg-indigo-100 px-3 py-2 font-bold text-red-700">
+                  {formatCurrency(getPenaltyTotal(row, weeks))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {!loading && rows.length > 0 && weeks.length > 0 ? (
+            <tfoot>
+              <tr className="bg-fuchsia-500 font-black text-white">
+                <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-fuchsia-500 px-3 py-2 text-left">TOTAL</th>
+                {weeks.map((week) => (
+                  <td key={week.startDate} className="border border-slate-950 px-3 py-2">
+                    {rows.every((row) => getPenaltyWeekValues(row, week).semanaFutura)
+                      ? "-"
+                      : formatCurrency(rows.reduce((sum, row) => sum + Number(getPenaltyWeekValues(row, week).valorDescontar || 0), 0))}
+                  </td>
+                ))}
+                <td className="border border-slate-950 px-3 py-2">{formatCurrency(total)}</td>
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function WeeklyLeaderTeamConfiguration({
   leader,
   weeks,
@@ -1924,6 +2663,162 @@ function WeeklyLeaderTeamConfiguration({
             disabled={disabled}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+function MonthlyLeaderAverageConfiguration({
+  leader,
+  leaderType,
+  sellers,
+  weeks,
+  onSave,
+  savingKey,
+  disabled,
+}) {
+  const resumen = leader.resumenMensual || {};
+  const isChief = leaderType === "jefe";
+  const configured = Boolean(
+    isChief
+      ? resumen.promedioJefeMensualConfigurado
+      : resumen.promedioSupervisorMensualConfigurado,
+  );
+  const configuredIds = isChief
+    ? resumen.vendedorIdsPromedioJefe
+    : resumen.vendedorIdsPromedioSupervisor;
+  const defaultIds = (isChief
+    ? resumen.vendedoresConsideradosBono || leader.vendedoresBono || []
+    : leader.vendedoresJunior || []
+  ).map((vendedor) => String(vendedor.usuarioId));
+  const savedIds = [
+    ...new Set(
+      (configured
+        ? configuredIds || []
+        : defaultIds
+      ).map((id) => String(id)),
+    ),
+  ].sort((a, b) => Number(a) - Number(b));
+  const savedSignature = savedIds.join(",");
+  const [selectedIds, setSelectedIds] = useState(savedIds);
+
+  useEffect(() => {
+    setSelectedIds(savedSignature ? savedSignature.split(",") : []);
+  }, [savedSignature]);
+
+  const selectedSignature = [...selectedIds]
+    .sort((a, b) => Number(a) - Number(b))
+    .join(",");
+  const isSaving = savingKey === String(leader.usuarioId);
+  const isBusy = Boolean(savingKey);
+  const hasChanges = !configured || selectedSignature !== savedSignature;
+  const availableSellers = sellers.filter((seller) =>
+    weeks.some((week) => isSellerAvailableForWeek(seller, week)),
+  );
+  const selectedCount = selectedIds.length;
+  const promedioCalculado = selectedCount
+    ? Number(resumen.ventasConsideradasBono || 0) / weeks.length / selectedCount
+    : 0;
+
+  const toggleSeller = (sellerId) => {
+    const id = String(sellerId);
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((currentId) => currentId !== id)
+        : [...current, id],
+    );
+  };
+
+  return (
+    <div className="border-b border-slate-200 bg-blue-50 px-4 py-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900">
+            Vendedores para promedio mensual
+          </h3>
+          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
+            <span>Dispositivos: {formatCommission(resumen.ventasConsideradasBono || 0)}</span>
+            <span>Semanas: {weeks.length}</span>
+            <span>Seleccionados: {selectedCount}</span>
+            <span>Promedio: {formatCommission(promedioCalculado)}</span>
+          </div>
+        </div>
+        {disabled ? (
+          <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
+            <Lock size={13} /> Periodo pagado
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded border border-blue-200 bg-white p-2">
+        {availableSellers.length ? (
+          availableSellers.map((seller) => {
+            const id = String(seller.usuarioId);
+            const detalleCargo =
+              seller.cargoComision || seller.cargo || seller.rol || "Vendedor";
+            return (
+              <label
+                key={seller.usuarioId}
+                className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs text-slate-700 hover:bg-blue-50"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(id)}
+                  onChange={() => toggleSeller(id)}
+                  disabled={disabled || isBusy}
+                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                />
+                <span className="min-w-0">
+                  <span className="block font-medium text-slate-800">
+                    {seller.nombre}
+                  </span>
+                  <span className="block truncate text-[10px] text-slate-500">
+                    {detalleCargo}
+                  </span>
+                </span>
+              </label>
+            );
+          })
+        ) : (
+          <p className="py-2 text-center text-xs text-slate-500">
+            No hay vendedores disponibles para el periodo.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedIds(availableSellers.map((seller) => String(seller.usuarioId)))}
+            disabled={disabled || isBusy || !availableSellers.length}
+            className="rounded border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Seleccionar todos
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            disabled={disabled || isBusy || !selectedIds.length}
+            className="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Limpiar
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            onSave({
+              [isChief ? "jefe" : "supervisor"]: leader,
+              vendedorIds: selectedIds.map(Number),
+            })
+          }
+          disabled={disabled || isBusy || !hasChanges}
+          className="inline-flex items-center justify-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Save size={13} />
+          {isSaving ? "Guardando..." : "Guardar promedio"}
+        </button>
       </div>
     </div>
   );
@@ -2049,219 +2944,78 @@ function WeeklyTeamCard({
   );
 }
 
-function LogisticsCommissionTable({ rows, weeks, loading }) {
-  if (loading) {
+function LogisticsCommissionTable({ rows, loading }) {
+  if (loading || !rows.length) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
-        Cargando reporte...
+        {loading ? "Cargando reporte..." : "No hay personal activo de logística para el período seleccionado."}
       </section>
     );
   }
-
-  if (!rows.length) {
-    return (
-      <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
-        No hay personal activo de logistica para el periodo seleccionado.
-      </section>
-    );
-  }
-
-  const weekTotals = Object.fromEntries(
-    weeks.map((week) => [
-      week.startDate,
-      rows.reduce(
-        (total, row) => ({
-          entregas:
-            total.entregas +
-            Number(row.semanas?.[week.startDate]?.entregas || 0),
-          totalComisiones:
-            total.totalComisiones +
-            Number(row.semanas?.[week.startDate]?.totalComisiones || 0),
-        }),
-        { entregas: 0, totalComisiones: 0 },
-      ),
-    ]),
-  );
-  const totalEntregas = rows.reduce(
-    (total, row) => total + Number(row.resumenMensual?.totalEntregas || 0),
-    0,
-  );
-  const totalPagar = rows.reduce(
-    (total, row) => total + Number(row.resumenMensual?.totalPagar || 0),
-    0,
-  );
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1260px] border-collapse text-center text-sm text-slate-950">
-          <thead>
-            <tr className="bg-slate-100">
-              <th className="sticky left-0 z-20 min-w-[240px] border border-slate-300 bg-slate-100 px-3 py-3 text-left font-black">
-                COLABORADOR
-              </th>
-              <th className="min-w-[150px] border border-slate-300 px-3 py-3 font-black">
-                CARGO / ROL
-              </th>
-              <th className="min-w-[120px] border border-slate-300 px-3 py-3 font-black">
-                TARIFA PROPIA
-              </th>
-              <th className="min-w-[130px] border border-slate-300 px-3 py-3 font-black">
-                BONO / JUNIOR
-              </th>
-              {weeks.map((week, index) => (
-                <th
-                  key={week.startDate}
-                  className={`min-w-[145px] border border-slate-300 px-3 py-3 font-black ${blockColors[index % blockColors.length]}`}
-                >
-                  {week.label}
-                </th>
-              ))}
-              <th className="min-w-[120px] border border-slate-300 bg-amber-100 px-3 py-3 font-black">
-                ENTREGAS PROPIAS
-              </th>
-              <th className="min-w-[130px] border border-slate-300 bg-cyan-100 px-3 py-3 font-black">
-                ENTREGAS JUNIORS
-              </th>
-              <th className="min-w-[130px] border border-slate-300 bg-cyan-700 px-3 py-3 font-black text-white">
-                BONO JUNIORS
-              </th>
-              <th className="min-w-[130px] border border-slate-300 bg-emerald-700 px-3 py-3 font-black text-white">
-                A RECIBIR
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={row.usuarioId}
-                className={
-                  row.esEncargadoLogistica
-                    ? "bg-emerald-50"
-                    : index % 2 === 0
-                      ? "bg-white"
-                      : "bg-slate-50"
-                }
-              >
-                <td className="sticky left-0 z-10 border border-slate-300 bg-inherit px-3 py-3 text-left">
-                  <span className="block font-bold text-slate-900">
-                    {row.nombre}
-                  </span>
-                  <span className="block text-xs font-medium text-slate-500">
-                    {row.esEncargadoLogistica ? "Encargado" : "Junior"}
-                    {row.agencias?.length
-                      ? ` · ${row.agencias.join(", ")}`
-                      : ""}
-                  </span>
-                </td>
-                <td className="border border-slate-300 px-3 py-3 font-semibold">
-                  {row.cargo}
-                </td>
-                <td className="border border-slate-300 px-3 py-3 font-black text-emerald-700">
-                  {formatCurrency(row.tarifaPorEntrega)}
-                </td>
-                <td className="border border-slate-300 px-3 py-3 font-black text-cyan-700">
-                  {row.esEncargadoLogistica
-                    ? formatCurrency(row.tarifaBonoJunior)
-                    : "-"}
-                </td>
-                {weeks.map((week) => {
-                  const values = row.semanas?.[week.startDate] || {};
-                  return (
-                    <td
-                      key={`${row.usuarioId}-${week.startDate}`}
-                      className="border border-slate-300 px-3 py-2"
-                    >
-                      {values.semanaFutura ? (
-                        "-"
-                      ) : (
-                        <>
-                          <span className="block text-lg font-black">
-                            {values.entregas || 0} propias
-                          </span>
-                          <span className="block text-xs font-semibold text-emerald-700">
-                            {formatCurrency(values.comisionEntregasPropias)}
-                          </span>
-                          {row.esEncargadoLogistica ? (
-                            <span className="mt-1 block text-xs font-semibold text-cyan-700">
-                              + {values.entregasJuniors || 0} juniors /{" "}
-                              {formatCurrency(values.bonoJuniors)}
-                            </span>
-                          ) : null}
-                          {row.esEncargadoLogistica ? (
-                            <span className="block text-xs font-black text-slate-800">
-                              Total {formatCurrency(values.totalComisiones)}
-                            </span>
-                          ) : null}
-                        </>
-                      )}
+    <div className="space-y-5">
+      {getLogisticsTables(rows).map(({ manager, people, totalDeliveries }) => (
+        <section key={manager?.usuarioId || "sin-encargado"} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table style={{ minWidth: Math.max(680, 260 + people.length * 140) }} className="w-full table-fixed border-collapse text-center text-sm text-black">
+              <caption className="sr-only">Entregas del período por encargado y chofer</caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="w-[260px] border border-black bg-white px-3 py-2 font-medium">JEFE LOGISTICA</th>
+                  {people.map((person) => (
+                    <th key={person.usuarioId} scope="col" title={person.cargo} className="min-w-[140px] border border-black px-3 py-2 font-medium uppercase">
+                      {person.nombre}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row" className="border border-black px-3 py-2 text-left font-medium uppercase">
+                    {manager?.nombre || "Sin encargado asignado"}
+                  </th>
+                  {people.map((person) => (
+                    <td key={person.usuarioId} title={`Entregas de ${person.nombre}`} className="border border-black px-3 py-2 font-bold">
+                      {formatMoney(person.resumenMensual?.totalEntregas)}
                     </td>
-                  );
-                })}
-                <td className="border border-slate-300 bg-amber-50 px-3 py-3 text-lg font-black">
-                  {row.resumenMensual?.totalEntregas || 0}
-                </td>
-                <td className="border border-slate-300 bg-cyan-50 px-3 py-3 text-lg font-black">
-                  {row.resumenMensual?.totalEntregasJuniors || 0}
-                </td>
-                <td className="border border-slate-300 bg-cyan-700 px-3 py-3 text-lg font-black text-white">
-                  {formatCurrency(row.resumenMensual?.totalBonoJuniors)}
-                </td>
-                <td className="border border-slate-300 bg-emerald-700 px-3 py-3 text-lg font-black text-white">
-                  {formatCurrency(row.resumenMensual?.totalPagar)}
-                </td>
-              </tr>
-            ))}
-            <tr className="bg-slate-900 font-black text-white">
-              <td className="sticky left-0 z-10 border border-slate-700 bg-slate-900 px-3 py-3 text-left">
-                TOTAL
-              </td>
-              <td className="border border-slate-700 px-3 py-3" />
-              <td className="border border-slate-700 px-3 py-3" />
-              <td className="border border-slate-700 px-3 py-3" />
-              {weeks.map((week) => (
-                <td
-                  key={`logistica-total-${week.startDate}`}
-                  className="border border-slate-700 px-3 py-2"
-                >
-                  <span className="block text-lg">
-                    {weekTotals[week.startDate]?.entregas || 0}
-                  </span>
-                  <span className="block text-xs text-emerald-300">
-                    {formatCurrency(
-                      weekTotals[week.startDate]?.totalComisiones,
-                    )}
-                  </span>
-                </td>
-              ))}
-              <td className="border border-slate-700 px-3 py-3 text-lg">
-                {totalEntregas}
-              </td>
-              <td className="border border-slate-700 px-3 py-3 text-lg">
-                {rows.reduce(
-                  (total, row) =>
-                    total +
-                    Number(row.resumenMensual?.totalEntregasJuniors || 0),
-                  0,
+                  ))}
+                </tr>
+                {manager && (
+                  <tr>
+                    <th scope="row" className="border border-black bg-[#00ff00] px-3 py-2 text-left font-bold uppercase">{manager.nombre}</th>
+                    <td title="Entregas propias del encargado" className="border border-black bg-[#00ff00] px-3 py-2 font-bold">
+                      {formatMoney(manager.resumenMensual?.totalEntregas)}
+                    </td>
+                    {people.slice(1).map((person) => <td key={person.usuarioId} className="border border-black" />)}
+                  </tr>
                 )}
-              </td>
-              <td className="border border-slate-700 bg-cyan-700 px-3 py-3 text-lg">
-                {formatCurrency(
-                  rows.reduce(
-                    (total, row) =>
-                      total + Number(row.resumenMensual?.totalBonoJuniors || 0),
-                    0,
-                  ),
-                )}
-              </td>
-              <td className="border border-slate-700 bg-emerald-700 px-3 py-3 text-lg">
-                {formatCurrency(totalPagar)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+              </tbody>
+            </table>
+            {manager && (
+              <table style={{ minWidth: Math.max(680, 260 + people.length * 140) }} className="w-full table-fixed border-collapse text-center text-sm text-black">
+                <caption className="sr-only">Resumen de comisión del encargado {manager.nombre}</caption>
+                <tbody>
+                  <tr className="font-bold">
+                    <th scope="row" className="w-[260px] border border-black bg-[#ffff00] px-3 py-2 text-left">SUMAN</th>
+                    <td title="Total de entregas del encargado y choferes" className="border border-black bg-[#ffff00] px-3 py-2">{formatMoney(totalDeliveries)}</td>
+                    <td title="Bono del encargado por entregas de choferes" className="border border-black bg-[#ffe699] px-3 py-2">{formatMoney(manager.resumenMensual?.totalBonoJuniors)}</td>
+                    <td title="Total a pagar al encargado" className="border border-black bg-[#ff0000] px-3 py-2 text-white">{formatMoney(manager.resumenMensual?.totalPagar)}</td>
+                  </tr>
+                  <tr className="text-xs text-slate-600">
+                    <td />
+                    <td className="px-3 py-2">Total entregas</td>
+                    <td className="px-3 py-2">Bono del encargado ($)</td>
+                    <td className="px-3 py-2">A recibir encargado ($)</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+          {!manager && <p className="p-3 text-sm text-slate-500">No hay un usuario activo con cargo de encargado o jefe de logística en este período.</p>}
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -2272,7 +3026,11 @@ function LeadershipCommissionTables({
   sectionLabel,
   vendedoresDisponibles,
   onGuardarEquipoSemanal,
+  onGuardarPromedioJefe,
+  onGuardarPromedioSupervisor,
   guardandoEquipoSemanal,
+  guardandoPromedioJefe,
+  guardandoPromedioSupervisor,
   periodoPagado,
 }) {
   if (loading) {
@@ -2379,6 +3137,27 @@ function LeadershipCommissionTables({
               ) : null}
             </div>
             {row.esJefeComercial || row.esSupervisorComercial ? (
+              <MonthlyLeaderAverageConfiguration
+                leader={row}
+                leaderType={row.esJefeComercial ? "jefe" : "supervisor"}
+                sellers={vendedoresDisponibles.filter(
+                  (vendedor) => Number(vendedor.usuarioId) !== Number(row.usuarioId),
+                )}
+                weeks={weeks}
+                onSave={
+                  row.esJefeComercial
+                    ? onGuardarPromedioJefe
+                    : onGuardarPromedioSupervisor
+                }
+                savingKey={
+                  row.esJefeComercial
+                    ? guardandoPromedioJefe
+                    : guardandoPromedioSupervisor
+                }
+                disabled={periodoPagado}
+              />
+            ) : null}
+            {row.esJefeComercial || row.esSupervisorComercial ? (
               <WeeklyLeaderTeamConfiguration
                 leader={row}
                 weeks={weeks}
@@ -2459,49 +3238,6 @@ function LeadershipCommissionTables({
                       </td>
                     </tr>
                   ) : null}
-                  {row.esSupervisorComercial ? (
-                    <tr className="font-bold">
-                      <td className="border border-slate-950 bg-blue-600 px-3 py-2 text-white">
-                        DISPOSITIVOS POR VENDEDOR
-                      </td>
-                      {weeks.map((week) => {
-                        const values = getWeekValues(row, week);
-                        const vendedoresActivos = values.vendedoresActivos || [];
-                        return (
-                          <td
-                            key={`equipo-${week.startDate}`}
-                            className="border border-slate-950 bg-blue-50 px-2 py-2 text-blue-800"
-                          >
-                            {values.semanaFutura
-                              ? "-"
-                              : vendedoresActivos.length
-                                ? (
-                                  <div className="flex flex-col gap-1">
-                                    {vendedoresActivos.map((vendedor) => (
-                                      <span
-                                        key={vendedor.usuarioId}
-                                        className="rounded bg-blue-100 px-2 py-1 text-xs font-semibold"
-                                      >
-                                        {vendedor.nombre}: {vendedor.venden || 0}
-                                        {vendedor.esLiderVendedor
-                                          ? " (doble cargo)"
-                                          : ""}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )
-                                : "Sin vendedores"}
-                          </td>
-                        );
-                      })}
-                      <td
-                        colSpan={3}
-                        className="border border-slate-950 bg-blue-50 px-3 py-2 text-xs text-blue-800"
-                      >
-                        Ventas individuales incluidas en el total del supervisor
-                      </td>
-                    </tr>
-                  ) : null}
                   <tr className="font-black">
                     <td className="border border-slate-950 bg-pink-400 px-3 py-2">TOTAL COMISIONES</td>
                     {weeks.map((week) => {
@@ -2534,21 +3270,98 @@ function Metric({ icon = null, label, value }) {
   );
 }
 
+function CollaboratorSearchInput({
+  label = "Colaborador",
+  options,
+  searchValue,
+  selectedId,
+  open,
+  placeholder,
+  onOpenChange,
+  onSearchChange,
+  onShowAll,
+  onSelect,
+}) {
+  return (
+    <div
+      className="relative text-sm font-medium text-slate-700"
+      onBlur={() => window.setTimeout(() => onOpenChange(false), 120)}
+    >
+      {label}
+      <div className="mt-1 flex overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-100">
+        <input
+          type="text"
+          value={searchValue}
+          onChange={(event) => onSearchChange(event.target.value)}
+          onFocus={() => onOpenChange(true)}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 px-3 py-2 text-sm font-normal text-slate-900 outline-none"
+        />
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onShowAll}
+          title="Ver colaboradores"
+          aria-label="Ver colaboradores"
+          className="inline-flex w-11 items-center justify-center border-l border-slate-300 text-slate-600 transition hover:bg-slate-50 hover:text-emerald-700"
+        >
+          <Search size={17} />
+        </button>
+      </div>
+      {open ? (
+        <div className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {options.length ? (
+            options.map((vendedor) => {
+              const id = String(vendedor.usuarioId);
+              const cargo =
+                vendedor.cargoComision || vendedor.cargo || vendedor.rol || "";
+              return (
+                <button
+                  type="button"
+                  key={id}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => onSelect(vendedor)}
+                  className={`flex w-full flex-col px-3 py-2 text-left text-sm transition hover:bg-emerald-50 ${
+                    selectedId === id ? "bg-emerald-100 text-emerald-900" : "text-slate-800"
+                  }`}
+                >
+                  <span className="font-semibold">{vendedor.nombre}</span>
+                  {cargo ? (
+                    <span className="text-[11px] font-normal text-slate-500">
+                      {cargo}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })
+          ) : (
+            <div className="px-3 py-2 text-sm font-normal text-slate-500">
+              Sin coincidencias
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function WeekHeader({ color }) {
   return (
     <>
       <th className={`border border-slate-950 px-2 py-2 text-xs font-black ${color}`}>
-        VENDEN
+        DISPOSITIVOS VENDIDOS
       </th>
       <th className={`border border-slate-950 px-2 py-2 text-xs font-black ${color}`}>
-        VALOR / VENDIDO
+        MONTO VENDIDO
       </th>
       <th className={`border border-slate-950 px-2 py-2 text-xs font-black ${color}`}>
         TOTAL COMISIONES
       </th>
-      <th className="border border-slate-950 bg-blue-800 px-2 py-2 text-xs font-black text-white">
-        NO CUMPLE METAS
-      </th>
+      {SHOW_GOAL_COMPLIANCE_SECTION ? (
+        <th className="border border-slate-950 bg-blue-800 px-2 py-2 text-xs font-black text-white">
+          NO CUMPLE METAS
+        </th>
+      ) : null}
     </>
   );
 }
@@ -2591,78 +3404,80 @@ function WeekValues({
       <td className="border border-slate-950 px-2 py-1.5">
         {values.semanaFutura ? "-" : values.totalComisiones ? formatCommission(values.totalComisiones) : 0}
       </td>
-      <td className={noCumpleClass}>
-        {values.semanaFutura
-          ? "-"
-          : !total && values.semanaLaborada === false
-            ? "No laborada"
-            : !total && values.semanaCompletaParaDescuento === false
-              ? "Semana parcial"
-              : (
-                <div className="flex min-w-[128px] flex-col items-center gap-1">
-                  <span className="font-semibold">{values.noCumpleMetas || 0}</span>
-                  {puedeGestionarMulta ? (
-                    <>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={valorInput}
-                        disabled={guardando}
-                        maxLength={13}
-                        pattern="\d+(\.\d{0,2})?"
-                        placeholder="0.00"
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (!esFormatoValorDescuentoInputValido(value)) return;
-                          onCambiarDescuento({
-                            vendedor,
-                            week,
-                            values,
-                            value,
-                          });
-                        }}
-                        aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
-                        className={`w-24 rounded border bg-white px-2 py-1 text-center text-xs font-semibold outline-none focus:ring-2 disabled:opacity-60 ${
-                          !valorInputValido
-                            ? "border-red-600 text-red-700 focus:ring-red-200"
-                            : descuentoEditado
-                              ? "border-amber-500 text-amber-800 focus:ring-amber-200"
-                              : "border-slate-300 text-red-700 focus:ring-red-200"
-                        }`}
-                      />
-                      <span className="text-[10px] text-slate-500">
-                        Sancion: {formatMoney(values.valorMultaCalculado)}
-                      </span>
-                      {descuentoEditado ? (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
-                          Pendiente de guardar
-                        </span>
-                      ) : null}
-                      {(values.descuentoModificado || descuentoEditado) && onRestaurarDescuento ? (
-                        <button
-                          type="button"
+      {SHOW_GOAL_COMPLIANCE_SECTION ? (
+        <td className={noCumpleClass}>
+          {values.semanaFutura
+            ? "-"
+            : !total && values.semanaLaborada === false
+              ? "No laborada"
+              : !total && values.semanaCompletaParaDescuento === false
+                ? "Semana parcial"
+                : (
+                  <div className="flex min-w-[128px] flex-col items-center gap-1">
+                    <span className="font-semibold">{values.noCumpleMetas || 0}</span>
+                    {puedeGestionarMulta ? (
+                      <>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={valorInput}
                           disabled={guardando}
-                          onClick={() =>
-                            onRestaurarDescuento({
+                          maxLength={13}
+                          pattern="\d+(\.\d{0,2})?"
+                          placeholder="0.00"
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (!esFormatoValorDescuentoInputValido(value)) return;
+                            onCambiarDescuento({
                               vendedor,
                               week,
                               values,
-                            })
-                          }
-                          className="text-[10px] font-semibold text-emerald-700 underline hover:text-emerald-800 disabled:opacity-60"
-                        >
-                          Usar sancion
-                        </button>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className={`text-[11px] font-semibold ${descuentoTextClass}`}>
-                      Desc: {formatMoney(values.valorDescontar || 0)}
-                    </span>
-                  )}
-                </div>
-              )}
-      </td>
+                              value,
+                            });
+                          }}
+                          aria-label={`Valor a descontar de ${vendedor.nombre} en ${week.label}`}
+                          className={`w-24 rounded border bg-white px-2 py-1 text-center text-xs font-semibold outline-none focus:ring-2 disabled:opacity-60 ${
+                            !valorInputValido
+                              ? "border-red-600 text-red-700 focus:ring-red-200"
+                              : descuentoEditado
+                                ? "border-amber-500 text-amber-800 focus:ring-amber-200"
+                                : "border-slate-300 text-red-700 focus:ring-red-200"
+                          }`}
+                        />
+                        <span className="text-[10px] text-slate-500">
+                          Sancion: {formatMoney(values.valorMultaCalculado)}
+                        </span>
+                        {descuentoEditado ? (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
+                            Pendiente de guardar
+                          </span>
+                        ) : null}
+                        {(values.descuentoModificado || descuentoEditado) && onRestaurarDescuento ? (
+                          <button
+                            type="button"
+                            disabled={guardando}
+                            onClick={() =>
+                              onRestaurarDescuento({
+                                vendedor,
+                                week,
+                                values,
+                              })
+                            }
+                            className="text-[10px] font-semibold text-emerald-700 underline hover:text-emerald-800 disabled:opacity-60"
+                          >
+                            Usar sancion
+                          </button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className={`text-[11px] font-semibold ${descuentoTextClass}`}>
+                        Desc: {formatMoney(values.valorDescontar || 0)}
+                      </span>
+                    )}
+                  </div>
+                )}
+        </td>
+      ) : null}
     </>
   );
 }
@@ -2694,12 +3509,14 @@ function MonthlyHeader() {
       >
         Total Comisiones Semana + Mensual
       </th>
-      <th
-        rowSpan={2}
-        className="border border-slate-950 bg-red-700 px-2 py-2 text-xs font-black text-white"
-      >
-        Total No Cumple Metas
-      </th>
+      {SHOW_GOAL_COMPLIANCE_SECTION ? (
+        <th
+          rowSpan={2}
+          className="border border-slate-950 bg-red-700 px-2 py-2 text-xs font-black text-white"
+        >
+          Total No Cumple Metas
+        </th>
+      ) : null}
     </>
   );
 }
@@ -2727,9 +3544,11 @@ function MonthlyValues({ values, total = false }) {
           ? formatCommission(values.totalComisionesSemanaMensual)
           : "0.00"}
       </td>
-      <td className="border border-slate-950 bg-blue-700 px-2 py-1.5 text-white">
-        {formatMoney(values.totalValorDescontar || 0)}
-      </td>
+      {SHOW_GOAL_COMPLIANCE_SECTION ? (
+        <td className="border border-slate-950 bg-blue-700 px-2 py-1.5 text-white">
+          {formatMoney(values.totalValorDescontar || 0)}
+        </td>
+      ) : null}
     </>
   );
 }

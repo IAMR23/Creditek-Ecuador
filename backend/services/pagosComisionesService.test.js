@@ -31,7 +31,11 @@ const {
   selectHighestPaidPosition,
   getDistinctPaidPositions,
   normalizeWeeklySellerIds,
+  normalizeChiefAverageSellerIds,
+  normalizeSupervisorAverageSellerIds,
   buildWeeklyTeamsMap,
+  buildChiefAverageSelectionsMap,
+  buildSupervisorAverageSelectionsMap,
   getLeaderMembersForWeek,
   resolveSalesSanctionConfig,
   resolvePersonalSellerSanctionConfig,
@@ -170,7 +174,7 @@ describe("pagosComisionesService", () => {
 
     const rows = buildLogisticsCommissionRows({ usuarios, asignaciones, weeks });
 
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       usuarioId: 1,
       esEncargadoLogistica: true,
@@ -178,21 +182,17 @@ describe("pagosComisionesService", () => {
       tarifaBonoJunior: 0.5,
       resumenMensual: {
         totalEntregas: 2,
-        totalEntregasJuniors: 3,
+        totalEntregasJuniors: 2,
         totalComisionEntregasPropias: 2,
-        totalBonoJuniors: 1.5,
-        totalPagar: 3.5,
+        totalBonoJuniors: 1,
+        totalPagar: 3,
       },
     });
     expect(rows.find((row) => row.usuarioId === 2)).toMatchObject({
       tarifaPorEntrega: 1,
       resumenMensual: { totalEntregas: 2, totalPagar: 2 },
     });
-    expect(rows.find((row) => row.usuarioId === 3)).toMatchObject({
-      cargo: "REPARTIDOR",
-      tarifaPorEntrega: 1,
-      resumenMensual: { totalEntregas: 1, totalPagar: 1 },
-    });
+    expect(rows.find((row) => row.usuarioId === 3)).toBeUndefined();
     expect(rows[0].semanas["2026-07-02"]).toMatchObject({
       entregas: 1,
       entregasJuniors: 1,
@@ -202,10 +202,10 @@ describe("pagosComisionesService", () => {
     });
     expect(rows[0].semanas["2026-07-09"]).toMatchObject({
       entregas: 1,
-      entregasJuniors: 2,
+      entregasJuniors: 1,
       comisionEntregasPropias: 1,
-      bonoJuniors: 1,
-      totalComisiones: 2,
+      bonoJuniors: 0.5,
+      totalComisiones: 1.5,
     });
   });
 
@@ -223,6 +223,7 @@ describe("pagosComisionesService", () => {
           nombre: "Junior uno",
           activo: true,
           roles: ["Repartidor"],
+          posicionesPago: [{ cargo: "CHOFER" }],
         },
         {
           usuarioId: 3,
@@ -259,6 +260,33 @@ describe("pagosComisionesService", () => {
       cargo: "Encargado de Logistica",
       tarifaPorEntrega: 1,
     });
+  });
+
+  test.each(["REPARTIDOR CHOFER", "CHOFER"])(
+    "identifica logistica por cargo %s aunque no tenga rol repartidor",
+    (cargo) => {
+      expect(getLogisticsProfile({
+        rol: "Logistica",
+        posicionesPago: [{ cargo }],
+      })).toMatchObject({ tipo: "JUNIOR", cargo });
+    },
+  );
+
+  test.each([
+    { cargo: "REPARTIDOR" },
+    { rol: "Repartidor", posicionesPago: [] },
+    { roles: ["Repartidor"], posicionesPago: [{ cargo: "VENDEDOR" }] },
+    { rol: "Chofer", posicionesPago: [] },
+  ])("excluye personal sin cargo de chofer aunque tenga rol de reparto: %j", (usuario) => {
+    expect(getLogisticsProfile(usuario)).toBeNull();
+  });
+
+  test("reconoce al jefe de logistica entre varios cargos y prioriza su cargo", () => {
+    expect(getLogisticsProfile({ posicionesPago: [
+      { cargo: "REPARTIDOR CHOFER" },
+      { cargo: "Jefe de Logística" },
+    ] })).toMatchObject({ tipo: "ENCARGADO", cargo: "Jefe de Logística" });
+    expect(getLogisticsProfile({ cargo: "JEFE COMERCIAL" })).toBeNull();
   });
 
   test("persona con dos cargos usa el cargo mejor pagado", () => {
@@ -954,6 +982,54 @@ describe("pagosComisionesService", () => {
       jefeComercialId: 10,
       semanaInicio: "2026-07-09",
       vendedorIds: [12, 11],
+    });
+  });
+
+  test("normaliza la seleccion mensual de vendedores para promedio de supervisor", () => {
+    const map = buildSupervisorAverageSelectionsMap([
+      {
+        id: 1,
+        supervisorComercialId: 20,
+        anio: 2026,
+        mes: 9,
+        vendedorIds: [31, "32", 31, "invalido"],
+      },
+    ]);
+
+    expect(normalizeSupervisorAverageSellerIds([31, "32", 31, "invalido"])).toEqual([
+      31,
+      32,
+    ]);
+    expect(map.get("20:2026:9")).toEqual({
+      id: 1,
+      supervisorComercialId: 20,
+      year: 2026,
+      month: 9,
+      vendedorIds: [31, 32],
+    });
+  });
+
+  test("normaliza la seleccion mensual de vendedores para promedio de jefe comercial", () => {
+    const map = buildChiefAverageSelectionsMap([
+      {
+        id: 1,
+        jefeComercialId: 40,
+        anio: 2026,
+        mes: 9,
+        vendedorIds: [51, "52", 51, "invalido"],
+      },
+    ]);
+
+    expect(normalizeChiefAverageSellerIds([51, "52", 51, "invalido"])).toEqual([
+      51,
+      52,
+    ]);
+    expect(map.get("40:2026:9")).toEqual({
+      id: 1,
+      jefeComercialId: 40,
+      year: 2026,
+      month: 9,
+      vendedorIds: [51, 52],
     });
   });
 

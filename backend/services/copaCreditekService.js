@@ -10,7 +10,8 @@ const CopaCreditekVendedorConfiguracion = require(
 const CopaCreditekSemanaVendedor = require(
   "../models/Marketing/CopaCreditekSemanaVendedor",
 );
-const adminVentas = require("../controllers/Admin/dashboardVentasVentas");
+const Venta = require("../models/Venta");
+const DetalleVenta = require("../models/DetalleVenta");
 
 const EQUIPOS_COPA = [
   "Martha Bucaram",
@@ -120,18 +121,15 @@ const normalizarConfiguracionCompleta = (datos = {}) => {
   const meta = normalizarEnteroNoNegativo(datos.meta, "La meta");
   if (!meta.valido) return meta;
 
-  let ventasManual = null;
   if (
     datos.ventasManual !== null &&
     datos.ventasManual !== undefined &&
     datos.ventasManual !== ""
   ) {
-    const ventas = normalizarEnteroNoNegativo(
-      datos.ventasManual,
-      "Las ventas manuales",
-    );
-    if (!ventas.valido) return ventas;
-    ventasManual = ventas.valor;
+    return {
+      valido: false,
+      mensaje: "Las ventas de Copa se calculan automáticamente según las fechas seleccionadas.",
+    };
   }
 
   return {
@@ -142,7 +140,7 @@ const normalizarConfiguracionCompleta = (datos = {}) => {
       equipoCopa,
       mostrarEnMarcador: datos.mostrarEnMarcador,
       meta: meta.valor,
-      ventasManual,
+      ventasManual: null,
     },
   };
 };
@@ -164,6 +162,8 @@ const construirMarcador = ({
   configuraciones = [],
   semanas = [],
   ventasPorUsuario = new Map(),
+  ventasDiaPorUsuario = new Map(),
+  fechaDia,
   fechaInicio,
   fechaFin,
 }) => {
@@ -188,10 +188,6 @@ const construirMarcador = ({
       fechaFin,
     );
     const ventasCalculadas = Number(ventasPorUsuario.get(usuarioId) || 0);
-    const ventasManual =
-      semana?.ventasManual === null || semana?.ventasManual === undefined
-        ? null
-        : Number(semana.ventasManual);
     const metaConfigurada =
       configuracion?.meta === null || configuracion?.meta === undefined
         ? null
@@ -213,9 +209,10 @@ const construirMarcador = ({
       mostrarEnMarcador,
       meta: metaConfigurada ?? Number(semana?.meta || 0),
       ventasCalculadas,
-      ventasManual,
-      ventasMostradas:
-        ventasManual === null ? ventasCalculadas : ventasManual,
+      ventasDia: Number(ventasDiaPorUsuario.get(usuarioId) || 0),
+      // Campo conservado por compatibilidad; los ajustes antiguos ya no puntúan.
+      ventasManual: null,
+      ventasMostradas: ventasCalculadas,
       requiereEquipo: mostrarEnMarcador && !equipoCopa,
     };
   });
@@ -238,6 +235,10 @@ const construirMarcador = ({
         (total, vendedor) => total + vendedor.ventasMostradas,
         0,
       ),
+      totalDia: vendedoresEquipo.reduce(
+        (total, vendedor) => total + vendedor.ventasDia,
+        0,
+      ),
       vendedores: vendedoresEquipo,
     };
   });
@@ -245,6 +246,7 @@ const construirMarcador = ({
   return {
     fechaInicio,
     fechaFin,
+    fechaDia,
     equipos,
     vendedores,
     vendedoresSinEquipo: vendedores.filter(
@@ -313,11 +315,59 @@ const obtenerAgenciasActuales = async (usuarioIds) => {
   return agenciasPorUsuario;
 };
 
+const obtenerVentasPorUsuario = async ({ fechaInicio, fechaFin, usuarioIds }) => {
+  if (usuarioIds.length === 0) return new Map();
+
+  // Copa cuenta detalles de ventas cargadas, sin sumar sus entregas.
+  // fecha es DATEONLY: conservar las fechas evita desplazar el período por zona horaria.
+  const ventas = await Venta.findAll({
+    where: { activo: true, fecha: { [Op.between]: [fechaInicio, fechaFin] } },
+    attributes: ["id"],
+    include: [
+      {
+        model: UsuarioAgencia,
+        as: "usuarioAgencia",
+        attributes: ["usuarioId"],
+        required: true,
+        // Mantener la autoría incluso si el vendedor cambió de agencia.
+        where: { usuarioId: { [Op.in]: usuarioIds } },
+      },
+      { model: DetalleVenta, as: "detalleVenta", attributes: ["id"] },
+    ],
+  });
+
+  const detallesPorUsuario = new Map();
+  for (const venta of ventas) {
+    const usuarioId = Number(venta.usuarioAgencia.usuarioId);
+    if (!detallesPorUsuario.has(usuarioId)) {
+      detallesPorUsuario.set(usuarioId, new Set());
+    }
+    const detalles = detallesPorUsuario.get(usuarioId);
+    for (const detalle of venta.detalleVenta || []) {
+      detalles.add(Number(detalle.id));
+    }
+  }
+  return new Map(
+    [...detallesPorUsuario].map(([usuarioId, detalles]) => [usuarioId, detalles.size]),
+  );
+};
+
 const obtenerMarcador = async ({ fechaInicio, fechaFin }) => {
+  const fechaDia = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
   const usuarios = await obtenerVendedoresActivos();
   const usuarioIds = usuarios.map((usuario) => Number(usuario.id));
+  const ventasPeriodoPromesa = obtenerVentasPorUsuario({
+    fechaInicio,
+    fechaFin,
+    usuarioIds,
+  });
 
-  const [agenciasPorUsuario, configuraciones, semanas, ventas] =
+  const [agenciasPorUsuario, configuraciones, semanas, ventasPorUsuario, ventasDiaPorUsuario] =
     await Promise.all([
       obtenerAgenciasActuales(usuarioIds),
       CopaCreditekVendedorConfiguracion.findAll({
@@ -330,16 +380,15 @@ const obtenerMarcador = async ({ fechaInicio, fechaFin }) => {
           fechaFin,
         },
       }),
-      adminVentas.getVentasCompletas({ fechaInicio, fechaFin }),
+      ventasPeriodoPromesa,
+      fechaInicio === fechaDia && fechaFin === fechaDia
+        ? ventasPeriodoPromesa
+        : obtenerVentasPorUsuario({
+            fechaInicio: fechaDia,
+            fechaFin: fechaDia,
+            usuarioIds,
+          }),
     ]);
-
-  const ventasCalculadas = adminVentas.contarPorUsuarioDetalle(ventas);
-  const ventasPorUsuario = new Map(
-    ventasCalculadas.map((venta) => [
-      Number(venta.usuarioId),
-      Number(venta.total || 0),
-    ]),
-  );
 
   return construirMarcador({
     usuarios,
@@ -347,6 +396,8 @@ const obtenerMarcador = async ({ fechaInicio, fechaFin }) => {
     configuraciones,
     semanas,
     ventasPorUsuario,
+    ventasDiaPorUsuario,
+    fechaDia,
     fechaInicio,
     fechaFin,
   });

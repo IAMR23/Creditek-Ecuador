@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeftRight,
-  BadgePercent,
   Banknote,
   CalendarDays,
   CircleDollarSign,
@@ -36,68 +34,33 @@ const money = new Intl.NumberFormat("es-EC", {
 
 const SECCIONES = [
   {
-    id: "entradas",
-    label: "Entradas",
+    id: "prestamos",
+    label: "Préstamos",
     icon: WalletCards,
+    active: "border-indigo-600 bg-indigo-50 text-indigo-800",
+    iconTone: "bg-indigo-100 text-indigo-700",
+    totalTone: "text-indigo-700",
+    buttonTone: "bg-indigo-700 hover:bg-indigo-800 focus:ring-indigo-200",
+  },
+  {
+    id: "anticipos",
+    label: "Anticipos",
+    icon: Banknote,
     active: "border-emerald-600 bg-emerald-50 text-emerald-800",
     iconTone: "bg-emerald-100 text-emerald-700",
     totalTone: "text-emerald-700",
     buttonTone: "bg-emerald-700 hover:bg-emerald-800 focus:ring-emerald-200",
   },
-  {
-    id: "cajas",
-    label: "Cajas",
-    icon: Banknote,
-    active: "border-blue-600 bg-blue-50 text-blue-800",
-    iconTone: "bg-blue-100 text-blue-700",
-    totalTone: "text-blue-700",
-    buttonTone: "bg-blue-700 hover:bg-blue-800 focus:ring-blue-200",
-  },
-  {
-    id: "transferencias",
-    label: "Transferencias",
-    icon: ArrowLeftRight,
-    active: "border-cyan-600 bg-cyan-50 text-cyan-800",
-    iconTone: "bg-cyan-100 text-cyan-700",
-    totalTone: "text-cyan-700",
-    buttonTone: "bg-cyan-700 hover:bg-cyan-800 focus:ring-cyan-200",
-  },
-  {
-    id: "descuentos",
-    label: "Descuentos",
-    icon: BadgePercent,
-    active: "border-amber-500 bg-amber-50 text-amber-900",
-    iconTone: "bg-amber-100 text-amber-800",
-    totalTone: "text-amber-700",
-    buttonTone: "bg-amber-600 hover:bg-amber-700 focus:ring-amber-200",
-  },
-  {
-    id: "jefes",
-    label: "Jefes",
-    icon: UserRound,
-    active: "border-violet-600 bg-violet-50 text-violet-800",
-    iconTone: "bg-violet-100 text-violet-700",
-    totalTone: "text-violet-700",
-    buttonTone: "bg-violet-700 hover:bg-violet-800 focus:ring-violet-200",
-  },
-  {
-    id: "multas_facturacion",
-    label: "Multas facturacion",
-    icon: BadgePercent,
-    active: "border-rose-600 bg-rose-50 text-rose-800",
-    iconTone: "bg-rose-100 text-rose-700",
-    totalTone: "text-rose-700",
-    buttonTone: "bg-rose-700 hover:bg-rose-800 focus:ring-rose-200",
-  },
-  {
-    id: "otros",
-    label: "Otros",
-    icon: CircleDollarSign,
-    active: "border-slate-700 bg-slate-100 text-slate-950",
-    iconTone: "bg-slate-100 text-slate-700",
-    totalTone: "text-slate-800",
-    buttonTone: "bg-slate-800 hover:bg-slate-900 focus:ring-slate-200",
-  },
+];
+
+const TIPOS_EGRESO = [
+  { id: "entradas", label: "Entradas" },
+  { id: "cajas", label: "Cajas" },
+  { id: "transferencias", label: "Transferencias" },
+  { id: "descuentos", label: "Descuentos" },
+  { id: "jefes", label: "Jefes" },
+  { id: "multas_facturacion", label: "Facturación" },
+  { id: "otros", label: "Otros" },
 ];
 
 const SECCIONES_CON_FECHA = new Set(SECCIONES.map((seccion) => seccion.id));
@@ -152,6 +115,12 @@ const normalizarValor = (value) => {
   return Number.isFinite(numero) ? numero : 0;
 };
 
+const buscarTipo = (tipoId) =>
+  TIPOS_EGRESO.find((tipo) => tipo.id === String(tipoId || "").toLowerCase()) ||
+  TIPOS_EGRESO[0];
+
+const tipoLabel = (tipoId) => buscarTipo(tipoId).label;
+
 const requiereFechaRegistro = (seccionId) =>
   SECCIONES_CON_FECHA.has(seccionId);
 
@@ -176,8 +145,9 @@ const esRegistroControlFinanciero = esCajaControlFinanciero;
 export default function EgresosCreditek() {
   const [usuarios, setUsuarios] = useState([]);
   const [registros, setRegistros] = useState([]);
-  const [seccionActiva, setSeccionActiva] = useState("entradas");
+  const [seccionActiva, setSeccionActiva] = useState("prestamos");
   const [usuarioId, setUsuarioId] = useState("");
+  const [tipo, setTipo] = useState("entradas");
   const [valor, setValor] = useState("");
   const [observacion, setObservacion] = useState("");
   const [fechaRegistro, setFechaRegistro] = useState(fechaEcuadorIso(new Date()));
@@ -187,6 +157,7 @@ export default function EgresosCreditek() {
   const [registroEditando, setRegistroEditando] = useState(null);
   const [edicion, setEdicion] = useState({
     usuarioId: "",
+    tipo: "entradas",
     valor: "",
     observacion: "",
     fecha: "",
@@ -238,7 +209,7 @@ export default function EgresosCreditek() {
   const SeccionIcon = seccion.icon;
   const seccionRequiereFecha = requiereFechaRegistro(seccionActiva);
   const historialGridClass =
-    "xl:grid-cols-[minmax(180px,1.15fr)_110px_120px_100px_minmax(180px,1.15fr)_minmax(190px,1fr)_88px]";
+    "xl:grid-cols-[minmax(170px,1.05fr)_130px_110px_120px_100px_minmax(170px,1fr)_minmax(170px,1fr)_88px]";
   const editandoControlFinanciero =
     registroEditando && esRegistroControlFinanciero(registroEditando);
 
@@ -251,6 +222,7 @@ export default function EgresosCreditek() {
         registro.usuario?.nombre,
         registro.observacion,
         registro.fecha,
+        tipoLabel(registro.tipo),
         registro.registradoPor?.nombre,
         registro.actualizadoPor?.nombre,
         ACCIONES[registro.ultimaAccion],
@@ -289,7 +261,7 @@ export default function EgresosCreditek() {
   );
 
   useEffect(() => {
-    cargar("entradas");
+    cargar("prestamos");
   }, [cargar]);
 
   useEffect(() => {
@@ -315,6 +287,7 @@ export default function EgresosCreditek() {
     setSeccionActiva(seccionId);
     setRegistros([]);
     setValor("");
+    setTipo("entradas");
     setObservacion("");
     setFechaRegistro(fechaEcuadorIso(new Date()));
     setBusqueda("");
@@ -343,6 +316,7 @@ export default function EgresosCreditek() {
         `/api/contabilidad/egresos-creditek/${seccionActiva}`,
         {
           usuarioId: Number(usuarioId),
+          tipo,
           valor,
           observacion,
           ...(seccionRequiereFecha ? { fecha: fechaRegistro } : {}),
@@ -350,6 +324,7 @@ export default function EgresosCreditek() {
       );
       setRegistros((actuales) => [data.registro, ...actuales]);
       setValor("");
+      setTipo("entradas");
       setObservacion("");
       setFechaRegistro(fechaEcuadorIso(new Date()));
       setBusqueda("");
@@ -374,6 +349,7 @@ export default function EgresosCreditek() {
     setRegistroEditando(registro);
     setEdicion({
       usuarioId: String(registro.usuarioId || ""),
+      tipo: String(registro.tipo || "ENTRADAS").toLowerCase(),
       valor: Number(registro.valor || 0).toFixed(2),
       observacion: registro.observacion || "",
       fecha: registro.fecha || fechaEcuadorIso(new Date()),
@@ -453,6 +429,7 @@ export default function EgresosCreditek() {
           `/api/contabilidad/egresos-creditek/${seccionActiva}/${registroEditando.id}`,
           {
             usuarioId: Number(edicion.usuarioId),
+            tipo: edicion.tipo,
             valor: edicion.valor,
             observacion: edicion.observacion,
             ...(seccionRequiereFecha ? { fecha: edicion.fecha } : {}),
@@ -586,7 +563,7 @@ export default function EgresosCreditek() {
               onClick={() => descargarReporte("excel")}
               disabled={loading || saving || actualizandoId !== null || exportando !== null}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Descargar las siete secciones en Excel"
+              title="Descargar prestamos y anticipos en Excel"
             >
               {exportando === "excel" ? (
                 <RefreshCw size={16} className="animate-spin" />
@@ -614,7 +591,7 @@ export default function EgresosCreditek() {
               onClick={() => descargarReporte("pdf")}
               disabled={loading || saving || actualizandoId !== null || exportando !== null}
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Descargar las siete secciones en PDF"
+              title="Descargar prestamos y anticipos en PDF"
             >
               {exportando === "pdf" ? (
                 <RefreshCw size={16} className="animate-spin" />
@@ -637,7 +614,7 @@ export default function EgresosCreditek() {
         </header>
 
         <nav
-          className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
+          className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm"
           aria-label="Secciones de Egresos Creditek"
         >
           {SECCIONES.map((item) => {
@@ -698,6 +675,22 @@ export default function EgresosCreditek() {
                 </select>
               </label>
 
+              <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
+                Tipo
+                <select
+                  value={tipo}
+                  onChange={(event) => setTipo(event.target.value)}
+                  disabled={loading || saving || actualizandoId !== null}
+                  className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                >
+                  {TIPOS_EGRESO.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
                 Valor
                 <span className="relative block">
@@ -748,7 +741,7 @@ export default function EgresosCreditek() {
               <button
                 type="submit"
                 disabled={saving || loading || actualizandoId !== null}
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2 lg:col-span-2 ${seccion.buttonTone}`}
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2 lg:col-span-12 ${seccion.buttonTone}`}
               >
                 {saving ? (
                   <RefreshCw size={17} className="animate-spin" />
@@ -894,8 +887,9 @@ export default function EgresosCreditek() {
               {[0, 1, 2, 3].map((item) => (
                 <div
                   key={item}
-                  className="grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-7"
+                  className="grid animate-pulse gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-8"
                 >
+                  <span className="h-4 rounded bg-slate-100" />
                   <span className="h-4 rounded bg-slate-100" />
                   <span className="h-4 rounded bg-slate-100" />
                   <span className="h-4 rounded bg-slate-100" />
@@ -949,6 +943,7 @@ export default function EgresosCreditek() {
             <div>
               <div className={`hidden gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[11px] font-semibold uppercase text-slate-500 xl:grid ${historialGridClass}`}>
                 <span>Usuario</span>
+                <span>Tipo</span>
                 <span className="text-right">Valor</span>
                 {seccionRequiereFecha && <span>Fecha sanción</span>}
                 <span>Estado</span>
@@ -1006,6 +1001,12 @@ export default function EgresosCreditek() {
                             : "Contrato no disponible"}
                         </p>
                       )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Tipo</p>
+                      <span className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-bold uppercase text-slate-700">
+                        <span className="truncate">{tipoLabel(registro.tipo)}</span>
+                      </span>
                     </div>
                     <div className="min-w-0 sm:text-right">
                       <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Valor</p>
@@ -1196,6 +1197,31 @@ export default function EgresosCreditek() {
                     {usuarios.map((usuario) => (
                       <option key={usuario.id} value={usuario.id}>
                         {usuario.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Tipo
+                  <select
+                    value={edicion.tipo}
+                    onChange={(event) =>
+                      setEdicion((actual) => ({
+                        ...actual,
+                        tipo: event.target.value,
+                      }))
+                    }
+                    disabled={actualizandoId !== null || editandoControlFinanciero}
+                    className={`h-10 rounded-md border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${
+                      editandoControlFinanciero
+                        ? "bg-slate-50 text-slate-500"
+                        : "bg-white text-slate-900"
+                    }`}
+                  >
+                    {TIPOS_EGRESO.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
                       </option>
                     ))}
                   </select>

@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { useLayoutEffect, useRef, useState } from "react";
 import { POSTER_LAYOUT } from "./posterLayout";
 
 const POSTER_SIZE_PX = 1100;
@@ -12,10 +13,29 @@ const obtenerEquipo = (equipos, nombre) =>
   equipos.find((equipo) => equipo.nombre === nombre) || {
     nombre,
     total: 0,
+    totalDia: 0,
     vendedores: [],
   };
 
 function BloqueVendedores({ equipo, posicion }) {
+  const listaRef = useRef(null);
+  const [altoFila, setAltoFila] = useState(31);
+
+  useLayoutEffect(() => {
+    const lista = listaRef.current;
+    if (!lista) return undefined;
+    const ajustarFilas = () => {
+      setAltoFila(Math.min(31, lista.clientHeight / equipo.vendedores.length));
+    };
+    ajustarFilas();
+    const observer = new ResizeObserver(ajustarFilas);
+    observer.observe(lista);
+    return () => observer.disconnect();
+  }, [equipo.vendedores.length]);
+
+  const tamanoNombre = Math.min(parseFloat(VENDEDOR_NOMBRE_FONT_SIZE), altoFila / 1.12);
+  const tamanoNumero = Math.min(parseFloat(VENDEDOR_NUMERO_FONT_SIZE), altoFila / 1.12);
+
   return (
     <div
       data-copa-bloque-vendedores
@@ -38,7 +58,7 @@ function BloqueVendedores({ equipo, posicion }) {
       }}
     >
       <div
-        className="whitespace-nowrap uppercase"
+        className="shrink-0 whitespace-nowrap uppercase"
         style={{
           fontFamily: COPA_FONT_FAMILY,
           fontSize: AGENCIA_FONT_SIZE,
@@ -49,45 +69,47 @@ function BloqueVendedores({ equipo, posicion }) {
         {equipo.nombre}
       </div>
       {equipo.vendedores.length > 0 && (
-        equipo.vendedores.map((vendedor) => (
-          <div
-            key={vendedor.usuarioId}
-            data-copa-fila-vendedor
-            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center overflow-visible"
-            style={{
-              columnGap: "16px",
-              minHeight: "31px",
-              fontFamily: COPA_FONT_FAMILY,
-              fontSize: VENDEDOR_NOMBRE_FONT_SIZE,
-              lineHeight: 1.05,
-              textTransform: "uppercase",
-            }}
-          >
-            <span
-              data-copa-nombre-vendedor
-              className="min-w-0 whitespace-nowrap"
+        <div ref={listaRef} className="min-h-0 flex-1">
+          {equipo.vendedores.map((vendedor) => (
+            <div
+              key={vendedor.usuarioId}
+              data-copa-fila-vendedor
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center overflow-visible"
               style={{
+                columnGap: "16px",
+                height: `${altoFila}px`,
                 fontFamily: COPA_FONT_FAMILY,
-                fontSize: VENDEDOR_NOMBRE_FONT_SIZE,
+                fontSize: `${tamanoNombre}px`,
                 lineHeight: 1.05,
-                overflow: "visible",
+                textTransform: "uppercase",
               }}
             >
-              {vendedor.nombreMostrado}
-            </span>
-            <span
-              data-copa-resultado-vendedor
-              className="whitespace-nowrap tabular-nums"
-              style={{
-                fontFamily: COPA_FONT_FAMILY,
-                fontSize: VENDEDOR_NUMERO_FONT_SIZE,
-                lineHeight: 1.05,
-              }}
-            >
-              {vendedor.ventasMostradas} / {vendedor.meta}
-            </span>
-          </div>
-        ))
+              <span
+                data-copa-nombre-vendedor
+                className="min-w-0 whitespace-nowrap"
+                style={{
+                  fontFamily: COPA_FONT_FAMILY,
+                  fontSize: `${tamanoNombre}px`,
+                  lineHeight: 1.05,
+                  overflow: "visible",
+                }}
+              >
+                {vendedor.nombreMostrado}
+              </span>
+              <span
+                data-copa-resultado-vendedor
+                className="whitespace-nowrap tabular-nums"
+                style={{
+                  fontFamily: COPA_FONT_FAMILY,
+                  fontSize: `${tamanoNumero}px`,
+                  lineHeight: 1.05,
+                }}
+              >
+                {vendedor.ventasMostradas} / {vendedor.meta}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -129,7 +151,7 @@ export default function CopaCreditekMarcador({ copa, posterRef, onImageReady }) 
                 textShadow: "0 3px 3px rgba(0,0,0,.95)",
               }}
             >
-              {equipo.total}
+              {equipo.total ?? 0}
             </div>
           );
         })}

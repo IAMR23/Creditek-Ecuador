@@ -89,6 +89,8 @@ export const ROUTE_PERMISSIONS = {
   "/contabilidad/pagos-comisiones": ["Contabilidad", "Administracion"],
   "/contabilidad/descuentos-decimos": ["Contabilidad", "Administracion"],
   "/contabilidad/egresos-creditek": ["Contabilidad", "Administracion"],
+  "/contabilidad/roles-creditek-nomina": ["Contabilidad", "Administracion"],
+  "/contabilidad/rol-descuentos-creditek": ["Contabilidad", "Administracion"],
   "/contabilidad/roles-creditek-resumen": ["Contabilidad", "Administracion"],
   "/contabilidad/sanciones-configuracion": ["Contabilidad", "Administracion"],
   "/contabilidad/sanciones-ventas": ["Contabilidad", "Administracion"],

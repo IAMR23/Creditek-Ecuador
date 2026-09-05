@@ -1448,6 +1448,16 @@ const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
     {
       type: Sequelize.STRING(30),
       allowNull: false,
+      defaultValue: "ANTICIPOS",
+    },
+  );
+  await addColumnIfMissing(
+    queryInterface,
+    "egresos_creditek_entradas",
+    "tipo",
+    {
+      type: Sequelize.STRING(30),
+      allowNull: false,
       defaultValue: "ENTRADAS",
     },
   );
@@ -1485,16 +1495,61 @@ const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
   );
   await sequelize.query(`
     UPDATE egresos_creditek_entradas
-    SET seccion = COALESCE(seccion, 'ENTRADAS'),
+    SET tipo = COALESCE(
+          CASE
+            WHEN tipo IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS')
+              THEN tipo
+            ELSE NULL
+          END,
+          CASE
+            WHEN seccion IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS')
+              THEN seccion
+            ELSE 'ENTRADAS'
+          END
+        ),
+        seccion = CASE
+          WHEN seccion IN ('PRESTAMOS', 'ANTICIPOS') THEN seccion
+          ELSE 'ANTICIPOS'
+        END,
         activo = COALESCE(activo, TRUE),
         "ultimaAccion" = COALESCE("ultimaAccion", 'CREADO')
     WHERE seccion IS NULL
+       OR seccion NOT IN ('PRESTAMOS', 'ANTICIPOS')
+       OR tipo IS NULL
+       OR tipo = ''
+       OR tipo NOT IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS')
        OR activo IS NULL
        OR "ultimaAccion" IS NULL;
   `);
   await sequelize.query(`
+    ALTER TABLE egresos_creditek_entradas
+    DROP CONSTRAINT IF EXISTS egresos_creditek_entradas_seccion_check;
+  `);
+  await sequelize.query(`
+    ALTER TABLE egresos_creditek_entradas
+    ADD CONSTRAINT egresos_creditek_entradas_seccion_check
+    CHECK (seccion IN ('PRESTAMOS', 'ANTICIPOS'));
+  `).catch((error) => {
+    if (!/already exists/i.test(error.message || "")) throw error;
+  });
+  await sequelize.query(`
+    ALTER TABLE egresos_creditek_entradas
+    DROP CONSTRAINT IF EXISTS egresos_creditek_entradas_tipo_check;
+  `);
+  await sequelize.query(`
+    ALTER TABLE egresos_creditek_entradas
+    ADD CONSTRAINT egresos_creditek_entradas_tipo_check
+    CHECK (tipo IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS'));
+  `).catch((error) => {
+    if (!/already exists/i.test(error.message || "")) throw error;
+  });
+  await sequelize.query(`
     CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_seccion_idx
     ON egresos_creditek_entradas (seccion);
+  `);
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_tipo_idx
+    ON egresos_creditek_entradas (tipo);
   `);
   await sequelize.query(`
     CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_fecha_idx

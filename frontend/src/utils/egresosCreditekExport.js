@@ -19,14 +19,19 @@ const FORMATO_FECHA = "yyyy-mm-dd";
 const FORMATO_FECHA_HORA = "yyyy-mm-dd hh:mm";
 
 export const SECCIONES_REPORTE_EGRESOS = [
-  { id: "entradas", label: "Entradas", color: "FF059669" },
-  { id: "cajas", label: "Cajas", color: "FF2563EB" },
-  { id: "transferencias", label: "Transferencias", color: "FF0891B2" },
-  { id: "descuentos", label: "Descuentos", color: "FFD97706" },
-  { id: "jefes", label: "Jefes", color: "FF7C3AED" },
-  { id: "multas_facturacion", label: "Multas facturacion", color: "FFE11D48" },
-  { id: "otros", label: "Otros", color: "FF334155" },
+  { id: "prestamos", label: "Prestamos", color: "FF4F46E5" },
+  { id: "anticipos", label: "Anticipos", color: "FF059669" },
 ];
+
+const TIPOS_EGRESO = {
+  ENTRADAS: "Entradas",
+  CAJAS: "Cajas",
+  TRANSFERENCIAS: "Transferencias",
+  DESCUENTOS: "Descuentos",
+  JEFES: "Jefes",
+  MULTAS_FACTURACION: "Facturacion",
+  OTROS: "Otros",
+};
 
 const texto = (value, fallback = "") => {
   const normalizado = value == null ? "" : String(value).trim();
@@ -57,10 +62,11 @@ const nombreUsuario = (registro) =>
     registro?.usuarioId ? `Usuario #${registro.usuarioId}` : "Sin responsable",
   );
 
-const fechaBase = (seccionId, registro) =>
-  seccionId === "jefes" && registro?.fecha
-    ? registro.fecha
-    : registro?.fecha || registro?.createdAt;
+const tipoRegistro = (registro) =>
+  TIPOS_EGRESO[String(registro?.tipo || "").toUpperCase()] ||
+  texto(registro?.tipo, "Entradas");
+
+const fechaBase = (registro) => registro?.fecha || registro?.createdAt;
 
 const fechaTexto = (value, incluirHora = false) => {
   if (!value) return "-";
@@ -185,43 +191,23 @@ const aplicarTarjetaResumen = (
   return valueCell;
 };
 
-const columnasExcel = (seccionId) => {
-  if (seccionId === "cajas") {
-    return [
-      { label: "Fecha sancion", key: "fecha", width: 17, date: true },
-      { label: "Origen", key: "origen", width: 20 },
-      { label: "Contrato", key: "contrato", width: 18 },
-      { label: "Cliente", key: "cliente", width: 30 },
-      { label: "Vendedor", key: "vendedor", width: 24 },
-      { label: "Modelo", key: "modelo", width: 23 },
-      { label: "Responsable", key: "usuario", width: 25 },
-      { label: "Valor", key: "valor", width: 15, currency: true },
-      { label: "Estado", key: "estado", width: 16 },
-      { label: "Incluido en total", key: "incluido", width: 18 },
-      { label: "Observacion", key: "observacion", width: 40 },
-      { label: "Registrado por", key: "registradoPor", width: 23 },
-      { label: "Creado", key: "creado", width: 20, dateTime: true },
-      { label: "Actualizado por", key: "actualizadoPor", width: 23 },
-      { label: "Actualizado", key: "actualizado", width: 20, dateTime: true },
-    ];
-  }
+const columnasExcel = () => [
+  { label: "Tipo", key: "tipo", width: 18 },
+  { label: "Fecha sancion", key: "fecha", width: 17, date: true },
+  { label: "Usuario", key: "usuario", width: 28 },
+  { label: "Valor", key: "valor", width: 15, currency: true },
+  { label: "Estado", key: "estado", width: 15 },
+  { label: "Incluido en total", key: "incluido", width: 18 },
+  { label: "Observacion", key: "observacion", width: 45 },
+  { label: "Registrado por", key: "registradoPor", width: 24 },
+  { label: "Creado", key: "creado", width: 20, dateTime: true },
+  { label: "Actualizado por", key: "actualizadoPor", width: 24 },
+  { label: "Actualizado", key: "actualizado", width: 20, dateTime: true },
+];
 
-  return [
-    { label: "Fecha sancion", key: "fecha", width: 17, date: true },
-    { label: "Usuario", key: "usuario", width: 28 },
-    { label: "Valor", key: "valor", width: 15, currency: true },
-    { label: "Estado", key: "estado", width: 15 },
-    { label: "Incluido en total", key: "incluido", width: 18 },
-    { label: "Observacion", key: "observacion", width: 45 },
-    { label: "Registrado por", key: "registradoPor", width: 24 },
-    { label: "Creado", key: "creado", width: 20, dateTime: true },
-    { label: "Actualizado por", key: "actualizadoPor", width: 24 },
-    { label: "Actualizado", key: "actualizado", width: 20, dateTime: true },
-  ];
-};
-
-const filaExcel = (seccionId, registro) => ({
-  fecha: fechaExcel(fechaBase(seccionId, registro)),
+const filaExcel = (registro) => ({
+  tipo: tipoRegistro(registro),
+  fecha: fechaExcel(fechaBase(registro)),
   origen: origenRegistro(registro),
   contrato: texto(registro?.contrato),
   cliente: texto(registro?.cliente),
@@ -239,7 +225,7 @@ const filaExcel = (seccionId, registro) => ({
 });
 
 const agregarHoja = (workbook, seccion, registros) => {
-  const columnas = columnasExcel(seccion.id);
+  const columnas = columnasExcel();
   const resumen = resumenRegistros(registros);
   const worksheet = workbook.addWorksheet(seccion.label, {
     properties: { tabColor: { argb: seccion.color } },
@@ -334,7 +320,7 @@ const agregarHoja = (workbook, seccion, registros) => {
   });
 
   registros.forEach((registro, index) => {
-    const valores = filaExcel(seccion.id, registro);
+    const valores = filaExcel(registro);
     const row = worksheet.addRow(columnas.map((columna) => valores[columna.key]));
     row.height = texto(registro?.observacion).length > 70 ? 34 : 24;
     row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
@@ -480,7 +466,7 @@ const crearLibroConSecciones = (datosSecciones, secciones) => {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "RVE - Egresos Creditek";
   workbook.company = "Creditek Ecuador";
-  workbook.subject = "Reporte de egresos por rubro";
+  workbook.subject = "Reporte de egresos por prestamos y anticipos";
   workbook.category = "Contabilidad";
   workbook.created = new Date();
   workbook.modified = new Date();
@@ -534,7 +520,7 @@ export const crearLibroRubroEgresosCreditek = (datosSeccion) => {
   const seccion = SECCIONES_REPORTE_EGRESOS.find(
     (item) => item.id === datosSeccion?.id,
   );
-  if (!seccion) throw new Error("El rubro solicitado no es valido.");
+  if (!seccion) throw new Error("La seccion solicitada no es valida.");
 
   return crearLibroConSecciones(
     [
@@ -562,22 +548,10 @@ export const descargarExcelRubroEgresosCreditek = async (datosSeccion) => {
   );
 };
 
-const filasPdf = (seccionId, registros) => {
-  if (seccionId === "cajas") {
-    return registros.map((registro) => [
-      fechaTexto(fechaBase(seccionId, registro)),
-      origenRegistro(registro),
-      texto(registro?.contrato, "-"),
-      texto(registro?.cliente, "-"),
-      nombreUsuario(registro),
-      `$${numero(registro?.valor).toFixed(2)}`,
-      estadoRegistro(registro),
-      texto(registro?.observacion, "-"),
-    ]);
-  }
-
+const filasPdf = (registros) => {
   return registros.map((registro) => [
-    fechaTexto(fechaBase(seccionId, registro)),
+    tipoRegistro(registro),
+    fechaTexto(fechaBase(registro)),
     nombreUsuario(registro),
     `$${numero(registro?.valor).toFixed(2)}`,
     estadoRegistro(registro),
@@ -587,10 +561,8 @@ const filasPdf = (seccionId, registros) => {
   ]);
 };
 
-const encabezadosPdf = (seccionId) =>
-  seccionId === "cajas"
-    ? [["Fecha sancion", "Origen", "Contrato", "Cliente", "Responsable", "Valor", "Estado", "Observacion"]]
-    : [["Fecha sancion", "Usuario", "Valor", "Estado", "Observacion", "Registrado por", "Actualizado"]];
+const encabezadosPdf = () =>
+  [["Tipo", "Fecha sancion", "Usuario", "Valor", "Estado", "Observacion", "Registrado por", "Actualizado"]];
 
 const dibujarEncabezadoPdf = (doc, seccion, registros) => {
   const ancho = doc.internal.pageSize.getWidth();
@@ -629,12 +601,12 @@ export const crearPdfEgresosCreditek = (datosSecciones) => {
     autoTable(doc, {
       startY: 30,
       margin: { top: 30, right: 10, bottom: 13, left: 10 },
-      head: encabezadosPdf(seccion.id),
-      body: filasPdf(seccion.id, registros),
+      head: encabezadosPdf(),
+      body: filasPdf(registros),
       theme: "striped",
       styles: {
         font: "helvetica",
-        fontSize: seccion.id === "cajas" ? 7 : 8,
+        fontSize: 8,
         cellPadding: 1.8,
         overflow: "linebreak",
         valign: "middle",
@@ -647,26 +619,16 @@ export const crearPdfEgresosCreditek = (datosSecciones) => {
         halign: "center",
       },
       alternateRowStyles: { fillColor: [241, 245, 249] },
-      columnStyles: seccion.id === "cajas"
-        ? {
-            0: { cellWidth: 21 },
-            1: { cellWidth: 24 },
-            2: { cellWidth: 24 },
-            3: { cellWidth: 42 },
-            4: { cellWidth: 40 },
-            5: { cellWidth: 20, halign: "right" },
-            6: { cellWidth: 22, halign: "center" },
-            7: { cellWidth: "auto" },
-          }
-        : {
-            0: { cellWidth: 24 },
-            1: { cellWidth: 42 },
-            2: { cellWidth: 23, halign: "right" },
-            3: { cellWidth: 22, halign: "center" },
-            4: { cellWidth: "auto" },
-            5: { cellWidth: 40 },
-            6: { cellWidth: 34 },
-          },
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 24 },
+        2: { cellWidth: 42 },
+        3: { cellWidth: 23, halign: "right" },
+        4: { cellWidth: 22, halign: "center" },
+        5: { cellWidth: "auto" },
+        6: { cellWidth: 36 },
+        7: { cellWidth: 34 },
+      },
       didDrawPage: () => dibujarEncabezadoPdf(doc, seccion, registros),
     });
   });

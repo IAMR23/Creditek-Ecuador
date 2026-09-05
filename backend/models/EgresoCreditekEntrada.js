@@ -2,6 +2,11 @@ const { DataTypes } = require("sequelize");
 const { sequelize } = require("../config/db");
 
 const SECCIONES = [
+  "PRESTAMOS",
+  "ANTICIPOS",
+];
+
+const TIPOS_EGRESO = [
   "ENTRADAS",
   "CAJAS",
   "TRANSFERENCIAS",
@@ -42,8 +47,14 @@ const EgresoCreditekEntrada = sequelize.define(
     seccion: {
       type: DataTypes.STRING(30),
       allowNull: false,
-      defaultValue: "ENTRADAS",
+      defaultValue: "ANTICIPOS",
       validate: { isIn: [SECCIONES] },
+    },
+    tipo: {
+      type: DataTypes.STRING(30),
+      allowNull: false,
+      defaultValue: "ENTRADAS",
+      validate: { isIn: [TIPOS_EGRESO] },
     },
     activo: {
       type: DataTypes.BOOLEAN,
@@ -89,10 +100,15 @@ const EgresoCreditekEntrada = sequelize.define(
         name: "egresos_creditek_entradas_fecha_idx",
         fields: ["fecha"],
       },
+      {
+        name: "egresos_creditek_entradas_tipo_idx",
+        fields: ["tipo"],
+      },
     ],
   },
 );
 
 EgresoCreditekEntrada.SECCIONES = SECCIONES;
+EgresoCreditekEntrada.TIPOS_EGRESO = TIPOS_EGRESO;
 
 module.exports = EgresoCreditekEntrada;

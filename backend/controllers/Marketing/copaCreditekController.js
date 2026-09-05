@@ -162,31 +162,12 @@ exports.actualizarMeta = async (req, res) => {
   }
 };
 
-exports.actualizarVentasManual = async (req, res) => {
-  try {
-    const usuarioId = await asegurarVendedor(req.params.usuarioId);
-    const { fechaInicio, fechaFin } = obtenerPeriodoValido(req.body);
-    const ventasManual = normalizarEnteroNoNegativo(
-      req.body.ventasManual,
-      "Las ventas manuales",
-    );
-    if (!ventasManual.valido) {
-      return res
-        .status(400)
-        .json({ ok: false, message: ventasManual.mensaje });
-    }
-
-    const semana = await obtenerOCrearSemana(usuarioId, fechaInicio, fechaFin);
-    await semana.update({ ventasManual: ventasManual.valor });
-    return res.json({ ok: true, semana });
-  } catch (error) {
-    return manejarError(
-      res,
-      error,
-      "No se pudo guardar el valor manual de ventas.",
-    );
-  }
-};
+// Mantener la ruta para clientes antiguos sin permitir nuevos ajustes.
+exports.actualizarVentasManual = (req, res) =>
+  res.status(400).json({
+    ok: false,
+    message: "Las ventas de Copa se calculan autom?ticamente seg?n las fechas seleccionadas.",
+  });
 
 exports.restaurarVentasAutomaticas = async (req, res) => {
   try {

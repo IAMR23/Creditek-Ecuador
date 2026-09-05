@@ -6,6 +6,9 @@ const ControlFinancieroConciliacionCaja = require(
 );
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
+const { NominaBeneficio } = require("../models/NominaBeneficio");
+const NominaEmpleado = require("../models/NominaEmpleado");
+const RolPago = require("../models/RolPago");
 const RolCreditekAjuste = require("../models/RolCreditekAjuste");
 const Usuario = require("../models/Usuario");
 const pagosComisionesService = require("./pagosComisionesService");
@@ -164,6 +167,44 @@ const construirIngresosComisiones = (reporteComisiones) => {
     .sort((left, right) => left.nombre.localeCompare(right.nombre, "es"));
 };
 
+const obtenerNominaPrincipal = (usuario) => {
+  const nominas = Array.isArray(usuario?.nominaEmpleados)
+    ? usuario.nominaEmpleados
+    : [];
+  return (
+    nominas.find((nomina) => String(nomina?.estado || "").toUpperCase() === "ACTIVO") ||
+    nominas[0] ||
+    null
+  );
+};
+
+const obtenerDatosPagoUsuario = (usuario, ingreso) => {
+  const nomina = obtenerNominaPrincipal(usuario);
+  const rolPago = nomina?.rolPago || usuario?.rolPago || null;
+  const sueldoBase = rolPago
+    ? rolPago.sueldoBase
+    : nomina?.sueldo;
+  const sueldoExtra = rolPago ? rolPago.sueldoExtra : 0;
+  const fondoReservaActivo = Array.isArray(nomina?.beneficios)
+    ? nomina.beneficios.some(
+        (beneficio) =>
+          beneficio?.tipoBeneficio === "FONDOS_RESERVA" &&
+          beneficio?.activo === true,
+      )
+    : false;
+
+  return {
+    cedula: usuario?.cedula || "",
+    fechaIngreso: usuario?.fechaIngreso || null,
+    fechaSalida: usuario?.fechaSalida || null,
+    cargo: usuario?.rolPago?.cargo || rolPago?.cargo || nomina?.cargo || ingreso?.cargo || "",
+    rolPagoId: rolPago?.id || nomina?.rolPagoId || usuario?.rolPagoId || null,
+    rolPagoSueldoBase: redondear(sueldoBase),
+    rolPagoSueldoExtra: redondear(sueldoExtra),
+    fondoReservaActivo,
+  };
+};
+
 const serializarAjuste = (row) => {
   const value = typeof row?.toJSON === "function" ? row.toJSON() : row || {};
   return {
@@ -247,7 +288,44 @@ const obtenerResumen = async (periodoValue) => {
     await Promise.all([
       Usuario.findAll({
         where: { activo: true },
-        attributes: ["id", "nombre", "activo"],
+        attributes: [
+          "id",
+          "cedula",
+          "nombre",
+          "activo",
+          "fechaIngreso",
+          "fechaSalida",
+          "rolPagoId",
+        ],
+        include: [
+          {
+            model: RolPago,
+            as: "rolPago",
+            attributes: ["id", "cargo", "sueldoBase", "sueldoExtra"],
+            required: false,
+          },
+          {
+            model: NominaEmpleado,
+            as: "nominaEmpleados",
+            attributes: ["id", "rolPagoId", "sueldo", "cargo", "estado"],
+            required: false,
+            where: { estado: "ACTIVO" },
+            include: [
+              {
+                model: RolPago,
+                as: "rolPago",
+                attributes: ["id", "cargo", "sueldoBase", "sueldoExtra"],
+                required: false,
+              },
+              {
+                model: NominaBeneficio,
+                as: "beneficios",
+                attributes: ["tipoBeneficio", "activo"],
+                required: false,
+              },
+            ],
+          },
+        ],
         order: [["nombre", "ASC"], ["id", "ASC"]],
       }),
       EgresoCreditekEntrada.findAll({
@@ -261,7 +339,7 @@ const obtenerResumen = async (periodoValue) => {
             },
           ],
         },
-        attributes: ["usuarioId", "seccion", "valor"],
+        attributes: ["usuarioId", "seccion", "tipo", "valor"],
       }),
       ControlFinancieroRegistro.findAll({
         where: {
@@ -301,7 +379,9 @@ const obtenerResumen = async (periodoValue) => {
     OTROS: "otros",
   };
   egresos.forEach((row) => {
-    const campo = camposSeccion[String(row.seccion || "").toUpperCase()];
+    const campo = camposSeccion[
+      String(row.tipo || row.seccion || "").toUpperCase()
+    ];
     if (campo) acumular(valoresPorUsuario, row.usuarioId, campo, row.valor);
   });
   const cajasControl = await filtrarCajasNoEnCierre(cajasControlValues);
@@ -324,6 +404,9 @@ const obtenerResumen = async (periodoValue) => {
     );
   });
   const ingresos = construirIngresosComisiones(reporteComisiones);
+  const ingresosPorUsuario = new Map(
+    ingresos.map((row) => [Number(row.usuarioId), row]),
+  );
   ingresos.forEach((row) => {
     acumular(
       valoresPorUsuario,
@@ -392,6 +475,7 @@ const obtenerResumen = async (periodoValue) => {
       usuarioId: Number(usuario.id),
       nombre: usuario.nombre || `Usuario #${usuario.id}`,
       usuarioActivo: usuario.activo !== false,
+      ...obtenerDatosPagoUsuario(usuario, ingresosPorUsuario.get(Number(usuario.id))),
       ...valores,
       ...Object.fromEntries(
         CAMPOS_CALCULADOS.map((campo) => [

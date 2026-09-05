@@ -19,8 +19,6 @@ const crearBorradores = (vendedores) =>
         equipoCopa: vendedor.equipoCopa || "",
         mostrarEnMarcador: vendedor.mostrarEnMarcador !== false,
         meta: String(vendedor.meta ?? 0),
-        ventasManual:
-          vendedor.ventasManual === null ? "" : String(vendedor.ventasManual),
       },
     ]),
   );
@@ -32,7 +30,6 @@ export default function CopaCreditekConfiguracion({
   accionesDeshabilitadas,
   onGuardar,
   onGuardarTodos,
-  onRestaurarAutomatico,
 }) {
   const [borradores, setBorradores] = useState(() => crearBorradores(vendedores));
   const [errorLocal, setErrorLocal] = useState("");
@@ -80,20 +77,10 @@ export default function CopaCreditekConfiguracion({
   const validarBorrador = (vendedor) => {
     const valores = borradores[vendedor.usuarioId];
     const meta = Number(valores.meta);
-    const ventasManual =
-      valores.ventasManual === "" ? null : Number(valores.ventasManual);
 
     if (!Number.isSafeInteger(meta) || meta < 0) {
       return {
         error: `${vendedor.nombreCorto}: la meta debe ser un número entero mayor o igual a 0.`,
-      };
-    }
-    if (
-      ventasManual !== null &&
-      (!Number.isSafeInteger(ventasManual) || ventasManual < 0)
-    ) {
-      return {
-        error: `${vendedor.nombreCorto}: las ventas manuales deben ser un número entero mayor o igual a 0.`,
       };
     }
 
@@ -101,7 +88,6 @@ export default function CopaCreditekConfiguracion({
       valores: {
         ...valores,
         meta,
-        ventasManual: ventasManual === null ? "" : ventasManual,
       },
     };
   };
@@ -132,10 +118,6 @@ export default function CopaCreditekConfiguracion({
       filas.push({
         usuarioId: vendedor.usuarioId,
         ...validacion.valores,
-        ventasManual:
-          validacion.valores.ventasManual === ""
-            ? null
-            : validacion.valores.ventasManual,
       });
     }
 
@@ -145,11 +127,6 @@ export default function CopaCreditekConfiguracion({
     } catch {
       // El contenedor muestra el error devuelto por la operación transaccional.
     }
-  };
-
-  const restaurar = async (vendedor) => {
-    setErrorLocal("");
-    await onRestaurarAutomatico(vendedor);
   };
 
   if (vendedores.length === 0) {
@@ -164,7 +141,8 @@ export default function CopaCreditekConfiguracion({
     <div className="space-y-3">
       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         La meta, alias, equipo y visibilidad se conservan aunque cambies fechas.
-        Las ventas manuales solo cambian este marcador y este periodo.
+        Las ventas se calculan automáticamente: un punto por cada detalle de
+        una venta activa dentro del rango de fechas seleccionado.
       </div>
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end sm:justify-between">
         <div className="flex w-full max-w-4xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -331,27 +309,10 @@ export default function CopaCreditekConfiguracion({
                 />
                 <div>
                   <p className="text-xs text-slate-600">
-                    Calculadas: <strong>{vendedor.ventasCalculadas}</strong>
+                    Ventas: <strong>{vendedor.ventasCalculadas}</strong>
                   </p>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={valores.ventasManual ?? ""}
-                    placeholder="Automático"
-                    onChange={(event) =>
-                      actualizar(
-                        vendedor.usuarioId,
-                        "ventasManual",
-                        event.target.value,
-                      )
-                    }
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 tabular-nums"
-                  />
                   <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {vendedor.ventasManual === null
-                      ? "Automático"
-                      : "Modificado manualmente"}
+                    Automático según las fechas seleccionadas
                   </p>
                 </div>
                 <div className="flex w-36 flex-col gap-2">
@@ -362,18 +323,6 @@ export default function CopaCreditekConfiguracion({
                     className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:opacity-50"
                   >
                     {guardando ? "Guardando..." : "Guardar"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={
-                      guardandoId !== null ||
-                      accionesDeshabilitadas ||
-                      vendedor.ventasManual === null
-                    }
-                    onClick={() => restaurar(vendedor)}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                  >
-                    Usar automático
                   </button>
                 </div>
               </div>

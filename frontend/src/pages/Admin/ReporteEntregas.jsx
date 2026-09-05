@@ -162,12 +162,15 @@ export default function DashboardEntregas() {
           transition={{ duration: 0.45 }}
           className="grid grid-cols-1 lg:grid-cols-4 gap-6"
         >
-          {/* TOTAL */}
-          <div className="col-span-1 bg-white rounded-2xl shadow p-6 border border-gray-100">
-            <p className="text-sm text-gray-500">Total del periodo</p>
-            <p className="mt-2 text-4xl font-bold text-gray-900">
-              {data.total || 0}
+          {/* ENTREGAS COMPLETADAS */}
+          <div className="col-span-1 bg-white rounded-2xl shadow p-7 border border-green-100 border-l-4 border-l-green-500">
+            <p className="text-sm font-medium text-green-700">
+              Entregas completadas
             </p>
+            <p className="mt-3 text-6xl font-bold text-green-600">
+              {estados.entregado || 0}
+            </p>
+            <p className="mt-2 text-sm text-gray-500">Estado: Entregado</p>
 
             <p className="mt-3 text-xs text-gray-400">
               Rango:{" "}
@@ -182,7 +185,7 @@ export default function DashboardEntregas() {
           </div>
 
           {/* CARDS */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 col-span-1 lg:col-span-3 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 col-span-1 lg:col-span-3 gap-6">
             <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-amber-500">
               <p className="text-xs text-gray-500">
                 Pendientes - Pedido creado
@@ -196,13 +199,6 @@ export default function DashboardEntregas() {
               <p className="text-xs text-gray-500">En Tránsito - En ruta</p>
               <p className="mt-3 text-2xl font-semibold text-blue-600">
                 {estados.transito || 0}
-              </p>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow p-5 border-l-4 border-green-500">
-              <p className="text-xs text-gray-500">Entregadas - Completadas</p>
-              <p className="mt-3 text-2xl font-semibold text-green-600">
-                {estados.entregado || 0}
               </p>
             </div>
 

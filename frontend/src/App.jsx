@@ -108,6 +108,8 @@ import MetaMinimaSinMulta from "./pages/Contabilidad/MetaMinimaSinMulta";
 import PagosComisiones from "./pages/Contabilidad/PagosComisiones";
 import DescuentosDecimos from "./pages/Contabilidad/DescuentosDecimos";
 import EgresosCreditek from "./pages/Contabilidad/EgresosCreditek";
+import RolesCreditekNomina from "./pages/Contabilidad/RolesCreditekNomina";
+import RolDescuentosCreditek from "./pages/Contabilidad/RolDescuentosCreditek";
 import RolesCreditekResumen from "./pages/Contabilidad/RolesCreditekResumen";
 import SancionesConfiguracion from "./pages/Contabilidad/SancionesConfiguracion";
 import SancionesVentas from "./pages/Contabilidad/SancionesVentas";
@@ -488,6 +490,17 @@ function App() {
                     <EgresosCreditek />,
                     "/contabilidad/egresos-creditek",
                   )}
+                />
+                <Route
+                  path="contabilidad/roles-creditek-nomina"
+                  element={protect(
+                    <RolesCreditekNomina />,
+                    "/contabilidad/roles-creditek-nomina",
+                  )}
+                />
+                <Route
+                  path="contabilidad/rol-descuentos-creditek"
+                  element={protect(<RolDescuentosCreditek />, "/contabilidad/rol-descuentos-creditek")}
                 />
                 <Route
                   path="contabilidad/roles-creditek-resumen"
