@@ -1,4 +1,6 @@
 const {
+  finalizarVendedor,
+  normalizarCantidadVendedoresComision,
   isCargoPagoComisionable,
   buildPersonalSellerView,
   getCommissionablePaidPosition,
@@ -978,6 +980,7 @@ describe("pagosComisionesService", () => {
       11,
     ]);
     expect(map.get("10:2026-07-09")).toEqual({
+      cantidadVendedoresComision: null,
       id: 1,
       jefeComercialId: 10,
       semanaInicio: "2026-07-09",
@@ -1246,4 +1249,148 @@ describe("pagosComisionesService", () => {
     expect(isFutureCommercialWeek({ startDate: "2026-07-09" }, "2026-07-10")).toBe(false);
     expect(isFutureCommercialWeek({ startDate: "2026-07-16" }, "2026-07-10")).toBe(true);
   });
+});
+
+describe("bono mensual del jefe comercial", () => {
+  const calcular = (cantidad, configurado = true, supervisor = false, ventasSemanales = [50, 50, 50, 50]) => {
+    const weeks = [5, 12, 19, 26].map(day => ({
+      startDate: "2026-01-" + String(day).padStart(2, "0"),
+      endDate: day === 26 ? "2026-02-01" : "2026-01-" + String(day + 6).padStart(2, "0"),
+    }));
+    if (ventasSemanales.length === 5) weeks.push({ startDate: "2026-02-02", endDate: "2026-02-08" });
+    const jefe = {
+      usuarioId: 1, grupoComision: supervisor ? "SUPERVISOR CALL CENTER" : "JEFE COMERCIAL",
+      esJefeComercial: !supervisor, esSupervisorComercial: supervisor,
+      cantidadVendedoresPromedioJefe: cantidad,
+      cantidadVendedoresPromedioSupervisor: cantidad,
+      promedioJefeMensualConfigurado: configurado,
+      promedioSupervisorMensualConfigurado: configurado,
+      semanas: Object.fromEntries(weeks.map((week, index) => [week.startDate, {
+        venden: ventasSemanales[index], ventasParaPromedioAntiguedad: ventasSemanales[index], valorVendido: 1000, vendenParaBono: 10,
+        cantidadVendedoresBono: index + 1, cantidadVendedores: index + 1,
+      }])),
+      total: { venden: 0, valorVendido: 0, totalComisiones: 0, noCumpleMetas: 0, valorDescontar: 0 },
+    };
+    const rules = buildMonthlyRulesByGroup([
+      { grupo: "JEFE COMERCIAL", periodo: "BONO_MENSUAL", promedioPorVendedor: 10, bono: 100 },
+      { grupo: "JEFE COMERCIAL", periodo: "BONO_MENSUAL", promedioPorVendedor: 20, bono: 200 },
+    ], 4);
+    const reglasSupervisor = buildMonthlyRulesByGroup([
+      { grupo: "SUPERVISOR CALL CENTER", periodo: "BONO_MENSUAL", promedioPorVendedor: 10, bono: 60 },
+      { grupo: "SUPERVISOR CALL CENTER", periodo: "BONO_MENSUAL", promedioPorVendedor: 20, bono: 80 },
+    ], weeks.length);
+    const reglasSemanales = buildWeeklyRulesByGroup([
+      { grupo: "SUPERVISOR CALL CENTER", periodo: "COMISION_SEMANAL", unidadesVendidas: "1 EN ADELANTE", comisionPorEquipo: 2, porcentaje: null },
+      { grupo: "JEFE COMERCIAL", periodo: "COMISION_SEMANAL", unidadesVendidas: "1 EN ADELANTE", comisionPorEquipo: 3, porcentaje: null },
+    ]);
+    finalizarVendedor(jefe, weeks, supervisor ? reglasSemanales : {}, { ...rules, ...reglasSupervisor }, { byRole: {}, byCargo: {} }, new Map());
+    return jefe.resumenMensual;
+  };
+  test.each([true, false])("suma ventas de equipos semanales y usa divisor mensual con seleccion configurada %s", configurado => {
+    expect(calcular(5, configurado)).toMatchObject({
+      ventasConsideradasBono: 200,
+      promedioVentasPorJunior: 10,
+      totalVendedoresSemanas: null,
+      valorComisionMensual: 100,
+    });
+  });
+  test("suma 221 ventas de cinco equipos semanales y divide entre cinco semanas y tres vendedores", () => {
+    expect(calcular(3, true, false, [40, 50, 30, 60, 41])).toMatchObject({
+      ventasTvCelulaMensual: 221,
+      ventasConsideradasBono: 221,
+      promedioVentasPorJunior: 14.733,
+      cantidadVendedoresPromedioJefe: 3,
+    });
+  });
+  test("una semana sin ventas aporta cero sin reducir el numero de semanas", () => {
+    expect(calcular(3, true, false, [0, 50, 50, 50])).toMatchObject({
+      ventasTvCelulaMensual: 150,
+      ventasConsideradasBono: 150,
+      promedioVentasPorJunior: 12.5,
+    });
+  });
+  test("cambiar cantidad seleccionada cambia divisor pero conserva ventas", () => {
+    expect(calcular(2)).toMatchObject({ ventasConsideradasBono: 200, promedioVentasPorJunior: 25, valorComisionMensual: 200 });
+  });
+  test("sin vendedores seleccionados el promedio y bono son cero", () => {
+    expect(calcular(0)).toMatchObject({ promedioVentasPorJunior: 0, valorComisionMensual: 0 });
+  });
+  test.each([true, false])("supervisor usa divisor mensual y tarifas de Call Center con seleccion configurada %s", configurado => {
+    expect(calcular(5, configurado, true)).toMatchObject({
+      totalVendedoresSemanas: null, promedioVentasPorJunior: 10,
+      valorComisionSemanal: 400, valorComisionMensual: 60,
+      totalComisionesSemanaMensual: 460,
+    });
+  });
+  test("supervisor divide ventas semanales entre cinco semanas y tres vendedores", () => {
+    expect(calcular(3, true, true, [40, 50, 30, 60, 41])).toMatchObject({
+      ventasConsideradasBono: 221, promedioVentasPorJunior: 14.733,
+      valorComisionMensual: 60,
+    });
+  });
+  test("supervisor sin seleccionados no genera bono mensual", () => {
+    expect(calcular(0, true, true)).toMatchObject({
+      promedioVentasPorJunior: 0, valorComisionMensual: 0,
+    });
+  });
+});
+
+describe("cantidad para comision semanal", () => {
+  test.each([1, 2, 3, 4, 5])("valida cantidad %s", cantidad => {
+    expect(normalizarCantidadVendedoresComision(String(cantidad))).toBe(cantidad);
+  });
+  test.each([0, 6, -1, 1.5, "abc", true])("rechaza cantidad %s", cantidad => {
+    expect(() => normalizarCantidadVendedoresComision(cantidad)).toThrow();
+  });
+  test("automatico y recuperacion de seleccion persistida", () => {
+    expect(normalizarCantidadVendedoresComision(null)).toBeNull();
+    const map = buildWeeklyTeamsMap([{ jefeComercialId: 1, semanaInicio: "2026-01-05", vendedorIds: [2, 3], cantidadVendedoresComision: 5 }]);
+    expect([...map.values()][0]).toMatchObject({ vendedorIds: [2, 3], cantidadVendedoresComision: 5 });
+  });
+  test.each([false, true])("seleccion semanal usa tarifa del cargo sin alterar equipo ni promedio; supervisor %s", supervisor => {
+    const grupo = supervisor ? "SUPERVISOR CALL CENTER" : "JEFE COMERCIAL";
+    const weeks = [{ startDate: "2026-01-05", endDate: "2026-01-11" }, { startDate: "2026-01-12", endDate: "2026-01-18" }];
+    const lider = {
+      usuarioId: 1, grupoComision: grupo,
+      esJefeComercial: !supervisor, esSupervisorComercial: supervisor,
+      cantidadVendedoresPromedioJefe: 3, cantidadVendedoresPromedioSupervisor: 3,
+      semanas: Object.fromEntries(weeks.map((week, i) => [week.startDate, {
+        venden: 30, ventasParaPromedioAntiguedad: 30, valorVendido: 100, cantidadVendedores: 4,
+        cantidadVendedoresComision: i === 0 ? 2 : 5,
+      }])),
+      total: { venden: 0, valorVendido: 0, totalComisiones: 0, noCumpleMetas: 0, valorDescontar: 0 },
+    };
+    const rules = buildWeeklyRulesByGroup(
+      ["JEFE COMERCIAL", "SUPERVISOR CALL CENTER"].flatMap(cargo => [2, 4, 5].map(cantidad => ({
+        grupo: cargo, subgrupo: cantidad + " VENDEDORES", periodo: "COMISION_SEMANAL",
+        unidadesVendidas: "1 EN ADELANTE", comisionPorEquipo: cantidad * (cargo === "SUPERVISOR CALL CENTER" ? 2 : 1), porcentaje: null,
+      }))),
+    );
+    finalizarVendedor(lider, weeks, rules, {}, { byRole: {}, byCargo: {} }, new Map());
+    expect(lider.semanas[weeks[0].startDate].totalComisiones).toBe(supervisor ? 120 : 60);
+    expect(lider.semanas[weeks[1].startDate].totalComisiones).toBe(supervisor ? 300 : 150);
+    expect(lider.semanas[weeks[0].startDate].cantidadVendedores).toBe(4);
+    expect(lider.resumenMensual.promedioVentasPorJunior).toBe(10);
+    expect(lider.total.venden).toBe(60);
+  });
+});
+
+test.each([false, true])("antiguedad afecta solo bono mensual del lider; supervisor %s", supervisor => {
+  const grupo = supervisor ? "SUPERVISOR CALL CENTER" : "JEFE COMERCIAL";
+  const weeks = [{ startDate: "2026-08-06", endDate: "2026-08-12" }];
+  const crear = elegibles => ({
+    usuarioId: 1, grupoComision: grupo, esJefeComercial: !supervisor, esSupervisorComercial: supervisor,
+    cantidadVendedoresPromedioJefe: 2, cantidadVendedoresPromedioSupervisor: 2,
+    semanas: { "2026-08-06": { venden: 40, ventasParaPromedioAntiguedad: elegibles, valorVendido: 1000, cantidadVendedores: 4, cantidadVendedoresComision: 3 } },
+    total: { venden: 0, valorVendido: 0, totalComisiones: 0, noCumpleMetas: 0, valorDescontar: 0 },
+  });
+  const semanal = buildWeeklyRulesByGroup([{ grupo, subgrupo: "3 VENDEDORES", periodo: "COMISION_SEMANAL", unidadesVendidas: "1 EN ADELANTE", comisionPorEquipo: 2, porcentaje: null }]);
+  const mensual = buildMonthlyRulesByGroup([{ grupo, periodo: "BONO_MENSUAL", promedioPorVendedor: 15, bono: 100 }], 1);
+  const antes = crear(40);
+  const despues = crear(20);
+  for (const lider of [antes, despues]) finalizarVendedor(lider, weeks, semanal, mensual, { byRole: {}, byCargo: {} }, new Map());
+  expect(despues.total).toEqual(antes.total);
+  expect(despues.semanas["2026-08-06"].totalComisiones).toBe(80);
+  expect(despues.resumenMensual).toMatchObject({ ventasTvCelulaMensual: 40, ventasConsideradasBono: 20, promedioVentasPorJunior: 10, valorComisionSemanal: 80, valorComisionMensual: 0 });
+  expect(antes.resumenMensual.valorComisionMensual).toBe(100);
 });

@@ -25,6 +25,11 @@ const PagoComisionEquipoSemanal = sequelize.define(
       allowNull: false,
       defaultValue: [],
     },
+    cantidadVendedoresComision: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: { min: 1, max: 5, isInt: true },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

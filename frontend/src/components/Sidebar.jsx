@@ -248,11 +248,11 @@ export default function Sidebar({ auth }) {
                 icon: <FileSpreadsheet size={18} />,
                 path: "/contabilidad/pagos-comisiones",
               },
-              {
+           /*    {
                 label: "Descuentos décimos",
                 icon: <LucideTicketPercent size={18} />,
                 path: "/contabilidad/descuentos-decimos",
-              },
+              }, */
               {
                 label: "Egresos",
                 icon: <WalletCards size={18} />,

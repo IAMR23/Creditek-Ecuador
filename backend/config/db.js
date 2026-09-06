@@ -958,6 +958,11 @@ const ensureComisionesConfiguracionSchema = async (queryInterface, tables) => {
 };
 
 const ensurePagosComisionesSchema = async (queryInterface, tables) => {
+  if (tables.includes("pagos_comisiones_sanciones_observaciones")) {
+    await addColumnIfMissing(queryInterface, "pagos_comisiones_sanciones_observaciones", "observacionesVendedores", {
+      type: Sequelize.JSONB, allowNull: false, defaultValue: {},
+    });
+  }
   if (!tables.includes("pagos_comisiones_multas_ajustes")) return;
 
   await addColumnIfMissing(
@@ -1372,6 +1377,8 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
   }
 
   const columnasCalculadasManuales = [
+    "fondosReservaManual",
+    "sueldosExtrasManual",
     "descuentosMetaManual",
     "cajaGeneralManual",
     "entradasManual",
@@ -1422,6 +1429,7 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
 const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("egresos_creditek_entradas")) return;
+  await addColumnIfMissing(queryInterface, "egresos_creditek_entradas", "fechaFin", { type: Sequelize.DATEONLY, allowNull: true });
 
   await addColumnIfMissing(
     queryInterface,
@@ -1495,14 +1503,9 @@ const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
   );
   await sequelize.query(`
     UPDATE egresos_creditek_entradas
-    SET tipo = COALESCE(
+    SET tipo = COALESCE(NULLIF(tipo, ''),
           CASE
-            WHEN tipo IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS')
-              THEN tipo
-            ELSE NULL
-          END,
-          CASE
-            WHEN seccion IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS')
+            WHEN seccion IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS', 'PLAN_MOVISTAR', 'MECANICA', 'LENTES', 'PRESTAMO_EMPRESARIAL', 'CUOTAS_TELEFONO')
               THEN seccion
             ELSE 'ENTRADAS'
           END
@@ -1517,7 +1520,6 @@ const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
        OR seccion NOT IN ('PRESTAMOS', 'ANTICIPOS')
        OR tipo IS NULL
        OR tipo = ''
-       OR tipo NOT IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS')
        OR activo IS NULL
        OR "ultimaAccion" IS NULL;
   `);
@@ -1536,13 +1538,6 @@ const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
     ALTER TABLE egresos_creditek_entradas
     DROP CONSTRAINT IF EXISTS egresos_creditek_entradas_tipo_check;
   `);
-  await sequelize.query(`
-    ALTER TABLE egresos_creditek_entradas
-    ADD CONSTRAINT egresos_creditek_entradas_tipo_check
-    CHECK (tipo IN ('ENTRADAS', 'CAJAS', 'TRANSFERENCIAS', 'DESCUENTOS', 'JEFES', 'MULTAS_FACTURACION', 'OTROS'));
-  `).catch((error) => {
-    if (!/already exists/i.test(error.message || "")) throw error;
-  });
   await sequelize.query(`
     CREATE INDEX IF NOT EXISTS egresos_creditek_entradas_seccion_idx
     ON egresos_creditek_entradas (seccion);
@@ -1653,8 +1648,16 @@ const connectDB = async () => {
     await ensureReporteCajaUsuarioAgenciaPreSyncSchema(queryInterface);
     await ensureEgresosCreditekEntradasPreSyncSchema(queryInterface);
     await sequelize.sync({});
+    await sequelize.query(require("fs").readFileSync(
+      require("path").join(__dirname, "../migrations/202609050004-create-egresos-creditek-tipos.sql"), "utf8",
+    ));
 
     const tables = await queryInterface.showAllTables();
+    if (tables.includes("pagos_comisiones_equipos_semanales")) {
+      await addColumnIfMissing(queryInterface, "pagos_comisiones_equipos_semanales", "cantidadVendedoresComision", {
+        type: Sequelize.INTEGER, allowNull: true,
+      });
+    }
     await ensureControlFinancieroConciliacionManualCajaSchema(tables);
 
     await ensureCierreCajaSchema(queryInterface, tables);

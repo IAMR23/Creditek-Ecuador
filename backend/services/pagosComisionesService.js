@@ -1,4 +1,5 @@
 const { Op } = require("sequelize");
+const { ventaCuentaParaPromedio } = require("../utils/antiguedadPromedioComisiones");
 const { sequelize } = require("../config/db");
 const Venta = require("../models/Venta");
 const DetalleVenta = require("../models/DetalleVenta");
@@ -18,6 +19,7 @@ const PagoComisionEquipoSemanal = require("../models/PagoComisionEquipoSemanal")
 const PagoComisionPromedioJefe = require("../models/PagoComisionPromedioJefe");
 const PagoComisionPromedioSupervisor = require("../models/PagoComisionPromedioSupervisor");
 const ConfiguracionMesComision = require("../models/ConfiguracionMesComision");
+const PagoComisionSancionObservacion = require("../models/PagoComisionSancionObservacion");
 const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
 const {
   addDays,
@@ -577,6 +579,7 @@ const buildWeeklyTeamsMap = (rows = []) =>
       jefeComercialId: Number(item.jefeComercialId),
       semanaInicio: String(item.semanaInicio).slice(0, 10),
       vendedorIds: normalizeWeeklySellerIds(item.vendedorIds),
+      cantidadVendedoresComision: item.cantidadVendedoresComision ?? null,
     });
     return map;
   }, new Map());
@@ -1924,11 +1927,11 @@ const finalizarVendedor = (
   weeks.forEach((week) => {
     const values = vendedor.semanas[week.startDate];
     const semanaFutura = isFutureCommercialWeek(week);
-    const cantidadVendedoresSemana = Number.isFinite(
+    const cantidadVendedoresSemana = values.cantidadVendedoresComision ?? (Number.isFinite(
       Number(values.cantidadVendedores),
     )
       ? Number(values.cantidadVendedores)
-      : vendedor.vendedoresJunior?.length || 0;
+      : vendedor.vendedoresJunior?.length || 0);
     const subgrupoSemanal = cantidadVendedoresSemana
       ? `${cantidadVendedoresSemana} VENDEDORES`
       : null;
@@ -2005,40 +2008,13 @@ const finalizarVendedor = (
   vendedor.resumenMensual.ventasTvCelulaMensual = vendedor.total.venden;
   vendedor.resumenMensual.valorComisionSemanal = vendedor.total.totalComisiones;
   const esLiderComercial = vendedor.esJefeComercial || vendedor.esSupervisorComercial;
-  const usaBaseEspecialBono =
-    vendedor.esJefeComercial &&
-    weeks.some((week) =>
-      Number.isFinite(
-        Number(vendedor.semanas[week.startDate].cantidadVendedoresBono),
-      ),
-    );
-  const totalDispositivosParaBono = usaBaseEspecialBono
-    ? weeks.reduce(
-        (total, week) =>
-          total + toNumber(vendedor.semanas[week.startDate].vendenParaBono),
-        0,
-      )
+  // Solo el numerador del promedio excluye ventas sin mas de 15 dias de ingreso.
+  // Las comisiones semanales, ventas visibles y divisor mensual se conservan.
+  const totalDispositivosParaBono = esLiderComercial
+    ? weeks.reduce((total, week) =>
+        total + toNumber(vendedor.semanas[week.startDate].ventasParaPromedioAntiguedad), 0)
     : vendedor.total.venden;
-  const usaPromedioSupervisorMensual =
-    vendedor.esSupervisorComercial &&
-    Boolean(vendedor.promedioSupervisorMensualConfigurado);
-  const usaPromedioJefeMensual =
-    vendedor.esJefeComercial &&
-    Boolean(vendedor.promedioJefeMensualConfigurado);
-  const totalVendedoresSemanas =
-    (vendedor.esSupervisorComercial && !usaPromedioSupervisorMensual) ||
-    (usaBaseEspecialBono && !usaPromedioJefeMensual)
-    ? weeks.reduce(
-        (total, week) =>
-          total +
-          toNumber(
-            usaBaseEspecialBono
-              ? vendedor.semanas[week.startDate].cantidadVendedoresBono
-              : vendedor.semanas[week.startDate].cantidadVendedores,
-          ),
-        0,
-      )
-    : null;
+  const totalVendedoresSemanas = null;
   const promedioVentasPorJunior = esLiderComercial
     ? calculateLeaderAverage({
         totalDispositivos: totalDispositivosParaBono,
@@ -2112,6 +2088,9 @@ const construirReportePagosComisiones = async ({
     numericMonth,
   );
   const weekKeys = new Set(weeks.map((week) => week.startDate));
+  const notaSanciones = await PagoComisionSancionObservacion.findOne({
+    where: { anio: numericYear, mes: numericMonth },
+  });
   const fechaInicio = weeks[0].startDate;
   const fechaFin = weeks[weeks.length - 1].endDate;
   const logisticaPeriodo = parseLogisticaPeriodo({
@@ -2151,7 +2130,7 @@ const construirReportePagosComisiones = async ({
       where: {
         semanaInicio: { [Op.between]: [fechaInicio, fechaFin] },
       },
-      attributes: ["id", "jefeComercialId", "semanaInicio", "vendedorIds"],
+      attributes: ["id", "jefeComercialId", "semanaInicio", "vendedorIds", "cantidadVendedoresComision"],
     }),
     PagoComisionPromedioJefe.findAll({
       where: {
@@ -2209,6 +2188,7 @@ const construirReportePagosComisiones = async ({
     }
   });
 
+  const hoyPromedio = getTodayEcuador();
   ventas.forEach((venta) => {
     const weekKey = getCommercialWeekKey(venta.fecha);
     if (!weekKeys.has(weekKey)) return;
@@ -2228,6 +2208,13 @@ const construirReportePagosComisiones = async ({
     ) return;
 
     const totals = getSaleTotals(venta);
+    const ventasParaPromedioAntiguedad = ventaCuentaParaPromedio({
+      fechaIngreso: usuarioPayload.fechaIngreso,
+      fechaSalida: usuarioPayload.fechaSalida,
+      activo: usuarioPayload.activo,
+      fechaVenta: getDateOnlyEcuador(venta.fecha),
+      hoy: hoyPromedio,
+    }) ? totals.venden : 0;
     if (isSellerEligibleForTeam(usuarioPayload)) {
       const vendedorEquipo = ensureVendedor(
         vendedoresEquipoMap,
@@ -2236,6 +2223,8 @@ const construirReportePagosComisiones = async ({
         { requireCommissionable: false },
       );
       if (vendedorEquipo) {
+        vendedorEquipo.semanas[weekKey].ventasParaPromedioAntiguedad =
+          toNumber(vendedorEquipo.semanas[weekKey].ventasParaPromedioAntiguedad) + ventasParaPromedioAntiguedad;
         vendedorEquipo.semanas[weekKey].venden += totals.venden;
         vendedorEquipo.semanas[weekKey].valorVendido += totals.valorVendido;
       }
@@ -2246,6 +2235,8 @@ const construirReportePagosComisiones = async ({
     const vendedor = ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     if (!vendedor) return;
 
+    vendedor.semanas[weekKey].ventasParaPromedioAntiguedad =
+      toNumber(vendedor.semanas[weekKey].ventasParaPromedioAntiguedad) + ventasParaPromedioAntiguedad;
     vendedor.semanas[weekKey].venden += totals.venden;
     vendedor.semanas[weekKey].valorVendido += totals.valorVendido;
   });
@@ -2419,6 +2410,11 @@ const construirReportePagosComisiones = async ({
         esSupervisor,
       });
       const integrantesProduccion = produccion.integrantes;
+      jefe.semanas[week.startDate].ventasParaPromedioAntiguedad =
+        integrantesProduccion.reduce((total, member) =>
+          total + toNumber(member.semanas[week.startDate]?.ventasParaPromedioAntiguedad), 0);
+      jefe.semanas[week.startDate].cantidadVendedoresComision =
+        weeklyTeams.get(getWeeklyTeamKey(jefe.usuarioId, week.startDate))?.cantidadVendedoresComision ?? null;
       jefe.semanas[week.startDate].cantidadVendedores =
         integrantesProduccion.length;
       jefe.semanas[week.startDate].vendedoresActivos =
@@ -2562,6 +2558,8 @@ const construirReportePagosComisiones = async ({
     fechaInicio,
     fechaFin,
     configuracionMes,
+    observacionSanciones: notaSanciones?.observacion || "",
+    observacionesVendedores: notaSanciones?.observacionesVendedores || {},
     estadoPago: {
       pagado: false,
       estado: "ABIERTO",
@@ -2734,13 +2732,24 @@ const isCommercialSupervisorInReport = (person) =>
     normalizeText(position.cargo).includes("SUPERVISOR"),
   );
 
+const normalizarCantidadVendedoresComision = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const numero = Number(value);
+  if (typeof value === "boolean" || !Number.isInteger(numero) || numero < 1 || numero > 5) {
+    throw createHttpError("La comision semanal debe corresponder a entre 1 y 5 vendedores", 400);
+  }
+  return numero;
+};
+
 const guardarEquipoSemanalLiderComercial = async ({
   liderComercialId,
   tipoLider,
   semanaInicio,
   vendedorIds,
+  cantidadVendedoresComision,
   actualizadoPorId,
 }) => {
+  const cantidadComision = normalizarCantidadVendedoresComision(cantidadVendedoresComision);
   const esSupervisor = tipoLider === "SUPERVISOR";
   const nombreLider = esSupervisor ? "supervisor comercial" : "jefe comercial";
   const numericLeaderId = Number(liderComercialId);
@@ -2845,6 +2854,7 @@ const guardarEquipoSemanalLiderComercial = async ({
     jefeComercialId: numericLeaderId,
     semanaInicio: week.startDate,
     vendedorIds: normalizedSellerIds,
+    ...(cantidadVendedoresComision !== undefined ? { cantidadVendedoresComision: cantidadComision } : {}),
     actualizadoPorId: actualizadoPorId || null,
   };
   const [team] = await PagoComisionEquipoSemanal.findOrCreate({
@@ -2861,6 +2871,7 @@ const guardarEquipoSemanalLiderComercial = async ({
     jefeComercialId: numericLeaderId,
     semanaInicio: week.startDate,
     vendedorIds: normalizedSellerIds,
+    ...(cantidadVendedoresComision !== undefined ? { cantidadVendedoresComision: cantidadComision } : {}),
   };
 };
 
@@ -3169,10 +3180,27 @@ const actualizarValoresMultas = async ({
   year,
   month,
   ajustes,
+  observacionSanciones,
+  observacionesVendedores = [],
   actualizadoPorId,
 }) => {
   const { numericYear, numericMonth } = parseReportPeriod({ year, month });
-  if (!Array.isArray(ajustes) || ajustes.length === 0) {
+  const guardaObservacion = observacionSanciones !== undefined;
+  if (guardaObservacion && (typeof observacionSanciones !== "string" || observacionSanciones.length > 5000)) {
+    throw createHttpError("La observacion debe ser texto de hasta 5000 caracteres", 400);
+  }
+  if (!Array.isArray(observacionesVendedores) || observacionesVendedores.length > 500) {
+    throw createHttpError("Debe enviar hasta 500 observaciones de vendedores", 400);
+  }
+  const notasValidadas = {};
+  for (const nota of observacionesVendedores) {
+    const id = Number(nota?.usuarioId);
+    if (!Number.isInteger(id) || id <= 0 || typeof nota?.observacion !== "string" || nota.observacion.length > 5000 || Object.hasOwn(notasValidadas, id)) {
+      throw createHttpError("Observacion de vendedor invalida o repetida (maximo 5000 caracteres)", 400);
+    }
+    notasValidadas[id] = nota.observacion;
+  }
+  if (!Array.isArray(ajustes) || (ajustes.length === 0 && !guardaObservacion && !observacionesVendedores.length)) {
     throw createHttpError("Debe enviar al menos un valor a descontar", 400);
   }
   if (ajustes.length > 500) {
@@ -3184,15 +3212,23 @@ const actualizarValoresMultas = async ({
     throw createHttpError("No se pueden modificar multas de un periodo pagado", 400);
   }
 
-  const reporte = await construirReportePagosComisiones({
-    year: numericYear,
-    month: numericMonth,
-  });
+  const reporte = ajustes.length
+    ? await construirReportePagosComisiones({ year: numericYear, month: numericMonth })
+    : { weeks: [], vendedores: [] };
   const semanasValidas = new Set(reporte.weeks.map((week) => week.startDate));
   const vendedoresPorId = new Map(
     reporte.vendedores.map((vendedor) => [Number(vendedor.usuarioId), vendedor]),
   );
   const clavesProcesadas = new Set();
+
+  if (observacionesVendedores.length) {
+    const usuarios = await Usuario.findAll({
+      where: { id: { [Op.in]: Object.keys(notasValidadas).map(Number) } }, attributes: ["id"],
+    });
+    if (usuarios.length !== observacionesVendedores.length) {
+      throw createHttpError("Uno de los vendedores no existe", 400);
+    }
+  }
 
   const ajustesValidados = ajustes.map((ajuste, index) => {
     try {
@@ -3235,6 +3271,14 @@ const actualizarValoresMultas = async ({
   });
 
   await sequelize.transaction(async (transaction) => {
+    if (guardaObservacion) {
+      await PagoComisionSancionObservacion.upsert({
+        anio: numericYear,
+        mes: numericMonth,
+        observacion: observacionSanciones,
+        actualizadoPorId: actualizadoPorId || null,
+      }, { transaction, fields: ["anio", "mes", "observacion", "actualizadoPorId"] });
+    }
     for (const ajusteData of ajustesValidados) {
       const [ajuste] = await PagoComisionMultaAjuste.findOrCreate({
         where: {
@@ -3246,15 +3290,27 @@ const actualizarValoresMultas = async ({
       });
       await ajuste.update(ajusteData, { transaction });
     }
+    if (observacionesVendedores.length) {
+      const [registro] = await PagoComisionSancionObservacion.findOrCreate({
+        where: { anio: numericYear, mes: numericMonth }, defaults: {}, transaction,
+      });
+      await registro.reload({ transaction, lock: transaction.LOCK.UPDATE });
+      await registro.update({
+        observacionesVendedores: { ...(registro.observacionesVendedores || {}), ...notasValidadas },
+        actualizadoPorId: actualizadoPorId || null,
+      }, { transaction });
+    }
   });
 
   return {
-    message: `${ajustesValidados.length} descuento(s) guardado(s) correctamente`,
+    message: `${ajustesValidados.length} descuento(s) y ${observacionesVendedores.length} observacion(es) de vendedores guardados correctamente${guardaObservacion ? ". Observacion general guardada" : ""}`,
     actualizados: ajustesValidados.length,
   };
 };
 
 module.exports = {
+  finalizarVendedor,
+  normalizarCantidadVendedoresComision,
   isCargoPagoComisionable,
   buildPersonalSellerView,
   getCommissionablePaidPosition,

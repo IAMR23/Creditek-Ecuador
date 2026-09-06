@@ -12,6 +12,7 @@ const RolPago = require("../models/RolPago");
 const RolCreditekAjuste = require("../models/RolCreditekAjuste");
 const Usuario = require("../models/Usuario");
 const pagosComisionesService = require("./pagosComisionesService");
+const { cuotaPrestamoDelMes } = require("../utils/prestamosCreditek");
 
 const CAMPOS_MANUALES = [
   "adelantosTransfer",
@@ -120,6 +121,15 @@ const obtenerValorIngresoComision = (persona, tipo) => {
       0
     );
   }
+  const resumen = persona?.resumenMensual;
+  const cargo = String(persona?.cargoComision || persona?.cargo || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  const esLider = persona?.esJefeComercial || persona?.esSupervisorComercial ||
+    cargo.includes("JEFE COMERCIAL") || cargo.includes("SUPERVISOR");
+  // Coincide con TOTAL de la tabla del lider; las sanciones van en egresos.
+  if (esLider && (resumen?.valorComisionSemanal != null || resumen?.valorComisionMensual != null)) {
+    return redondear(Number(resumen.valorComisionSemanal || 0) + Number(resumen.valorComisionMensual || 0));
+  }
   return (
     persona?.resumenMensual?.totalComisionesSemanaMensual ??
     persona?.total?.totalComisiones ??
@@ -208,6 +218,8 @@ const obtenerDatosPagoUsuario = (usuario, ingreso) => {
 const serializarAjuste = (row) => {
   const value = typeof row?.toJSON === "function" ? row.toJSON() : row || {};
   return {
+    sueldosExtrasManual: value.sueldosExtrasManual == null ? null : redondear(value.sueldosExtrasManual),
+    fondosReservaManual: value.fondosReservaManual == null ? null : redondear(value.fondosReservaManual),
     ...Object.fromEntries(
       CAMPOS_MANUALES.map((campo) => [campo, redondear(value[campo])]),
     ),
@@ -332,6 +344,13 @@ const obtenerResumen = async (periodoValue) => {
         where: {
           activo: true,
           [Op.or]: [
+            {
+              seccion: "PRESTAMOS",
+              [Op.and]: [
+                { [Op.or]: [{ fecha: { [Op.lte]: fechaFin } }, { fecha: null, createdAt: { [Op.lt]: fin } }] },
+                { [Op.or]: [{ fechaFin: { [Op.gte]: fechaInicio } }, { fechaFin: null }] },
+              ],
+            },
             { fecha: { [Op.between]: [fechaInicio, fechaFin] } },
             {
               fecha: null,
@@ -339,7 +358,7 @@ const obtenerResumen = async (periodoValue) => {
             },
           ],
         },
-        attributes: ["usuarioId", "seccion", "tipo", "valor"],
+        attributes: ["usuarioId", "seccion", "tipo", "valor", "fecha", "fechaFin", "createdAt"],
       }),
       ControlFinancieroRegistro.findAll({
         where: {
@@ -379,9 +398,13 @@ const obtenerResumen = async (periodoValue) => {
     OTROS: "otros",
   };
   egresos.forEach((row) => {
+    if (row.seccion === "PRESTAMOS") {
+      acumular(valoresPorUsuario, row.usuarioId, "prestamosEgresos", cuotaPrestamoDelMes(row, periodo));
+      return;
+    }
     const campo = camposSeccion[
       String(row.tipo || row.seccion || "").toUpperCase()
-    ];
+    ] || (row.seccion === "ANTICIPOS" ? "otros" : null);
     if (campo) acumular(valoresPorUsuario, row.usuarioId, campo, row.valor);
   });
   const cajasControl = await filtrarCajasNoEnCierre(cajasControlValues);
@@ -458,6 +481,7 @@ const obtenerResumen = async (periodoValue) => {
         0,
       ),
     );
+    const prestamosEgresos = redondear(automaticos.prestamosEgresos);
     const sumanPrestamos = redondear(
       CAMPOS_PRESTAMOS.reduce(
         (total, campo) => total + Number(valores[campo] || 0),
@@ -484,6 +508,7 @@ const obtenerResumen = async (periodoValue) => {
         ]),
       ),
       totalAnticipos,
+      prestamosEgresos,
       sumanPrestamos,
       totalDescuentos,
       totalNomina,
@@ -541,7 +566,7 @@ const obtenerResumen = async (periodoValue) => {
   };
 };
 
-const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue) => {
+const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue, soloNomina = false) => {
   const periodo = normalizarPeriodo({ anio, mes });
   const actualizadoPorId = normalizarId(
     actualizadoPorValue,
@@ -560,6 +585,18 @@ const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue) => 
       const usuarioId = normalizarId(registro.usuarioId, "El usuario");
       if (vistos.has(usuarioId)) throw crearError("El usuario esta repetido");
       vistos.add(usuarioId);
+      if (soloNomina) {
+        if (registro.fondosReservaManual === undefined) throw crearError("Debe enviar fondos de reserva");
+        return {
+          usuarioId,
+          ...periodo,
+          fondosReservaManual: normalizarValorOpcional(registro.fondosReservaManual, "Fondos de reserva"),
+          ...(registro.sueldosExtrasManual !== undefined ? {
+            sueldosExtrasManual: normalizarValorOpcional(registro.sueldosExtrasManual, "Sueldos extras"),
+          } : {}),
+          actualizadoPorId,
+        };
+      }
       return {
         usuarioId,
         ...periodo,
@@ -616,6 +653,7 @@ const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue) => 
 
 module.exports = {
   CAMPOS_MANUALES,
+  guardarNomina: (datos, usuarioId) => guardarAjustes(datos, usuarioId, true),
   guardarAjustes,
   normalizarPeriodo,
   normalizarValor,

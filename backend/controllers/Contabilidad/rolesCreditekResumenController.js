@@ -23,4 +23,12 @@ const guardarAjustes = async (req, res) => {
   }
 };
 
-module.exports = { guardarAjustes, obtenerResumen };
+const guardarNomina = async (req, res) => {
+  try {
+    res.json(await service.guardarNomina(req.body, req.user.id));
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
+module.exports = { guardarAjustes, obtenerResumen, guardarNomina };

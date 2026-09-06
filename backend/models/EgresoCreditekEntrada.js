@@ -44,6 +44,7 @@ const EgresoCreditekEntrada = sequelize.define(
       type: DataTypes.DATEONLY,
       allowNull: true,
     },
+    fechaFin: { type: DataTypes.DATEONLY, allowNull: true },
     seccion: {
       type: DataTypes.STRING(30),
       allowNull: false,
@@ -54,7 +55,7 @@ const EgresoCreditekEntrada = sequelize.define(
       type: DataTypes.STRING(30),
       allowNull: false,
       defaultValue: "ENTRADAS",
-      validate: { isIn: [TIPOS_EGRESO] },
+      validate: { notEmpty: true, len: [1, 30] },
     },
     activo: {
       type: DataTypes.BOOLEAN,

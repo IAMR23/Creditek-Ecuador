@@ -24,6 +24,8 @@ export const SECCIONES_REPORTE_EGRESOS = [
 ];
 
 const TIPOS_EGRESO = {
+  PLAN_MOVISTAR: "Plan Movistar", MECANICA: "Mecánica", LENTES: "Lentes",
+  PRESTAMO_EMPRESARIAL: "Préstamo empresarial", CUOTAS_TELEFONO: "Cuotas teléfono",
   ENTRADAS: "Entradas",
   CAJAS: "Cajas",
   TRANSFERENCIAS: "Transferencias",
@@ -63,6 +65,7 @@ const nombreUsuario = (registro) =>
   );
 
 const tipoRegistro = (registro) =>
+  texto(registro?.tipoNombre) ||
   TIPOS_EGRESO[String(registro?.tipo || "").toUpperCase()] ||
   texto(registro?.tipo, "Entradas");
 
@@ -193,7 +196,8 @@ const aplicarTarjetaResumen = (
 
 const columnasExcel = () => [
   { label: "Tipo", key: "tipo", width: 18 },
-  { label: "Fecha sancion", key: "fecha", width: 17, date: true },
+  { label: "Fecha / Inicio", key: "fecha", width: 17, date: true },
+  { label: "Fecha final", key: "fechaFin", width: 17, date: true },
   { label: "Usuario", key: "usuario", width: 28 },
   { label: "Valor", key: "valor", width: 15, currency: true },
   { label: "Estado", key: "estado", width: 15 },
@@ -208,6 +212,7 @@ const columnasExcel = () => [
 const filaExcel = (registro) => ({
   tipo: tipoRegistro(registro),
   fecha: fechaExcel(fechaBase(registro)),
+  fechaFin: fechaExcel(registro.fechaFin),
   origen: origenRegistro(registro),
   contrato: texto(registro?.contrato),
   cliente: texto(registro?.cliente),
@@ -551,7 +556,7 @@ export const descargarExcelRubroEgresosCreditek = async (datosSeccion) => {
 const filasPdf = (registros) => {
   return registros.map((registro) => [
     tipoRegistro(registro),
-    fechaTexto(fechaBase(registro)),
+    registro.seccion === "PRESTAMOS" ? `${fechaTexto(fechaBase(registro))} / ${fechaTexto(registro.fechaFin)}` : fechaTexto(fechaBase(registro)),
     nombreUsuario(registro),
     `$${numero(registro?.valor).toFixed(2)}`,
     estadoRegistro(registro),
@@ -562,7 +567,7 @@ const filasPdf = (registros) => {
 };
 
 const encabezadosPdf = () =>
-  [["Tipo", "Fecha sancion", "Usuario", "Valor", "Estado", "Observacion", "Registrado por", "Actualizado"]];
+  [["Tipo", "Fecha / Periodo", "Usuario", "Valor", "Estado", "Observacion", "Registrado por", "Actualizado"]];
 
 const dibujarEncabezadoPdf = (doc, seccion, registros) => {
   const ancho = doc.internal.pageSize.getWidth();

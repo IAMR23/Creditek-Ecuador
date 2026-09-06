@@ -10,5 +10,6 @@ const router = express.Router();
 router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
 router.get("/", controller.obtenerResumen);
 router.put("/", controller.guardarAjustes);
+router.put("/nomina", controller.guardarNomina);
 
 module.exports = router;

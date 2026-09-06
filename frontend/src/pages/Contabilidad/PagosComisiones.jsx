@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import ExcelJS from "exceljs";
 import {
@@ -659,7 +659,7 @@ const createGroupedExcelSheet = ({
 
   monthlyColumns.forEach((column) => {
     const cell = totalRow.getCell(columnIndex);
-    cell.value = rows.reduce((sum, row) => sum + Number(column.getValue(row) || 0), 0);
+    cell.value = column.aggregate === false ? "" : rows.reduce((sum, row) => sum + Number(column.getValue(row) || 0), 0);
     styleExcelCell(cell, "FFFF00FF", { bold: true });
     cell.numFmt = column.numFmt;
     columnIndex += 1;
@@ -735,21 +735,27 @@ const createLogisticsExcelSheet = ({ workbook, rows }) => {
   return worksheet;
 };
 
-const createPenaltiesExcelSheet = ({ workbook, rows, weeks }) =>
-  createGroupedExcelSheet({
+const createPenaltiesExcelSheet = ({ workbook, rows, weeks, observaciones = {} }) => {
+  const worksheet = createGroupedExcelSheet({
     workbook,
     sheetName: "Sanción por no llegar a meta",
     rows,
     weeks,
     weekColumns: [
       {
-        label: "Unidades faltantes",
+        label: "Unidades vendidas",
+        width: 16,
+        numFmt: EXCEL_INTEGER_FORMAT,
+        getValue: (values) => Number(values.venden || 0),
+      },
+      {
+        label: "Unidades faltantes para meta",
         width: 16,
         numFmt: EXCEL_INTEGER_FORMAT,
         getValue: (values) => Number(values.noCumpleMetas || 0),
       },
       {
-        label: "Sanción a descontar",
+        label: "Valor a descontar",
         width: 18,
         numFmt: EXCEL_MONEY_FORMAT,
         getValue: (values) => Number(values.valorDescontar || 0),
@@ -762,6 +768,7 @@ const createPenaltiesExcelSheet = ({ workbook, rows, weeks }) =>
         numFmt: EXCEL_MONEY_FORMAT,
         getValue: (row) => getPenaltyTotal(row, weeks),
       },
+      { label: "Observación", width: 50, numFmt: "@", aggregate: false, getValue: (row) => observaciones[row.usuarioId] || "" },
     ],
     getRowWeekValues: getPenaltyWeekValues,
     getCollaboratorValue: (row) =>
@@ -769,10 +776,20 @@ const createPenaltiesExcelSheet = ({ workbook, rows, weeks }) =>
     getCollaboratorStyle: getSalesCollaboratorStyle,
   });
 
+  rows.forEach((row, index) => {
+    const excelRow = worksheet.getRow(index + 3);
+    excelRow.getCell(weeks.length * 3 + 3).alignment = { wrapText: true, vertical: "top", horizontal: "left" };
+    const lines = String(observaciones[row.usuarioId] || "").split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 48)), 0);
+    excelRow.height = Math.min(409, Math.max(28, lines * 15));
+  });
+  return worksheet;
+};
+
 export default function PagosComisiones() {
   const [filters, setFilters] = useState(initialFilters);
   const [logisticaFilters, setLogisticaFilters] = useState(initialLogisticaFilters);
   const [report, setReport] = useState(null);
+  const reportRevision = useRef(0);
   const [loading, setLoading] = useState(false);
   const [vendedorFiltro, setVendedorFiltro] = useState("");
   const [vendedorBusqueda, setVendedorBusqueda] = useState("");
@@ -788,6 +805,7 @@ export default function PagosComisiones() {
   const [supervisorComercialId, setSupervisorComercialId] = useState("");
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
   const [descuentosEditados, setDescuentosEditados] = useState({});
+  const [observacionesEditadas, setObservacionesEditadas] = useState({});
   const [guardandoDescuentos, setGuardandoDescuentos] = useState(false);
   const [juniorSupervisorBusqueda, setJuniorSupervisorBusqueda] = useState("");
   const [juniorSupervisorOpen, setJuniorSupervisorOpen] = useState(false);
@@ -816,11 +834,11 @@ export default function PagosComisiones() {
   const configuracionMes = report?.configuracionMes || null;
   const estadoPago = report?.estadoPago || null;
   const periodoPagado = Boolean(estadoPago?.pagado);
-  const cantidadDescuentosEditados = Object.keys(descuentosEditados).length;
+  const cantidadCambiosPendientes = Object.keys(descuentosEditados).length + Object.keys(observacionesEditadas).length;
   const mostrarGestionDescuentos = seccionActiva !== "LOGISTICA" && (
     seccionActiva === "SANCIONES" ||
     SHOW_GOAL_COMPLIANCE_SECTION ||
-    cantidadDescuentosEditados > 0
+    cantidadCambiosPendientes > 0
   );
   const selectedMonthLabel =
     MONTHS.find((month) => Number(month.value) === Number(filters.month))?.label ||
@@ -1080,6 +1098,7 @@ export default function PagosComisiones() {
   };
 
   const fetchReport = async (reportFilters = filters) => {
+    reportRevision.current += 1;
     setLoading(true);
     try {
       const params = {
@@ -1089,6 +1108,7 @@ export default function PagosComisiones() {
       };
       const { data } = await api.get(ENDPOINT, { params });
       setReport(data);
+      setObservacionesEditadas({});
       setDescuentosEditados({});
     } catch (error) {
       console.error("Error cargando pagos de comisiones", error);
@@ -1230,6 +1250,7 @@ export default function PagosComisiones() {
             workbook,
             rows: getRowsForSection(vendedores, scope),
             weeks,
+            observaciones: report.observacionesVendedores,
           });
           return;
         }
@@ -1395,26 +1416,59 @@ export default function PagosComisiones() {
     });
   };
 
-  const guardarEquipoSemanal = async ({ jefe, week, vendedorIds }) => {
+  const guardarEquipoSemanal = async ({ jefe, week, vendedorIds, cantidadVendedoresComision }) => {
+    if (guardandoEquipoSemanal) return;
     const key = `${jefe.usuarioId}-${week.startDate}`;
     const tipoLider = jefe.esSupervisorComercial ? "supervisores" : "jefes";
+    const revision = reportRevision.current;
+    const cantidadAnterior = getWeekValues(jefe, week).cantidadVendedoresComision ?? null;
+    const actualizarCantidad = (cantidad) => {
+      if (revision !== reportRevision.current) return;
+      setReport((actual) => actual ? {
+        ...actual,
+        vendedores: actual.vendedores.map((row) => Number(row.usuarioId) === Number(jefe.usuarioId) ? {
+          ...row,
+          semanas: {
+            ...row.semanas,
+            [week.startDate]: { ...row.semanas[week.startDate], cantidadVendedoresComision: cantidad },
+          },
+        } : row),
+      } : actual);
+    };
     setGuardandoEquipoSemanal(key);
+    if (cantidadVendedoresComision !== undefined) actualizarCantidad(cantidadVendedoresComision);
+    let guardado = false;
     try {
       await api.put(
         `${ENDPOINT}/${tipoLider}/${jefe.usuarioId}/equipos-semanales/${week.startDate}`,
-        { vendedorIds },
+        { vendedorIds, cantidadVendedoresComision },
       );
-      await fetchReport();
-      Swal.fire({
-        icon: "success",
-        title: "Equipo semanal guardado",
-        showConfirmButton: false,
-        timer: 1400,
+      guardado = true;
+      const { data } = await api.get(ENDPOINT, {
+        params: {
+          year: report.year,
+          month: report.month,
+          logisticaFechaInicio: logisticaFilters.fechaInicio,
+          logisticaFechaFin: logisticaFilters.fechaFin,
+        },
       });
+      if (revision !== reportRevision.current) return;
+      setReport((actual) => actual ? {
+        ...actual,
+        total: data.total,
+        vendedores: actual.vendedores.map((row) =>
+          Number(row.usuarioId) === Number(jefe.usuarioId)
+            ? data.vendedores.find((item) => Number(item.usuarioId) === Number(jefe.usuarioId)) || row
+            : row,
+        ),
+      } : actual);
     } catch (error) {
+      if (!guardado && cantidadVendedoresComision !== undefined) actualizarCantidad(cantidadAnterior);
       Swal.fire(
         "Error",
-        error.response?.data?.message || "No se pudo guardar el equipo semanal",
+        guardado
+          ? "La selección se guardó, pero no se pudieron actualizar los importes. Pulse Generar para recargarlos."
+          : error.response?.data?.message || "No se pudo guardar el equipo semanal",
         "error",
       );
     } finally {
@@ -1495,7 +1549,7 @@ export default function PagosComisiones() {
   };
 
   const guardarValoresDescuento = async () => {
-    if (!cantidadDescuentosEditados || !report || periodoPagado) return;
+    if (!cantidadCambiosPendientes || !report || periodoPagado) return;
 
     const ajustes = [];
     for (const ajuste of Object.values(descuentosEditados)) {
@@ -1524,8 +1578,8 @@ export default function PagosComisiones() {
     }
 
     const confirmacion = await Swal.fire({
-      title: "Guardar todos los descuentos",
-      text: `Se guardaran ${ajustes.length} valor(es) modificado(s) del reporte.`,
+      title: "Guardar cambios de sanciones",
+      text: `Se guardarán ${ajustes.length} descuento(s) y ${Object.keys(observacionesEditadas).length} observación(es).`,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Guardar todo",
@@ -1540,6 +1594,7 @@ export default function PagosComisiones() {
       const { data } = await api.put(`${ENDPOINT}/multas`, {
         ...periodoReporte,
         ajustes,
+        observacionesVendedores: Object.entries(observacionesEditadas).map(([usuarioId, observacion]) => ({ usuarioId: Number(usuarioId), observacion })),
       });
       setDescuentosEditados({});
       setFilters(periodoReporte);
@@ -1569,10 +1624,10 @@ export default function PagosComisiones() {
       );
       return;
     }
-    if (cantidadDescuentosEditados) {
+    if (cantidadCambiosPendientes) {
       const confirmacion = await Swal.fire({
         title: "Cambios sin guardar",
-        text: "Al generar otro reporte se descartaran los descuentos modificados.",
+        text: "Al generar otro reporte se descartarán los descuentos y la observación pendientes.",
         icon: "warning",
         showCancelButton: true,
         confirmButtonText: "Descartar y generar",
@@ -1787,8 +1842,8 @@ export default function PagosComisiones() {
           <Metric
             label={
               seccionActiva === "SANCIONES"
-                ? `Total sanciones del mes${cantidadDescuentosEditados ? " (vista previa)" : ""}`
-                : cantidadDescuentosEditados
+                ? `Total sanciones del mes${cantidadCambiosPendientes ? " (vista previa)" : ""}`
+                : cantidadCambiosPendientes
                 ? "A recibir (vista previa)"
                 : "A recibir"
             }
@@ -1830,9 +1885,9 @@ export default function PagosComisiones() {
                       : "Abierto. El reporte se recalcula con ventas, entregas, semanas y configuraciones actuales."}
                   </p>
                 {mostrarGestionDescuentos &&
-                cantidadDescuentosEditados ? (
+                cantidadCambiosPendientes ? (
                   <p className="mt-1 text-xs font-semibold text-amber-700">
-                    {cantidadDescuentosEditados} descuento(s) pendiente(s) de guardar.
+                    {cantidadCambiosPendientes} cambio(s) pendiente(s) de guardar.
                   </p>
                 ) : null}
               </div>
@@ -1863,7 +1918,7 @@ export default function PagosComisiones() {
                   type="button"
                   onClick={guardarValoresDescuento}
                   disabled={
-                    !cantidadDescuentosEditados ||
+                    !cantidadCambiosPendientes ||
                     guardandoDescuentos ||
                     periodoPagado ||
                     loading
@@ -1873,13 +1928,13 @@ export default function PagosComisiones() {
                   <Save size={16} />
                   {guardandoDescuentos
                     ? "Guardando todo..."
-                    : `Guardar todo (${cantidadDescuentosEditados})`}
+                    : `Guardar todo (${cantidadCambiosPendientes})`}
                 </button>
               ) : null}
               <button
                 type="button"
                 onClick={exportarExcel}
-                disabled={!report || exportandoExcel || cantidadDescuentosEditados > 0}
+                disabled={!report || exportandoExcel || cantidadCambiosPendientes > 0}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
               >
                 <Download size={16} />
@@ -1894,7 +1949,7 @@ export default function PagosComisiones() {
                     periodoPagado ||
                     pagandoPeriodo ||
                     loading ||
-                    cantidadDescuentosEditados > 0
+                    cantidadCambiosPendientes > 0
                   }
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                 >
@@ -2222,6 +2277,16 @@ export default function PagosComisiones() {
         </section>
         ) : seccionActiva === "SANCIONES" ? (
           <SalesPenaltiesTable
+            observaciones={report?.observacionesVendedores || {}}
+            observacionesEditadas={observacionesEditadas}
+            onCambiarObservacion={(usuarioId, value) => setObservacionesEditadas((actuales) => {
+              const siguientes = { ...actuales };
+              if (value === (report?.observacionesVendedores?.[usuarioId] || "")) delete siguientes[usuarioId];
+              else siguientes[usuarioId] = value;
+              return siguientes;
+            })}
+            onGuardarTodo={guardarValoresDescuento}
+            cantidadCambiosPendientes={cantidadCambiosPendientes}
             rows={vendedoresFiltrados}
             weeks={weeks}
             loading={loading}
@@ -2475,7 +2540,7 @@ function SalesPenaltyAmount({
               onCambiarDescuento({ vendedor, week, values, value });
             }
           }}
-          className={`w-28 rounded border bg-white px-2 py-1 text-center text-sm outline-none focus:ring-2 disabled:opacity-60 ${
+          className={`h-6 w-20 max-w-full rounded border bg-white px-1 text-right text-xs tabular-nums outline-none focus:ring-2 disabled:opacity-60 ${
             invalido ? "border-red-600 focus:ring-red-200"
               : descuentoEditado ? "border-amber-500 text-amber-800 focus:ring-amber-200"
                 : "border-slate-300 focus:ring-emerald-200"
@@ -2502,6 +2567,11 @@ function SalesPenaltiesTable({
   rows,
   weeks,
   loading,
+  observaciones = {},
+  observacionesEditadas = {},
+  onGuardarTodo,
+  cantidadCambiosPendientes = 0,
+  onCambiarObservacion,
   descuentosEditados = {},
   onCambiarDescuento,
   onRestaurarDescuento,
@@ -2511,46 +2581,58 @@ function SalesPenaltiesTable({
   const total = roundMoney(rows.reduce((sum, row) => sum + getPenaltyTotal(row, weeks), 0));
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <h2 className="font-semibold text-slate-900">Sanción por no llegar a meta</h2>
-        <p className="mt-1 text-sm text-slate-600">
+    <section className="overflow-hidden border border-slate-300 bg-white shadow-sm">
+      <div className="border-b border-slate-300 bg-slate-100 px-3 py-3">
+        <h2 className="text-sm font-bold text-slate-950">Sanción por no llegar a meta</h2>
+        <p className="mt-1 text-xs text-slate-600">
           Valor a descontar por cada semana comercial, según la meta y la sanción configuradas.
           {periodoPagado
             ? " El período está pagado y sus valores no se pueden editar."
-            : " Edite el importe y pulse Guardar todo. Puede ingresar 0 para omitir la sanción."}
+            : " Las unidades se calculan desde las ventas y metas. Edite el importe o la observación y pulse Guardar todo. Puede ingresar 0 para omitir la sanción."}
           {Object.keys(descuentosEditados).length > 0
             ? " Los totales muestran una vista previa de los cambios pendientes."
             : " Los valores incluyen los ajustes guardados."}
         </p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[780px] border-collapse text-center text-sm text-slate-950">
-          <thead>
+      <div className="max-h-[calc(100vh-250px)] min-h-[480px] overflow-auto">
+        <table className="w-full min-w-[1840px] border-collapse text-center text-xs text-slate-950">
+          <thead className="sticky top-0 z-20 text-slate-950">
             <tr>
-              <th scope="col" className="sticky left-0 z-20 min-w-[240px] border border-slate-950 bg-white px-3 py-4 text-left font-black">
+              <th scope="col" rowSpan={2} className="sticky left-0 z-20 min-w-[200px] border border-slate-950 bg-sky-100 px-2 py-2 text-left font-bold">
                 Vendedor
               </th>
-              {weeks.map((week, index) => (
-                <th key={week.startDate} scope="col" className={`min-w-[160px] border border-slate-950 px-3 py-2 font-black ${blockColors[index % blockColors.length]}`}>
+              {weeks.map((week) => (
+                <th key={week.startDate} scope="colgroup" colSpan={3} className={`min-w-[160px] border border-slate-950 bg-sky-200 px-2 py-2 font-bold`}>
                   {week.label}
                 </th>
               ))}
-              <th scope="col" className="border border-slate-950 bg-indigo-100 px-3 py-2 font-black">
+              <th scope="col" rowSpan={2} className="border border-slate-950 bg-sky-100 px-3 py-2 font-black">
                 Total sanciones del mes
               </th>
+              <th scope="col" rowSpan={2} className="min-w-[220px] border border-slate-950 bg-sky-100 px-2 py-2 font-bold">Observación</th>
+            </tr>
+            <tr>
+              {weeks.map((week) => (
+                <Fragment key={week.startDate}>
+                  {["Unidades vendidas", "Unidades faltantes para meta", "Valor a descontar"].map((label) => (
+                    <th key={label} scope="col" className={`min-w-[90px] border border-slate-950 bg-sky-100 px-2 py-2 font-bold`}>
+                      {label}
+                    </th>
+                  ))}
+                </Fragment>
+              ))}
             </tr>
           </thead>
           <tbody>
             {loading || !rows.length ? (
               <tr>
-                <td colSpan={weeks.length + 2} className="px-4 py-10 text-slate-500">
+                <td colSpan={weeks.length * 3 + 3} className="px-4 py-10 text-slate-500">
                   {loading ? "Cargando reporte..." : "No hay registros en esta sección para el mes seleccionado."}
                 </td>
               </tr>
             ) : rows.map((row, index) => (
-              <tr key={row.usuarioId} className={row.fechaSalida ? "bg-blue-50" : index % 2 === 0 ? "bg-white" : "bg-orange-100"}>
-                <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-inherit px-3 py-2 text-left font-medium">
+              <tr key={row.usuarioId} className={row.fechaSalida ? "bg-blue-50 hover:bg-blue-100" : index % 2 === 0 ? "bg-emerald-50/70 hover:bg-emerald-100" : "bg-white hover:bg-emerald-50"}>
+                <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-inherit px-2 py-1.5 text-left font-bold">
                   {row.nombre}
                   <span className="block text-[11px] font-normal text-slate-500">{row.cargoComision || row.cargo}</span>
                 </th>
@@ -2564,7 +2646,14 @@ function SalesPenaltiesTable({
                         ? "Semana parcial"
                         : null;
                   return (
-                    <td key={week.startDate} className="border border-slate-950 px-3 py-2">
+                    <Fragment key={week.startDate}>
+                      <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
+                        {values.semanaFutura ? "-" : Number(values.venden || 0)}
+                      </td>
+                      <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
+                        {estado ? "-" : Number(values.noCumpleMetas || 0)}
+                      </td>
+                      <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
                       {estado ? <span className="text-xs text-slate-500">{estado}</span> : (
                         <>
                           <SalesPenaltyAmount
@@ -2577,11 +2666,6 @@ function SalesPenaltiesTable({
                             periodoPagado={periodoPagado}
                             guardando={guardando}
                           />
-                          {Number(values.noCumpleMetas || 0) > 0 ? (
-                            <span className="block text-[11px] text-slate-600">
-                              {values.noCumpleMetas} unidad(es) faltante(s)
-                            </span>
-                          ) : null}
                           {values.descuentoModificado && !descuentosEditados[`${row.usuarioId}-${week.startDate}`] ? (
                             <span className="block text-[11px] text-slate-500">
                               {values.multaOmitida ? "Sanción omitida" : "Valor ajustado"} · Calculado: {formatCurrency(values.valorMultaCalculado)}
@@ -2589,31 +2673,63 @@ function SalesPenaltiesTable({
                           ) : null}
                         </>
                       )}
-                    </td>
+                      </td>
+                    </Fragment>
                   );
                 })}
-                <td className="border border-slate-950 bg-indigo-100 px-3 py-2 font-bold text-red-700">
+                <td className="border border-slate-950 bg-rose-50 px-2 py-1.5 text-right font-extrabold text-rose-800 tabular-nums">
                   {formatCurrency(getPenaltyTotal(row, weeks))}
+                </td>
+                <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
+                  <textarea
+                    aria-label={`Observación de ${row.nombre}`}
+                    value={observacionesEditadas[row.usuarioId] ?? observaciones[row.usuarioId] ?? ""}
+                    onChange={(event) => onCambiarObservacion(row.usuarioId, event.target.value)}
+                    disabled={periodoPagado || guardando || loading}
+                    maxLength={5000}
+                    rows={1}
+                    placeholder="Observación del vendedor"
+                    className="h-6 min-h-6 w-full min-w-[200px] resize-y rounded border border-slate-300 bg-white px-1 py-0.5 text-xs font-normal focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60"
+                  />
+                  {Object.hasOwn(observacionesEditadas, row.usuarioId) ? <span className="block text-xs font-semibold text-amber-700">Pendiente de guardar</span> : null}
                 </td>
               </tr>
             ))}
           </tbody>
           {!loading && rows.length > 0 && weeks.length > 0 ? (
-            <tfoot>
-              <tr className="bg-fuchsia-500 font-black text-white">
-                <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-fuchsia-500 px-3 py-2 text-left">TOTAL</th>
+            <tfoot className="sticky bottom-0 z-10 bg-sky-700 text-white">
+              <tr className="bg-sky-700 font-black text-white">
+                <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-sky-700 px-3 py-2 text-left">TOTAL</th>
                 {weeks.map((week) => (
-                  <td key={week.startDate} className="border border-slate-950 px-3 py-2">
+                  <Fragment key={week.startDate}>
+                    {["venden", "noCumpleMetas"].map((field) => (
+                      <td key={field} className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
+                        {rows.every((row) => getPenaltyWeekValues(row, week).semanaFutura)
+                          ? "-"
+                          : rows.reduce((sum, row) => sum + Number(getPenaltyWeekValues(row, week)[field] || 0), 0)}
+                      </td>
+                    ))}
+                    <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
                     {rows.every((row) => getPenaltyWeekValues(row, week).semanaFutura)
                       ? "-"
                       : formatCurrency(rows.reduce((sum, row) => sum + Number(getPenaltyWeekValues(row, week).valorDescontar || 0), 0))}
-                  </td>
+                    </td>
+                  </Fragment>
                 ))}
-                <td className="border border-slate-950 px-3 py-2">{formatCurrency(total)}</td>
+                <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">{formatCurrency(total)}</td>
+                <td className="border border-slate-950" />
               </tr>
             </tfoot>
           ) : null}
         </table>
+      </div>
+      <div className="flex items-center justify-end gap-3 border-t border-slate-300 bg-slate-100 px-3 py-3">
+        <span className="text-xs text-slate-600">{cantidadCambiosPendientes} cambio(s) pendiente(s)</span>
+        <button type="button" onClick={onGuardarTodo}
+          disabled={!cantidadCambiosPendientes || periodoPagado || guardando || loading}
+          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
+          <Save size={16} />{guardando ? "Guardando todo..." : "Guardar todo"}
+        </button>
       </div>
     </section>
   );
@@ -2716,7 +2832,7 @@ function MonthlyLeaderAverageConfiguration({
     weeks.some((week) => isSellerAvailableForWeek(seller, week)),
   );
   const selectedCount = selectedIds.length;
-  const promedioCalculado = selectedCount
+  const promedioCalculado = selectedCount && weeks.length
     ? Number(resumen.ventasConsideradasBono || 0) / weeks.length / selectedCount
     : 0;
 
@@ -2742,6 +2858,9 @@ function MonthlyLeaderAverageConfiguration({
             <span>Seleccionados: {selectedCount}</span>
             <span>Promedio: {formatCommission(promedioCalculado)}</span>
           </div>
+            <p className="mt-1 text-xs text-slate-600">
+              Promedio = ventas elegibles de los equipos semanales ÷ semanas ÷ vendedores del promedio mensual. Si el vendedor sigue activo, sin fecha de salida, y ya supera 15 días desde su ingreso, también cuentan sus ventas iniciales.
+            </p>
         </div>
         {disabled ? (
           <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
@@ -3113,18 +3232,18 @@ function LeadershipCommissionTables({
               {row.esJefeComercial ? (
                 <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs">
                   <p className="font-semibold text-emerald-800">
-                    Bono:{" "}
+                    Vendedores en el divisor del promedio:{" "}
                     {mensual.vendedoresConsideradosBono?.length
                       ? mensual.vendedoresConsideradosBono
                           .map((vendedor) => vendedor.nombre)
                           .join(", ")
                       : "Sin vendedores elegibles"}
                     {" · "}
-                    {mensual.ventasConsideradasBono || 0} dispositivos considerados
+                    {mensual.ventasConsideradasBono || 0} dispositivos de los equipos semanales que cumplen la condición de antigüedad
                   </p>
                   {mensual.vendedoresExcluidosBono?.length ? (
                     <p className="mt-1 text-amber-800">
-                      No considerados para el bono:{" "}
+                      No incluidos en el divisor del promedio:{" "}
                       {mensual.vendedoresExcluidosBono
                         .map(
                           (vendedor) =>
@@ -3177,11 +3296,38 @@ function LeadershipCommissionTables({
                     {weeks.map((week, index) => (
                       <th key={week.startDate} className={`border border-slate-950 px-3 py-2 font-black ${blockColors[index % blockColors.length]}`}>
                         {week.label}
+                        {row.esJefeComercial || row.esSupervisorComercial ? (
+                          <label className="mt-2 block text-[11px] font-semibold normal-case">
+                            Comisión según
+                            <select
+                              aria-label={`Vendedores para comisión de ${row.nombre} en ${week.label}`}
+                              value={getWeekValues(row, week).cantidadVendedoresComision ?? ""}
+                              disabled={periodoPagado || Boolean(guardandoEquipoSemanal)}
+                              onChange={(event) => onGuardarEquipoSemanal({
+                                jefe: row,
+                                week,
+                                vendedorIds: (getWeekValues(row, week).vendedorIdsSeleccionados || []).filter((id) => Number(id) !== Number(row.usuarioId)),
+                                cantidadVendedoresComision: event.target.value === "" ? null : Number(event.target.value),
+                              })}
+                              className="mx-auto mt-1 block h-7 max-w-full rounded border border-slate-300 bg-white px-1 text-xs font-semibold text-slate-900 outline-none focus:border-emerald-600 disabled:opacity-50"
+                            >
+                              <option value="">
+                                {getWeekValues(row, week).cantidadVendedores ?? 0} vendedor{Number(getWeekValues(row, week).cantidadVendedores) === 1 ? "" : "es"}
+                              </option>
+                              {[1, 2, 3, 4, 5].map((cantidad) => (
+                                <option key={cantidad} value={cantidad}>{cantidad} vendedor{cantidad === 1 ? "" : "es"}</option>
+                              ))}
+                            </select>
+                            {guardandoEquipoSemanal === `${row.usuarioId}-${week.startDate}` ? (
+                              <span role="status" className="mt-1 block text-[10px] font-normal">Guardando y calculando...</span>
+                            ) : null}
+                          </label>
+                        ) : null}
                       </th>
                     ))}
-                    <th className="border border-slate-950 bg-amber-100 px-3 py-2 font-black">COMISION</th>
-                    <th className="border border-slate-950 px-3 py-2 font-black">BONO</th>
-                    <th className="border border-slate-950 bg-red-600 px-3 py-2 font-black text-white">A RECIBIR</th>
+                    <th className="border border-slate-950 bg-amber-100 px-3 py-2 font-black">COMISIÓN SEMANAL</th>
+                    <th className="border border-slate-950 px-3 py-2 font-black">BONO MENSUAL</th>
+                    <th className="border border-slate-950 bg-red-600 px-3 py-2 font-black text-white">TOTAL</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3195,7 +3341,7 @@ function LeadershipCommissionTables({
                     <td className="border border-slate-950 px-3 py-2" />
                     <td className="border border-slate-950 bg-red-600 px-3 py-2 text-white" />
                   </tr>
-                  {row.esJefeComercial ? (
+                  {row.esJefeComercial || row.esSupervisorComercial ? (
                     <tr className="font-bold">
                       <td className="border border-slate-950 bg-emerald-700 px-3 py-2 text-white">
                         DISPOSITIVOS POR VENDEDOR
@@ -3234,7 +3380,7 @@ function LeadershipCommissionTables({
                         colSpan={3}
                         className="border border-slate-950 bg-emerald-50 px-3 py-2 text-xs text-emerald-800"
                       >
-                        Ventas individuales incluidas en el total del jefe
+                        Ventas individuales incluidas en el total del {row.esJefeComercial ? "jefe" : "supervisor"}
                       </td>
                     </tr>
                   ) : null}
@@ -3246,7 +3392,7 @@ function LeadershipCommissionTables({
                     })}
                     <td className="border border-slate-950 bg-amber-100 px-3 py-2 text-lg">{formatCommission(mensual.valorComisionSemanal)}</td>
                     <td className="border border-slate-950 px-3 py-2 text-lg">{formatCommission(mensual.valorComisionMensual)}</td>
-                    <td className="border border-slate-950 bg-red-600 px-3 py-2 text-lg text-white">{formatCommission(mensual.totalPagar)}</td>
+                    <td className="border border-slate-950 bg-red-600 px-3 py-2 text-lg text-white">{formatCommission(Number(mensual.valorComisionSemanal || 0) + Number(mensual.valorComisionMensual || 0))}</td>
                   </tr>
                 </tbody>
               </table>

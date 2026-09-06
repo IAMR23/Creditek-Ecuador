@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import EgresosCreditekTipos from "./EgresosCreditekTipos";
 import {
   descargarExcelEgresosCreditek,
   descargarExcelRubroEgresosCreditek,
@@ -60,6 +61,15 @@ const TIPOS_EGRESO = [
   { id: "descuentos", label: "Descuentos" },
   { id: "jefes", label: "Jefes" },
   { id: "multas_facturacion", label: "Facturación" },
+  { id: "otros", label: "Otros" },
+];
+
+const TIPOS_PRESTAMO = [
+  { id: "plan_movistar", label: "Plan Movistar" },
+  { id: "mecanica", label: "Mecánica" },
+  { id: "lentes", label: "Lentes" },
+  { id: "prestamo_empresarial", label: "Préstamo empresarial" },
+  { id: "cuotas_telefono", label: "Cuotas teléfono" },
   { id: "otros", label: "Otros" },
 ];
 
@@ -116,7 +126,7 @@ const normalizarValor = (value) => {
 };
 
 const buscarTipo = (tipoId) =>
-  TIPOS_EGRESO.find((tipo) => tipo.id === String(tipoId || "").toLowerCase()) ||
+  [...TIPOS_EGRESO, ...TIPOS_PRESTAMO].find((tipo) => tipo.id === String(tipoId || "").toLowerCase()) ||
   TIPOS_EGRESO[0];
 
 const tipoLabel = (tipoId) => buscarTipo(tipoId).label;
@@ -147,7 +157,17 @@ export default function EgresosCreditek() {
   const [registros, setRegistros] = useState([]);
   const [seccionActiva, setSeccionActiva] = useState("prestamos");
   const [usuarioId, setUsuarioId] = useState("");
-  const [tipo, setTipo] = useState("entradas");
+  const [tipo, setTipo] = useState("plan_movistar");
+  const [fechaFin, setFechaFin] = useState("");
+  const esPrestamo = seccionActiva === "prestamos";
+  const [catalogoTipos, setCatalogoTipos] = useState([]);
+  const [gestionTipos, setGestionTipos] = useState(null);
+  const tiposDisponibles = catalogoTipos.filter((item) => item.activo).map((item) => ({ id: item.codigo.toLowerCase(), label: item.nombre }));
+  const actualizarCatalogo = (tipos) => {
+    setCatalogoTipos(tipos);
+    setRegistros((actuales) => actuales.map((registro) => ({ ...registro, tipoNombre: tipos.find((item) => item.codigo === registro.tipo)?.nombre || registro.tipoNombre })));
+    setTipo((actual) => tipos.some((item) => item.activo && item.codigo.toLowerCase() === actual) ? actual : tipos.find((item) => item.activo)?.codigo.toLowerCase() || "");
+  };
   const [valor, setValor] = useState("");
   const [observacion, setObservacion] = useState("");
   const [fechaRegistro, setFechaRegistro] = useState(fechaEcuadorIso(new Date()));
@@ -222,7 +242,7 @@ export default function EgresosCreditek() {
         registro.usuario?.nombre,
         registro.observacion,
         registro.fecha,
-        tipoLabel(registro.tipo),
+        (registro.tipoNombre || tipoLabel(registro.tipo)),
         registro.registradoPor?.nombre,
         registro.actualizadoPor?.nombre,
         ACCIONES[registro.ultimaAccion],
@@ -246,6 +266,9 @@ export default function EgresosCreditek() {
           `/api/contabilidad/egresos-creditek/${seccionId}`,
         );
         setUsuarios(Array.isArray(data.usuarios) ? data.usuarios : []);
+        const tipos = Array.isArray(data.tipos) ? data.tipos : [];
+        setCatalogoTipos(tipos);
+        setTipo((actual) => tipos.some((item) => item.activo && item.codigo.toLowerCase() === actual) ? actual : tipos.find((item) => item.activo)?.codigo.toLowerCase() || "");
         setRegistros(Array.isArray(data.registros) ? data.registros : []);
       } catch (error) {
         Swal.fire(
@@ -286,8 +309,10 @@ export default function EgresosCreditek() {
     }
     setSeccionActiva(seccionId);
     setRegistros([]);
+    setCatalogoTipos([]);
     setValor("");
-    setTipo("entradas");
+    setTipo(seccionId === "prestamos" ? "plan_movistar" : "entradas");
+    setFechaFin("");
     setObservacion("");
     setFechaRegistro(fechaEcuadorIso(new Date()));
     setBusqueda("");
@@ -297,6 +322,7 @@ export default function EgresosCreditek() {
   const guardar = async (event) => {
     event.preventDefault();
     const valorNumerico = normalizarValor(valor);
+    if (!tipo) { Swal.fire("Tipo requerido", "Crea o selecciona un tipo activo.", "warning"); return; }
     if (!usuarioId) {
       Swal.fire("Usuario requerido", "Selecciona un usuario.", "warning");
       return;
@@ -306,10 +332,14 @@ export default function EgresosCreditek() {
       return;
     }
     if (seccionRequiereFecha && !fechaRegistro) {
-      Swal.fire("Fecha requerida", "Ingresa la fecha de la sanción.", "warning");
+      Swal.fire("Fecha requerida", "Ingresa la fecha del registro.", "warning");
       return;
     }
 
+    if (esPrestamo && fechaFin && fechaFin < fechaRegistro) {
+      Swal.fire("Fechas inválidas", "La fecha final debe ser igual o posterior al inicio.", "warning");
+      return;
+    }
     try {
       setSaving(true);
       const { data } = await api.post(
@@ -320,11 +350,13 @@ export default function EgresosCreditek() {
           valor,
           observacion,
           ...(seccionRequiereFecha ? { fecha: fechaRegistro } : {}),
+          ...(esPrestamo ? { fechaFin } : {}),
         },
       );
       setRegistros((actuales) => [data.registro, ...actuales]);
       setValor("");
-      setTipo("entradas");
+      setTipo(tiposDisponibles.some((item) => item.id === tipo) ? tipo : tiposDisponibles[0]?.id || "");
+      setFechaFin("");
       setObservacion("");
       setFechaRegistro(fechaEcuadorIso(new Date()));
       setBusqueda("");
@@ -353,6 +385,7 @@ export default function EgresosCreditek() {
       valor: Number(registro.valor || 0).toFixed(2),
       observacion: registro.observacion || "",
       fecha: registro.fecha || fechaEcuadorIso(new Date()),
+      fechaFin: registro.fechaFin || "",
       estadoPagoEntrada: registro.estadoPagoEntrada || "PENDIENTE",
     });
   };
@@ -378,7 +411,7 @@ export default function EgresosCreditek() {
     }
 
     if (!esVinculado && seccionRequiereFecha && !edicion.fecha) {
-      Swal.fire("Fecha requerida", "Ingresa la fecha de la sanción.", "warning");
+      Swal.fire("Fecha requerida", "Ingresa la fecha del registro.", "warning");
       return;
     }
 
@@ -433,6 +466,7 @@ export default function EgresosCreditek() {
             valor: edicion.valor,
             observacion: edicion.observacion,
             ...(seccionRequiereFecha ? { fecha: edicion.fecha } : {}),
+            ...(esPrestamo ? { fechaFin: edicion.fechaFin } : {}),
           },
         );
         setRegistros((actuales) =>
@@ -642,7 +676,7 @@ export default function EgresosCreditek() {
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
               <span className={`inline-flex size-9 items-center justify-center rounded-md ${seccion.iconTone}`}>
                 <SeccionIcon size={18} />
               </span>
@@ -652,6 +686,15 @@ export default function EgresosCreditek() {
                   {seccion.label}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setGestionTipos("crear")}
+                disabled={loading || saving || actualizandoId !== null}
+                className="ml-auto inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:opacity-50"
+              >
+                <Plus size={16} className="shrink-0" />
+                Crear / administrar tipos
+              </button>
             </div>
 
             <form
@@ -676,14 +719,15 @@ export default function EgresosCreditek() {
               </label>
 
               <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
-                Tipo
+                {esPrestamo ? "Tipo de préstamo" : "Tipo"}
                 <select
                   value={tipo}
                   onChange={(event) => setTipo(event.target.value)}
                   disabled={loading || saving || actualizandoId !== null}
                   className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
                 >
-                  {TIPOS_EGRESO.map((item) => (
+                  <option value="">Seleccionar tipo</option>
+                  {tiposDisponibles.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.label}
                     </option>
@@ -691,8 +735,8 @@ export default function EgresosCreditek() {
                 </select>
               </label>
 
-              <label className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
-                Valor
+              <label title={esPrestamo ? "Se descuenta desde el mes de inicio. Sin fecha final, continúa cada mes mientras el préstamo esté activo." : undefined} className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
+                {esPrestamo ? "Cuota mensual" : "Valor"}
                 <span className="relative block">
                   <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-semibold text-slate-400">
                     $
@@ -714,7 +758,7 @@ export default function EgresosCreditek() {
 
               {seccionRequiereFecha && (
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
-                  Fecha de sanción
+                  {esPrestamo ? "Fecha de inicio" : "Fecha de sanción"}
                   <input
                     type="date"
                     value={fechaRegistro}
@@ -725,6 +769,11 @@ export default function EgresosCreditek() {
                 </label>
               )}
 
+              {esPrestamo && <label className="grid gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
+                Fecha final (opcional; vacío = continúa)
+                <input type="date" value={fechaFin} min={fechaRegistro} onChange={(event) => setFechaFin(event.target.value)} disabled={saving || actualizandoId !== null}
+                  className="h-10 rounded-md border border-slate-300 px-3 text-sm" />
+              </label>}
               <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2 lg:col-span-3">
                 Observación
                 <input
@@ -945,7 +994,7 @@ export default function EgresosCreditek() {
                 <span>Usuario</span>
                 <span>Tipo</span>
                 <span className="text-right">Valor</span>
-                {seccionRequiereFecha && <span>Fecha sanción</span>}
+                {seccionRequiereFecha && <span>{esPrestamo ? "Inicio / Fin" : "Fecha sanción"}</span>}
                 <span>Estado</span>
                 <span>Observación</span>
                 <span>Trazabilidad</span>
@@ -1005,7 +1054,7 @@ export default function EgresosCreditek() {
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Tipo</p>
                       <span className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-bold uppercase text-slate-700">
-                        <span className="truncate">{tipoLabel(registro.tipo)}</span>
+                        <span className="truncate">{(registro.tipoNombre || tipoLabel(registro.tipo))}</span>
                       </span>
                     </div>
                     <div className="min-w-0 sm:text-right">
@@ -1022,10 +1071,10 @@ export default function EgresosCreditek() {
                     </div>
                     {seccionRequiereFecha && (
                       <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">Fecha sanción</p>
+                        <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">{esPrestamo ? "Inicio / Fin" : "Fecha sanción"}</p>
                         <p className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                           <CalendarDays size={13} className="shrink-0 text-slate-400" />
-                          {registro.fecha || "-"}
+                          {registro.fecha || "-"}{esPrestamo ? ` / ${registro.fechaFin || "Sin fecha final"}` : ""}
                         </p>
                       </div>
                     )}
@@ -1203,7 +1252,7 @@ export default function EgresosCreditek() {
                 </label>
 
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-                  Tipo
+                  {esPrestamo ? "Tipo de préstamo" : "Tipo"}
                   <select
                     value={edicion.tipo}
                     onChange={(event) =>
@@ -1219,16 +1268,18 @@ export default function EgresosCreditek() {
                         : "bg-white text-slate-900"
                     }`}
                   >
-                    {TIPOS_EGRESO.map((item) => (
+                    {!tiposDisponibles.some((item) => item.id === edicion.tipo) && <option value={edicion.tipo}>{registroEditando?.tipoNombre || tipoLabel(edicion.tipo)} (inactivo)</option>}
+                    {tiposDisponibles.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.label}
                       </option>
                     ))}
                   </select>
+                  <button type="button" onClick={() => setGestionTipos("editar")} disabled={actualizandoId !== null || editandoControlFinanciero} className="text-left text-xs font-semibold text-emerald-700 underline disabled:opacity-50">+ Crear / administrar tipos</button>
                 </label>
 
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-                  Valor
+                  {esPrestamo ? "Cuota mensual" : "Valor"}
                   <span className="relative block">
                     <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm font-semibold text-slate-400">
                       $
@@ -1257,7 +1308,7 @@ export default function EgresosCreditek() {
 
                 {seccionRequiereFecha && (
                   <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-                    Fecha de sanción
+                    {esPrestamo ? "Fecha de inicio" : "Fecha de sanción"}
                     <input
                       type="date"
                       value={edicion.fecha}
@@ -1277,6 +1328,12 @@ export default function EgresosCreditek() {
                   </label>
                 )}
 
+                {esPrestamo && <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Fecha final (opcional; vacío = continúa)
+                  <input type="date" value={edicion.fechaFin || ""} min={edicion.fecha} disabled={actualizandoId !== null}
+                    onChange={(event) => setEdicion((actual) => ({ ...actual, fechaFin: event.target.value }))}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm" />
+                </label>}
                 <div className="grid content-end gap-1.5 text-xs font-semibold text-slate-700">
                   {editandoControlFinanciero ? "Estado de pago" : "Estado"}
                   {editandoControlFinanciero ? (
@@ -1352,6 +1409,12 @@ export default function EgresosCreditek() {
           </section>
         </div>
       )}
+      {gestionTipos && <EgresosCreditekTipos
+        seccion={seccionActiva}
+        onClose={() => setGestionTipos(null)}
+        onActualizados={actualizarCatalogo}
+        onCreado={(codigo) => gestionTipos === "editar" ? setEdicion((actual) => ({ ...actual, tipo: codigo.toLowerCase() })) : setTipo(codigo.toLowerCase())}
+      />}
     </main>
   );
 }

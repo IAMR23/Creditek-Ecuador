@@ -126,6 +126,16 @@ const RolCreditekAjuste = sequelize.define(
       allowNull: true,
       validate: { min: 0 },
     },
+    sueldosExtrasManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
+    fondosReservaManual: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0 },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

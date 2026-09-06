@@ -35,9 +35,30 @@ const RolCreditekAjuste = require("../models/RolCreditekAjuste");
 const Usuario = require("../models/Usuario");
 const pagosComisionesService = require("./pagosComisionesService");
 const { Op } = require("sequelize");
-const { guardarAjustes, obtenerResumen } = require("./rolesCreditekResumenService");
+const { guardarAjustes, guardarNomina, obtenerResumen } = require("./rolesCreditekResumenService");
 
 describe("rolesCreditekResumenService", () => {
+  test("incluye tipos nuevos de anticipos en nomina", async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 4, nombre: "Prueba", activo: true }]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([{ usuarioId: 4, seccion: "ANTICIPOS", tipo: "T_NUEVO", valor: 18.5 }]);
+    const resultado = await obtenerResumen({ anio: 2026, mes: 9 });
+    expect(resultado.registros[0]).toMatchObject({ otrosCalculado: 18.5, totalAnticipos: 18.5 });
+  });
+  test("suma cuotas de prestamos en nomina sin duplicarlas en anticipos", async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 4, nombre: "Prueba", activo: true }]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([
+      { usuarioId: 4, seccion: "PRESTAMOS", tipo: "OTROS", valor: 25, fecha: "2026-07-01", fechaFin: "2026-12-31" },
+      { usuarioId: 4, seccion: "PRESTAMOS", tipo: "PLAN_MOVISTAR", valor: 15, fecha: "2026-08-01", fechaFin: "2026-09-30" },
+      { usuarioId: 4, seccion: "PRESTAMOS", tipo: "MECANICA", valor: 25, fecha: "2025-01-01", fechaFin: null },
+      { usuarioId: 4, seccion: "PRESTAMOS", tipo: "LENTES", valor: 50, fecha: "2026-10-01", fechaFin: "2026-12-31" },
+      { usuarioId: 4, seccion: "ANTICIPOS", tipo: "OTROS", valor: 10 },
+    ]);
+    const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
+    expect(resultado.registros[0]).toMatchObject({ prestamosEgresos: 65, sumanPrestamos: 0, totalAnticipos: 10, totalDescuentos: 10 });
+    const filtroPrestamos = EgresoCreditekEntrada.findAll.mock.calls[0][0].where[Op.or][0];
+    expect(filtroPrestamos.seccion).toBe("PRESTAMOS");
+    expect(filtroPrestamos[Op.and][1][Op.or]).toContainEqual({ fechaFin: null });
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     Usuario.findAll.mockResolvedValue([]);
@@ -48,6 +69,28 @@ describe("rolesCreditekResumenService", () => {
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
       vendedores: [],
     });
+  });
+
+  test("COMxVTA coincide con la columna de comisiones de cada cargo y mantiene sanciones separadas", async () => {
+    Usuario.findAll.mockResolvedValue([
+      { id: 4, nombre: "Vendedor", activo: true },
+      { id: 5, nombre: "Jefe", activo: true },
+      { id: 6, nombre: "Supervisor", activo: true },
+      { id: 7, nombre: "Supervisor sin bono", activo: true },
+    ]);
+    pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({
+      vendedores: [
+        { usuarioId: 4, cargo: "VENDEDOR", resumenMensual: { totalComisionesSemanaMensual: 150.25, totalPagar: 130.25 }, total: { valorDescontar: 20 } },
+        { usuarioId: 5, cargo: "JEFE COMERCIAL", esJefeComercial: true, resumenMensual: { valorComisionSemanal: "95.50", valorComisionMensual: "60.00", totalPagar: 145.5 }, total: { valorDescontar: 10 }, ventasPersonalesVendedor: { resumenMensual: { totalComisionesSemanaMensual: 999 } } },
+        { usuarioId: 6, cargoComision: "SUPERVISOR CALL CENTER", resumenMensual: { valorComisionSemanal: 80, valorComisionMensual: 40, totalPagar: 100 }, total: { valorDescontar: 20 } },
+        { usuarioId: 7, esSupervisorComercial: true, resumenMensual: { valorComisionSemanal: 0, valorComisionMensual: 0, totalComisionesSemanaMensual: 999 } },
+      ],
+    });
+    const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
+    expect(resultado.registros.map(row => row.ingresosComisiones)).toEqual([150.25, 155.5, 120, 0]);
+    expect(resultado.registros.map(row => row.descuentosMetaCalculado)).toEqual([20, 10, 20, 0]);
+    expect(resultado.totales.ingresosComisiones).toBe(425.75);
+    expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({ year: 2026, month: 8 });
   });
 
   test("consolida valores automaticos, manuales y total por colaborador", async () => {
@@ -428,5 +471,79 @@ describe("rolesCreditekResumenService", () => {
       ),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(Usuario.count).not.toHaveBeenCalled();
+  });
+});
+
+describe("fondos de reserva de nomina", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test("guarda todos los colaboradores del periodo en una transaccion sin modificar otros ajustes", async () => {
+    Usuario.count.mockResolvedValue(2);
+    const update = jest.fn().mockResolvedValue(undefined);
+    RolCreditekAjuste.findOrCreate.mockResolvedValue([{ update }, false]);
+    await guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: "25,50", prestamo: 999 },
+      { usuarioId: 5, fondosReservaManual: 0 },
+    ] }, 7);
+    expect(update.mock.calls).toEqual([
+      [{ usuarioId: 4, anio: 2026, mes: 9, fondosReservaManual: 25.5, actualizadoPorId: 7 }, { transaction: { id: "tx" } }],
+      [{ usuarioId: 5, anio: 2026, mes: 9, fondosReservaManual: 0, actualizadoPorId: 7 }, { transaction: { id: "tx" } }],
+    ]);
+  });
+
+  test.each([-1, "abc", 10000000000, undefined])("rechaza fondos invalidos %s antes de escribir", async (valor) => {
+    await expect(guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: 20 },
+      { usuarioId: 5, fondosReservaManual: valor },
+    ] }, 7)).rejects.toMatchObject({ statusCode: 400 });
+    expect(RolCreditekAjuste.findOrCreate).not.toHaveBeenCalled();
+  });
+
+  test("rechaza colaboradores duplicados", async () => {
+    await expect(guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: 20 },
+      { usuarioId: 4, fondosReservaManual: 25 },
+    ] }, 7)).rejects.toMatchObject({ statusCode: 400 });
+    expect(RolCreditekAjuste.findOrCreate).not.toHaveBeenCalled();
+  });
+
+  test("recupera el importe guardado incluido cero y mantiene automatico sin ajuste", async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 4 }, { id: 5 }, { id: 6 }]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([]);
+    ControlFinancieroRegistro.findAll.mockResolvedValue([]);
+    ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([]);
+    pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({ vendedores: [] });
+    RolCreditekAjuste.findAll.mockResolvedValue([
+      { usuarioId: 4, fondosReservaManual: "25.50", sueldosExtrasManual: "75.50" },
+      { usuarioId: 5, fondosReservaManual: "0.00", sueldosExtrasManual: "0.00" },
+    ]);
+    const resultado = await obtenerResumen({ anio: 2026, mes: 9 });
+    expect(resultado.registros.map(r => r.fondosReservaManual)).toEqual([25.5, 0, null]);
+    expect(resultado.registros.map(r => r.sueldosExtrasManual)).toEqual([75.5, 0, null]);
+    expect(RolCreditekAjuste.findAll).toHaveBeenCalledWith({ where: { anio: 2026, mes: 9 } });
+  });
+});
+
+describe("sueldos extras de nomina", () => {
+  beforeEach(() => jest.clearAllMocks());
+  test("guarda sueldo extra y fondos juntos sin sobrescribir otros ajustes", async () => {
+    Usuario.count.mockResolvedValue(2);
+    const update = jest.fn().mockResolvedValue(undefined);
+    RolCreditekAjuste.findOrCreate.mockResolvedValue([{ update }, false]);
+    await guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: 20, sueldosExtrasManual: "75,50", prestamo: 999 },
+      { usuarioId: 5, fondosReservaManual: 0, sueldosExtrasManual: 0 },
+    ] }, 7);
+    expect(update.mock.calls).toEqual([
+      [{ usuarioId: 4, anio: 2026, mes: 9, fondosReservaManual: 20, sueldosExtrasManual: 75.5, actualizadoPorId: 7 }, { transaction: { id: "tx" } }],
+      [{ usuarioId: 5, anio: 2026, mes: 9, fondosReservaManual: 0, sueldosExtrasManual: 0, actualizadoPorId: 7 }, { transaction: { id: "tx" } }],
+    ]);
+  });
+  test.each([-1, "abc", 10000000000])("rechaza extras invalidos %s sin guardar parcialmente", async (valor) => {
+    await expect(guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: 20, sueldosExtrasManual: 25 },
+      { usuarioId: 5, fondosReservaManual: 0, sueldosExtrasManual: valor },
+    ] }, 7)).rejects.toMatchObject({ statusCode: 400 });
+    expect(RolCreditekAjuste.findOrCreate).not.toHaveBeenCalled();
   });
 });

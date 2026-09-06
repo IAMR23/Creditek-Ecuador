@@ -6,6 +6,7 @@ const ControlFinancieroConciliacionCaja = require(
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const Usuario = require("../models/Usuario");
 const { Op } = require("sequelize");
+const tiposService = require("./egresosCreditekTiposService");
 
 const MAX_VALOR = 9999999999.99;
 const SECCIONES = [
@@ -85,12 +86,16 @@ const normalizarSeccion = (value) => {
   return seccion;
 };
 
-const normalizarTipo = (value) => {
-  const tipo = String(value || "ENTRADAS").trim().toUpperCase();
-  if (!TIPOS_EGRESO.includes(tipo)) {
-    throw crearError("El tipo solicitado no es valido");
-  }
-  return tipo;
+const validarFechaFinalPrestamo = (seccion, fechaInicio, value) => {
+  if (seccion !== "PRESTAMOS") return null;
+  const fechaFin = normalizarFecha(value);
+  if (fechaFin && fechaFin < fechaInicio) throw crearError("La fecha final no puede ser anterior al inicio del prestamo");
+  return fechaFin;
+};
+
+const normalizarTipo = async (value, seccion = "ANTICIPOS", codigoAnterior) => {
+  const tipo = String(value || (seccion === "PRESTAMOS" ? "OTROS" : "ENTRADAS")).trim().toUpperCase();
+  return tiposService.validarTipo(seccion, tipo, codigoAnterior);
 };
 
 const serializarEntrada = (value) => {
@@ -239,13 +244,15 @@ const obtenerRegistroCompleto = async (registro) => {
   const registroCompleto = await EgresoCreditekEntrada.findByPk(registro.id, {
     include: includeUsuarios,
   });
-  return serializarEntrada(registroCompleto || registro);
+  const entrada = serializarEntrada(registroCompleto || registro);
+  const tipos = await tiposService.listar(entrada.seccion || "ANTICIPOS");
+  return { ...entrada, tipoNombre: tipos.find((tipo) => tipo.codigo === entrada.tipo)?.nombre || entrada.tipo };
 };
 
 const obtenerRegistros = async (seccionValue) => {
   const seccion = normalizarSeccion(seccionValue);
   const incluirControlFinancieroCaja = seccion === "ANTICIPOS";
-  const [usuarios, registrosValues, registrosControlFinancieroCajaValues] =
+  const [usuarios, registrosValues, registrosControlFinancieroCajaValues, tipos] =
     await Promise.all([
       Usuario.findAll({
         where: { activo: true },
@@ -296,6 +303,7 @@ const obtenerRegistros = async (seccionValue) => {
             order: [["updatedAt", "DESC"], ["id", "DESC"]],
           })
         : Promise.resolve([]),
+      tiposService.listar(seccion),
     ]);
   const registrosControlFinancieroCaja = incluirControlFinancieroCaja
     ? await filtrarCajasNoEnCierre(registrosControlFinancieroCajaValues)
@@ -303,10 +311,11 @@ const obtenerRegistros = async (seccionValue) => {
   const registros = [
     ...registrosValues.map(serializarEntrada),
     ...registrosControlFinancieroCaja.map(serializarCajaControlFinanciero),
-  ].sort(ordenarPorActividad);
+  ].map((registro) => ({ ...registro, tipoNombre: tipos.find((tipo) => tipo.codigo === registro.tipo)?.nombre || registro.tipo })).sort(ordenarPorActividad);
 
   return {
     seccion,
+    tipos,
     usuarios: usuarios.map((usuario) =>
       typeof usuario.toJSON === "function" ? usuario.toJSON() : usuario,
     ),
@@ -322,11 +331,11 @@ const obtenerRegistros = async (seccionValue) => {
 
 const crearRegistro = async (
   seccionValue,
-  { usuarioId: usuarioIdValue, valor, observacion, fecha, tipo },
+  { usuarioId: usuarioIdValue, valor, observacion, fecha, fechaFin, tipo },
   registradoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
-  const tipoNormalizado = normalizarTipo(tipo);
+  const tipoNormalizado = await normalizarTipo(tipo, seccion);
   const usuarioId = normalizarId(usuarioIdValue, "El usuario");
   const registradoPorId = normalizarId(registradoPor, "El usuario registrador");
   const valorNormalizado = normalizarValor(valor);
@@ -348,6 +357,7 @@ const crearRegistro = async (
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
     fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
+    ...(seccion === "PRESTAMOS" ? { fechaFin: validarFechaFinalPrestamo(seccion, fechaNormalizada, fechaFin) } : {}),
     seccion,
     tipo: tipoNormalizado,
     registradoPorId,
@@ -358,12 +368,12 @@ const crearRegistro = async (
 const actualizarRegistro = async (
   seccionValue,
   idValue,
-  { usuarioId: usuarioIdValue, valor, observacion, fecha, tipo },
+  { usuarioId: usuarioIdValue, valor, observacion, fecha, fechaFin, tipo },
   actualizadoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
   const registro = await obtenerRegistroDeSeccion(seccion, idValue);
-  const tipoNormalizado = normalizarTipo(tipo);
+  const tipoNormalizado = await normalizarTipo(tipo, seccion, registro.tipo);
   const usuarioId = normalizarId(usuarioIdValue, "El usuario");
   const actualizadoPorId = normalizarId(
     actualizadoPor,
@@ -390,6 +400,7 @@ const actualizarRegistro = async (
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
     fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
+    ...(seccion === "PRESTAMOS" ? { fechaFin: validarFechaFinalPrestamo(seccion, fechaNormalizada, fechaFin) } : {}),
     tipo: tipoNormalizado,
     actualizadoPorId,
     ultimaAccion: "EDITADO",

@@ -181,6 +181,8 @@ const actualizarValoresMultas = async (req, res) => {
       year: req.body.year,
       month: req.body.month,
       ajustes: req.body.ajustes,
+      observacionSanciones: req.body.observacionSanciones,
+      observacionesVendedores: req.body.observacionesVendedores,
       actualizadoPorId: req.user.id,
     });
     return res.json(resultado);
@@ -196,6 +198,7 @@ const guardarEquipoSemanalJefeComercial = async (req, res) => {
         jefeComercialId: req.params.jefeComercialId,
         semanaInicio: req.params.semanaInicio,
         vendedorIds: req.body.vendedorIds,
+        cantidadVendedoresComision: req.body.cantidadVendedoresComision,
         actualizadoPorId: req.user.id,
       });
     return res.json(resultado);
@@ -211,6 +214,7 @@ const guardarEquipoSemanalSupervisorComercial = async (req, res) => {
         supervisorComercialId: req.params.supervisorComercialId,
         semanaInicio: req.params.semanaInicio,
         vendedorIds: req.body.vendedorIds,
+        cantidadVendedoresComision: req.body.cantidadVendedoresComision,
         actualizadoPorId: req.user.id,
       });
     return res.json(resultado);

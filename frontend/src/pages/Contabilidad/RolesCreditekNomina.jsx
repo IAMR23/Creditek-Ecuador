@@ -4,11 +4,13 @@ import {
   FileSpreadsheet,
   RefreshCw,
   Search,
+  Save,
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
 import { api } from "../../api/client";
+import { calcularEgresosNomina } from "../../utils/rolesCreditekNomina";
 
 const ahora = new Date();
 const IESS_RATE = 0.0945;
@@ -105,18 +107,20 @@ const calcularFila = (row, anio, mes) => {
   const sueldoExtra = numero(row.rolPagoSueldoExtra);
   const diasTrabajados = diasTrabajadosPeriodo(row, anio, mes);
   const sueldoAPagar = redondear((sueldoBase * diasTrabajados) / 30);
-  const sueldosExtras = redondear((sueldoExtra * diasTrabajados) / 30);
-  const fondosReserva = row.fondoReservaActivo
-    ? redondear((sueldoAPagar + sueldosExtras) / 12)
-    : 0;
+  const sueldosExtras = row.sueldosExtrasManual != null
+    ? redondear(row.sueldosExtrasManual)
+    : redondear((sueldoExtra * diasTrabajados) / 30);
+  const fondosReserva = row.fondosReservaManual != null
+    ? redondear(row.fondosReservaManual)
+    : row.fondoReservaActivo
+      ? redondear((sueldoAPagar + sueldosExtras) / 12)
+      : 0;
   const comisionVenta = numero(row.ingresosComisiones);
   const totalIngresos = redondear(
     sueldoAPagar + fondosReserva + sueldosExtras + comisionVenta,
   );
   const iess = redondear(totalIngresos * IESS_RATE);
-  const anticipo = numero(row.totalAnticipos);
-  const prestamo = numero(row.sumanPrestamos);
-  const totalEgresos = redondear(iess + anticipo + prestamo);
+  const { anticipo, prestamo, sancionMeta, totalEgresos } = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - totalEgresos);
 
   return {
@@ -131,6 +135,7 @@ const calcularFila = (row, anio, mes) => {
     iess,
     anticipo,
     prestamo,
+    sancionMeta,
     totalEgresos,
     valorRecibir,
   };
@@ -145,6 +150,20 @@ export default function RolesCreditekNomina() {
   const [rows, setRows] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [cambios, setCambios] = useState({});
+  const [cambiosExtras, setCambiosExtras] = useState({});
+  const hayCambios = Object.keys(cambios).length > 0 || Object.keys(cambiosExtras).length > 0;
+
+  useEffect(() => {
+    if (!hayCambios) return undefined;
+    const advertir = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", advertir);
+    return () => window.removeEventListener("beforeunload", advertir);
+  }, [hayCambios]);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -154,7 +173,10 @@ export default function RolesCreditekNomina() {
         { params: { anio, mes } },
       );
       setRows(Array.isArray(data.registros) ? data.registros : []);
+      setCambios({});
+      setCambiosExtras({});
     } catch (error) {
+      setRows([]);
       Swal.fire(
         "Error",
         error.response?.data?.message || "No se pudo cargar la nomina.",
@@ -172,7 +194,13 @@ export default function RolesCreditekNomina() {
   const rowsCalculadas = useMemo(
     () =>
       rows
-        .map((row) => calcularFila(row, anio, mes))
+        .map((row) => calcularFila(
+          {
+            ...row,
+            ...(Object.hasOwn(cambios, row.usuarioId) ? { fondosReservaManual: cambios[row.usuarioId] } : {}),
+            ...(Object.hasOwn(cambiosExtras, row.usuarioId) ? { sueldosExtrasManual: cambiosExtras[row.usuarioId] } : {}),
+          }, anio, mes,
+        ))
         .sort((left, right) => {
           const prioridad = prioridadCargo(left.cargo) - prioridadCargo(right.cargo);
           if (prioridad !== 0) return prioridad;
@@ -181,7 +209,7 @@ export default function RolesCreditekNomina() {
             "es",
           );
         }),
-    [anio, mes, rows],
+    [anio, mes, rows, cambios, cambiosExtras],
   );
 
   const rowsFiltradas = useMemo(() => {
@@ -209,11 +237,35 @@ export default function RolesCreditekNomina() {
       iess: sumar(rowsFiltradas, "iess"),
       anticipo: sumar(rowsFiltradas, "anticipo"),
       prestamo: sumar(rowsFiltradas, "prestamo"),
+      sancionMeta: sumar(rowsFiltradas, "sancionMeta"),
       totalEgresos: sumar(rowsFiltradas, "totalEgresos"),
       valorRecibir: sumar(rowsFiltradas, "valorRecibir"),
     }),
     [rowsFiltradas],
   );
+
+  const guardarTodo = async () => {
+    setSaving(true);
+    try {
+      const registros = rowsCalculadas.map((row) => ({
+        usuarioId: row.usuarioId,
+        fondosReservaManual: row.fondosReserva,
+        sueldosExtrasManual: row.sueldosExtras,
+      }));
+      await api.put("/api/contabilidad/roles-creditek-resumen/nomina", { anio, mes, registros });
+      const valores = new Map(registros.map((row) => [row.usuarioId, row]));
+      setRows((actuales) => actuales.map((row) => ({
+        ...row, ...valores.get(row.usuarioId),
+      })));
+      setCambios({});
+      setCambiosExtras({});
+      Swal.fire("Guardado", "Los fondos de reserva y sueldos extras del período fueron guardados.", "success");
+    } catch (error) {
+      Swal.fire("Error", error.response?.data?.message || "No se pudo guardar la nómina. Los cambios siguen disponibles.", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const exportarExcel = () => {
     const encabezado = [
@@ -233,6 +285,7 @@ export default function RolesCreditekNomina() {
         "9,45% IESS/15DIAS",
         "ANTICIPO",
         "PRESTAMO",
+        "SANCIÓN POR NO LLEGAR A META",
         "TOTAL EGRESOS",
         "VALOR A RECIBIR",
       ],
@@ -257,6 +310,7 @@ export default function RolesCreditekNomina() {
         row.iess,
         row.anticipo,
         row.prestamo,
+        row.sancionMeta,
         row.totalEgresos,
         row.valorRecibir,
       ]),
@@ -276,6 +330,7 @@ export default function RolesCreditekNomina() {
         totales.iess,
         totales.anticipo,
         totales.prestamo,
+        totales.sancionMeta,
         totales.totalEgresos,
         totales.valorRecibir,
       ],
@@ -287,7 +342,7 @@ export default function RolesCreditekNomina() {
       { wch: 14 },
       { wch: 34 },
       { wch: 24 },
-      ...Array.from({ length: 12 }, () => ({ wch: 14 })),
+      ...Array.from({ length: 13 }, () => ({ wch: 14 })),
     ];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "Nomina");
@@ -320,7 +375,7 @@ export default function RolesCreditekNomina() {
             <select
               value={mes}
               onChange={(event) => setMes(Number(event.target.value))}
-              disabled={loading}
+              disabled={loading || saving || hayCambios}
               className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600"
               aria-label="Mes"
             >
@@ -333,7 +388,7 @@ export default function RolesCreditekNomina() {
             <select
               value={anio}
               onChange={(event) => setAnio(Number(event.target.value))}
-              disabled={loading}
+              disabled={loading || saving || hayCambios}
               className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600"
               aria-label="Anio"
             >
@@ -344,12 +399,21 @@ export default function RolesCreditekNomina() {
             <button
               type="button"
               onClick={cargar}
-              disabled={loading}
+              disabled={loading || saving || hayCambios}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               title="Actualizar"
             >
               <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
               Actualizar
+            </button>
+            <button
+              type="button"
+              onClick={guardarTodo}
+              disabled={loading || saving || !rows.length}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-700 px-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+            >
+              <Save size={17} />
+              {saving ? "Guardando..." : "Guardar todo"}
             </button>
             <button
               type="button"
@@ -367,6 +431,7 @@ export default function RolesCreditekNomina() {
         <section className="overflow-hidden border border-slate-300 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-300 bg-slate-100 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
+              {hayCambios && <span className="text-amber-700">Cambios sin guardar</span>}
               <span className="rounded-full border border-slate-300 bg-white px-3 py-1">
                 {rowsFiltradas.length} colaboradores
               </span>
@@ -401,7 +466,7 @@ export default function RolesCreditekNomina() {
           </div>
 
           <div className="max-h-[calc(100vh-250px)] min-h-[480px] overflow-auto">
-            <table className="w-full min-w-[1680px] border-collapse text-xs">
+            <table className="w-full min-w-[1840px] border-collapse text-xs">
               <thead className="sticky top-0 z-20 text-slate-950">
                 <tr>
                   <th
@@ -429,7 +494,7 @@ export default function RolesCreditekNomina() {
                     9,45%<br />IESS/15DIAS
                   </th>
                   <th
-                    colSpan={3}
+                    colSpan={4}
                     className="border border-slate-950 bg-sky-200 px-2 py-2 text-center"
                   >
                     EGRESOS
@@ -456,6 +521,7 @@ export default function RolesCreditekNomina() {
                     "TOTAL INGRESOS",
                     "ANTICIPO",
                     "PRESTAMO",
+                    "SANCIÓN POR NO LLEGAR A META",
                     "TOTAL EGRESOS",
                   ].map((header) => (
                     <th
@@ -471,7 +537,7 @@ export default function RolesCreditekNomina() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={17}
+                      colSpan={18}
                       className="border border-slate-300 px-4 py-16 text-center text-sm font-semibold text-slate-500"
                     >
                       Calculando nomina...
@@ -480,7 +546,7 @@ export default function RolesCreditekNomina() {
                 ) : rowsFiltradas.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={17}
+                      colSpan={18}
                       className="border border-slate-300 px-4 py-16 text-center text-sm text-slate-500"
                     >
                       No hay colaboradores para mostrar.
@@ -521,12 +587,48 @@ export default function RolesCreditekNomina() {
                         {formatoNumero(row.sueldoAPagar)}
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
-                        {row.fondosReserva ? formatoNumero(row.fondosReserva) : ""}
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Fondos de reserva de ${row.nombre}`}
+                          value={cambios[row.usuarioId] ?? row.fondosReserva.toFixed(2)}
+                          disabled={saving}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (/^\d{0,10}([.,]\d{0,2})?$/.test(value)) {
+                              setCambios((actuales) => ({ ...actuales, [row.usuarioId]: value }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (Object.hasOwn(cambios, row.usuarioId)) {
+                              setCambios((actuales) => ({ ...actuales, [row.usuarioId]: numero(actuales[row.usuarioId]).toFixed(2) }));
+                            }
+                          }}
+                          className="h-6 w-20 max-w-full rounded border border-slate-300 bg-white/80 px-1 text-right text-xs font-bold tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 disabled:opacity-50"
+                        />
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
-                        {row.sueldosExtras ? formatoNumero(row.sueldosExtras) : ""}
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Sueldos extras de ${row.nombre}`}
+                          value={cambiosExtras[row.usuarioId] ?? row.sueldosExtras.toFixed(2)}
+                          disabled={saving}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (/^\d{0,10}([.,]\d{0,2})?$/.test(value)) {
+                              setCambiosExtras((actuales) => ({ ...actuales, [row.usuarioId]: value }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (Object.hasOwn(cambiosExtras, row.usuarioId)) {
+                              setCambiosExtras((actuales) => ({ ...actuales, [row.usuarioId]: numero(actuales[row.usuarioId]).toFixed(2) }));
+                            }
+                          }}
+                          className="h-6 w-20 max-w-full rounded border border-slate-300 bg-white/80 px-1 text-right text-xs font-bold tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 disabled:opacity-50"
+                        />
                       </td>
-                      <td className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
+                      <td title="Pagos comisiones del mes: Total Comisiones Semana + Mensual para vendedores; Total para jefes y supervisores." className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
                         {row.comisionVenta ? formatoNumero(row.comisionVenta) : ""}
                       </td>
                       <td className="border border-slate-950 bg-emerald-100 px-2 py-1.5 text-right font-extrabold tabular-nums">
@@ -540,6 +642,9 @@ export default function RolesCreditekNomina() {
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
                         {row.prestamo ? formatoNumero(row.prestamo) : ""}
+                      </td>
+                      <td title="Valor del período en Pagos comisiones · Sanción por no llegar a meta" className="border border-slate-950 bg-rose-50 px-2 py-1.5 text-right font-bold text-rose-800 tabular-nums">
+                        {formatoNumero(row.sancionMeta)}
                       </td>
                       <td className="border border-slate-950 bg-rose-50 px-2 py-1.5 text-right font-extrabold tabular-nums">
                         {formatoNumero(row.totalEgresos)}
@@ -588,6 +693,9 @@ export default function RolesCreditekNomina() {
                     </td>
                     <td className="border border-slate-950 px-2 py-2 text-right font-extrabold tabular-nums">
                       {formatoNumero(totales.prestamo)}
+                    </td>
+                    <td className="border border-slate-950 px-2 py-2 text-right font-extrabold tabular-nums">
+                      {formatoNumero(totales.sancionMeta)}
                     </td>
                     <td className="border border-slate-950 px-2 py-2 text-right font-extrabold tabular-nums">
                       {formatoNumero(totales.totalEgresos)}

@@ -60,6 +60,7 @@ const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
+const PagoComisionSancionObservacion = require('./PagoComisionSancionObservacion');
 const PagoComisionEquipoSemanal = require('./PagoComisionEquipoSemanal');
 const PagoComisionPromedioJefe = require('./PagoComisionPromedioJefe');
 const PagoComisionPromedioSupervisor = require('./PagoComisionPromedioSupervisor');
@@ -79,6 +80,7 @@ const NotificacionPersonalLectura = require('./NotificacionPersonalLectura');
 const AuditoriaVentaPdf = require('./AuditoriaVentaPdf');
 const DescuentoDecimo = require('./DescuentoDecimo');
 const EgresoCreditekEntrada = require('./EgresoCreditekEntrada');
+require('./EgresoCreditekTipo');
 const RolCreditekAjuste = require('./RolCreditekAjuste');
 const RolDescuentoCreditek = require('./RolDescuentoCreditek');
 RolDescuentoCreditek.belongsTo(Usuario, { as: 'usuario', foreignKey: 'usuarioId' });
@@ -826,6 +828,14 @@ Usuario.hasMany(PagoComisionMultaAjuste, {
   as: "ajustesMultasComisionesRealizados",
 });
 PagoComisionMultaAjuste.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(PagoComisionSancionObservacion, {
+  foreignKey: "actualizadoPorId",
+  as: "observacionesSancionesComisionesActualizadas",
+});
+PagoComisionSancionObservacion.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
 });

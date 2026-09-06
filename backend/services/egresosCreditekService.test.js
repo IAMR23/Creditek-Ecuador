@@ -4,6 +4,13 @@ jest.mock("../models/EgresoCreditekEntrada", () => ({
   findByPk: jest.fn(),
   findOne: jest.fn(),
 }));
+jest.mock("../models/EgresoCreditekTipo", () => ({
+  findAll: jest.fn(async () => []),
+  findOne: jest.fn(async ({ where }) => {
+    const codigos = ["ENTRADAS", "CAJAS", "TRANSFERENCIAS", "DESCUENTOS", "JEFES", "MULTAS_FACTURACION", "OTROS", "PLAN_MOVISTAR", "MECANICA", "LENTES", "PRESTAMO_EMPRESARIAL", "CUOTAS_TELEFONO"];
+    return codigos.includes(where.codigo) ? { codigo: where.codigo, activo: true } : null;
+  }),
+}));
 jest.mock("../models/ControlFinancieroCarga", () => ({}));
 jest.mock("../models/ControlFinancieroConciliacionCaja", () => ({
   findAll: jest.fn(),
@@ -34,6 +41,32 @@ const {
 } = require("./egresosCreditekService");
 
 describe("egresosCreditekService", () => {
+  test.each(["PLAN_MOVISTAR", "MECANICA", "LENTES", "PRESTAMO_EMPRESARIAL", "CUOTAS_TELEFONO", "OTROS"])("guarda prestamo %s con inicio y fin", async (tipo) => {
+    Usuario.findOne.mockResolvedValue({ id: 3 });
+    EgresoCreditekEntrada.create.mockImplementation(async (payload) => ({ id: 90, ...payload }));
+    EgresoCreditekEntrada.findByPk.mockResolvedValue(null);
+    const row = await crearRegistro("prestamos", { usuarioId: 3, tipo, valor: 25, fecha: "2026-09-01", fechaFin: "2026-12-31" }, 7);
+    expect(row).toMatchObject({ tipo, valor: 25, fecha: "2026-09-01", fechaFin: "2026-12-31" });
+  });
+  test.each([undefined, null, ""])("permite guardar sin fecha final: %s", async (fechaFin) => {
+    Usuario.findOne.mockResolvedValue({ id: 3 });
+    EgresoCreditekEntrada.create.mockImplementation(async (payload) => ({ id: 90, ...payload }));
+    EgresoCreditekEntrada.findByPk.mockResolvedValue(null);
+    const row = await crearRegistro("prestamos", { usuarioId: 3, tipo: "MECANICA", valor: 25, fecha: "2026-09-01", fechaFin }, 7);
+    expect(row.fechaFin).toBeNull();
+  });
+  test("permite borrar la fecha final al editar un prestamo", async () => {
+    const registro = { id: 90, usuarioId: 3, fechaFin: "2026-12-31", update: jest.fn() };
+    EgresoCreditekEntrada.findOne.mockResolvedValue(registro);
+    EgresoCreditekEntrada.findByPk.mockResolvedValue(null);
+    await actualizarRegistro("prestamos", 90, { usuarioId: 3, tipo: "MECANICA", valor: 25, fecha: "2026-09-01", fechaFin: "" }, 7);
+    expect(registro.update).toHaveBeenCalledWith(expect.objectContaining({ fechaFin: null }));
+  });
+  test.each(["2026-08-01", "2026-02-30"])("rechaza fecha final invalida %s", async (fechaFin) => {
+    Usuario.findOne.mockResolvedValue({ id: 3 });
+    await expect(crearRegistro("prestamos", { usuarioId: 3, tipo: "MECANICA", valor: 25, fecha: "2026-09-01", fechaFin }, 7)).rejects.toMatchObject({ statusCode: 400 });
+    expect(EgresoCreditekEntrada.create).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     ControlFinancieroRegistro.findAll.mockResolvedValue([]);
