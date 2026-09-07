@@ -149,10 +149,15 @@ export default function Sidebar({ auth }) {
             icon: <Table2 size={20} />,
             path: "/ghl/oportunidades-matriz",
           },
-            {
+          {
             label: "Rendimiento de pautas",
             icon: <BarChart3 size={20} />,
             path: "/ghl/rendimiento-pautas",
+          },
+          {
+            label: "Reparto de oportunidades",
+            icon: <UsersRound size={20} />,
+            path: "/ghl/reparto-oportunidades",
           },
         ],
       },

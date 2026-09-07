@@ -127,6 +127,7 @@ import {
 
 const GhlOportunidadesMatriz = lazy(() => import("./pages/GHL/OportunidadesMatriz"));
 const GhlRendimientoPautas = lazy(() => import("./pages/GHL/RendimientoPautas"));
+const GhlRepartoOportunidades = lazy(() => import("./pages/GHL/RepartoOportunidades"));
 
 const emptyAuth = {
   isAuthenticated: false,
@@ -345,6 +346,13 @@ function App() {
                       <GhlRendimientoPautas />
                     </Suspense>,
                     "/ghl/rendimiento-pautas",
+                  )}
+                />
+                <Route
+                  path="ghl/reparto-oportunidades"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}><GhlRepartoOportunidades /></Suspense>,
+                    "/ghl/reparto-oportunidades",
                   )}
                 />
                 <Route path="usuarios" element={protect(<Usuarios />, "/usuarios")} />

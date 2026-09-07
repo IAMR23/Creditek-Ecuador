@@ -50,6 +50,7 @@ export const ROUTE_PERMISSIONS = {
   "/powerbi": "Gerencia",
   "/ghl/oportunidades-matriz": "Gerencia",
   "/ghl/rendimiento-pautas": ["Gerencia", "Administracion", "Sistemas"],
+  "/ghl/reparto-oportunidades": ["Gerencia", "Administracion", "Sistemas"],
   "/metas-comerciales": "Gerencia",
   "/costo-venta-marketing": "Gerencia",
   "/costo-entrega-marketing": "Gerencia",

@@ -30,6 +30,60 @@ const addColumnIfMissing = async (
   }
 };
 
+const ensureGhlRepartoExecutionControlSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("ghl_reparto_ejecuciones")) return;
+
+  // Cada ALTER TYPE se ejecuta por separado para que PostgreSQL confirme el
+  // nuevo valor ENUM antes de utilizarlo en el indice parcial.
+  for (const value of [
+    "pause_requested",
+    "paused",
+    "cancel_requested",
+    "cancelled",
+    "interrupted",
+  ]) {
+    await sequelize.query(
+      `ALTER TYPE enum_ghl_reparto_ejecuciones_estado ADD VALUE IF NOT EXISTS '${value}'`,
+    );
+  }
+
+  await sequelize.query(`
+    ALTER TABLE ghl_reparto_ejecuciones
+      ADD COLUMN IF NOT EXISTS "pauseRequestedAt" TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS "pausedAt" TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS "resumedAt" TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS "cancelRequestedAt" TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS "cancelledAt" TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS "heartbeatAt" TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS "processedCount" INTEGER NOT NULL DEFAULT 0;
+  `);
+
+  if (tables.includes("ghl_reparto_ejecucion_detalles")) {
+    for (const value of ["pending", "cancelled"]) {
+      await sequelize.query(
+        `ALTER TYPE enum_ghl_reparto_ejecucion_detalles_estado ADD VALUE IF NOT EXISTS '${value}'`,
+      );
+    }
+    await sequelize.query(`
+      ALTER TABLE ghl_reparto_ejecucion_detalles
+        ADD COLUMN IF NOT EXISTS retryable BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS "attemptCount" INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
+
+  await sequelize.query(`DROP INDEX IF EXISTS ghl_reparto_ejecucion_activa_unique;`);
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ghl_reparto_ejecucion_activa_unique
+    ON ghl_reparto_ejecuciones ("configuracionId")
+    WHERE estado IN ('running', 'pause_requested', 'paused', 'cancel_requested');
+  `);
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS ghl_reparto_ejecucion_heartbeat_idx
+    ON ghl_reparto_ejecuciones (estado, "heartbeatAt");
+  `);
+};
+
 const ensureCierreCajaSchema = async (queryInterface, tables) => {
   if (!tables.includes("cierre_caja")) return;
 
@@ -1642,6 +1696,7 @@ const connectDB = async () => {
     console.log("Conectado a PostgreSQL exitosamente");
 
     const queryInterface = sequelize.getQueryInterface();
+    await ensureGhlRepartoExecutionControlSchema(queryInterface);
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
@@ -1873,4 +1928,5 @@ module.exports = {
   sequelize,
   connectDB,
   ensureFacturasFisicasOcrPreSyncSchema,
+  ensureGhlRepartoExecutionControlSchema,
 };

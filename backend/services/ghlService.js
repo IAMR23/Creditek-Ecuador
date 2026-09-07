@@ -25,6 +25,11 @@ const getNonNegativeEnvNumber = (name, fallback) => {
     : fallback;
 };
 
+const getPositiveEnvNumber = (name, fallback) => {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
 const getGhlConfig = ({ requirePipelineId = true } = {}) => {
   const config = {
     token: process.env.GHL_TOKEN,
@@ -53,7 +58,7 @@ const getGhlConfig = ({ requirePipelineId = true } = {}) => {
 const createGhlClient = (config) =>
   axios.create({
     baseURL: config.baseUrl,
-    timeout: Number(process.env.GHL_TIMEOUT_MS || 20000),
+    timeout: getPositiveEnvNumber("GHL_TIMEOUT_MS", 20000),
     headers: {
       Authorization: `Bearer ${config.token}`,
       Version: config.apiVersion,
@@ -126,7 +131,7 @@ const normalizeGhlError = (error) => {
 
   if (status === 429) {
     serviceError.message =
-      "HighLevel alcanzo temporalmente su limite de consultas. Se reintentara con datos en cache.";
+      "HighLevel alcanzo temporalmente su limite de solicitudes. Intente nuevamente en unos momentos.";
     serviceError.statusCode = 503;
     serviceError.code = "GHL_RATE_LIMITED";
     return serviceError;
@@ -147,11 +152,23 @@ const normalizeGhlError = (error) => {
 };
 
 const requestGhl = async (client, options) => {
-  try {
-    const response = await client.request(options);
-    return response.data || {};
-  } catch (error) {
-    throw normalizeGhlError(error);
+  const requestedRetries = Number(process.env.GHL_MAX_RETRIES);
+  const maxRetries = Number.isInteger(requestedRetries) && requestedRetries >= 0
+    ? Math.min(requestedRetries, 10) : 3;
+  const baseDelay = getPositiveEnvNumber("GHL_RETRY_BASE_MS", 500);
+  const { beforeRetry, ...requestOptions } = options;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await client.request(requestOptions);
+      return response.data || {};
+    } catch (rawError) {
+      const error = normalizeGhlError(rawError);
+      if (error.upstreamStatus !== 429 || attempt >= maxRetries) throw error;
+      if (typeof beforeRetry === "function") await beforeRetry();
+      const delay = Math.min(error.retryAfterMs ?? baseDelay * (2 ** attempt), 10000);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (typeof beforeRetry === "function") await beforeRetry();
+    }
   }
 };
 
@@ -1717,6 +1734,35 @@ const fetchUsers = async (client, config) => {
   return extractUsers(payload).filter(Boolean);
 };
 
+const fetchAllAssignableUsers = async (client, config) => {
+  const companyId = await fetchCompanyId(client, config);
+  if (!companyId) {
+    const error = new Error("HighLevel no devolvio companyId para consultar usuarios");
+    error.statusCode = 502;
+    error.code = "GHL_COMPANY_ID_MISSING";
+    throw error;
+  }
+
+  const users = [];
+  const seen = new Set();
+  for (let skip = 0; skip < DEFAULT_LIMIT * MAX_OPPORTUNITY_PAGES; skip += DEFAULT_LIMIT) {
+    const payload = await requestGhl(client, {
+      method: "GET",
+      url: "/users/search",
+      params: { companyId, locationId: config.locationId, limit: DEFAULT_LIMIT, skip },
+    });
+    const page = extractUsers(payload).filter(Boolean);
+    for (const user of page) {
+      const userId = toId(user?.id || user?._id);
+      if (!userId || seen.has(userId)) continue;
+      seen.add(userId);
+      users.push(user);
+    }
+    if (page.length < DEFAULT_LIMIT) break;
+  }
+  return users;
+};
+
 const resolvePautasDateFilters = ({ fechaInicio, fechaFin } = {}) => {
   const dateFilters = resolveDateFilters({ fechaInicio, fechaFin });
   const isValidDateInput = (value) => {
@@ -2071,6 +2117,18 @@ async function enviarAGHL({
 }
 
 module.exports = {
+  getGhlConfig,
+  createGhlClient,
+  requestGhl,
+  normalizeGhlError,
+  fetchPipelines,
+  fetchUsers,
+  fetchAllAssignableUsers,
+  fetchOpportunitiesByStatus,
+  getOpportunityPipelineId,
+  getOpportunityStageId,
+  getOpportunityDateValue,
+  toId,
   enviarAGHL,
   obtenerMatrizOportunidadesDashboard,
   obtenerRendimientoPautasPorSourceId,

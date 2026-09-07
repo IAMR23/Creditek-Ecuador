@@ -7,6 +7,9 @@ const {
   getNextStartAfterId,
   resolveDateFilters,
   shouldStopDatePagination,
+  normalizeGhlError,
+  fetchAllAssignableUsers,
+  fetchOpportunitiesByStatus,
 } = require("./ghlService");
 
 describe("ghlService matrix builder", () => {
@@ -198,5 +201,42 @@ describe("ghlService matrix builder", () => {
 
     expect(filters.fechaInicio).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(filters.fechaFin).toBe(filters.fechaInicio);
+  });
+});
+
+describe("ghlService para reparto", () => {
+  test.each([
+    [401, "GHL_UNAUTHORIZED"],
+    [403, "GHL_FORBIDDEN"],
+    [429, "GHL_RATE_LIMITED"],
+  ])("normaliza respuesta %i", (status, code) => {
+    const error = normalizeGhlError({ response: { status, data: {}, headers: { "retry-after": "1" } } });
+    expect(error.code).toBe(code);
+    if (status === 429) expect(error.retryAfterMs).toBe(1000);
+  });
+
+  test("normaliza timeout sin exponer la respuesta", () => {
+    expect(normalizeGhlError({ code: "ECONNABORTED" })).toMatchObject({ code: "GHL_CONNECTION_ERROR", message: "HighLevel no respondio a tiempo" });
+  });
+
+  test("pagina mas de cien usuarios", async () => {
+    const first = Array.from({ length: 100 }, (_, i) => ({ id: `u${i}` }));
+    const client = { request: jest.fn()
+      .mockResolvedValueOnce({ data: { location: { companyId: "company" } } })
+      .mockResolvedValueOnce({ data: { users: first } })
+      .mockResolvedValueOnce({ data: { users: [{ id: "u100" }] } }) };
+    const result = await fetchAllAssignableUsers(client, { locationId: "location" });
+    expect(result).toHaveLength(101);
+    expect(client.request).toHaveBeenCalledTimes(3);
+  });
+
+  test("pagina mas de cien oportunidades", async () => {
+    const first = Array.from({ length: 100 }, (_, i) => ({ id: `o${i}` }));
+    const client = { request: jest.fn()
+      .mockResolvedValueOnce({ data: { opportunities: first } })
+      .mockResolvedValueOnce({ data: { opportunities: [{ id: "o100" }] } }) };
+    const result = await fetchOpportunitiesByStatus(client, { locationId: "location", pipelineId: "pipeline" }, "open");
+    expect(result).toHaveLength(101);
+    expect(client.request).toHaveBeenCalledTimes(2);
   });
 });

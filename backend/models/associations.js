@@ -57,6 +57,9 @@ const ConciliacionModeloTv = require('./ConciliacionModeloTv');
 const ConciliacionModeloCelular = require('./ConciliacionModeloCelular');
 const MapaComercialZona = require('./MapaComercialZona');
 const MapaUbicacionNormalizada = require('./MapaUbicacionNormalizada');
+const GhlRepartoConfiguracion = require('./GhlRepartoConfiguracion');
+const GhlRepartoEjecucion = require('./GhlRepartoEjecucion');
+const GhlRepartoEjecucionDetalle = require('./GhlRepartoEjecucionDetalle');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
@@ -1266,3 +1269,11 @@ MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {
   foreignKey: "zonaId",
   as: "zona",
 });
+
+GhlRepartoConfiguracion.hasMany(GhlRepartoEjecucion, { foreignKey: "configuracionId", as: "ejecuciones" });
+GhlRepartoEjecucion.belongsTo(GhlRepartoConfiguracion, { foreignKey: "configuracionId", as: "configuracion" });
+GhlRepartoEjecucion.hasMany(GhlRepartoEjecucionDetalle, { foreignKey: "ejecucionId", as: "detalles" });
+GhlRepartoEjecucionDetalle.belongsTo(GhlRepartoEjecucion, { foreignKey: "ejecucionId", as: "ejecucion" });
+GhlRepartoConfiguracion.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });
+GhlRepartoConfiguracion.belongsTo(Usuario, { foreignKey: "actualizadoPorId", as: "actualizadoPor" });
+GhlRepartoEjecucion.belongsTo(Usuario, { foreignKey: "ejecutadoPorId", as: "ejecutadoPor" });

@@ -167,6 +167,9 @@ connectDB()
   .then(() => {
     console.log("Base de datos conectada");
     iniciarProcesadorNormalizaciones();
+    require("./services/ghlOpportunityDistributionScheduler").start().catch((error) => {
+      console.error("No se pudo iniciar scheduler GHL", { message: error.message });
+    });
 
     app.use("/agencias", agencia);
     app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));
@@ -243,6 +246,7 @@ connectDB()
     app.use("/api/movimientos", require("./routes/Contabilidad/movimientosTemp"));
     app.use("/api/denominaciones-caja", require("./routes/Contabilidad/denominacionesCajaTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
+    app.use("/api/ghl/repartos", require("./routes/GHL/repartoRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
     app.use("/api/meta", require("./routes/metaRoutes"));
     app.use("/api/facebook", require("./routes/facebookWebhookRoutes"));

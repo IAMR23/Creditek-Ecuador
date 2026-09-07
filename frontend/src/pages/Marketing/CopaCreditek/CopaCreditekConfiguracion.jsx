@@ -146,14 +146,14 @@ export default function CopaCreditekConfiguracion({
       </div>
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-end sm:justify-between">
         <div className="flex w-full max-w-4xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <label className="w-full text-sm font-semibold text-slate-700 sm:min-w-[260px] sm:flex-1">
-            Buscar vendedor o agencia
+          <label className="w-full text-sm font-semibold text-slate-700 sm:min-w-[340px] sm:flex-1">
+            Buscar por nombre, apellido o agencia
             <input
               type="search"
               value={busqueda}
               onChange={(event) => setBusqueda(event.target.value)}
-              placeholder="Nombre, apellido o agencia..."
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+              placeholder="Ej.: Fernando, Simbaña o Caupicho"
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-4 py-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
             />
           </label>
           <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
