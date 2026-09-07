@@ -2,12 +2,30 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calcularEgresosNomina,
-  cambiarSeleccionNomina,
+  aplicarCalculoNovedad,
   moverPrioridadNomina,
   normalizarIdsNomina,
   ordenarFilasNomina,
-  seleccionarFilasNomina,
 } from "./rolesCreditekNomina.js";
+
+test('maternidad usa el cálculo del servidor y separa el subsidio del pago de Creditek', () => {
+  const row = { fondosReservaManual: 40.15, totalAnticipos: 183.5, prestamosEgresos: 50,
+    nominaCalculada: { tipoNovedad: 'MATERNIDAD', tieneMaternidad: true, salario: 482, sueldoAPagar: 301.25,
+      iess: 45.55, sueldosExtras: 0, subsidioIessInformativo: 180.75 } };
+  const result = aplicarCalculoNovedad(row);
+  assert.equal(result.totalIngresos, 341.4);
+  assert.equal(result.totalEgresos, 279.05);
+  assert.equal(result.valorRecibir, 62.35);
+  assert.equal(result.subsidioIessInformativo, 180.75);
+  const editada = aplicarCalculoNovedad({ ...row, fondosReservaManual: 50 });
+  assert.equal(editada.iess, 45.55);
+  assert.equal(editada.valorRecibir, 72.2);
+});
+
+test('sin novedad no reemplaza ningún cálculo existente', () => {
+  assert.equal(aplicarCalculoNovedad({ totalAnticipos: 10 }), null);
+  assert.equal(aplicarCalculoNovedad({ nominaCalculada: { tipoNovedad: '' } }), null);
+});
 
 const colaboradores = [
   { usuarioId: 1, nombre: "Gerente", valorRecibir: 900 },
@@ -30,29 +48,10 @@ test("mueve prioridades entre personas presentes y conserva las ausentes del per
   assert.deepEqual(moverPrioridadNomina(prioridades, 4, 1, colaboradores), ["3", "99", "2", "4"]);
 });
 
-test("solo las filas marcadas entran en el total, respetando el orden elegido", () => {
-  const ordenadas = ordenarFilasNomina(colaboradores, [3, 2]);
-  const seleccionadas = seleccionarFilasNomina(ordenadas, [1, "4"]);
-  assert.deepEqual(seleccionadas.map((row) => row.usuarioId), [3, 2]);
-  assert.equal(seleccionadas.reduce((total, row) => total + row.valorRecibir, 0), 980.75);
-  assert.deepEqual(seleccionarFilasNomina(colaboradores, []), colaboradores);
-  assert.deepEqual(seleccionarFilasNomina(colaboradores, [1, 2, 3, 4]), []);
-});
-
-test("seleccionar bajo una búsqueda conserva el estado de las filas ocultas", () => {
-  const visibles = colaboradores.slice(1, 3);
-  const excluidos = cambiarSeleccionNomina([1], visibles, false);
-  assert.deepEqual(excluidos, ["1", "2", "3"]);
-  assert.deepEqual(seleccionarFilasNomina(visibles, excluidos), []);
-  const seleccion = cambiarSeleccionNomina(excluidos, [colaboradores[1]], true);
-  assert.deepEqual(seleccionarFilasNomina(colaboradores, seleccion).map((row) => row.usuarioId), [2, 4]);
-  assert.deepEqual(cambiarSeleccionNomina(seleccion, visibles, true), ["1"]);
-});
-
-test("el orden se mantiene al recalcular valores y la selección no depende de la posición", () => {
+test("el orden se mantiene al recalcular valores y conserva todas las filas", () => {
   const recalculadas = colaboradores.map((row) => ({ ...row, valorRecibir: row.valorRecibir + 10 }));
-  const seleccionadas = seleccionarFilasNomina(ordenarFilasNomina(recalculadas, [4, 2]), [1, 3]);
-  assert.deepEqual(seleccionadas.map((row) => [row.usuarioId, row.valorRecibir]), [[4, 480], [2, 470.25]]);
+  const ordenadas = ordenarFilasNomina(recalculadas, [4, 2]);
+  assert.deepEqual(ordenadas.map((row) => [row.usuarioId, row.valorRecibir]), [[4, 480], [2, 470.25], [1, 910], [3, 530.5]]);
 });
 
 test("ignora preferencias inválidas y normaliza identificadores duplicados", () => {

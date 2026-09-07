@@ -17,21 +17,6 @@ export const ordenarFilasNomina = (rows, prioritarios) => {
   );
 };
 
-export const seleccionarFilasNomina = (rows, excluidos) => {
-  const ids = new Set(normalizarIdsNomina(excluidos));
-  return rows.filter((row) => !ids.has(String(row.usuarioId)));
-};
-
-export const cambiarSeleccionNomina = (excluidos, rows, incluir) => {
-  const ids = new Set(normalizarIdsNomina(excluidos));
-  rows.forEach((row) => {
-    const id = String(row.usuarioId);
-    if (incluir) ids.delete(id);
-    else ids.add(id);
-  });
-  return [...ids];
-};
-
 export const moverPrioridadNomina = (prioritarios, usuarioId, desplazamiento, rows) => {
   const ids = normalizarIdsNomina(prioritarios);
   const presentes = new Set(rows.map((row) => String(row.usuarioId)));
@@ -57,4 +42,20 @@ export const calcularEgresosNomina = (row, iess) => {
     sancionMeta,
     totalEgresos: redondear(numero(iess) + anticipo + prestamo + sancionMeta),
   };
+};
+
+// Los días, el sueldo de maternidad y la base IESS provienen del cálculo definitivo del backend.
+// Solo actualiza la vista al editar los dos importes manuales ya existentes en Nómina.
+export const aplicarCalculoNovedad = (row) => {
+  const calculo = row.nominaCalculada;
+  if (!calculo?.tipoNovedad) return null;
+  const sueldosExtras = row.sueldosExtrasManual != null ? redondear(numero(row.sueldosExtrasManual)) : calculo.sueldosExtras;
+  const fondosReserva = row.fondosReservaManual != null ? redondear(numero(row.fondosReservaManual))
+    : row.fondoReservaActivo ? redondear(((calculo.tieneMaternidad ? calculo.salario : calculo.sueldoAPagar) + sueldosExtras) / 12) : 0;
+  const totalIngresos = redondear(calculo.sueldoAPagar + sueldosExtras + fondosReserva + numero(row.ingresosComisiones));
+  const iess = calculo.tieneMaternidad ? calculo.iess : redondear(totalIngresos * 0.0945);
+  const egresos = calcularEgresosNomina(row, iess);
+  const valorRecibir = redondear(totalIngresos - egresos.totalEgresos);
+  return { ...row, ...calculo, ...egresos, fondosReserva, sueldosExtras, totalIngresos,
+    totalIngresosEmpresa: totalIngresos, iess, valorRecibir, valorRecibirEmpresa: valorRecibir };
 };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Calculator,
+  CalendarDays,
   ArrowDown,
   ArrowUp,
   FileSpreadsheet,
@@ -11,16 +12,17 @@ import {
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
-import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import { crearLibroNomina, ENCABEZADOS_NOMINA, ENCABEZADOS_NOVEDAD } from "../../utils/rolesCreditekNominaExcel";
 import { api } from "../../api/client";
 import { useAuthUser } from "../../utils/useAuthUser";
+import NominaNovedadModal from './NominaNovedadModal';
 import {
   calcularEgresosNomina,
-  cambiarSeleccionNomina,
+  aplicarCalculoNovedad,
   moverPrioridadNomina,
   normalizarIdsNomina,
   ordenarFilasNomina,
-  seleccionarFilasNomina,
 } from "../../utils/rolesCreditekNomina";
 
 const ahora = new Date();
@@ -113,6 +115,8 @@ const diasTrabajadosPeriodo = (row, anio, mes) => {
 };
 
 const calcularFila = (row, anio, mes) => {
+  const conNovedad = aplicarCalculoNovedad(row);
+  if (conNovedad) return conNovedad;
   const salario = SALARIO_BASE_NOMINA;
   const sueldoBase = SALARIO_BASE_NOMINA;
   const sueldoExtra = numero(row.rolPagoSueldoExtra);
@@ -163,9 +167,11 @@ export default function RolesCreditekNomina() {
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [cambios, setCambios] = useState({});
   const [cambiosExtras, setCambiosExtras] = useState({});
-  const [excluidos, setExcluidos] = useState([]);
+  const [personaNovedad, setPersonaNovedad] = useState(null);
+  const [novedadesDisponibles, setNovedadesDisponibles] = useState(true);
   const [ordenPersonal, setOrdenPersonal] = useState({ clave: null, ids: [] });
   const claveOrden = user?.id ? `rve:nomina:orden:${user.id}` : null;
   const prioritarios = useMemo(
@@ -195,10 +201,6 @@ export default function RolesCreditekNomina() {
   }, [claveOrden, ordenPersonal]);
 
   useEffect(() => {
-    setExcluidos([]);
-  }, [anio, mes]);
-
-  useEffect(() => {
     if (!hayCambios) return undefined;
     const advertir = (event) => {
       event.preventDefault();
@@ -208,7 +210,7 @@ export default function RolesCreditekNomina() {
     return () => window.removeEventListener("beforeunload", advertir);
   }, [hayCambios]);
 
-  const cargar = useCallback(async () => {
+  const cargar = useCallback(async ({ conservarCambios = false } = {}) => {
     setLoading(true);
     try {
       const { data } = await api.get(
@@ -216,8 +218,11 @@ export default function RolesCreditekNomina() {
         { params: { anio, mes } },
       );
       setRows(Array.isArray(data.registros) ? data.registros : []);
-      setCambios({});
-      setCambiosExtras({});
+      setNovedadesDisponibles(data.novedadesDisponibles !== false);
+      if (!conservarCambios) {
+        setCambios({});
+        setCambiosExtras({});
+      }
     } catch (error) {
       setRows([]);
       Swal.fire(
@@ -274,16 +279,10 @@ export default function RolesCreditekNomina() {
     );
   }, [busqueda, rowsOrdenadas]);
 
-  const rowsContabilizadas = useMemo(
-    () => seleccionarFilasNomina(rowsFiltradas, excluidos),
-    [rowsFiltradas, excluidos],
-  );
-  const idsExcluidos = useMemo(() => new Set(excluidos), [excluidos]);
   const prioritariosVisibles = useMemo(() => {
     const presentes = new Set(rowsFiltradas.map((row) => String(row.usuarioId)));
     return prioritarios.filter((id) => presentes.has(id));
   }, [prioritarios, rowsFiltradas]);
-  const todasVisiblesMarcadas = rowsFiltradas.length > 0 && rowsContabilizadas.length === rowsFiltradas.length;
 
   const destacar = (usuarioId) => {
     const id = String(usuarioId);
@@ -302,20 +301,24 @@ export default function RolesCreditekNomina() {
 
   const totales = useMemo(
     () => ({
-      salario: sumar(rowsContabilizadas, "salario"),
-      sueldoAPagar: sumar(rowsContabilizadas, "sueldoAPagar"),
-      fondosReserva: sumar(rowsContabilizadas, "fondosReserva"),
-      sueldosExtras: sumar(rowsContabilizadas, "sueldosExtras"),
-      comisionVenta: sumar(rowsContabilizadas, "comisionVenta"),
-      totalIngresos: sumar(rowsContabilizadas, "totalIngresos"),
-      iess: sumar(rowsContabilizadas, "iess"),
-      anticipo: sumar(rowsContabilizadas, "anticipo"),
-      prestamo: sumar(rowsContabilizadas, "prestamo"),
-      sancionMeta: sumar(rowsContabilizadas, "sancionMeta"),
-      totalEgresos: sumar(rowsContabilizadas, "totalEgresos"),
-      valorRecibir: sumar(rowsContabilizadas, "valorRecibir"),
+      salario: sumar(rowsFiltradas, "salario"),
+      sueldoAPagar: sumar(rowsFiltradas, "sueldoAPagar"),
+      fondosReserva: sumar(rowsFiltradas, "fondosReserva"),
+      sueldosExtras: sumar(rowsFiltradas, "sueldosExtras"),
+      comisionVenta: sumar(rowsFiltradas, "comisionVenta"),
+      totalIngresos: sumar(rowsFiltradas, "totalIngresos"),
+      iess: sumar(rowsFiltradas, "iess"),
+      anticipo: sumar(rowsFiltradas, "anticipo"),
+      prestamo: sumar(rowsFiltradas, "prestamo"),
+      sancionMeta: sumar(rowsFiltradas, "sancionMeta"),
+      totalEgresos: sumar(rowsFiltradas, "totalEgresos"),
+      valorRecibir: sumar(rowsFiltradas, "valorRecibir"),
+      diasMaternidad25: sumar(rowsFiltradas, 'diasMaternidad25'),
+      diasSueldoCompleto: redondear(rowsFiltradas.reduce((total, row) => total + (row.diasSueldoCompleto ?? row.diasTrabajados), 0)),
+      sueldoMaternidadEmpresa: sumar(rowsFiltradas, 'sueldoMaternidadEmpresa'),
+      subsidioIessInformativo: sumar(rowsFiltradas, 'subsidioIessInformativo'),
     }),
-    [rowsContabilizadas],
+    [rowsFiltradas],
   );
 
   const guardarTodo = async () => {
@@ -341,90 +344,19 @@ export default function RolesCreditekNomina() {
     }
   };
 
-  const exportarExcel = () => {
-    if (!rowsContabilizadas.length) return;
-    const encabezado = [
-      [
-        "N#",
-        "FECHA DE INGRESO",
-        "CEDULAS",
-        "NOMBRES Y APELLIDOS",
-        "CARGO",
-        "SALARIO",
-        "DIAS TRABAJADAS",
-        "SUELDO A PAGAR",
-        "FONDOS RESERVA",
-        "SUELDOS EXTRAS",
-        "COMxVTA",
-        "TOTAL INGRESOS",
-        "9,45% IESS/15DIAS",
-        "ANTICIPO",
-        "PRESTAMO",
-        "SANCIÓN POR NO LLEGAR A META",
-        "TOTAL EGRESOS",
-        "VALOR A RECIBIR",
-      ],
-    ];
-    const data = [
-      [`NOMINA CREDITEK ${MESES[mes - 1].toUpperCase()} ${anio}`],
-      [],
-      ...encabezado,
-      ...rowsContabilizadas.map((row, index) => [
-        index + 1,
-        formatoFecha(row.fechaIngreso),
-        row.cedula || "",
-        row.nombre || "",
-        row.cargo || "",
-        row.salario,
-        row.diasTrabajados,
-        row.sueldoAPagar,
-        row.fondosReserva,
-        row.sueldosExtras,
-        row.comisionVenta,
-        row.totalIngresos,
-        row.iess,
-        row.anticipo,
-        row.prestamo,
-        row.sancionMeta,
-        row.totalEgresos,
-        row.valorRecibir,
-      ]),
-      [
-        "",
-        "",
-        "",
-        "",
-        "TOTALES",
-        totales.salario,
-        "",
-        totales.sueldoAPagar,
-        totales.fondosReserva,
-        totales.sueldosExtras,
-        totales.comisionVenta,
-        totales.totalIngresos,
-        totales.iess,
-        totales.anticipo,
-        totales.prestamo,
-        totales.sancionMeta,
-        totales.totalEgresos,
-        totales.valorRecibir,
-      ],
-    ];
-    const sheet = XLSX.utils.aoa_to_sheet(data);
-    sheet["!cols"] = [
-      { wch: 6 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 34 },
-      { wch: 24 },
-      ...Array.from({ length: 13 }, () => ({ wch: 14 })),
-    ];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, "Nomina");
-    XLSX.writeFile(
-      workbook,
-      `Nomina_Roles_Creditek_${anio}_${String(mes).padStart(2, "0")}.xlsx`,
-    );
+  const exportarExcel = async () => {
+    if (!rowsFiltradas.length || exportando) return;
+    setExportando(true);
+    try {
+      const workbook = crearLibroNomina({ filas: rowsFiltradas, totales, periodoTexto, formatoFecha });
+      const buffer = await workbook.xlsx.writeBuffer();
+      saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        `Nomina_Roles_Creditek_${anio}_${String(mes).padStart(2, '0')}.xlsx`);
+    } catch {
+      Swal.fire('Error', 'No se pudo generar el Excel de la nómina. Intenta nuevamente.', 'error');
+    } finally {
+      setExportando(false);
+    }
   };
 
   const anios = Array.from({ length: 7 }, (_, index) => ahora.getFullYear() - 3 + index);
@@ -493,12 +425,12 @@ export default function RolesCreditekNomina() {
             <button
               type="button"
               onClick={exportarExcel}
-              disabled={loading || !rowsContabilizadas.length}
+              disabled={loading || exportando || !rowsFiltradas.length}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-              title="Descargar las filas visibles marcadas, en el orden de la tabla"
+              title="Descargar todas las filas visibles, en el orden de la tabla"
             >
               <FileSpreadsheet size={17} />
-              Excel seleccionados
+              {exportando ? 'Generando...' : 'Excel'}
             </button>
           </div>
         </header>
@@ -508,7 +440,7 @@ export default function RolesCreditekNomina() {
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
               {hayCambios && <span className="text-amber-700">Cambios sin guardar</span>}
               <span className="rounded-full border border-slate-300 bg-white px-3 py-1">
-                {rowsContabilizadas.length} de {rowsFiltradas.length} filas visibles contabilizadas
+                {rowsFiltradas.length} colaboradores
               </span>
               <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-emerald-800">
                 Total a recibir {formatoNumero(totales.valorRecibir)}
@@ -543,54 +475,23 @@ export default function RolesCreditekNomina() {
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
             <button
               type="button"
-              disabled={loading || !rows.length}
-              onClick={() => setExcluidos([])}
-              className="rounded-md border border-slate-300 px-2 py-1.5 font-semibold hover:bg-sky-50 disabled:opacity-50"
-            >
-              Marcar todas
-            </button>
-            <button
-              type="button"
-              disabled={loading || !rows.length}
-              onClick={() => setExcluidos(cambiarSeleccionNomina([], rowsCalculadas, false))}
-              className="rounded-md border border-slate-300 px-2 py-1.5 font-semibold hover:bg-sky-50 disabled:opacity-50"
-            >
-              Desmarcar todas
-            </button>
-            <button
-              type="button"
               disabled={!prioritarios.length}
               onClick={() => setOrdenPersonal({ clave: claveOrden, ids: [] })}
               className="rounded-md border border-slate-300 px-2 py-1.5 font-semibold hover:bg-sky-50 disabled:opacity-50"
             >
               Restablecer orden
             </button>
-            <span>Totales y Excel: solo filas visibles marcadas. Al cambiar de período se marcan todas.</span>
+            <span>Totales y Excel incluyen todas las filas visibles.</span>
             <span className="inline-flex items-center gap-1 text-sky-800">
               <Star size={14} /> Destaca personas para mostrarlas primero y usa las flechas para ordenarlas. El orden se recuerda en este navegador.
             </span>
           </div>
 
+          {!novedadesDisponibles && <p className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Novedades de nómina pendientes de habilitar: aplicar la migración de maternidad y lactancia.</p>}
           <div className="max-h-[calc(100vh-250px)] min-h-[480px] overflow-auto">
             <table className="w-full min-w-[1840px] border-collapse text-xs">
               <thead className="sticky top-0 z-20 text-slate-950">
                 <tr>
-                  <th rowSpan={2} className="border border-slate-950 bg-sky-100 px-2 py-2 text-center">
-                    <label className="flex flex-col items-center gap-2">
-                      Sumar
-                      <input
-                        type="checkbox"
-                        checked={todasVisiblesMarcadas}
-                        ref={(element) => {
-                          if (element) element.indeterminate = rowsContabilizadas.length > 0 && !todasVisiblesMarcadas;
-                        }}
-                        disabled={loading || !rowsFiltradas.length}
-                        onChange={(event) => setExcluidos((actuales) => cambiarSeleccionNomina(actuales, rowsFiltradas, event.target.checked))}
-                        aria-label="Contabilizar todas las filas visibles"
-                        className="size-4 cursor-pointer accent-sky-700"
-                      />
-                    </label>
-                  </th>
                   <th
                     rowSpan={2}
                     className="border border-slate-950 bg-sky-100 px-2 py-2 text-center"
@@ -627,25 +528,12 @@ export default function RolesCreditekNomina() {
                   >
                     VALOR<br />A RECIBIR
                   </th>
+                  {ENCABEZADOS_NOVEDAD.map((titulo) => (
+                    <th key={titulo} rowSpan={2} className="border border-slate-950 bg-sky-100 px-2 py-2 text-center">{titulo}</th>
+                  ))}
                 </tr>
                 <tr>
-                  {[
-                    "FECHA DE INGRESO",
-                    "CEDULAS",
-                    "NOMBRES Y APELLIDOS",
-                    "CARGO",
-                    "SALARIO",
-                    "DIAS TRABAJADAS",
-                    "SUELDO A PAGAR",
-                    "FONDOS RESERVA",
-                    "SUELDOS EXTRAS",
-                    "COMxVTA",
-                    "TOTAL INGRESOS",
-                    "ANTICIPO",
-                    "PRESTAMO",
-                    "SANCIÓN POR NO LLEGAR A META",
-                    "TOTAL EGRESOS",
-                  ].map((header) => (
+                  {ENCABEZADOS_NOMINA.map((header) => (
                     <th
                       key={header}
                       className="border border-slate-950 bg-sky-100 px-2 py-2 text-center"
@@ -659,7 +547,7 @@ export default function RolesCreditekNomina() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={19}
+                      colSpan={24}
                       className="border border-slate-300 px-4 py-16 text-center text-sm font-semibold text-slate-500"
                     >
                       Calculando nomina...
@@ -668,7 +556,7 @@ export default function RolesCreditekNomina() {
                 ) : rowsFiltradas.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={19}
+                      colSpan={24}
                       className="border border-slate-300 px-4 py-16 text-center text-sm text-slate-500"
                     >
                       No hay colaboradores para mostrar.
@@ -679,23 +567,11 @@ export default function RolesCreditekNomina() {
                     <tr
                       key={row.usuarioId}
                       className={
-                        idsExcluidos.has(String(row.usuarioId))
-                          ? "bg-slate-100 text-slate-500"
-                          : index % 2 === 0
+                        index % 2 === 0
                           ? "bg-emerald-50/70 hover:bg-emerald-100"
                           : "bg-white hover:bg-emerald-50"
                       }
                     >
-                      <td className="border border-slate-950 px-2 py-1.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={!idsExcluidos.has(String(row.usuarioId))}
-                          onChange={(event) => setExcluidos((actuales) => cambiarSeleccionNomina(actuales, [row], event.target.checked))}
-                          aria-label={`Contabilizar a ${row.nombre}`}
-                          title={idsExcluidos.has(String(row.usuarioId)) ? "No se incluye en los totales ni en Excel" : "Incluido en los totales y en Excel"}
-                          className="size-4 cursor-pointer accent-sky-700"
-                        />
-                      </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-center font-bold">
                         {index + 1}
                       </td>
@@ -718,7 +594,14 @@ export default function RolesCreditekNomina() {
                           >
                             <Star size={17} fill={prioritarios.includes(String(row.usuarioId)) ? "currentColor" : "none"} />
                           </button>
-                          <span className="flex-1">{row.nombre}</span>
+                          <span className="flex-1">{row.nombre}
+                            <button type="button" disabled={saving || !novedadesDisponibles}
+                              onClick={() => setPersonaNovedad(row)}
+                              title="Crear o editar una novedad de nómina"
+                              className="mt-1 flex items-center gap-1 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium normal-case text-sky-800 disabled:opacity-50">
+                              <CalendarDays size={13} /> {row.novedadesNomina?.length ? 'Editar novedad' : 'Novedad de nómina'}
+                            </button>
+                          </span>
                           {prioritariosVisibles.includes(String(row.usuarioId)) && (
                             <span className="flex shrink-0 items-center gap-1">
                               <button
@@ -823,6 +706,20 @@ export default function RolesCreditekNomina() {
                       <td className="border border-slate-950 bg-sky-50 px-2 py-1.5 text-right font-extrabold text-sky-900 tabular-nums">
                         {formatoNumero(row.valorRecibir)}
                       </td>
+                      <td className="border border-slate-950 px-2 py-1.5 text-right tabular-nums">{row.diasMaternidad25 || 0}</td>
+                      <td className="border border-slate-950 px-2 py-1.5 text-right tabular-nums">{row.diasSueldoCompleto ?? row.diasTrabajados}</td>
+                      <td className="border border-slate-950 px-2 py-1.5 text-right tabular-nums">{formatoNumero(row.sueldoMaternidadEmpresa)}</td>
+                      <td title="Informativo: no se suma al total de ingresos ni al valor a recibir de Creditek" className="border border-slate-950 bg-indigo-50 px-2 py-1.5 text-right font-bold text-indigo-800 tabular-nums">{formatoNumero(row.subsidioIessInformativo)}</td>
+                      <td className="min-w-48 border border-slate-950 px-2 py-1.5">
+                        {row.tipoNovedad && <span className="rounded bg-sky-100 px-2 py-1 font-semibold text-sky-900">{row.tipoNovedad === 'LACTANCIA' ? 'Lactancia' : row.tipoNovedad}</span>}
+                        {row.tipoNovedad && row.novedadesNomina?.map((novedad) => <div key={novedad.id} className="mt-1 text-[11px] text-slate-600">
+                          {novedad.tipo}: {formatoFecha(novedad.fechaInicio)} – {formatoFecha(novedad.fechaFin)}{novedad.fechaRetorno ? ` · Retorno: ${formatoFecha(novedad.fechaRetorno)}` : ''}
+                          <button type="button" disabled={saving || !novedadesDisponibles}
+                            onClick={() => setPersonaNovedad({ ...row, novedadIdEditar: novedad.id })}
+                            className="ml-2 rounded border border-sky-200 bg-sky-50 px-2 py-1 font-semibold text-sky-800 disabled:opacity-50">Editar</button>
+                        </div>)}
+                      </td>
+                      <td className="min-w-48 whitespace-pre-wrap border border-slate-950 px-2 py-1.5">{row.observacionNovedad || ''}</td>
                     </tr>
                   ))
                 )}
@@ -830,13 +727,12 @@ export default function RolesCreditekNomina() {
               {!loading && rowsFiltradas.length > 0 && (
                 <tfoot className="sticky bottom-0 z-10 bg-sky-700 text-white">
                   <tr>
-                    <td className="border border-slate-950 px-2 py-2 text-center font-bold">{rowsContabilizadas.length}</td>
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2 font-extrabold uppercase">
-                      Totales seleccionados
+                      Totales
                     </td>
                     <td className="border border-slate-950 px-2 py-2 text-right font-extrabold tabular-nums">
                       {formatoNumero(totales.salario)}
@@ -875,6 +771,12 @@ export default function RolesCreditekNomina() {
                     <td className="border border-slate-950 px-2 py-2 text-right font-extrabold tabular-nums">
                       {formatoNumero(totales.valorRecibir)}
                     </td>
+                    <td className="border border-slate-950 px-2 py-2 text-right font-bold">{totales.diasMaternidad25}</td>
+                    <td className="border border-slate-950 px-2 py-2 text-right font-bold">{totales.diasSueldoCompleto}</td>
+                    <td className="border border-slate-950 px-2 py-2 text-right font-bold">{formatoNumero(totales.sueldoMaternidadEmpresa)}</td>
+                    <td title="Total informativo; no incluido en el pago de Creditek" className="border border-slate-950 bg-indigo-700 px-2 py-2 text-right font-bold">{formatoNumero(totales.subsidioIessInformativo)}</td>
+                    <td className="border border-slate-950" />
+                    <td className="border border-slate-950" />
                   </tr>
                 </tfoot>
               )}
@@ -882,6 +784,13 @@ export default function RolesCreditekNomina() {
           </div>
         </section>
       </div>
+      {personaNovedad && <NominaNovedadModal persona={personaNovedad} anio={anio} mes={mes}
+        novedadIdInicial={personaNovedad.novedadIdEditar}
+        ajustesPendientes={{
+          ...(Object.hasOwn(cambios, personaNovedad.usuarioId) ? { fondosReservaManual: cambios[personaNovedad.usuarioId] } : {}),
+          ...(Object.hasOwn(cambiosExtras, personaNovedad.usuarioId) ? { sueldosExtrasManual: cambiosExtras[personaNovedad.usuarioId] } : {}),
+        }}
+        onClose={() => setPersonaNovedad(null)} onSaved={() => { setPersonaNovedad(null); cargar({ conservarCambios: true }); }} />}
     </main>
   );
 }

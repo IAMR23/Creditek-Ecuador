@@ -25,6 +25,7 @@ jest.mock("../models/Usuario", () => ({
 jest.mock("./pagosComisionesService", () => ({
   obtenerReportePagosComisiones: jest.fn(),
 }));
+jest.mock('./nominaNovedadesService', () => ({ listarPeriodo: jest.fn() }));
 
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const ControlFinancieroConciliacionCaja = require(
@@ -34,6 +35,7 @@ const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
 const RolCreditekAjuste = require("../models/RolCreditekAjuste");
 const Usuario = require("../models/Usuario");
 const pagosComisionesService = require("./pagosComisionesService");
+const novedadesService = require('./nominaNovedadesService');
 const { Op } = require("sequelize");
 const { guardarAjustes, guardarNomina, obtenerResumen } = require("./rolesCreditekResumenService");
 
@@ -61,6 +63,7 @@ describe("rolesCreditekResumenService", () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    novedadesService.listarPeriodo.mockResolvedValue({ disponible: true, registros: [] });
     Usuario.findAll.mockResolvedValue([]);
     EgresoCreditekEntrada.findAll.mockResolvedValue([]);
     ControlFinancieroRegistro.findAll.mockResolvedValue([]);
@@ -94,6 +97,22 @@ describe("rolesCreditekResumenService", () => {
       year: 2026, month: 8,
       logisticaFechaInicio: "2026-08-01", logisticaFechaFin: "2026-08-31",
     });
+  });
+
+  test('adjunta novedades y cálculo solo a la persona y mes correspondientes', async () => {
+    Usuario.findAll.mockResolvedValue([{ id: 4, nombre: 'Persona A', activo: true }, { id: 5, nombre: 'Persona B', activo: true }]);
+    RolCreditekAjuste.findAll.mockResolvedValue([{ usuarioId: 4, fondosReservaManual: 40.15 }]);
+    EgresoCreditekEntrada.findAll.mockResolvedValue([
+      { usuarioId: 4, seccion: 'ANTICIPOS', tipo: 'OTROS', valor: 183.5 },
+      { usuarioId: 4, seccion: 'PRESTAMOS', valor: 50, fecha: '2026-08-01' },
+    ]);
+    novedadesService.listarPeriodo.mockResolvedValue({ disponible: true, registros: [{
+      id: 1, usuarioId: 4, tipo: 'MATERNIDAD', activo: true, fechaInicio: '2026-08-16', fechaFin: '2026-08-31',
+    }] });
+    const result = await obtenerResumen({ anio: 2026, mes: 8 });
+    expect(result.registros[0].nominaCalculada).toMatchObject({ sueldoAPagar: 301.25, iess: 45.55, fondosReserva: 40.15, totalEgresos: 279.05, valorRecibir: 62.35, subsidioIessInformativo: 180.75 });
+    expect(result.registros[1].nominaCalculada).toBeUndefined();
+    expect(result.registros[1].novedadesNomina).toEqual([]);
   });
 
   test("Nómina usa el mes calendario de logística y conserva las comisiones comerciales", async () => {

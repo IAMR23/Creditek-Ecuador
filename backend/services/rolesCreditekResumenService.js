@@ -13,6 +13,8 @@ const RolCreditekAjuste = require("../models/RolCreditekAjuste");
 const Usuario = require("../models/Usuario");
 const pagosComisionesService = require("./pagosComisionesService");
 const { cuotaPrestamoDelMes } = require("../utils/prestamosCreditek");
+const novedadesService = require('./nominaNovedadesService');
+const { novedadesDelMes, calcularNominaPeriodo } = require('../utils/nominaNovedades');
 
 const CAMPOS_MANUALES = [
   "adelantosTransfer",
@@ -296,6 +298,7 @@ const obtenerResumen = async (periodoValue) => {
     cajasControlValues,
     ajustes,
     reporteComisiones,
+    novedadesResultado,
   ] =
     await Promise.all([
       Usuario.findAll({
@@ -388,6 +391,7 @@ const obtenerResumen = async (periodoValue) => {
         logisticaFechaInicio: fechaInicio,
         logisticaFechaFin: fechaFin,
       }),
+      novedadesService.listarPeriodo(periodo),
     ]);
 
   const valoresPorUsuario = new Map();
@@ -498,7 +502,7 @@ const obtenerResumen = async (periodoValue) => {
     const totalPagarNomina = redondear(
       totalNomina + Number(valores.sueldo || 0),
     );
-    return {
+    const registro = {
       usuarioId: Number(usuario.id),
       nombre: usuario.nombre || `Usuario #${usuario.id}`,
       usuarioActivo: usuario.activo !== false,
@@ -516,6 +520,12 @@ const obtenerResumen = async (periodoValue) => {
       totalDescuentos,
       totalNomina,
       totalPagarNomina,
+    };
+    const novedadesNomina = novedadesDelMes(novedadesResultado.registros.filter((item) => Number(item.usuarioId) === Number(usuario.id)), periodo);
+    return {
+      ...registro,
+      novedadesNomina,
+      ...(novedadesNomina.length ? { nominaCalculada: calcularNominaPeriodo(registro, periodo, novedadesNomina) } : {}),
     };
   });
 
@@ -561,6 +571,7 @@ const obtenerResumen = async (periodoValue) => {
 
   return {
     ...periodo,
+    novedadesDisponibles: novedadesResultado.disponible,
     fechaInicio,
     fechaFin,
     registros,

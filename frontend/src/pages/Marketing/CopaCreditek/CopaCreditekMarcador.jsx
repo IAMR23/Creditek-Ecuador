@@ -74,7 +74,7 @@ function BloqueVendedores({ equipo, posicion }) {
             <div
               key={vendedor.usuarioId}
               data-copa-fila-vendedor
-              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center overflow-visible"
+              className="flex min-w-0 items-center overflow-visible"
               style={{
                 columnGap: "16px",
                 height: `${altoFila}px`,
@@ -86,7 +86,7 @@ function BloqueVendedores({ equipo, posicion }) {
             >
               <span
                 data-copa-nombre-vendedor
-                className="min-w-0 whitespace-nowrap"
+                className="min-w-0 flex-1 whitespace-nowrap"
                 style={{
                   fontFamily: COPA_FONT_FAMILY,
                   fontSize: `${tamanoNombre}px`,
@@ -98,7 +98,7 @@ function BloqueVendedores({ equipo, posicion }) {
               </span>
               <span
                 data-copa-resultado-vendedor
-                className="whitespace-nowrap tabular-nums"
+                className="relative shrink-0 whitespace-nowrap bg-black tabular-nums"
                 style={{
                   fontFamily: COPA_FONT_FAMILY,
                   fontSize: `${tamanoNumero}px`,
@@ -117,52 +117,84 @@ function BloqueVendedores({ equipo, posicion }) {
 
 export default function CopaCreditekMarcador({ copa, posterRef, onImageReady }) {
   const equipos = copa.equipos || [];
+  const contenedorRef = useRef(null);
+  const [vista, setVista] = useState({ escala: 1, alto: 0 });
+
+  useLayoutEffect(() => {
+    const contenedor = contenedorRef.current;
+    const poster = posterRef.current;
+    if (!contenedor || !poster) return undefined;
+
+    const ajustarVista = () => {
+      const escala = Math.min(1, contenedor.clientWidth / POSTER_SIZE_PX);
+      setVista({ escala, alto: poster.offsetHeight * escala });
+    };
+    ajustarVista();
+    const observer = new ResizeObserver(ajustarVista);
+    observer.observe(contenedor);
+    observer.observe(poster);
+    return () => observer.disconnect();
+  }, [posterRef]);
 
   return (
-    <div className="overflow-x-auto rounded-xl bg-slate-100 p-2 sm:p-4">
+    <div className="w-full min-w-0 max-w-full rounded-xl bg-slate-100 p-2 sm:p-4">
       <div
-        ref={posterRef}
-        className="relative mx-auto shrink-0 overflow-hidden"
-        style={{ width: `${POSTER_SIZE_PX}px` }}
+        ref={contenedorRef}
+        data-copa-vista
+        className="relative mx-auto w-full max-w-[1100px] overflow-hidden"
+        // El afiche escalado no debe crear un área desplazable de 1100 px.
+        style={{ height: vista.alto, overflow: "clip" }}
       >
-        <img
-          src="/CopaCreditek2026.webp"
-          alt="Copa Creditek 2026"
-          className="block h-auto w-full"
-          onLoad={() => onImageReady(true)}
-          onError={() => onImageReady(false)}
-        />
-
-        {POSTER_LAYOUT.scores.map((posicion) => {
-          const equipo = obtenerEquipo(equipos, posicion.equipo);
-          return (
-            <div
-              key={posicion.equipo}
-              className="absolute z-20 -translate-x-1/2 -translate-y-1/2 text-center font-black tabular-nums"
-              style={{
-                left: `${posicion.left}%`,
-                top: `${posicion.top}%`,
-                color: posicion.color,
-                fontFamily: 'Impact, "Arial Black", sans-serif',
-                fontSize: "82px",
-                lineHeight: 1,
-                WebkitTextStroke: "7px #000000",
-                paintOrder: "stroke fill",
-                textShadow: "0 3px 3px rgba(0,0,0,.95)",
-              }}
-            >
-              {equipo.total ?? 0}
-            </div>
-          );
-        })}
-
-        {Object.entries(POSTER_LAYOUT.vendedores).map(([nombre, posicion]) => (
-          <BloqueVendedores
-            key={nombre}
-            equipo={obtenerEquipo(equipos, nombre)}
-            posicion={posicion}
+        <div
+          ref={posterRef}
+          data-copa-poster
+          className="absolute left-0 top-0 overflow-hidden"
+          style={{
+            width: `${POSTER_SIZE_PX}px`,
+            transform: `scale(${vista.escala})`,
+            transformOrigin: "top left",
+            textSizeAdjust: "none",
+            WebkitTextSizeAdjust: "none",
+          }}
+        >
+          <img
+            src="/CopaCreditek2026.webp"
+            alt="Copa Creditek 2026"
+            className="block h-auto w-full"
+            onLoad={() => onImageReady(true)}
+            onError={() => onImageReady(false)}
           />
-        ))}
+
+          {POSTER_LAYOUT.scores.map((posicion) => {
+            const equipo = obtenerEquipo(equipos, posicion.equipo);
+            return (
+              <div
+                key={posicion.equipo}
+                className="absolute z-20 -translate-x-1/2 -translate-y-1/2 text-center font-black tabular-nums"
+                style={{
+                  left: `${posicion.left}%`,
+                  top: `${posicion.top}%`,
+                  color: posicion.color,
+                  fontFamily: 'Impact, "Arial Black", sans-serif',
+                  fontSize: "82px",
+                  lineHeight: 1,
+                  textShadow:
+                    "-3px -3px 0 #000, 0 -3px 0 #000, 3px -3px 0 #000, -3px 0 0 #000, 3px 0 0 #000, -3px 3px 0 #000, 0 3px 0 #000, 3px 3px 0 #000, 0 3px 3px rgba(0,0,0,.95)",
+                }}
+              >
+                {equipo.total ?? 0}
+              </div>
+            );
+          })}
+
+          {Object.entries(POSTER_LAYOUT.vendedores).map(([nombre, posicion]) => (
+            <BloqueVendedores
+              key={nombre}
+              equipo={obtenerEquipo(equipos, nombre)}
+              posicion={posicion}
+            />
+          ))}
+        </div>
       </div>
 
       {copa.vendedoresSinEquipo?.length > 0 && (

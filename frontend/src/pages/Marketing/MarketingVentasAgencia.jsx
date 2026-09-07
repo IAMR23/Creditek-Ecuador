@@ -156,12 +156,24 @@ export default function MarketingVentasAgencia() {
           requestAnimationFrame(() => requestAnimationFrame(resolve)),
         );
 
-        const canvas = await html2canvas(posterRef.current, {
+        const poster = posterRef.current;
+        const canvas = await html2canvas(poster, {
+          width: poster.offsetWidth,
+          height: poster.offsetHeight,
           scale: 2,
           useCORS: true,
           backgroundColor: null,
           logging: false,
           onclone: (documentoClonado) => {
+            // La escala pertenece solo a la vista; la copia conserva 1100 px
+            // de ancho de diseño y los tamaños originales de los caracteres.
+            const posterClonado = documentoClonado.querySelector("[data-copa-poster]");
+            posterClonado.style.transform = "none";
+            posterClonado.style.position = "relative";
+            const vistaClonada = documentoClonado.querySelector("[data-copa-vista]");
+            vistaClonada.style.width = `${poster.offsetWidth}px`;
+            vistaClonada.style.height = `${poster.offsetHeight}px`;
+            vistaClonada.style.overflow = "visible";
             documentoClonado
               .querySelectorAll(
                 "[data-copa-bloque-vendedores], [data-copa-fila-vendedor], [data-copa-nombre-vendedor], [data-copa-resultado-vendedor]",
@@ -301,7 +313,7 @@ export default function MarketingVentasAgencia() {
   };
 
   return (
-    <section className="mx-auto w-full max-w-[1400px] p-3 sm:p-5">
+    <section className="mx-auto min-w-0 w-full max-w-[1400px] p-3 sm:p-5">
       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-blue-700">
@@ -313,22 +325,22 @@ export default function MarketingVentasAgencia() {
         </div>
 
         <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <label className="text-sm font-semibold text-slate-700">
+          <label className="min-w-0 max-w-full text-sm font-semibold text-slate-700">
             Fecha inicio
             <input
               type="date"
               value={filtros.fechaInicio}
               onChange={cambiarFecha("fechaInicio")}
-              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 font-normal"
+              className="mt-1 block min-w-0 max-w-full rounded-lg border border-slate-300 px-3 py-2 font-normal"
             />
           </label>
-          <label className="text-sm font-semibold text-slate-700">
+          <label className="min-w-0 max-w-full text-sm font-semibold text-slate-700">
             Fecha fin
             <input
               type="date"
               value={filtros.fechaFin}
               onChange={cambiarFecha("fechaFin")}
-              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 font-normal"
+              className="mt-1 block min-w-0 max-w-full rounded-lg border border-slate-300 px-3 py-2 font-normal"
             />
           </label>
           <button
@@ -368,7 +380,7 @@ export default function MarketingVentasAgencia() {
             role="tab"
             aria-selected={tabActiva === id}
             onClick={() => setTabActiva(id)}
-            className={`border-b-2 px-4 py-3 text-sm font-extrabold uppercase tracking-wide transition ${
+            className={`min-w-0 border-b-2 px-2 py-3 text-xs font-extrabold uppercase tracking-wide transition sm:px-4 sm:text-sm ${
               tabActiva === id
                 ? "border-blue-700 text-blue-700"
                 : "border-transparent text-slate-500 hover:text-slate-800"
