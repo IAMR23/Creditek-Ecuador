@@ -93,7 +93,7 @@ export default function DashboardEntregas() {
             Dashboard de Entregas
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Resumen ejecutivo — Rango seleccionado
+            Resumen ejecutivo — Rango seleccionado. Las reasignaciones se atribuyen al repartidor vigente.
           </p>
         </div>
 
@@ -174,13 +174,9 @@ export default function DashboardEntregas() {
 
             <p className="mt-3 text-xs text-gray-400">
               Rango:{" "}
-              {data?.rango?.desde
-                ? new Date(data.rango.desde).toLocaleString()
-                : "Sin fecha"}{" "}
+              {data?.filtros?.fechaInicio || "Sin fecha"}{" "}
               —{" "}
-              {data?.rango?.hasta
-                ? new Date(data.rango.hasta).toLocaleString()
-                : "Sin fecha"}
+              {data?.filtros?.fechaFin || "Sin fecha"}
             </p>
           </div>
 

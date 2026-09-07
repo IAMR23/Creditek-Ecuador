@@ -90,7 +90,51 @@ describe("rolesCreditekResumenService", () => {
     expect(resultado.registros.map(row => row.ingresosComisiones)).toEqual([150.25, 155.5, 120, 0]);
     expect(resultado.registros.map(row => row.descuentosMetaCalculado)).toEqual([20, 10, 20, 0]);
     expect(resultado.totales.ingresosComisiones).toBe(425.75);
-    expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({ year: 2026, month: 8 });
+    expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({
+      year: 2026, month: 8,
+      logisticaFechaInicio: "2026-08-01", logisticaFechaFin: "2026-08-31",
+    });
+  });
+
+  test("Nómina usa el mes calendario de logística y conserva las comisiones comerciales", async () => {
+    Usuario.findAll.mockResolvedValue([
+      { id: 13, nombre: "Bryan", activo: true },
+      { id: 85, nombre: "Holger", activo: true },
+      { id: 75, nombre: "Paul", activo: true },
+      { id: 4, nombre: "Vendedor", activo: true },
+      { id: 5, nombre: "Supervisor", activo: true },
+    ]);
+    pagosComisionesService.obtenerReportePagosComisiones.mockImplementation(async (params) => ({
+      vendedores: [
+        { usuarioId: 4, cargo: "VENDEDOR", resumenMensual: { totalComisionesSemanaMensual: 150.25 }, total: { valorDescontar: 20 } },
+        { usuarioId: 5, cargo: "SUPERVISOR", resumenMensual: { valorComisionSemanal: 80, valorComisionMensual: 40 } },
+      ],
+      logistica: [
+        { usuarioId: 13, cargo: "ENCARGADO DE LOGISTICA", resumenMensual: { totalPagar: params.logisticaFechaInicio === "2026-08-01" && params.logisticaFechaFin === "2026-08-31" ? 142.5 : 166 } },
+        { usuarioId: 85, cargo: "CHOFER", resumenMensual: { totalPagar: 95 } },
+        { usuarioId: 75, cargo: "CHOFER", resumenMensual: { totalPagar: 82 } },
+      ],
+    }));
+    const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
+    expect(resultado.registros.map((row) => row.ingresosComisiones)).toEqual([142.5, 95, 82, 150.25, 120]);
+    expect(resultado.registros.find((row) => row.usuarioId === 4).descuentosMetaCalculado).toBe(20);
+    expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledTimes(1);
+    expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({
+      year: 2026, month: 8,
+      logisticaFechaInicio: "2026-08-01", logisticaFechaFin: "2026-08-31",
+    });
+  });
+
+  test.each([
+    [2026, 2, "2026-02-01", "2026-02-28"],
+    [2028, 2, "2028-02-01", "2028-02-29"],
+    [2026, 4, "2026-04-01", "2026-04-30"],
+    [2026, 12, "2026-12-01", "2026-12-31"],
+  ])("limita logística al mes calendario %i/%i", async (anio, mes, inicio, fin) => {
+    await obtenerResumen({ anio, mes });
+    expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({
+      year: anio, month: mes, logisticaFechaInicio: inicio, logisticaFechaFin: fin,
+    });
   });
 
   test("consolida valores automaticos, manuales y total por colaborador", async () => {
@@ -235,6 +279,8 @@ describe("rolesCreditekResumenService", () => {
     expect(pagosComisionesService.obtenerReportePagosComisiones).toHaveBeenCalledWith({
       year: 2026,
       month: 8,
+      logisticaFechaInicio: "2026-08-01",
+      logisticaFechaFin: "2026-08-31",
     });
   });
 

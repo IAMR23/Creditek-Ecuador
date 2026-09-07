@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Calculator,
+  ArrowDown,
+  ArrowUp,
   FileSpreadsheet,
   RefreshCw,
   Search,
   Save,
+  Star,
   X,
 } from "lucide-react";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
 import { api } from "../../api/client";
-import { calcularEgresosNomina } from "../../utils/rolesCreditekNomina";
+import { useAuthUser } from "../../utils/useAuthUser";
+import {
+  calcularEgresosNomina,
+  cambiarSeleccionNomina,
+  moverPrioridadNomina,
+  normalizarIdsNomina,
+  ordenarFilasNomina,
+  seleccionarFilasNomina,
+} from "../../utils/rolesCreditekNomina";
 
 const ahora = new Date();
 const IESS_RATE = 0.0945;
@@ -145,6 +156,7 @@ const sumar = (rows, campo) =>
   redondear(rows.reduce((total, row) => total + numero(row[campo]), 0));
 
 export default function RolesCreditekNomina() {
+  const user = useAuthUser();
   const [anio, setAnio] = useState(ahora.getFullYear());
   const [mes, setMes] = useState(ahora.getMonth() + 1);
   const [rows, setRows] = useState([]);
@@ -153,7 +165,38 @@ export default function RolesCreditekNomina() {
   const [saving, setSaving] = useState(false);
   const [cambios, setCambios] = useState({});
   const [cambiosExtras, setCambiosExtras] = useState({});
+  const [excluidos, setExcluidos] = useState([]);
+  const [ordenPersonal, setOrdenPersonal] = useState({ clave: null, ids: [] });
+  const claveOrden = user?.id ? `rve:nomina:orden:${user.id}` : null;
+  const prioritarios = useMemo(
+    () => ordenPersonal.clave === claveOrden ? ordenPersonal.ids : [],
+    [claveOrden, ordenPersonal],
+  );
   const hayCambios = Object.keys(cambios).length > 0 || Object.keys(cambiosExtras).length > 0;
+
+  useEffect(() => {
+    if (!claveOrden) return;
+    let ids = [];
+    try {
+      ids = normalizarIdsNomina(JSON.parse(localStorage.getItem(claveOrden) || "[]"));
+    } catch {
+      // Se puede seguir ordenando aunque el navegador no permita guardar preferencias.
+    }
+    setOrdenPersonal({ clave: claveOrden, ids });
+  }, [claveOrden]);
+
+  useEffect(() => {
+    if (!claveOrden || ordenPersonal.clave !== claveOrden) return;
+    try {
+      localStorage.setItem(claveOrden, JSON.stringify(ordenPersonal.ids));
+    } catch {
+      // El orden permanece disponible durante esta sesión.
+    }
+  }, [claveOrden, ordenPersonal]);
+
+  useEffect(() => {
+    setExcluidos([]);
+  }, [anio, mes]);
 
   useEffect(() => {
     if (!hayCambios) return undefined;
@@ -212,10 +255,15 @@ export default function RolesCreditekNomina() {
     [anio, mes, rows, cambios, cambiosExtras],
   );
 
+  const rowsOrdenadas = useMemo(
+    () => ordenarFilasNomina(rowsCalculadas, prioritarios),
+    [rowsCalculadas, prioritarios],
+  );
+
   const rowsFiltradas = useMemo(() => {
     const query = normalizarTexto(busqueda);
-    if (!query) return rowsCalculadas;
-    return rowsCalculadas.filter((row) =>
+    if (!query) return rowsOrdenadas;
+    return rowsOrdenadas.filter((row) =>
       [
         row.usuarioId,
         row.cedula,
@@ -224,24 +272,50 @@ export default function RolesCreditekNomina() {
         row.fechaIngreso,
       ].some((value) => normalizarTexto(value).includes(query)),
     );
-  }, [busqueda, rowsCalculadas]);
+  }, [busqueda, rowsOrdenadas]);
+
+  const rowsContabilizadas = useMemo(
+    () => seleccionarFilasNomina(rowsFiltradas, excluidos),
+    [rowsFiltradas, excluidos],
+  );
+  const idsExcluidos = useMemo(() => new Set(excluidos), [excluidos]);
+  const prioritariosVisibles = useMemo(() => {
+    const presentes = new Set(rowsFiltradas.map((row) => String(row.usuarioId)));
+    return prioritarios.filter((id) => presentes.has(id));
+  }, [prioritarios, rowsFiltradas]);
+  const todasVisiblesMarcadas = rowsFiltradas.length > 0 && rowsContabilizadas.length === rowsFiltradas.length;
+
+  const destacar = (usuarioId) => {
+    const id = String(usuarioId);
+    setOrdenPersonal((actual) => ({
+      clave: claveOrden,
+      ids: actual.ids.includes(id) ? actual.ids.filter((value) => value !== id) : [...actual.ids, id],
+    }));
+  };
+
+  const moverPrioridad = (usuarioId, desplazamiento) => {
+    setOrdenPersonal((actual) => ({
+      clave: claveOrden,
+      ids: moverPrioridadNomina(actual.ids, usuarioId, desplazamiento, rowsFiltradas),
+    }));
+  };
 
   const totales = useMemo(
     () => ({
-      salario: sumar(rowsFiltradas, "salario"),
-      sueldoAPagar: sumar(rowsFiltradas, "sueldoAPagar"),
-      fondosReserva: sumar(rowsFiltradas, "fondosReserva"),
-      sueldosExtras: sumar(rowsFiltradas, "sueldosExtras"),
-      comisionVenta: sumar(rowsFiltradas, "comisionVenta"),
-      totalIngresos: sumar(rowsFiltradas, "totalIngresos"),
-      iess: sumar(rowsFiltradas, "iess"),
-      anticipo: sumar(rowsFiltradas, "anticipo"),
-      prestamo: sumar(rowsFiltradas, "prestamo"),
-      sancionMeta: sumar(rowsFiltradas, "sancionMeta"),
-      totalEgresos: sumar(rowsFiltradas, "totalEgresos"),
-      valorRecibir: sumar(rowsFiltradas, "valorRecibir"),
+      salario: sumar(rowsContabilizadas, "salario"),
+      sueldoAPagar: sumar(rowsContabilizadas, "sueldoAPagar"),
+      fondosReserva: sumar(rowsContabilizadas, "fondosReserva"),
+      sueldosExtras: sumar(rowsContabilizadas, "sueldosExtras"),
+      comisionVenta: sumar(rowsContabilizadas, "comisionVenta"),
+      totalIngresos: sumar(rowsContabilizadas, "totalIngresos"),
+      iess: sumar(rowsContabilizadas, "iess"),
+      anticipo: sumar(rowsContabilizadas, "anticipo"),
+      prestamo: sumar(rowsContabilizadas, "prestamo"),
+      sancionMeta: sumar(rowsContabilizadas, "sancionMeta"),
+      totalEgresos: sumar(rowsContabilizadas, "totalEgresos"),
+      valorRecibir: sumar(rowsContabilizadas, "valorRecibir"),
     }),
-    [rowsFiltradas],
+    [rowsContabilizadas],
   );
 
   const guardarTodo = async () => {
@@ -268,6 +342,7 @@ export default function RolesCreditekNomina() {
   };
 
   const exportarExcel = () => {
+    if (!rowsContabilizadas.length) return;
     const encabezado = [
       [
         "N#",
@@ -294,7 +369,7 @@ export default function RolesCreditekNomina() {
       [`NOMINA CREDITEK ${MESES[mes - 1].toUpperCase()} ${anio}`],
       [],
       ...encabezado,
-      ...rowsFiltradas.map((row, index) => [
+      ...rowsContabilizadas.map((row, index) => [
         index + 1,
         formatoFecha(row.fechaIngreso),
         row.cedula || "",
@@ -418,12 +493,12 @@ export default function RolesCreditekNomina() {
             <button
               type="button"
               onClick={exportarExcel}
-              disabled={loading || !rowsFiltradas.length}
+              disabled={loading || !rowsContabilizadas.length}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-              title="Descargar Excel"
+              title="Descargar las filas visibles marcadas, en el orden de la tabla"
             >
               <FileSpreadsheet size={17} />
-              Excel
+              Excel seleccionados
             </button>
           </div>
         </header>
@@ -433,7 +508,7 @@ export default function RolesCreditekNomina() {
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
               {hayCambios && <span className="text-amber-700">Cambios sin guardar</span>}
               <span className="rounded-full border border-slate-300 bg-white px-3 py-1">
-                {rowsFiltradas.length} colaboradores
+                {rowsContabilizadas.length} de {rowsFiltradas.length} filas visibles contabilizadas
               </span>
               <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-emerald-800">
                 Total a recibir {formatoNumero(totales.valorRecibir)}
@@ -465,10 +540,57 @@ export default function RolesCreditekNomina() {
             </label>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 text-xs text-slate-600">
+            <button
+              type="button"
+              disabled={loading || !rows.length}
+              onClick={() => setExcluidos([])}
+              className="rounded-md border border-slate-300 px-2 py-1.5 font-semibold hover:bg-sky-50 disabled:opacity-50"
+            >
+              Marcar todas
+            </button>
+            <button
+              type="button"
+              disabled={loading || !rows.length}
+              onClick={() => setExcluidos(cambiarSeleccionNomina([], rowsCalculadas, false))}
+              className="rounded-md border border-slate-300 px-2 py-1.5 font-semibold hover:bg-sky-50 disabled:opacity-50"
+            >
+              Desmarcar todas
+            </button>
+            <button
+              type="button"
+              disabled={!prioritarios.length}
+              onClick={() => setOrdenPersonal({ clave: claveOrden, ids: [] })}
+              className="rounded-md border border-slate-300 px-2 py-1.5 font-semibold hover:bg-sky-50 disabled:opacity-50"
+            >
+              Restablecer orden
+            </button>
+            <span>Totales y Excel: solo filas visibles marcadas. Al cambiar de período se marcan todas.</span>
+            <span className="inline-flex items-center gap-1 text-sky-800">
+              <Star size={14} /> Destaca personas para mostrarlas primero y usa las flechas para ordenarlas. El orden se recuerda en este navegador.
+            </span>
+          </div>
+
           <div className="max-h-[calc(100vh-250px)] min-h-[480px] overflow-auto">
             <table className="w-full min-w-[1840px] border-collapse text-xs">
               <thead className="sticky top-0 z-20 text-slate-950">
                 <tr>
+                  <th rowSpan={2} className="border border-slate-950 bg-sky-100 px-2 py-2 text-center">
+                    <label className="flex flex-col items-center gap-2">
+                      Sumar
+                      <input
+                        type="checkbox"
+                        checked={todasVisiblesMarcadas}
+                        ref={(element) => {
+                          if (element) element.indeterminate = rowsContabilizadas.length > 0 && !todasVisiblesMarcadas;
+                        }}
+                        disabled={loading || !rowsFiltradas.length}
+                        onChange={(event) => setExcluidos((actuales) => cambiarSeleccionNomina(actuales, rowsFiltradas, event.target.checked))}
+                        aria-label="Contabilizar todas las filas visibles"
+                        className="size-4 cursor-pointer accent-sky-700"
+                      />
+                    </label>
+                  </th>
                   <th
                     rowSpan={2}
                     className="border border-slate-950 bg-sky-100 px-2 py-2 text-center"
@@ -537,7 +659,7 @@ export default function RolesCreditekNomina() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={18}
+                      colSpan={19}
                       className="border border-slate-300 px-4 py-16 text-center text-sm font-semibold text-slate-500"
                     >
                       Calculando nomina...
@@ -546,7 +668,7 @@ export default function RolesCreditekNomina() {
                 ) : rowsFiltradas.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={18}
+                      colSpan={19}
                       className="border border-slate-300 px-4 py-16 text-center text-sm text-slate-500"
                     >
                       No hay colaboradores para mostrar.
@@ -557,11 +679,23 @@ export default function RolesCreditekNomina() {
                     <tr
                       key={row.usuarioId}
                       className={
-                        index % 2 === 0
+                        idsExcluidos.has(String(row.usuarioId))
+                          ? "bg-slate-100 text-slate-500"
+                          : index % 2 === 0
                           ? "bg-emerald-50/70 hover:bg-emerald-100"
                           : "bg-white hover:bg-emerald-50"
                       }
                     >
+                      <td className="border border-slate-950 px-2 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={!idsExcluidos.has(String(row.usuarioId))}
+                          onChange={(event) => setExcluidos((actuales) => cambiarSeleccionNomina(actuales, [row], event.target.checked))}
+                          aria-label={`Contabilizar a ${row.nombre}`}
+                          title={idsExcluidos.has(String(row.usuarioId)) ? "No se incluye en los totales ni en Excel" : "Incluido en los totales y en Excel"}
+                          className="size-4 cursor-pointer accent-sky-700"
+                        />
+                      </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-center font-bold">
                         {index + 1}
                       </td>
@@ -572,7 +706,44 @@ export default function RolesCreditekNomina() {
                         {row.cedula || "-"}
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 font-bold uppercase">
-                        {row.nombre}
+                        <div className="flex min-w-64 items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => destacar(row.usuarioId)}
+                            disabled={!claveOrden || ordenPersonal.clave !== claveOrden}
+                            aria-pressed={prioritarios.includes(String(row.usuarioId))}
+                            aria-label={`${prioritarios.includes(String(row.usuarioId)) ? "Quitar prioridad de" : "Mostrar primero a"} ${row.nombre}`}
+                            title="Mostrar al inicio"
+                            className="shrink-0 rounded p-1 text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                          >
+                            <Star size={17} fill={prioritarios.includes(String(row.usuarioId)) ? "currentColor" : "none"} />
+                          </button>
+                          <span className="flex-1">{row.nombre}</span>
+                          {prioritariosVisibles.includes(String(row.usuarioId)) && (
+                            <span className="flex shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => moverPrioridad(row.usuarioId, -1)}
+                                disabled={prioritariosVisibles[0] === String(row.usuarioId)}
+                                aria-label={`Subir a ${row.nombre}`}
+                                title="Subir prioridad"
+                                className="rounded p-1 text-sky-700 hover:bg-sky-100 disabled:opacity-30"
+                              >
+                                <ArrowUp size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moverPrioridad(row.usuarioId, 1)}
+                                disabled={prioritariosVisibles[prioritariosVisibles.length - 1] === String(row.usuarioId)}
+                                aria-label={`Bajar a ${row.nombre}`}
+                                title="Bajar prioridad"
+                                className="rounded p-1 text-sky-700 hover:bg-sky-100 disabled:opacity-30"
+                              >
+                                <ArrowDown size={15} />
+                              </button>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 font-semibold uppercase">
                         {row.cargo || "-"}
@@ -628,7 +799,7 @@ export default function RolesCreditekNomina() {
                           className="h-6 w-20 max-w-full rounded border border-slate-300 bg-white/80 px-1 text-right text-xs font-bold tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 disabled:opacity-50"
                         />
                       </td>
-                      <td title="Pagos comisiones del mes: Total Comisiones Semana + Mensual para vendedores; Total para jefes y supervisores." className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
+                      <td title="Choferes y encargados de logística: entregas del día 1 al último día del mes. Vendedores: Total Comisiones Semana + Mensual; jefes y supervisores: Total, según sus semanas comerciales." className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
                         {row.comisionVenta ? formatoNumero(row.comisionVenta) : ""}
                       </td>
                       <td className="border border-slate-950 bg-emerald-100 px-2 py-1.5 text-right font-extrabold tabular-nums">
@@ -659,12 +830,13 @@ export default function RolesCreditekNomina() {
               {!loading && rowsFiltradas.length > 0 && (
                 <tfoot className="sticky bottom-0 z-10 bg-sky-700 text-white">
                   <tr>
+                    <td className="border border-slate-950 px-2 py-2 text-center font-bold">{rowsContabilizadas.length}</td>
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2" />
                     <td className="border border-slate-950 px-2 py-2 font-extrabold uppercase">
-                      Totales
+                      Totales seleccionados
                     </td>
                     <td className="border border-slate-950 px-2 py-2 text-right font-extrabold tabular-nums">
                       {formatoNumero(totales.salario)}

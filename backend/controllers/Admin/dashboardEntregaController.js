@@ -7,6 +7,7 @@ exports.getDashboardEntregas = async (req, res) => {
     let { fechaInicio, fechaFin, userId } = req.query;
 
     const whereBase = {
+      activo: true,
       estado: {  
         [Op.ne]: "Eliminado",
       },
@@ -30,7 +31,9 @@ const includeMotorizado = {
   model: UsuarioAgencia,
   as: "repartidores",
   attributes: [],
-  through: { attributes: [] },
+  // Las asignaciones reasignadas se conservan como historial (activo=false).
+  // Solo la asignacion vigente debe atribuir la entrega al repartidor.
+  through: { attributes: [], where: { activo: true } },
   required: !!userId,
   ...(userId && {
     where: { id: userId },

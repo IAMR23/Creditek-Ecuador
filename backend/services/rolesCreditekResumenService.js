@@ -384,6 +384,9 @@ const obtenerResumen = async (periodoValue) => {
       pagosComisionesService.obtenerReportePagosComisiones({
         year: periodo.anio,
         month: periodo.mes,
+        // Solo Logística usa el mes calendario; el reporte comercial conserva sus semanas.
+        logisticaFechaInicio: fechaInicio,
+        logisticaFechaFin: fechaFin,
       }),
     ]);
 

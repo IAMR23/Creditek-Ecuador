@@ -61,4 +61,34 @@ describe("getDashboardEntregas", () => {
       }),
     );
   });
+
+  test("todos los indicadores del repartidor omiten entregas inactivas y asignaciones reasignadas", async () => {
+    Entrega.count.mockResolvedValue(0);
+    const req = { query: { userId: "111", fechaInicio: "2026-08-01", fechaFin: "2026-08-31" } };
+    const res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
+    await getDashboardEntregas(req, res);
+
+    expect(Entrega.count).toHaveBeenCalledTimes(7);
+    for (const [options] of Entrega.count.mock.calls) {
+      expect(options.where.activo).toBe(true);
+      expect(options.where.fecha).toEqual({ [Op.gte]: "2026-08-01", [Op.lte]: "2026-08-31" });
+      expect(options.include[0]).toMatchObject({
+        as: "repartidores", required: true, where: { id: "111" },
+        through: { where: { activo: true } },
+      });
+      expect(options.distinct).toBe(true);
+    }
+  });
+
+  test("el total general conserva entregas sin repartidor y evita duplicados", async () => {
+    Entrega.count.mockResolvedValue(0);
+    const res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
+    await getDashboardEntregas({ query: {} }, res);
+    for (const [options] of Entrega.count.mock.calls) {
+      expect(options.include[0].required).toBe(false);
+      expect(options.include[0].where).toBeUndefined();
+      expect(options.where.activo).toBe(true);
+      expect(options.distinct).toBe(true);
+    }
+  });
 });

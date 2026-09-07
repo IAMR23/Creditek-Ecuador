@@ -696,39 +696,49 @@ const createLogisticsExcelSheet = ({ workbook, rows }) => {
   getLogisticsTables(rows).forEach(({ manager, people, totalDeliveries }) => {
     const addRow = (values, fills = [], bold = false) => {
       const row = worksheet.addRow(values);
-      row.height = 25;
+      row.height = 30;
       values.forEach((_value, index) => {
         const cell = row.getCell(index + 1);
         const fill = fills[index] || "FFFFFFFF";
         styleExcelCell(cell, fill, {
           bold,
-          color: { argb: fill === "FFFF0000" ? "FFFFFFFF" : "FF000000" },
+          color: { argb: fill === "FF0369A1" ? "FFFFFFFF" : "FF0F172A" },
         });
         if (index === 0) cell.alignment.horizontal = "left";
-        if (typeof cell.value === "number") cell.numFmt = '#,##0.##';
+        if (typeof cell.value === "number") {
+          cell.numFmt = '#,##0.##';
+          cell.alignment.horizontal = "right";
+        }
         if (index > 0) worksheet.getColumn(index + 1).width = 22;
       });
       return row;
     };
-    addRow(["JEFE LOGISTICA", ...people.map((person) => person.nombre.toUpperCase())]);
+    const headerRow = addRow(
+      ["ENCARGADO LOGÍSTICA", ...people.map((person) => person.nombre.toUpperCase())],
+      Array(people.length + 1).fill("FFBAE6FD"), true,
+    );
+    headerRow.height = 44;
     addRow([
       manager?.nombre.toUpperCase() || "SIN ENCARGADO ASIGNADO",
       ...people.map((person) => Number(person.resumenMensual?.totalEntregas || 0)),
     ], [], true);
     if (manager) {
       addRow([
-        manager.nombre.toUpperCase(),
+        "ENTREGAS PROPIAS DEL ENCARGADO",
         Number(manager.resumenMensual?.totalEntregas || 0),
         ...people.slice(1).map(() => null),
-      ], ["FF00FF00", "FF00FF00"], true);
+      ], Array(people.length + 1).fill("FFD1FAE5"), true);
+      const summaryHeader = addRow(["RESUMEN DEL ENCARGADO", "Total entregas", "Bono del encargado ($): total ÷ 2", "A recibir encargado ($)"], Array(4).fill("FFE0F2FE"), true);
+      summaryHeader.height = 44;
       const summary = addRow([
-        "SUMAN", totalDeliveries,
+        "TOTALES", totalDeliveries,
         Number(manager.resumenMensual?.totalBonoJuniors || 0),
         Number(manager.resumenMensual?.totalPagar || 0),
-      ], ["FFFFFF00", "FFFFFF00", "FFFFE699", "FFFF0000"], true);
-      ["Total de entregas", "Bono del encargado por entregas de choferes", "Total a pagar al encargado"]
+      ], Array(4).fill("FF0369A1"), true);
+      summary.getCell(3).numFmt = EXCEL_MONEY_FORMAT;
+      summary.getCell(4).numFmt = EXCEL_MONEY_FORMAT;
+      ["Total de entregas", "Bono del encargado: total de entregas dividido para 2", "Total a pagar al encargado"]
         .forEach((label, index) => { summary.getCell(index + 2).note = label; });
-      addRow(["", "Total entregas", "Bono del encargado ($)", "A recibir encargado ($)"]);
     }
     worksheet.addRow([]);
   });
@@ -3066,7 +3076,7 @@ function WeeklyTeamCard({
 function LogisticsCommissionTable({ rows, loading }) {
   if (loading || !rows.length) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+      <section className="border border-slate-300 bg-white px-4 py-16 text-center text-sm text-slate-500 shadow-sm">
         {loading ? "Cargando reporte..." : "No hay personal activo de logística para el período seleccionado."}
       </section>
     );
@@ -3075,63 +3085,85 @@ function LogisticsCommissionTable({ rows, loading }) {
   return (
     <div className="space-y-5">
       {getLogisticsTables(rows).map(({ manager, people, totalDeliveries }) => (
-        <section key={manager?.usuarioId || "sin-encargado"} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section key={manager?.usuarioId || "sin-encargado"} className="overflow-hidden border border-slate-300 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-300 bg-slate-100 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Entregas de logística</h3>
+              <p className="mt-0.5 text-xs text-slate-600">
+                {manager ? `Encargado: ${manager.nombre}` : "Equipo de choferes"}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-slate-700">
+                {people.length} colaboradores
+              </span>
+              {manager ? (
+                <span className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-emerald-800 tabular-nums">
+                  A recibir encargado {formatCurrency(manager.resumenMensual?.totalPagar)}
+                </span>
+              ) : null}
+            </div>
+          </div>
           <div className="overflow-x-auto">
-            <table style={{ minWidth: Math.max(680, 260 + people.length * 140) }} className="w-full table-fixed border-collapse text-center text-sm text-black">
+            <table style={{ minWidth: Math.max(680, 260 + people.length * 140) }} className="w-full table-fixed border-collapse text-center text-xs text-slate-950">
               <caption className="sr-only">Entregas del período por encargado y chofer</caption>
               <thead>
                 <tr>
-                  <th scope="col" className="w-[260px] border border-black bg-white px-3 py-2 font-medium">JEFE LOGISTICA</th>
+                  <th scope="col" className="w-[260px] border border-slate-950 bg-sky-100 px-3 py-3 text-left font-bold">ENCARGADO LOGÍSTICA</th>
                   {people.map((person) => (
-                    <th key={person.usuarioId} scope="col" title={person.cargo} className="min-w-[140px] border border-black px-3 py-2 font-medium uppercase">
+                    <th key={person.usuarioId} scope="col" title={person.cargo} className="min-w-[140px] border border-slate-950 bg-sky-200 px-3 py-3 font-bold uppercase">
                       {person.nombre}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <th scope="row" className="border border-black px-3 py-2 text-left font-medium uppercase">
+                <tr className="bg-white hover:bg-emerald-50">
+                  <th scope="row" className="border border-slate-950 px-3 py-3 text-left font-semibold uppercase">
                     {manager?.nombre || "Sin encargado asignado"}
                   </th>
                   {people.map((person) => (
-                    <td key={person.usuarioId} title={`Entregas de ${person.nombre}`} className="border border-black px-3 py-2 font-bold">
+                    <td key={person.usuarioId} title={`Entregas de ${person.nombre}`} className="border border-slate-950 px-3 py-3 text-right text-sm font-bold tabular-nums">
                       {formatMoney(person.resumenMensual?.totalEntregas)}
                     </td>
                   ))}
                 </tr>
                 {manager && (
-                  <tr>
-                    <th scope="row" className="border border-black bg-[#00ff00] px-3 py-2 text-left font-bold uppercase">{manager.nombre}</th>
-                    <td title="Entregas propias del encargado" className="border border-black bg-[#00ff00] px-3 py-2 font-bold">
+                  <tr className="bg-emerald-50/70 hover:bg-emerald-100">
+                    <th scope="row" className="border border-slate-950 px-3 py-3 text-left font-semibold text-emerald-900">Entregas propias del encargado</th>
+                    <td title="Entregas propias del encargado" className="border border-slate-950 bg-emerald-100 px-3 py-3 text-right text-sm font-extrabold text-emerald-900 tabular-nums">
                       {formatMoney(manager.resumenMensual?.totalEntregas)}
                     </td>
-                    {people.slice(1).map((person) => <td key={person.usuarioId} className="border border-black" />)}
+                    {people.slice(1).map((person) => <td key={person.usuarioId} className="border border-slate-950" />)}
                   </tr>
                 )}
               </tbody>
             </table>
             {manager && (
-              <table style={{ minWidth: Math.max(680, 260 + people.length * 140) }} className="w-full table-fixed border-collapse text-center text-sm text-black">
+              <table style={{ minWidth: Math.max(680, 260 + people.length * 140) }} className="w-full table-fixed border-collapse text-xs text-slate-950">
                 <caption className="sr-only">Resumen de comisión del encargado {manager.nombre}</caption>
-                <tbody>
-                  <tr className="font-bold">
-                    <th scope="row" className="w-[260px] border border-black bg-[#ffff00] px-3 py-2 text-left">SUMAN</th>
-                    <td title="Total de entregas del encargado y choferes" className="border border-black bg-[#ffff00] px-3 py-2">{formatMoney(totalDeliveries)}</td>
-                    <td title="Bono del encargado por entregas de choferes" className="border border-black bg-[#ffe699] px-3 py-2">{formatMoney(manager.resumenMensual?.totalBonoJuniors)}</td>
-                    <td title="Total a pagar al encargado" className="border border-black bg-[#ff0000] px-3 py-2 text-white">{formatMoney(manager.resumenMensual?.totalPagar)}</td>
+                <thead>
+                  <tr className="bg-sky-100">
+                    <th scope="col" className="w-[260px] border border-slate-950 px-3 py-3 text-left">RESUMEN DEL ENCARGADO</th>
+                    <th scope="col" className="border border-slate-950 px-3 py-3 text-right">TOTAL ENTREGAS</th>
+                    <th scope="col" className="border border-slate-950 bg-sky-200 px-3 py-3 text-right">
+                      BONO DEL ENCARGADO
+                    </th>
+                    <th scope="col" className="border border-slate-950 bg-sky-300 px-3 py-3 text-right">A RECIBIR ENCARGADO</th>
                   </tr>
-                  <tr className="text-xs text-slate-600">
-                    <td />
-                    <td className="px-3 py-2">Total entregas</td>
-                    <td className="px-3 py-2">Bono del encargado ($)</td>
-                    <td className="px-3 py-2">A recibir encargado ($)</td>
+                </thead>
+                <tbody>
+                  <tr className="bg-sky-700 font-extrabold text-white">
+                    <th scope="row" className="border border-slate-950 px-3 py-3 text-left uppercase">Totales</th>
+                    <td title="Total de entregas del encargado y choferes" className="border border-slate-950 px-3 py-3 text-right text-sm tabular-nums">{formatMoney(totalDeliveries)}</td>
+                    <td title="Bono del encargado: total de entregas dividido para 2" className="border border-slate-950 px-3 py-3 text-right text-sm tabular-nums">{formatCurrency(manager.resumenMensual?.totalBonoJuniors)}</td>
+                    <td title="Total a pagar al encargado" className="border border-slate-950 px-3 py-3 text-right text-base tabular-nums">{formatCurrency(manager.resumenMensual?.totalPagar)}</td>
                   </tr>
                 </tbody>
               </table>
             )}
           </div>
-          {!manager && <p className="p-3 text-sm text-slate-500">No hay un usuario activo con cargo de encargado o jefe de logística en este período.</p>}
+          {!manager && <p className="border-t border-slate-300 bg-slate-50 p-3 text-sm text-slate-500">No hay un usuario activo con cargo de encargado o jefe de logística en este período.</p>}
         </section>
       ))}
     </div>

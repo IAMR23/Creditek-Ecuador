@@ -186,8 +186,9 @@ describe("pagosComisionesService", () => {
         totalEntregas: 2,
         totalEntregasJuniors: 2,
         totalComisionEntregasPropias: 2,
-        totalBonoJuniors: 1,
-        totalPagar: 3,
+        totalEntregasParaBono: 4,
+        totalBonoJuniors: 2,
+        totalPagar: 4,
       },
     });
     expect(rows.find((row) => row.usuarioId === 2)).toMatchObject({
@@ -199,19 +200,21 @@ describe("pagosComisionesService", () => {
       entregas: 1,
       entregasJuniors: 1,
       comisionEntregasPropias: 1,
-      bonoJuniors: 0.5,
-      totalComisiones: 1.5,
+      entregasParaBono: 2,
+      bonoJuniors: 1,
+      totalComisiones: 2,
     });
     expect(rows[0].semanas["2026-07-09"]).toMatchObject({
       entregas: 1,
       entregasJuniors: 1,
       comisionEntregasPropias: 1,
-      bonoJuniors: 0.5,
-      totalComisiones: 1.5,
+      entregasParaBono: 2,
+      bonoJuniors: 1,
+      totalComisiones: 2,
     });
   });
 
-  test("cuenta una sola vez el bono del encargado por entrega de juniors", () => {
+  test("el bono usa la suma de entregas por chofer sin duplicar asignaciones del mismo usuario", () => {
     const rows = buildLogisticsCommissionRows({
       usuarios: [
         {
@@ -236,6 +239,7 @@ describe("pagosComisionesService", () => {
       ],
       asignaciones: [
         { usuarioId: 2, entregaId: 50, fecha: "2026-07-03" },
+        { usuarioId: 2, entregaId: 50, fecha: "2026-07-03" },
         { usuarioId: 3, entregaId: 50, fecha: "2026-07-03" },
       ],
       weeks: [{ startDate: "2026-07-02", endDate: "2026-07-08" }],
@@ -244,11 +248,56 @@ describe("pagosComisionesService", () => {
     expect(rows[0].resumenMensual).toMatchObject({
       totalEntregas: 0,
       totalEntregasJuniors: 1,
-      totalBonoJuniors: 0.5,
-      totalPagar: 0.5,
+      totalEntregasParaBono: 2,
+      totalBonoJuniors: 1,
+      totalPagar: 1,
     });
     expect(rows.find((row) => row.usuarioId === 2).resumenMensual.totalPagar).toBe(1);
     expect(rows.find((row) => row.usuarioId === 3).resumenMensual.totalPagar).toBe(1);
+  });
+
+  test("213 entregas generan bono de 106.50 y pago de 142.50 con 36 entregas propias", () => {
+    const usuarios = [
+      { usuarioId: 1, nombre: "Encargado", activo: true, posicionesPago: [{ cargo: "JEFE LOGISTICA" }] },
+      { usuarioId: 2, nombre: "Chofer uno", activo: true, posicionesPago: [{ cargo: "CHOFER" }] },
+      { usuarioId: 3, nombre: "Chofer dos", activo: true, posicionesPago: [{ cargo: "CHOFER" }] },
+    ];
+    const asignaciones = [36, 95, 82].flatMap((cantidad, index) =>
+      Array.from({ length: cantidad }, (_, numero) => ({
+        usuarioId: index + 1, entregaId: (index + 1) * 1000 + numero,
+        fecha: numero % 2 === 0 ? "2026-08-07" : "2026-08-14",
+      })),
+    );
+    const weeks = [
+      { startDate: "2026-08-06", endDate: "2026-08-12" },
+      { startDate: "2026-08-13", endDate: "2026-08-19" },
+    ];
+    const rows = buildLogisticsCommissionRows({ usuarios, asignaciones, weeks });
+    const encargado = rows.find(row => row.usuarioId === 1);
+    expect(encargado.resumenMensual).toMatchObject({
+      totalEntregas: 36, totalEntregasParaBono: 213,
+      totalComisionEntregasPropias: 36, totalBonoJuniors: 106.5, totalPagar: 142.5,
+    });
+    expect(rows.find(row => row.usuarioId === 2).resumenMensual.totalPagar).toBe(95);
+    expect(rows.find(row => row.usuarioId === 3).resumenMensual.totalPagar).toBe(82);
+    expect(weeks.reduce((sum, week) => sum + encargado.semanas[week.startDate].bonoJuniors, 0)).toBe(106.5);
+    expect(weeks.reduce((sum, week) => sum + encargado.semanas[week.startDate].totalComisiones, 0)).toBe(142.5);
+  });
+
+  test("cada encargado suma sus entregas propias a las de choferes, con cero si no hay entregas", () => {
+    const usuarios = [
+      { usuarioId: 1, nombre: "Encargado uno", activo: true, posicionesPago: [{ cargo: "JEFE LOGISTICA" }] },
+      { usuarioId: 2, nombre: "Encargado dos", activo: true, posicionesPago: [{ cargo: "ENCARGADO LOGISTICA" }] },
+      { usuarioId: 3, nombre: "Chofer", activo: true, posicionesPago: [{ cargo: "CHOFER" }] },
+    ];
+    const weeks = [{ startDate: "2026-08-06", endDate: "2026-08-12" }];
+    const rows = buildLogisticsCommissionRows({ usuarios, weeks, asignaciones: [
+      { usuarioId: 1, entregaId: 10, fecha: "2026-08-07" },
+      { usuarioId: 3, entregaId: 20, fecha: "2026-08-07" },
+    ] });
+    expect(rows.find(row => row.usuarioId === 1).resumenMensual).toMatchObject({ totalEntregasParaBono: 2, totalBonoJuniors: 1 });
+    expect(rows.find(row => row.usuarioId === 2).resumenMensual).toMatchObject({ totalEntregasParaBono: 1, totalBonoJuniors: 0.5 });
+    expect(buildLogisticsCommissionRows({ usuarios, weeks }).every(row => row.resumenMensual.totalPagar === 0)).toBe(true);
   });
 
   test("prioriza la tarifa del encargado aunque tambien tenga rol repartidor", () => {
