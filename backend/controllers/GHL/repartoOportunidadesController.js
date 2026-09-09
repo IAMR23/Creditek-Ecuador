@@ -1,6 +1,7 @@
 const Configuracion = require("../../models/GhlRepartoConfiguracion");
 const Ejecucion = require("../../models/GhlRepartoEjecucion");
 const service = require("../../services/ghlOpportunityDistributionService");
+const advisorService = require("../../services/ghlAdvisorAvailabilityService");
 
 const respondError = (res, error) => res.status(error.statusCode || 500).json({ ok: false, code: error.code || "GHL_REPARTO_ERROR", message: service.sanitize(error.message) });
 
@@ -27,4 +28,57 @@ async function resume(req, res) { try { const row = await service.resume(req.par
 async function cancel(req, res) { try { const row = await service.requestCancel(req.params.id); res.json({ ok: true, ejecucion: row, message: row.estado === "cancelled" ? "Ejecucion cancelada" : "Cancelacion solicitada" }); } catch (error) { respondError(res, error); } }
 async function forceFinishStale(req, res) { try { const row = await service.forceFinishStale(req.params.id); res.json({ ok: true, ejecucion: row, message: "Ejecucion atascada finalizada" }); } catch (error) { respondError(res, error); } }
 
-module.exports = { pipelines, stages, users, list, get, create, update, state, preview, execute, history, execution, pause, resume, cancel, forceFinishStale };
+async function myAvailability(req, res) {
+  try {
+    res.json({
+      ok: true,
+      disponibilidad: await advisorService.getMyAvailability(req.user.id),
+    });
+  } catch (error) { respondError(res, error); }
+}
+
+async function setMyAvailability(req, res) {
+  try {
+    const disponibilidad = await advisorService.changeAvailability({
+      usuarioId: req.user.id,
+      estado: req.body.estado,
+      actorId: req.user.id,
+      motivoCambio: "asesor",
+    });
+    res.json({ ok: true, disponibilidad });
+  } catch (error) { respondError(res, error); }
+}
+
+async function advisorAvailability(req, res) {
+  try {
+    res.json({
+      ok: true,
+      asesores: await advisorService.listAdvisorAvailability(),
+    });
+  } catch (error) { respondError(res, error); }
+}
+
+async function saveAdvisorAssociation(req, res) {
+  try {
+    const disponibilidad = await advisorService.saveAssociation({
+      usuarioId: Number(req.params.usuarioId),
+      ghlUserId: req.body.ghlUserId,
+      actorId: req.user.id,
+    });
+    res.json({ ok: true, disponibilidad });
+  } catch (error) { respondError(res, error); }
+}
+
+async function setAdvisorAvailability(req, res) {
+  try {
+    const disponibilidad = await advisorService.changeAvailability({
+      usuarioId: Number(req.params.usuarioId),
+      estado: req.body.estado,
+      actorId: req.user.id,
+      motivoCambio: "administrador",
+    });
+    res.json({ ok: true, disponibilidad });
+  } catch (error) { respondError(res, error); }
+}
+
+module.exports = { pipelines, stages, users, list, get, create, update, state, preview, execute, history, execution, pause, resume, cancel, forceFinishStale, myAvailability, setMyAvailability, advisorAvailability, saveAdvisorAssociation, setAdvisorAvailability };

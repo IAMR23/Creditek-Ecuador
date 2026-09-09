@@ -9,6 +9,7 @@ const GhlRepartoConfiguracion = sequelize.define("GhlRepartoConfiguracion", {
   stageId: { type: DataTypes.STRING(100), allowNull: false },
   stageNombre: { type: DataTypes.STRING(200), allowNull: false },
   hora: { type: DataTypes.STRING(5), allowNull: false },
+  intervaloMinutos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, validate: { min: 1, max: 60 } },
   zonaHoraria: { type: DataTypes.STRING(50), allowNull: false, defaultValue: "America/Guayaquil" },
   diasSemana: { type: DataTypes.ARRAY(DataTypes.INTEGER), allowNull: false },
   modo: { type: DataTypes.ENUM("unassigned", "all"), allowNull: false },

@@ -10,6 +10,7 @@ const GhlRepartoEjecucionDetalle = sequelize.define("GhlRepartoEjecucionDetalle"
   estado: { type: DataTypes.ENUM("pending", "assigned", "skipped", "error", "cancelled"), allowNull: false, defaultValue: "pending" },
   retryable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   attemptCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  assignedAt: { type: DataTypes.DATE, allowNull: true },
   errorCode: { type: DataTypes.STRING(80), allowNull: true },
   errorMessage: { type: DataTypes.TEXT, allowNull: true },
 }, { tableName: "ghl_reparto_ejecucion_detalles", timestamps: true });

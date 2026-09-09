@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Ban, Pause, Play, RefreshCcw, RotateCcw, Save, Search, ShieldAlert, X } from "lucide-react";
 import api from "../../api/client";
+import AsesoresDisponibilidadPanel from "../../components/GHL/AsesoresDisponibilidadPanel";
 
 const DAYS = [[1, "Lunes"], [2, "Martes"], [3, "Miercoles"], [4, "Jueves"], [5, "Viernes"], [6, "Sabado"], [0, "Domingo"]];
 const ACTIVE_STATES = ["running", "pause_requested", "cancel_requested"];
@@ -10,7 +11,7 @@ const STATUS_LABELS = {
   cancel_requested: "Cancelando...", completed: "Completada", partial: "Parcial",
   failed: "Fallida", cancelled: "Cancelada", interrupted: "Interrumpida", skipped: "Omitida",
 };
-const empty = { nombre: "Reparto de oportunidades", pipelineId: "", stageId: "", hora: "09:00", zonaHoraria: "America/Guayaquil", diasSemana: [1, 2, 3, 4, 5], modo: "unassigned", usuariosGhl: [], activo: true };
+const empty = { nombre: "Reparto de oportunidades", pipelineId: "", stageId: "", hora: "09:00", intervaloMinutos: 1, zonaHoraria: "America/Guayaquil", diasSemana: [1, 2, 3, 4, 5], modo: "unassigned", usuariosGhl: [], activo: true };
 const messageOf = (error) => error.response?.data?.message || error.message || "Ocurrio un error";
 const inputClass = "h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 
@@ -121,10 +122,12 @@ export default function RepartoOportunidades() {
 
   return <div className="min-h-screen space-y-4 bg-gray-50 p-4">
     <header className="flex flex-wrap items-center justify-between gap-3">
-      <div><div className="text-sm font-semibold text-green-700">GoHighLevel</div><h1 className="text-2xl font-bold text-gray-900">Reparto de oportunidades</h1><p className="text-sm text-gray-500">Solo oportunidades de hoy y ayer · America/Guayaquil</p></div>
+      <div><div className="text-sm font-semibold text-green-700">GoHighLevel</div><h1 className="text-2xl font-bold text-gray-900">Reparto de oportunidades</h1><p className="text-sm text-gray-500">Consulta periódica de oportunidades sin propietario · America/Guayaquil</p></div>
       <div className={`rounded-full px-3 py-1 text-xs font-bold ${error ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{loading ? "Comprobando conexion..." : error ? "GHL no disponible" : "GHL conectado"}</div>
     </header>
     {error && <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertTriangle size={18}/><span className="flex-1">{error}</span><button onClick={() => setError("")}><X size={16}/></button></div>}
+
+    <AsesoresDisponibilidadPanel ghlUsers={users} />
 
     <section className="space-y-4 rounded border bg-white p-4 shadow-sm">
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
@@ -133,6 +136,7 @@ export default function RepartoOportunidades() {
         <Field label="Pipeline"><select className={inputClass} value={form.pipelineId} onChange={(event) => { setForm((old) => ({ ...old, pipelineId: event.target.value, stageId: "" })); setPreview(null); }}><option value="">Seleccione...</option>{pipelines.map((pipeline) => <option key={pipeline.id || pipeline._id} value={pipeline.id || pipeline._id}>{pipeline.name}</option>)}</select></Field>
         <Field label="Etapa"><select className={inputClass} value={form.stageId} onChange={(event) => set("stageId", event.target.value)} disabled={!form.pipelineId}><option value="">Seleccione...</option>{stages.map((stage) => <option key={stage.id || stage._id} value={stage.id || stage._id}>{stage.name}</option>)}</select></Field>
         <Field label="Hora"><input type="time" className={inputClass} value={form.hora} onChange={(event) => set("hora", event.target.value)}/></Field>
+        <Field label="Intervalo de consulta"><select className={inputClass} value={form.intervaloMinutos || 1} onChange={(event) => set("intervaloMinutos", Number(event.target.value))}><option value={1}>Cada minuto</option><option value={2}>Cada 2 minutos</option><option value={5}>Cada 5 minutos</option><option value={10}>Cada 10 minutos</option><option value={15}>Cada 15 minutos</option></select></Field>
         <Field label="Zona horaria"><input className={`${inputClass} bg-gray-100`} value="America/Guayaquil" disabled/></Field>
         <Field label="Modo"><select className={inputClass} value={form.modo} onChange={(event) => set("modo", event.target.value)}><option value="unassigned">Solo sin propietario</option><option value="all">Redistribuir todas</option></select></Field>
         <Field label="Estado"><label className="flex h-10 items-center gap-2"><input type="checkbox" checked={form.activo} onChange={(event) => set("activo", event.target.checked)} className="h-5 w-5 accent-green-600"/> {form.activo ? "Activo" : "Inactivo"}</label></Field>
@@ -147,7 +151,7 @@ export default function RepartoOportunidades() {
       </div>
     </section>
 
-    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Resumen de vista previa</h2><p className="mb-3 text-xs text-gray-500">Periodo: {preview.rangoFechas?.fechaInicio} al {preview.rangoFechas?.fechaFin}, America/Guayaquil</p><div className="grid gap-2 sm:grid-cols-3"><Metric label="Encontradas" value={preview.totalEncontradas}/><Metric label="Elegibles" value={preview.totalElegibles}/><Metric label="Omitidas" value={preview.totalOmitidas}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-gray-50 p-3 text-sm"><b>{user.name}</b><div>{user.cantidad} oportunidades</div></div>)}</div></section>}
+    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Resumen de vista previa</h2><p className="mb-3 text-xs text-gray-500">{preview.rangoFechas ? `Periodo: ${preview.rangoFechas.fechaInicio} al ${preview.rangoFechas.fechaFin}` : "Incluye oportunidades pendientes sin propietario"} · America/Guayaquil</p>{preview.advertencia && <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{preview.advertencia}</div>}<div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"><Metric label="Encontradas" value={preview.totalEncontradas}/><Metric label="Elegibles" value={preview.totalElegibles}/><Metric label="Omitidas" value={preview.totalOmitidas}/><Metric label="Configurados" value={preview.usuariosConfigurados}/><Metric label="En Play" value={preview.usuariosActivos}/><Metric label="Pausados" value={preview.usuariosPausados}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-green-50 p-3 text-sm"><b>{user.name}</b><div>{user.cantidad} oportunidades</div></div>)}{preview.pausados?.map((user) => <div key={user.id} className="rounded bg-gray-100 p-3 text-sm"><b>{user.name}</b><div>Pausado</div></div>)}{preview.invalidos?.map((user) => <div key={user.id} className="rounded bg-amber-50 p-3 text-sm"><b>{user.name}</b><div>Asociación inválida</div></div>)}</div></section>}
 
     <section className="overflow-hidden rounded border bg-white shadow-sm">
       <div className="flex items-center justify-between border-b p-4"><b>Historial de ejecuciones</b>{hasActiveExecution && <span className="text-xs font-semibold text-blue-700">Actualizando automaticamente...</span>}</div>
@@ -165,8 +169,8 @@ export default function RepartoOportunidades() {
             <td className="px-3 py-2">{run.ejecutadoPor?.nombre || "-"}</td>
             <td className="px-3 py-2"><div className="flex flex-wrap gap-1">
               <button className="rounded border px-2 py-1 text-green-700" onClick={() => showDetail(run.id)}>Detalle</button>
-              {run.estado === "running" && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "pause")} icon={<Pause size={14}/>} label="Pausar"/>}
-              {run.estado === "paused" && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "resume")} icon={<RotateCcw size={14}/>} label="Reanudar"/>}
+              {run.estado === "running" && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "pause")} icon={<Pause size={14}/>} label="Pausar ejecución"/>}
+              {run.estado === "paused" && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "resume")} icon={<RotateCcw size={14}/>} label="Reanudar ejecución"/>}
               {["running", "pause_requested", "paused"].includes(run.estado) && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "cancel")} icon={<Ban size={14}/>} label="Cancelar" danger/>}
               {run.isStale && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "force-finish-stale")} icon={<ShieldAlert size={14}/>} label="Finalizar atascada" danger/>}
             </div></td>

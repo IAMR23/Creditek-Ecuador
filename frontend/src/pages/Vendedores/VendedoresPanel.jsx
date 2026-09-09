@@ -1,5 +1,6 @@
+/* eslint-disable react/prop-types */
 import { jwtDecode } from "jwt-decode";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MdShoppingCart,
@@ -7,14 +8,13 @@ import {
   MdList,
   MdPointOfSale,
   MdReceiptLong,
-  MdSwapHoriz,
-  MdAssignment,
   MdAnalytics,
   MdSupportAgent,
   MdFlag,
   MdFactCheck,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
+import AsesorDisponibilidadCard from "../../components/GHL/AsesorDisponibilidadCard";
 
 function VendedorPanel() {
   const navigate = useNavigate();
@@ -32,7 +32,7 @@ function VendedorPanel() {
     } else {
       navigate("/login");
     }
-  }, []);
+  }, [navigate]);
 
   const colorMap = {
     green: "bg-green-100 text-green-600 group-hover:bg-green-200",
@@ -194,6 +194,8 @@ function VendedorPanel() {
           BIENVENIDO {user?.usuario?.nombre || "Vendedor"}
         </h1>
       </div>
+
+      <AsesorDisponibilidadCard />
 
       {/* Secciones */}
       {visibleOptions.map((section, i) => (

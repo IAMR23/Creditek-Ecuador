@@ -1,8 +1,18 @@
+jest.mock("./ghlAdvisorAvailabilityService", () => ({
+  resolveConfiguredAdvisors: jest.fn(async (configuredUsers) => ({
+    active: configuredUsers,
+    paused: [],
+    invalid: [],
+  })),
+  isGhlUserActiveToday: jest.fn(async () => true),
+}));
+
 const service = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
 const { sequelize } = require("../config/db");
 const Ejecucion = require("../models/GhlRepartoEjecucion");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
+const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 
 const makeRun = (overrides = {}) => {
   const run = {
@@ -30,6 +40,7 @@ describe("control de ejecuciones GHL", () => {
     jest.spyOn(Detalle, "bulkCreate").mockResolvedValue([]);
     jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
     jest.spyOn(ghl, "createGhlClient").mockReturnValue({ request: jest.fn() });
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue([{ id: "u1" }, { id: "u2" }]);
     jest.spyOn(ghl, "fetchOpportunitiesByStatus")[opportunityResult instanceof Error ? "mockRejectedValue" : "mockResolvedValue"](opportunityResult);
     return connection;
   };
@@ -41,6 +52,23 @@ describe("control de ejecuciones GHL", () => {
     const result = await service.execute(config);
     expect(result.estado).toBe("completed");
     expect(result.finishedAt).toEqual(expect.any(Date));
+    expect(Detalle.bulkCreate).not.toHaveBeenCalled();
+  });
+
+  test("todos pausados finaliza omitida y conserva oportunidades pendientes", async () => {
+    const run = makeRun({ totalEncontradas: 0, totalElegibles: 0 });
+    mockExecuteInfrastructure(run, [{ id: "o1", pipelineId: "p", pipelineStageId: "s" }]);
+    advisorAvailability.resolveConfiguredAdvisors.mockResolvedValueOnce({
+      active: [],
+      paused: [{ id: "u1" }, { id: "u2" }],
+      invalid: [],
+    });
+    const config = { id: 3, pipelineId: "p", stageId: "s", modo: "unassigned", pipelineNombre: "P", stageNombre: "S", usuariosGhl: [{ id: "u1" }, { id: "u2" }], indiceSiguienteUsuario: 0, update: jest.fn() };
+
+    const result = await service.execute(config);
+
+    expect(result.estado).toBe("skipped");
+    expect(result.errorGeneral).toContain("pendientes sin propietario");
     expect(Detalle.bulkCreate).not.toHaveBeenCalled();
   });
 
@@ -171,5 +199,19 @@ describe("control de ejecuciones GHL", () => {
     jest.spyOn(ghl, "requestGhl").mockRejectedValue(Object.assign(new Error("timeout"), { code: "GHL_CONNECTION_ERROR" }));
     await service.processOneDetail(run, {}, detail, {});
     expect(detail).toMatchObject({ estado: "error", retryable: true, errorCode: "GHL_CONNECTION_ERROR" });
+  });
+
+  test("un asesor pausado durante la ejecucion se omite antes de asignar", async () => {
+    const run = makeRun();
+    const detail = { opportunityId: "o1", newAssignedTo: "u1", attemptCount: 0, update: jest.fn(async (values) => Object.assign(detail, values)) };
+    jest.spyOn(Ejecucion, "findByPk").mockResolvedValue({ estado: "running" });
+    jest.spyOn(Detalle, "findAll").mockResolvedValue([{ estado: "skipped" }]);
+    jest.spyOn(ghl, "requestGhl").mockResolvedValue({ opportunity: { id: "o1", pipelineId: "p", pipelineStageId: "s" } });
+    advisorAvailability.isGhlUserActiveToday.mockResolvedValueOnce(false);
+
+    await service.processOneDetail(run, { pipelineId: "p", stageId: "s", modo: "unassigned" }, detail, {});
+
+    expect(detail).toMatchObject({ estado: "skipped", errorCode: "ADVISOR_PAUSED" });
+    expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
   });
 });

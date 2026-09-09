@@ -1,3 +1,12 @@
+jest.mock("./ghlAdvisorAvailabilityService", () => ({
+  resolveConfiguredAdvisors: jest.fn(async (configuredUsers) => ({
+    active: configuredUsers,
+    paused: [],
+    invalid: [],
+  })),
+  isGhlUserActiveToday: jest.fn(async () => true),
+}));
+
 const {
   buildAssignments,
   eligibleOpportunities,
@@ -14,6 +23,7 @@ const {
   uniqueUsers,
 } = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
+const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 const { sequelize } = require("../config/db");
 const Ejecucion = require("../models/GhlRepartoEjecucion");
 
@@ -22,13 +32,21 @@ const opportunities = (amount) => Array.from({ length: amount }, (_, index) => (
 const counts = (assignments, selectedUsers) => selectedUsers.map((user) => assignments.filter((item) => item.user.id === user.id).length);
 
 describe("reparto determinista de oportunidades GHL", () => {
+  beforeEach(() => jest.clearAllMocks());
+
   test("maneja cero oportunidades", () => expect(buildAssignments([], users.slice(0, 2))).toEqual([]));
   test("maneja menos oportunidades que usuarios", () => expect(counts(buildAssignments(opportunities(2), users), users)).toEqual([1, 1, 0, 0, 0]));
   test("reparte una division exacta", () => expect(counts(buildAssignments(opportunities(10), users), users)).toEqual([2, 2, 2, 2, 2]));
   test("reparte el residuo con diferencia maxima de uno", () => expect(counts(buildAssignments(opportunities(103), users), users)).toEqual([21, 21, 21, 20, 20]));
   test("rota quien recibe el primer sobrante", () => expect(counts(buildAssignments(opportunities(7), users, 2), users)).toEqual([1, 1, 2, 2, 1]));
+  test("mantiene reparto equilibrado al pausar y reactivar asesores", () => {
+    const reduced = [users[0], users[2]];
+    expect(counts(buildAssignments(opportunities(5), reduced, 1), reduced)).toEqual([2, 3]);
+    expect(counts(buildAssignments(opportunities(6), users.slice(0, 3), 2), users.slice(0, 3))).toEqual([2, 2, 2]);
+  });
   test("elimina usuarios duplicados conservando orden", () => expect(uniqueUsers([users[0], users[0], users[1]]).map((u) => u.id)).toEqual(["u1", "u2"]));
-  test("rechaza menos de dos usuarios distintos", () => expect(() => buildAssignments(opportunities(1), [users[0], users[0]])).toThrow("al menos dos"));
+  test("permite repartir a un solo asesor activo", () => expect(counts(buildAssignments(opportunities(3), [users[0]]), [users[0]])).toEqual([3]));
+  test("rechaza un reparto sin asesores activos", () => expect(() => buildAssignments(opportunities(1), [])).toThrow("No hay asesores"));
   test("ordena establemente por fecha y luego ID", () => {
     const result = buildAssignments([{ id: "b", createdAt: "2026-02-01" }, { id: "c", createdAt: "2026-01-01" }, { id: "a", createdAt: "2026-02-01" }], users.slice(0, 2));
     expect(result.map((item) => item.opportunity.id)).toEqual(["c", "a", "b"]);
@@ -52,11 +70,70 @@ describe("reparto determinista de oportunidades GHL", () => {
     jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
     jest.spyOn(ghl, "createGhlClient").mockReturnValue(client);
     jest.spyOn(ghl, "fetchOpportunitiesByStatus").mockResolvedValue([{ id: "o1", pipelineId: "p", pipelineStageId: "s" }]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
     const result = await preview({ pipelineId: "p", stageId: "s", modo: "all", usuariosGhl: users.slice(0, 2), indiceSiguienteUsuario: 0 });
     expect(result.totalElegibles).toBe(1);
     expect(client.request).not.toHaveBeenCalled();
     expect(ghl.fetchOpportunitiesByStatus).toHaveBeenCalledWith(client, expect.anything(), "open", expect.objectContaining({ fechaInicio: expect.any(String), fechaFin: expect.any(String) }));
     jest.restoreAllMocks();
+  });
+
+  test("preview conserva pendientes y advierte cuando todos estan pausados", async () => {
+    const client = { request: jest.fn() };
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(ghl, "createGhlClient").mockReturnValue(client);
+    jest.spyOn(ghl, "fetchOpportunitiesByStatus").mockResolvedValue([
+      { id: "o1", pipelineId: "p", pipelineStageId: "s" },
+    ]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
+    advisorAvailability.resolveConfiguredAdvisors.mockResolvedValueOnce({
+      active: [],
+      paused: users.slice(0, 2),
+      invalid: [],
+    });
+
+    const result = await preview({
+      pipelineId: "p",
+      stageId: "s",
+      modo: "unassigned",
+      usuariosGhl: users.slice(0, 2),
+      indiceSiguienteUsuario: 0,
+    });
+
+    expect(result).toMatchObject({
+      totalElegibles: 1,
+      usuariosActivos: 0,
+      usuariosPausados: 2,
+      advertencia: expect.stringContaining("sin propietario"),
+    });
+    expect(ghl.fetchOpportunitiesByStatus).toHaveBeenCalledWith(
+      client,
+      expect.anything(),
+      "open",
+      {},
+    );
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  test("una oportunidad pendiente se reparte en la siguiente consulta cuando aparece Play", async () => {
+    const client = { request: jest.fn() };
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(ghl, "createGhlClient").mockReturnValue(client);
+    jest.spyOn(ghl, "fetchOpportunitiesByStatus").mockResolvedValue([
+      { id: "o-pendiente", pipelineId: "p", pipelineStageId: "s" },
+    ]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
+    advisorAvailability.resolveConfiguredAdvisors
+      .mockResolvedValueOnce({ active: [], paused: users.slice(0, 2), invalid: [] })
+      .mockResolvedValueOnce({ active: users.slice(0, 2), paused: [], invalid: [] });
+    const config = { pipelineId: "p", stageId: "s", modo: "unassigned", usuariosGhl: users.slice(0, 2), indiceSiguienteUsuario: 0 };
+
+    const first = await preview(config);
+    const second = await preview(config);
+
+    expect(first.usuarios).toHaveLength(0);
+    expect(second.usuarios.reduce((total, user) => total + user.cantidad, 0)).toBe(1);
+    expect(ghl.fetchOpportunitiesByStatus).toHaveBeenCalledTimes(2);
   });
 
   test("429 respeta reintento limitado y Retry-After", async () => {

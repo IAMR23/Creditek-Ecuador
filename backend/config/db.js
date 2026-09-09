@@ -84,6 +84,29 @@ const ensureGhlRepartoExecutionControlSchema = async (queryInterface) => {
   `);
 };
 
+const ensureGhlAdvisorAvailabilitySchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+
+  if (tables.includes("ghl_reparto_configuraciones")) {
+    await sequelize.query(`
+      ALTER TABLE ghl_reparto_configuraciones
+        ADD COLUMN IF NOT EXISTS "intervaloMinutos" INTEGER NOT NULL DEFAULT 1;
+    `);
+  }
+
+  if (tables.includes("ghl_reparto_ejecucion_detalles")) {
+    await sequelize.query(`
+      ALTER TABLE ghl_reparto_ejecucion_detalles
+        ADD COLUMN IF NOT EXISTS "assignedAt" TIMESTAMPTZ;
+    `);
+    await sequelize.query(`
+      UPDATE ghl_reparto_ejecucion_detalles
+      SET "assignedAt" = COALESCE("assignedAt", "updatedAt")
+      WHERE estado = 'assigned' AND "assignedAt" IS NULL;
+    `);
+  }
+};
+
 const ensureCierreCajaSchema = async (queryInterface, tables) => {
   if (!tables.includes("cierre_caja")) return;
 
@@ -1697,6 +1720,7 @@ const connectDB = async () => {
 
     const queryInterface = sequelize.getQueryInterface();
     await ensureGhlRepartoExecutionControlSchema(queryInterface);
+    await ensureGhlAdvisorAvailabilitySchema(queryInterface);
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
@@ -1928,5 +1952,6 @@ module.exports = {
   sequelize,
   connectDB,
   ensureFacturasFisicasOcrPreSyncSchema,
+  ensureGhlAdvisorAvailabilitySchema,
   ensureGhlRepartoExecutionControlSchema,
 };
