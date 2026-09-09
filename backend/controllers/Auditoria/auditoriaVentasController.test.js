@@ -103,6 +103,51 @@ describe("obtenerEntregasPorVendedorDashboard", () => {
   });
 });
 
+describe("obtenerEntregasPorHoraCreacionDashboard", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("agrupa createdAt por las 24 horas de Ecuador y conserva horas vacias", async () => {
+    const findAll = jest.spyOn(Entrega, "findAll").mockResolvedValue([
+      { id: 1, createdAt: "2026-08-24T14:15:00.000Z" },
+      { id: 2, createdAt: "2026-08-24T14:50:00.000Z" },
+      { id: 3, createdAt: "2026-08-24T23:10:00.000Z" },
+    ]);
+
+    const resultado =
+      await controller.obtenerEntregasPorHoraCreacionDashboard({
+        fechaInicio: "2026-08-01",
+        fechaFin: "2026-08-25",
+        agenciaId: "2,3",
+        vendedorId: "10",
+      });
+
+    expect(findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: ["id", "createdAt"],
+        where: expect.objectContaining({ activo: true }),
+      }),
+    );
+    expect(resultado).toHaveLength(24);
+    expect(resultado[0]).toEqual({
+      hora: "00:00",
+      cantidad: 0,
+      promedioDiario: 0,
+    });
+    expect(resultado[9]).toEqual({
+      hora: "09:00",
+      cantidad: 2,
+      promedioDiario: 0.08,
+    });
+    expect(resultado[18]).toEqual({
+      hora: "18:00",
+      cantidad: 1,
+      promedioDiario: 0.04,
+    });
+  });
+});
+
 const crearVentaTv = ({ ventaId, detalleId, contrato = "CONTRATO" }) => ({
   id: ventaId,
   fecha: "2026-07-16",

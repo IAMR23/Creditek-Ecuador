@@ -22,13 +22,11 @@ import {
   MonitorCog,
   Table2,
   FileCheck2,
-  ReceiptText,
   MapPinned,
   FileSpreadsheet,
   Megaphone,
   UsersRound,
   WalletCards,
-  Sparkles,
   Settings2,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
@@ -51,7 +49,7 @@ export default function Sidebar({ auth }) {
   // Acordeones
   const [open, setOpen] = useState({
     comercial: true,
-    ghl: false,
+    ghl: location.pathname.startsWith("/ghl/"),
     Marketing: false,
     logistica: false,
     contabilidad:
@@ -63,7 +61,9 @@ export default function Sidebar({ auth }) {
       location.pathname === "/contabilidad/roles-creditek-resumen",
     Auditoria: false,
     DesarrolloOrganizacional: true,
-    Sistemas: false,
+    Sistemas:
+      location.pathname.startsWith("/sistemas/") ||
+      location.pathname.startsWith("/ghl/"),
     supervisores: location.pathname.startsWith("/supervisores"),
     admin: false,
     catalogos: false,
@@ -94,7 +94,6 @@ export default function Sidebar({ auth }) {
             path: "/metas-comerciales",
           },
 
-
           {
             label: "Reporte Entregas",
             icon: <BarChart3 size={20} />,
@@ -110,8 +109,6 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/revision-gestiones-comercial",
           },
-        
-
 
           {
             label: "Secretarios Ejecutivos",
@@ -123,7 +120,7 @@ export default function Sidebar({ auth }) {
             icon: <UsersRound size={20} />,
             path: "/consejo-ejecutivo",
           },
-/*           {
+          /*           {
             label: "Facturas fisicas",
             icon: <ReceiptText size={20} />,
             path: "/gerencia/facturas-fisicas",
@@ -138,8 +135,8 @@ export default function Sidebar({ auth }) {
             icon: <FileCheck2 size={20} />,
             path: "/ver-planes-batalla",
           },
-/*           { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
- */          {
+          /*           { label: "Tareas", icon: <FaTasks size={20} />, path: "/tasks" },
+           */ {
             label: "Power BI",
             icon: <BarChart3 size={20} />,
             path: "/powerbi",
@@ -154,11 +151,6 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/ghl/rendimiento-pautas",
           },
-          {
-            label: "Reparto de oportunidades",
-            icon: <UsersRound size={20} />,
-            path: "/ghl/reparto-oportunidades",
-          },
         ],
       },
       Marketing: {
@@ -170,7 +162,7 @@ export default function Sidebar({ auth }) {
             icon: <Megaphone size={20} />,
             path: "/marketing/pautas",
           },
-                   {
+          {
             label: "Costo por Venta Marketing",
             icon: <DollarSign size={20} />,
             path: "/costo-venta-marketing",
@@ -185,7 +177,6 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/goleadores",
           },
- 
         ],
       },
 
@@ -193,7 +184,7 @@ export default function Sidebar({ auth }) {
         title: "Logística",
         permission: "Logistica",
         items: [
-                    {
+          {
             label: "Costo por Entrega",
             icon: <PackageCheck size={20} />,
             path: "/costo-entrega-marketing",
@@ -217,18 +208,17 @@ export default function Sidebar({ auth }) {
         title: "Contabilidad",
         permission: "Contabilidad",
         items: [
-        
           {
             label: "Niveles Jerarquicos",
             icon: <DollarSign size={20} />,
             path: "/contabilidad/roles-pago",
           },
           {
-            label: "Configuracion de Comisiones", 
+            label: "Configuracion de Comisiones",
             icon: <LucideTicketPercent size={20} />,
             path: "/contabilidad/comisiones",
           },
-              {
+          {
             label: "Base de Datos Ventas",
             icon: <BarChart3 size={20} />,
             path: "/bdd-ventas",
@@ -253,7 +243,7 @@ export default function Sidebar({ auth }) {
                 icon: <FileSpreadsheet size={18} />,
                 path: "/contabilidad/pagos-comisiones",
               },
-           /*    {
+              /*    {
                 label: "Descuentos décimos",
                 icon: <LucideTicketPercent size={18} />,
                 path: "/contabilidad/descuentos-decimos",
@@ -320,7 +310,7 @@ export default function Sidebar({ auth }) {
         ],
       },
 
-/*       DesarrolloOrganizacional: {
+      /*       DesarrolloOrganizacional: {
         title: "Desarrollo Organizacional",
         items: [
           {
@@ -365,10 +355,20 @@ export default function Sidebar({ auth }) {
             icon: <ClipboardList size={20} />,
             path: "/conciliacion-facturas",
           },
-        
+          {
+            key: "ghl",
+            label: "GHL",
+            icon: <UsersRound size={20} />,
+            items: [
+              {
+                label: "Reparto de Oportunidades",
+                icon: <UsersRound size={18} />,
+                path: "/ghl/reparto-oportunidades",
+              },
+            ],
+          },
         ],
       },
-
       supervisores: {
         title: "Supervisores",
         permission: "Supervisores",
@@ -478,16 +478,21 @@ export default function Sidebar({ auth }) {
     return Object.fromEntries(
       Object.entries(sections)
         .filter(([, section]) => {
-          const rolesPermitidos = (section.allowedRoles || []).map(normalizeRole);
+          const rolesPermitidos = (section.allowedRoles || []).map(
+            normalizeRole,
+          );
           const rolPermitido =
             rolesPermitidos.length === 0 ||
             rolesPermitidos.includes(normalizeRole(rol));
 
-          return rolPermitido && hasRouteAccess({
-            rol,
-            permisos,
-            permission: section.permission,
-          });
+          return (
+            rolPermitido &&
+            hasRouteAccess({
+              rol,
+              permisos,
+              permission: section.permission,
+            })
+          );
         })
         .map(([key, section]) => [
           key,

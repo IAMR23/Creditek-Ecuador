@@ -279,16 +279,24 @@ router.get("/ventas2", async (req, res) => {
         (acc, item) => acc + (Number(item.tareasFinalizadas) || 0),
         0,
       );
-    const entregasPorVendedor =
-      await auditoriaVentasController.obtenerEntregasPorVendedorDashboard({
+    const [entregasPorVendedor, entregasPorHoraCreacion] = await Promise.all([
+      auditoriaVentasController.obtenerEntregasPorVendedorDashboard({
         fechaInicio,
         fechaFin,
         agenciaId,
         vendedorId,
-      });
+      }),
+      auditoriaVentasController.obtenerEntregasPorHoraCreacionDashboard({
+        fechaInicio,
+        fechaFin,
+        agenciaId,
+        vendedorId,
+      }),
+    ]);
     estadisticas.entregasPorVendedor = entregasPorVendedor.totales;
     estadisticas.entregasPorVendedorEstados = entregasPorVendedor.porEstado;
     estadisticas.procesosCompletos = entregasPorVendedor.procesosCompletos;
+    estadisticas.entregasPorHoraCreacion = entregasPorHoraCreacion;
  
     res.json({ ok: true, estadisticas});
   } catch (error) {

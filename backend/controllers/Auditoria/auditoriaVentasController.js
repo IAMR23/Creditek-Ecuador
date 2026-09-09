@@ -953,6 +953,99 @@ exports.obtenerEntregasPorVendedorDashboard = async ({
   };
 };
 
+const formateadorHoraEcuador = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "America/Guayaquil",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+const obtenerCantidadDiasRango = (fechaInicio, fechaFin) => {
+  if (!fechaInicio || !fechaFin) return 1;
+
+  const inicio = Date.parse(`${fechaInicio}T00:00:00Z`);
+  const fin = Date.parse(`${fechaFin}T00:00:00Z`);
+  if (!Number.isFinite(inicio) || !Number.isFinite(fin) || fin < inicio) return 1;
+
+  return Math.floor((fin - inicio) / 86400000) + 1;
+};
+
+exports.obtenerEntregasPorHoraCreacionDashboard = async ({
+  fechaInicio,
+  fechaFin,
+  agenciaId,
+  vendedorId,
+}) => {
+  const whereEntrega = { activo: true };
+
+  if (fechaInicio && fechaFin) {
+    whereEntrega.createdAt = {
+      [Op.between]: [
+        new Date(`${fechaInicio}T00:00:00-05:00`),
+        new Date(`${fechaFin}T23:59:59.999-05:00`),
+      ],
+    };
+  } else if (fechaInicio) {
+    whereEntrega.createdAt = {
+      [Op.gte]: new Date(`${fechaInicio}T00:00:00-05:00`),
+    };
+  } else if (fechaFin) {
+    whereEntrega.createdAt = {
+      [Op.lte]: new Date(`${fechaFin}T23:59:59.999-05:00`),
+    };
+  }
+
+  const agenciasIds = normalizarIds(agenciaId);
+  const vendedoresIds = normalizarIds(vendedorId);
+  const entregas = await Entrega.findAll({
+    where: whereEntrega,
+    attributes: ["id", "createdAt"],
+    include: [
+      {
+        model: UsuarioAgencia,
+        as: "usuarioAgencia",
+        attributes: ["id"],
+        required: true,
+        include: [
+          {
+            model: Usuario,
+            as: "usuario",
+            attributes: ["id"],
+            required: true,
+            ...(vendedoresIds && {
+              where: { id: { [Op.in]: vendedoresIds } },
+            }),
+          },
+          {
+            model: Agencia,
+            as: "agencia",
+            attributes: ["id"],
+            required: true,
+            ...(agenciasIds && {
+              where: { id: { [Op.in]: agenciasIds } },
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  const cantidades = Array.from({ length: 24 }, () => 0);
+  entregas.forEach((entrega) => {
+    if (!entrega.createdAt) return;
+
+    const hora = Number(formateadorHoraEcuador.format(new Date(entrega.createdAt)));
+    if (Number.isInteger(hora) && hora >= 0 && hora <= 23) cantidades[hora] += 1;
+  });
+
+  const diasRango = obtenerCantidadDiasRango(fechaInicio, fechaFin);
+
+  return cantidades.map((cantidad, hora) => ({
+    hora: `${String(hora).padStart(2, "0")}:00`,
+    cantidad,
+    promedioDiario: Number((cantidad / diasRango).toFixed(2)),
+  }));
+};
+
 const normalizarEstadoActivo = (estado) => {
   if (!estado || estado === "todos") return null;
 

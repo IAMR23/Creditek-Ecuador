@@ -52,6 +52,14 @@ const toEntregasPorVendedorEstados = (rows = []) =>
         .sort((a, b) => b.total - a.total)
     : [];
 
+const toEntregasPorHoraCreacion = (rows = [], campo = "cantidad") =>
+  Array.isArray(rows)
+    ? rows.map((row) => ({
+        name: row.hora,
+        value: Number(row[campo]) || 0,
+      }))
+    : [];
+
 const tooltipStyle = {
   contentStyle: {
     borderRadius: "10px",
@@ -94,6 +102,17 @@ export default function DashboardGraficas({
       (acc, item) => acc + item.value,
       0,
     );
+  const entregasPorHoraCreacion = toEntregasPorHoraCreacion(
+    estadisticas.entregasPorHoraCreacion,
+  );
+  const proyeccionEntregasPorHora = toEntregasPorHoraCreacion(
+    estadisticas.entregasPorHoraCreacion,
+    "promedioDiario",
+  );
+  const horaPico = entregasPorHoraCreacion.reduce(
+    (mayor, item) => (item.value > mayor.value ? item : mayor),
+    { name: "Sin datos", value: 0 },
+  );
 
   const cards = [
     {
@@ -114,6 +133,21 @@ export default function DashboardGraficas({
       type: "stacked-bar",
       data: entregasPorVendedorChart,
       showXAxis: true,
+    },
+    {
+      title: "Entregas subidas por hora",
+      type: "line",
+      data: entregasPorHoraCreacion,
+      color: COLORS[6],
+      showXAxis: true,
+    },
+    {
+      title: "Proyección diaria de entregas por hora",
+      type: "line",
+      data: proyeccionEntregasPorHora,
+      color: COLORS[4],
+      showXAxis: true,
+      allowDecimals: true,
     },
     {
       title: "Ventas por Dia",
@@ -154,13 +188,17 @@ export default function DashboardGraficas({
   return (
     <section className="mt-6 space-y-6">
       {!soloSupervisores && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
           <KpiCard
             label="Precio vendedor promedio"
             value={formatCurrency(estadisticas.precioVendedorPromedio)}
           />
           <KpiCard label="Total entregas" value={totalEntregas} />
+          <KpiCard
+            label="Hora con más entregas subidas"
+            value={horaPico.value ? `${horaPico.name} (${horaPico.value})` : "Sin datos"}
+          />
           <KpiCard
             label="Agencias con ventas"
             value={toArray(estadisticas.porAgencia).length}
@@ -253,6 +291,7 @@ function ChartRenderer({
   showXAxis = false,
   loading = false,
   emptyMessage = "Sin datos para mostrar",
+  allowDecimals = false,
 }) {
   if (loading) {
     return <EmptyState message="Cargando oportunidades..." />;
@@ -289,7 +328,7 @@ function ChartRenderer({
         <LineChart data={data} margin={{ top: 10, right: 18, left: -10, bottom: 10 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis dataKey="name" hide={!showXAxis} tick={{ fontSize: 12 }} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+          <YAxis allowDecimals={allowDecimals} tick={{ fontSize: 12 }} />
           <Tooltip {...tooltipStyle} />
           <Line
             dataKey="value"
