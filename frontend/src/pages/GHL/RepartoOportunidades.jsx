@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Ban, Pause, Play, RefreshCcw, RotateCcw, Save, Search, ShieldAlert, X } from "lucide-react";
 import api from "../../api/client";
-import AsesoresDisponibilidadPanel from "../../components/GHL/AsesoresDisponibilidadPanel";
 
 const DAYS = [[1, "Lunes"], [2, "Martes"], [3, "Miercoles"], [4, "Jueves"], [5, "Viernes"], [6, "Sabado"], [0, "Domingo"]];
 const ACTIVE_STATES = ["running", "pause_requested", "cancel_requested"];
@@ -126,8 +125,6 @@ export default function RepartoOportunidades() {
       <div className={`rounded-full px-3 py-1 text-xs font-bold ${error ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{loading ? "Comprobando conexion..." : error ? "GHL no disponible" : "GHL conectado"}</div>
     </header>
     {error && <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertTriangle size={18}/><span className="flex-1">{error}</span><button onClick={() => setError("")}><X size={16}/></button></div>}
-
-    <AsesoresDisponibilidadPanel ghlUsers={users} />
 
     <section className="space-y-4 rounded border bg-white p-4 shadow-sm">
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">

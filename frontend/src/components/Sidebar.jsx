@@ -365,6 +365,11 @@ export default function Sidebar({ auth }) {
                 icon: <UsersRound size={18} />,
                 path: "/ghl/reparto-oportunidades",
               },
+              {
+                label: "Disponibilidad de asesores",
+                icon: <UserPlus size={18} />,
+                path: "/ghl/disponibilidad-asesores",
+              },
             ],
           },
         ],

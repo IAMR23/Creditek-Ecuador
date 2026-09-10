@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getDefaultRoute } from "../utils/getDefaultRoute";
 import api, { logoutSession } from "../api/client";
 import { hasRouteAccess } from "../config/routePermissions";
+import AsesorDisponibilidadNavbar from "./GHL/AsesorDisponibilidadNavbar";
 
 const PERMISOS_ALERTAS_PERSONAL = [
   "Administracion",
@@ -208,6 +209,8 @@ function Navbar({ auth, setAuth }) {
 
           {/* Acciones */}
           <div className="absolute right-0 flex items-center gap-2 sm:gap-4 md:static">
+            <AsesorDisponibilidadNavbar auth={auth} />
+
             {puedeVerAlertasPersonal && (
               <button
                 onClick={() => setOpenAlertasPersonal(true)}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Pause, Play, RefreshCcw } from "lucide-react";
 import api from "../../api/client";
 
+const AVAILABILITY_EVENT = "ghl:availability-updated";
 const messageOf = (error) =>
   error.response?.data?.message || error.message || "No se pudo actualizar el reparto";
 
@@ -31,6 +32,9 @@ export default function AsesorDisponibilidadCard() {
 
   useEffect(() => {
     load();
+    const synchronize = (event) => setData(event.detail);
+    window.addEventListener(AVAILABILITY_EVENT, synchronize);
+    return () => window.removeEventListener(AVAILABILITY_EVENT, synchronize);
   }, [load]);
 
   const changeState = async (estado) => {
@@ -40,6 +44,9 @@ export default function AsesorDisponibilidadCard() {
     try {
       const response = await api.patch("/api/ghl/repartos/mi-disponibilidad", { estado });
       setData(response.data.disponibilidad);
+      window.dispatchEvent(new CustomEvent(AVAILABILITY_EVENT, {
+        detail: response.data.disponibilidad,
+      }));
     } catch (requestError) {
       setError(messageOf(requestError));
     } finally {
