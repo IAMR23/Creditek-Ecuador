@@ -1267,6 +1267,32 @@ const fetchOpportunitiesByStatus = async (
   return opportunities;
 };
 
+const fetchOpportunitiesByContact = async (client, config, contactId) => {
+  const normalizedContactId = toId(contactId);
+  if (!normalizedContactId) return [];
+  const payload = await requestGhlWithFallback(
+    client,
+    {
+      method: "GET",
+      url: "/opportunities/search",
+      params: { locationId: config.locationId, contactId: normalizedContactId, limit: DEFAULT_LIMIT },
+    },
+    {
+      method: "GET",
+      url: "/opportunities/search",
+      params: { location_id: config.locationId, contact_id: normalizedContactId, limit: DEFAULT_LIMIT },
+    },
+    (error) => errorHasAnyMessage(error, [
+      "property locationId should not exist",
+      "property contactId should not exist",
+      "location_id must be a string",
+      "contact_id must be a string",
+    ]),
+  );
+  return dedupeOpportunitiesById(extractOpportunities(payload).filter((opportunity) =>
+    getOpportunityContactId(opportunity) === normalizedContactId));
+};
+
 const fetchAllOpportunityStatuses = async (
   client,
   config,
@@ -2125,6 +2151,7 @@ module.exports = {
   fetchUsers,
   fetchAllAssignableUsers,
   fetchOpportunitiesByStatus,
+  fetchOpportunitiesByContact,
   getOpportunityPipelineId,
   getOpportunityStageId,
   getOpportunityDateValue,

@@ -111,6 +111,50 @@ const ensureGhlAdvisorAvailabilitySchema = async (queryInterface) => {
   }
 };
 
+const ensureGhlRepartoCapacitySchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+
+  if (tables.includes("ghl_reparto_configuraciones")) {
+    await sequelize.query(`
+      ALTER TABLE ghl_reparto_configuraciones
+        ADD COLUMN IF NOT EXISTS "maxPendientesPorAsesor" INTEGER;
+      ALTER TABLE ghl_reparto_configuraciones
+        ALTER COLUMN "maxPendientesPorAsesor" SET DEFAULT 10;
+      UPDATE ghl_reparto_configuraciones
+      SET "maxPendientesPorAsesor" = 10
+      WHERE "maxPendientesPorAsesor" IS NULL
+         OR "maxPendientesPorAsesor" NOT BETWEEN 1 AND 1000;
+      ALTER TABLE ghl_reparto_configuraciones
+        ALTER COLUMN "maxPendientesPorAsesor" SET NOT NULL;
+    `);
+    await sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'ghl_reparto_config_max_pendientes_check'
+            AND conrelid = 'ghl_reparto_configuraciones'::regclass
+        ) THEN
+          ALTER TABLE ghl_reparto_configuraciones
+            ADD CONSTRAINT ghl_reparto_config_max_pendientes_check
+            CHECK ("maxPendientesPorAsesor" BETWEEN 1 AND 1000);
+        END IF;
+      END $$;
+    `);
+  }
+
+  if (tables.includes("ghl_reparto_ejecuciones")) {
+    await sequelize.query(`
+      ALTER TABLE ghl_reparto_ejecuciones
+        ADD COLUMN IF NOT EXISTS "totalPlanificadas" INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "totalOmitidasCambioEtapa" INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "totalOmitidasAsesorPausado" INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "totalOmitidasPropietarioCambiado" INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS "totalPendientesCapacidad" INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
+};
+
 const ensureCierreCajaSchema = async (queryInterface, tables) => {
   if (!tables.includes("cierre_caja")) return;
 
@@ -1724,6 +1768,7 @@ const connectDB = async () => {
 
     const queryInterface = sequelize.getQueryInterface();
     await ensureGhlRepartoExecutionControlSchema(queryInterface);
+    await ensureGhlRepartoCapacitySchema(queryInterface);
     await ensureGhlAdvisorAvailabilitySchema(queryInterface);
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
@@ -1957,5 +2002,6 @@ module.exports = {
   connectDB,
   ensureFacturasFisicasOcrPreSyncSchema,
   ensureGhlAdvisorAvailabilitySchema,
+  ensureGhlRepartoCapacitySchema,
   ensureGhlRepartoExecutionControlSchema,
 };

@@ -55,6 +55,41 @@ describe("control de ejecuciones GHL", () => {
     expect(Detalle.bulkCreate).not.toHaveBeenCalled();
   });
 
+  test("la ejecucion unassigned crea solo veinte detalles para dos asesores con limite diez", async () => {
+    const run = makeRun({ totalEncontradas: 0, totalElegibles: 0, totalPlanificadas: 0 });
+    mockExecuteInfrastructure(run, Array.from({ length: 100 }, (_, index) => ({
+      id: `o${index}`,
+      pipelineId: "p",
+      pipelineStageId: "s",
+      createdAt: new Date(2026, 0, 1, 0, 0, index).toISOString(),
+    })));
+    const config = { id: 3, pipelineId: "p", stageId: "s", modo: "unassigned", pipelineNombre: "P", stageNombre: "S", usuariosGhl: [{ id: "u1" }, { id: "u2" }], indiceSiguienteUsuario: 0, maxPendientesPorAsesor: 10, update: jest.fn() };
+
+    const result = await service.execute(config);
+
+    const planned = Detalle.bulkCreate.mock.calls[0][0];
+    expect(planned).toHaveLength(20);
+    expect(planned.filter((detail) => detail.newAssignedTo === "u1")).toHaveLength(10);
+    expect(planned.filter((detail) => detail.newAssignedTo === "u2")).toHaveLength(10);
+    expect(result).toMatchObject({ estado: "completed", totalPlanificadas: 20, totalPendientesCapacidad: 80 });
+  });
+
+  test("la ejecucion unassigned nunca incluye oportunidades que ya tienen propietario", async () => {
+    const run = makeRun({ totalEncontradas: 0, totalElegibles: 0, totalPlanificadas: 0 });
+    mockExecuteInfrastructure(run, [
+      { id: "con-propietario", pipelineId: "p", pipelineStageId: "s", assignedTo: "manual" },
+      { id: "sin-propietario-1", pipelineId: "p", pipelineStageId: "s" },
+      { id: "sin-propietario-2", pipelineId: "p", pipelineStageId: "s" },
+    ]);
+    const config = { id: 3, pipelineId: "p", stageId: "s", modo: "unassigned", pipelineNombre: "P", stageNombre: "S", usuariosGhl: [{ id: "u1" }, { id: "u2" }], indiceSiguienteUsuario: 0, maxPendientesPorAsesor: 10, update: jest.fn() };
+
+    await service.execute(config);
+
+    const plannedIds = Detalle.bulkCreate.mock.calls[0][0].map((detail) => detail.opportunityId);
+    expect(plannedIds).toEqual(["sin-propietario-1", "sin-propietario-2"]);
+    expect(plannedIds).not.toContain("con-propietario");
+  });
+
   test("todos pausados finaliza omitida y conserva oportunidades pendientes", async () => {
     const run = makeRun({ totalEncontradas: 0, totalElegibles: 0 });
     mockExecuteInfrastructure(run, [{ id: "o1", pipelineId: "p", pipelineStageId: "s" }]);
@@ -108,7 +143,7 @@ describe("control de ejecuciones GHL", () => {
     const first = { id: 1, opportunityId: "o1", newAssignedTo: "u1", attemptCount: 0, update: jest.fn(async (values) => Object.assign(first, values)) };
     const second = { id: 2, opportunityId: "o2", newAssignedTo: "u2", attemptCount: 0, update: jest.fn() };
     let stateChecks = 0;
-    jest.spyOn(Ejecucion, "findByPk").mockImplementation(async () => ({ id: run.id, estado: ++stateChecks >= 4 ? "pause_requested" : "running" }));
+    jest.spyOn(Ejecucion, "findByPk").mockImplementation(async () => ({ id: run.id, estado: ++stateChecks >= 5 ? "pause_requested" : "running" }));
     jest.spyOn(Detalle, "findAll").mockImplementation(async (options) => options.attributes ? [{ estado: first.estado || "assigned" }, { estado: "pending" }] : [first, second]);
     jest.spyOn(ghl, "requestGhl").mockResolvedValueOnce({ opportunity: { id: "o1", pipelineId: "p", pipelineStageId: "s" } }).mockResolvedValueOnce({});
     await service.processPlan(run, { pipelineId: "p", stageId: "s", modo: "all" }, {});
@@ -213,5 +248,51 @@ describe("control de ejecuciones GHL", () => {
 
     expect(detail).toMatchObject({ estado: "skipped", errorCode: "ADVISOR_PAUSED" });
     expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+  });
+
+  test("una asignacion manual durante la ejecucion nunca se sobrescribe", async () => {
+    const run = makeRun();
+    const detail = { opportunityId: "o1", newAssignedTo: "u1", attemptCount: 0, update: jest.fn(async (values) => Object.assign(detail, values)) };
+    jest.spyOn(Ejecucion, "findByPk").mockResolvedValue({ estado: "running" });
+    jest.spyOn(Detalle, "findAll").mockResolvedValue([{ estado: "skipped", errorCode: "OWNER_CHANGED" }]);
+    jest.spyOn(ghl, "requestGhl").mockResolvedValue({ opportunity: { id: "o1", pipelineId: "p", pipelineStageId: "s", assignedTo: "manual" } });
+
+    await service.processOneDetail(run, { pipelineId: "p", stageId: "s", modo: "unassigned" }, detail, {});
+
+    expect(detail).toMatchObject({ estado: "skipped", errorCode: "OWNER_CHANGED", previousAssignedTo: "manual" });
+    expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+  });
+
+  test("una oportunidad que cambia de etapa durante la ejecucion no se modifica", async () => {
+    const run = makeRun();
+    const detail = { opportunityId: "o1", newAssignedTo: "u1", attemptCount: 0, update: jest.fn(async (values) => Object.assign(detail, values)) };
+    jest.spyOn(Ejecucion, "findByPk").mockResolvedValue({ estado: "running" });
+    jest.spyOn(Detalle, "findAll").mockResolvedValue([{ estado: "skipped", errorCode: "STAGE_CHANGED" }]);
+    jest.spyOn(ghl, "requestGhl").mockResolvedValue({ opportunity: { id: "o1", pipelineId: "p", pipelineStageId: "otra" } });
+
+    await service.processOneDetail(run, { pipelineId: "p", stageId: "s", modo: "unassigned" }, detail, {});
+
+    expect(detail).toMatchObject({ estado: "skipped", errorCode: "STAGE_CHANGED" });
+    expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+  });
+
+  test("un cambio de carga conocido antes del PUT impide superar el limite", async () => {
+    const run = makeRun({ totalPlanificadas: 2 });
+    const detail = { opportunityId: "o1", newAssignedTo: "u1", attemptCount: 0, update: jest.fn(async (values) => Object.assign(detail, values)) };
+    jest.spyOn(Ejecucion, "findByPk").mockResolvedValue({ estado: "running" });
+    jest.spyOn(Detalle, "findAll").mockResolvedValue([{ estado: "skipped", errorCode: "CAPACITY_REACHED" }]);
+    jest.spyOn(ghl, "requestGhl").mockResolvedValue({ opportunity: { id: "o1", pipelineId: "p", pipelineStageId: "s" } });
+
+    await service.processOneDetail(
+      run,
+      { pipelineId: "p", stageId: "s", modo: "unassigned" },
+      detail,
+      {},
+      { loads: new Map([["u1", 10]]), limit: 10 },
+    );
+
+    expect(detail).toMatchObject({ estado: "skipped", errorCode: "CAPACITY_REACHED" });
+    expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+    expect(run.totalErrores).toBe(0);
   });
 });

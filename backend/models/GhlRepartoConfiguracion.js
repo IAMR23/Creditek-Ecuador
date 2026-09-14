@@ -15,6 +15,7 @@ const GhlRepartoConfiguracion = sequelize.define("GhlRepartoConfiguracion", {
   modo: { type: DataTypes.ENUM("unassigned", "all", "refresh_non_management"), allowNull: false },
   usuariosGhl: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
   activo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  maxPendientesPorAsesor: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 10, validate: { isInt: true, min: 1, max: 1000 } },
   indiceSiguienteUsuario: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   creadoPorId: { type: DataTypes.INTEGER, allowNull: false },
   actualizadoPorId: { type: DataTypes.INTEGER, allowNull: false },

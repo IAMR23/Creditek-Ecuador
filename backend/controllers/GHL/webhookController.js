@@ -1,6 +1,7 @@
 
 
 const { enviarAGHL } = require("../../services/ghlService");
+const opportunityWebhookService = require("../../services/ghlOpportunityWebhookService");
 const { findValueDeep, limpiarTelefono, decodeBase64, detectarCampania } = require("../../utils/stevoUtils");
 
 async function recibirWebhookStevo(req, res) {
@@ -178,7 +179,31 @@ async function recibirWebhookStevo(req, res) {
   }
 }
 
+async function recibirWebhookReparto(req, res) {
+  const providedSecret = req.get("X-GHL-Webhook-Secret");
+  if (!opportunityWebhookService.isValidWebhookSecret(providedSecret)) {
+    return res.status(401).json({ ok: false, code: "INVALID_WEBHOOK_SECRET", message: "Webhook no autorizado" });
+  }
+  try {
+    const result = await opportunityWebhookService.enqueueWebhookEvent(req.body, req.headers);
+    return res.status(result.duplicate ? 200 : 202).json({
+      ok: true,
+      accepted: true,
+      duplicate: result.duplicate,
+      eventId: result.eventId,
+      message: result.duplicate ? "Evento recibido anteriormente" : "Evento aceptado para procesamiento",
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      code: error.code || "GHL_WEBHOOK_ERROR",
+      message: "No se pudo aceptar el webhook",
+    });
+  }
+}
+
 
 module.exports = {
   recibirWebhookStevo,
+  recibirWebhookReparto,
 };

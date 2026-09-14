@@ -14,6 +14,8 @@ jest.mock("./ghlAdvisorAvailabilityService", () => ({
 
 const {
   buildAssignments,
+  buildCapacityAssignments,
+  currentLoadsByAdvisor,
   eligibleOpportunities,
   classifyCurrentOpportunity,
   executionState,
@@ -21,12 +23,14 @@ const {
   opportunityDateRange,
   opportunityTodayRange,
   preview,
+  validateInput,
   requestWithRetry,
   acquireLock,
   releaseLock,
   recoverStaleRuns,
   sanitize,
   uniqueUsers,
+  lockScopeForConfiguration,
 } = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
@@ -56,6 +60,43 @@ describe("reparto determinista de oportunidades GHL", () => {
   test("ordena establemente por fecha y luego ID", () => {
     const result = buildAssignments([{ id: "b", createdAt: "2026-02-01" }, { id: "c", createdAt: "2026-01-01" }, { id: "a", createdAt: "2026-02-01" }], users.slice(0, 2));
     expect(result.map((item) => item.opportunity.id)).toEqual(["c", "a", "b"]);
+  });
+  test("dos asesores con limite 10 reciben solo 10 de una cola de 100", () => {
+    const result = buildCapacityAssignments(opportunities(100), users.slice(0, 2), new Map(), 10, 0);
+    expect(counts(result.assignments, users.slice(0, 2))).toEqual([10, 10]);
+    expect(result.totalPendientesCapacidad).toBe(80);
+  });
+  test("asesores nuevos con carga cero reciben antes que quienes ya tienen diez", () => {
+    const loads = new Map([["u1", 10], ["u2", 10], ["u3", 0], ["u4", 0]]);
+    const result = buildCapacityAssignments(opportunities(80), users.slice(0, 4), loads, 10, 0);
+    expect(counts(result.assignments, users.slice(0, 4))).toEqual([0, 0, 10, 10]);
+    expect(result.totalPendientesCapacidad).toBe(60);
+  });
+  test("un asesor con carga ocho recibe como maximo dos", () => {
+    const result = buildCapacityAssignments(opportunities(20), [users[0]], new Map([["u1", 8]]), 10, 0);
+    expect(result.assignments).toHaveLength(2);
+    expect(result.advisors[0]).toMatchObject({ cargaActual: 8, capacidadDisponible: 2, cantidadPlanificada: 2, cargaResultante: 10 });
+  });
+  test("todos los asesores al limite conservan toda la cola", () => {
+    const result = buildCapacityAssignments(opportunities(12), users.slice(0, 2), new Map([["u1", 10], ["u2", 10]]), 10, 0);
+    expect(result.assignments).toHaveLength(0);
+    expect(result.totalPendientesCapacidad).toBe(12);
+  });
+  test("empates de carga respetan indiceSiguienteUsuario", () => {
+    const result = buildCapacityAssignments(opportunities(1), users.slice(0, 3), new Map(), 10, 2);
+    expect(result.assignments[0].user.id).toBe("u3");
+    expect(result.nextUserIndex).toBe(0);
+  });
+  test("calcula la carga solo con propietarios configurados dentro de la consulta", () => {
+    const loads = currentLoadsByAdvisor([
+      { id: "o1", assignedTo: "u1" }, { id: "o2", ownerId: "u1" }, { id: "o3", assignedTo: "externo" }, { id: "o4" },
+    ], users.slice(0, 2));
+    expect(Object.fromEntries(loads)).toEqual({ u1: 2, u2: 0 });
+  });
+  test("el bloqueo de capacidad se comparte por pipeline y etapa", () => {
+    expect(lockScopeForConfiguration({ id: 1, modo: "unassigned", pipelineId: "p", stageId: "s" }))
+      .toBe(lockScopeForConfiguration({ id: 2, modo: "unassigned", pipelineId: "p", stageId: "s" }));
+    expect(lockScopeForConfiguration({ id: 1, modo: "all", pipelineId: "p", stageId: "s" })).toBe("1");
   });
   test("solo sin propietario excluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "unassigned").map((o) => o.id)).toEqual(["a"]));
   test("redistribuir todas incluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "all")).toHaveLength(2));
@@ -125,6 +166,45 @@ describe("reparto determinista de oportunidades GHL", () => {
       {},
     );
     expect(client.request).not.toHaveBeenCalled();
+  });
+
+  test("preview calcula carga, capacidad, plan y cola restante", async () => {
+    const client = { request: jest.fn() };
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(ghl, "createGhlClient").mockReturnValue(client);
+    jest.spyOn(ghl, "fetchOpportunitiesByStatus").mockResolvedValue([
+      ...opportunities(15).map((item) => ({ ...item, pipelineId: "p", pipelineStageId: "s" })),
+      ...opportunities(8).map((item, index) => ({ ...item, id: `a${index}`, pipelineId: "p", pipelineStageId: "s", assignedTo: "u1" })),
+    ]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
+    advisorAvailability.resolveConfiguredAdvisors.mockResolvedValueOnce({ active: users.slice(0, 2), paused: [], invalid: [] });
+
+    const result = await preview({
+      pipelineId: "p", stageId: "s", modo: "unassigned", usuariosGhl: users.slice(0, 2),
+      indiceSiguienteUsuario: 0, maxPendientesPorAsesor: 10,
+    });
+
+    expect(result).toMatchObject({
+      totalEncontradas: 23,
+      totalSinPropietario: 15,
+      totalPorAsignar: 12,
+      totalPendientesCapacidad: 3,
+    });
+    expect(result.usuarios.map((user) => ({ id: user.id, carga: user.cargaActual, plan: user.cantidadPlanificada })))
+      .toEqual([{ id: "u1", carga: 8, plan: 2 }, { id: "u2", carga: 0, plan: 10 }]);
+    expect(client.request).not.toHaveBeenCalled();
+  });
+
+  test.each([0, -1, 1.5, 1001])("rechaza limite de pendientes invalido: %p", async (maxPendientesPorAsesor) => {
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(ghl, "createGhlClient").mockReturnValue({ request: jest.fn() });
+    jest.spyOn(ghl, "fetchPipelines").mockResolvedValue([{ id: "pipeline", name: "Pipeline", stages: [{ id: "stage", name: "Etapa" }] }]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
+    await expect(validateInput({
+      nombre: "Prueba", pipelineId: "pipeline", stageId: "stage", hora: "09:00", diasSemana: [1],
+      modo: "unassigned", usuariosGhl: users.slice(0, 2), maxPendientesPorAsesor,
+    })).rejects.toMatchObject({ code: "INVALID_MAX_PENDING", statusCode: 400 });
+    jest.restoreAllMocks();
   });
 
   test("preview de refresco usa todos los asesores en Play y excluye Gestion", async () => {

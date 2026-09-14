@@ -1,10 +1,11 @@
 const express = require("express");
-const { recibirWebhookStevo } = require("../controllers/GHL/webhookController");
+const { recibirWebhookStevo, recibirWebhookReparto } = require("../controllers/GHL/webhookController");
 const router = express.Router();
 
 
 
 router.post("/stevo", recibirWebhookStevo); 
+router.post("/ghl/reparto", recibirWebhookReparto);
 
 router.get("/test", (req, res) => {
   res.json({
@@ -13,4 +14,4 @@ router.get("/test", (req, res) => {
   });
 });
 
-module.exports = router; 
+module.exports = router;

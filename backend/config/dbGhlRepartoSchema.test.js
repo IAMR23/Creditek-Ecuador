@@ -1,6 +1,7 @@
 const {
   sequelize,
   ensureGhlAdvisorAvailabilitySchema,
+  ensureGhlRepartoCapacitySchema,
   ensureGhlRepartoExecutionControlSchema,
 } = require("./db");
 const fs = require("fs");
@@ -77,5 +78,44 @@ describe("esquema previo al arranque para reparto GHL", () => {
     );
     expect(sql).toContain("ADD VALUE IF NOT EXISTS 'refresh_non_management'");
     expect(sql).toContain("SELECT enumlabel");
+  });
+
+  test("agrega limite y contadores de capacidad antes de sequelize.sync", async () => {
+    const query = jest.spyOn(sequelize, "query").mockResolvedValue([]);
+    await ensureGhlRepartoCapacitySchema({
+      showAllTables: jest.fn().mockResolvedValue([
+        "ghl_reparto_configuraciones",
+        "ghl_reparto_ejecuciones",
+      ]),
+    });
+    const sql = query.mock.calls.map(([statement]) => statement).join("\n");
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "maxPendientesPorAsesor" INTEGER');
+    expect(sql).toContain('SET "maxPendientesPorAsesor" = 10');
+    expect(sql).toContain('ALTER COLUMN "maxPendientesPorAsesor" SET NOT NULL');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "totalPendientesCapacidad"');
+  });
+
+  test("la migracion incremental asigna 10 a configuraciones existentes y no recrea tablas", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "../migrations/202609140001-add-ghl-max-pendientes-por-asesor.sql"),
+      "utf8",
+    );
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "maxPendientesPorAsesor" INTEGER');
+    expect(sql).toContain('SET "maxPendientesPorAsesor" = 10');
+    expect(sql).toContain('ALTER COLUMN "maxPendientesPorAsesor" SET DEFAULT 10');
+    expect(sql).toContain('CHECK ("maxPendientesPorAsesor" BETWEEN 1 AND 1000)');
+    expect(sql).not.toMatch(/DROP TABLE|CREATE TABLE/i);
+  });
+
+  test("la migracion del webhook crea idempotencia persistente sin guardar telefono ni payload", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "../migrations/202609140002-create-ghl-reparto-webhook-eventos.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS ghl_reparto_webhook_eventos");
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS ghl_reparto_webhook_eventos_idempotency_unique');
+    expect(sql).toContain('"idempotencyKey" VARCHAR(64) NOT NULL');
+    expect(sql).not.toMatch(/phone|payload/i);
+    expect(sql).not.toMatch(/DROP TABLE/i);
   });
 });

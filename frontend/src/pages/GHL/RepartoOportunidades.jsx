@@ -10,7 +10,7 @@ const STATUS_LABELS = {
   cancel_requested: "Cancelando...", completed: "Completada", partial: "Parcial",
   failed: "Fallida", cancelled: "Cancelada", interrupted: "Interrumpida", skipped: "Omitida",
 };
-const empty = { nombre: "Reparto de oportunidades", pipelineId: "", stageId: "", hora: "09:00", intervaloMinutos: 1, zonaHoraria: "America/Guayaquil", diasSemana: [1, 2, 3, 4, 5], modo: "unassigned", usuariosGhl: [], activo: true };
+const empty = { nombre: "Reparto de oportunidades", pipelineId: "", stageId: "", hora: "09:00", intervaloMinutos: 1, maxPendientesPorAsesor: 10, zonaHoraria: "America/Guayaquil", diasSemana: [1, 2, 3, 4, 5], modo: "unassigned", usuariosGhl: [], activo: true };
 const messageOf = (error) => error.response?.data?.message || error.message || "Ocurrio un error";
 const inputClass = "h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 
@@ -51,7 +51,7 @@ export default function RepartoOportunidades() {
       setHistory(historyResponse.data.ejecuciones || []);
       if (!selectedId && configResponse.data.configuraciones?.[0]) {
         setSelectedId(configResponse.data.configuraciones[0].id);
-        setForm(configResponse.data.configuraciones[0]);
+        setForm({ ...configResponse.data.configuraciones[0], maxPendientesPorAsesor: configResponse.data.configuraciones[0].maxPendientesPorAsesor ?? 10 });
       }
     } catch (requestError) {
       setError(messageOf(requestError));
@@ -78,7 +78,7 @@ export default function RepartoOportunidades() {
   const set = (key, value) => { setForm((old) => ({ ...old, [key]: value })); setPreview(null); };
   const toggleUser = (user) => set("usuariosGhl", form.usuariosGhl.some((item) => item.id === user.id) ? form.usuariosGhl.filter((item) => item.id !== user.id) : [...form.usuariosGhl, user]);
   const toggleDay = (day) => set("diasSemana", form.diasSemana.includes(day) ? form.diasSemana.filter((item) => item !== day) : [...form.diasSemana, day]);
-  const valid = useMemo(() => form.pipelineId && form.stageId && form.hora && form.diasSemana.length && form.usuariosGhl.length >= 2, [form]);
+  const valid = useMemo(() => form.pipelineId && form.stageId && form.hora && form.diasSemana.length && form.usuariosGhl.length >= 2 && Number.isInteger(Number(form.maxPendientesPorAsesor)) && Number(form.maxPendientesPorAsesor) >= 1 && Number(form.maxPendientesPorAsesor) <= 1000, [form]);
 
   const save = async () => {
     setBusy("save"); setError("");
@@ -116,7 +116,7 @@ export default function RepartoOportunidades() {
   const choose = (id) => {
     if (!id) { setSelectedId(null); setForm(empty); return; }
     const row = configs.find((item) => String(item.id) === id);
-    setSelectedId(row.id); setForm(row); setPreview(null);
+    setSelectedId(row.id); setForm({ ...row, maxPendientesPorAsesor: row.maxPendientesPorAsesor ?? 10 }); setPreview(null);
   };
 
   return <div className="min-h-screen space-y-4 bg-gray-50 p-4">
@@ -134,6 +134,7 @@ export default function RepartoOportunidades() {
         <Field label="Etapa"><select className={inputClass} value={form.stageId} onChange={(event) => set("stageId", event.target.value)} disabled={!form.pipelineId}><option value="">Seleccione...</option>{stages.map((stage) => <option key={stage.id || stage._id} value={stage.id || stage._id}>{stage.name}</option>)}</select></Field>
         <Field label="Hora"><input type="time" className={inputClass} value={form.hora} onChange={(event) => set("hora", event.target.value)}/></Field>
         <Field label="Intervalo de consulta"><select className={inputClass} value={form.intervaloMinutos || 1} onChange={(event) => set("intervaloMinutos", Number(event.target.value))}><option value={1}>Cada minuto</option><option value={2}>Cada 2 minutos</option><option value={5}>Cada 5 minutos</option><option value={10}>Cada 10 minutos</option><option value={15}>Cada 15 minutos</option></select></Field>
+        <Field label="Max. pendientes por asesor"><input type="number" min="1" max="1000" step="1" className={inputClass} value={form.maxPendientesPorAsesor} onChange={(event) => set("maxPendientesPorAsesor", event.target.value === "" ? "" : Number(event.target.value))}/></Field>
         <Field label="Zona horaria"><input className={`${inputClass} bg-gray-100`} value="America/Guayaquil" disabled/></Field>
         <Field label="Modo"><select className={inputClass} value={form.modo} onChange={(event) => set("modo", event.target.value)}><option value="unassigned">Solo sin propietario</option><option value="all">Redistribuir todas</option></select></Field>
         <Field label="Estado"><label className="flex h-10 items-center gap-2"><input type="checkbox" checked={form.activo} onChange={(event) => set("activo", event.target.checked)} className="h-5 w-5 accent-green-600"/> {form.activo ? "Activo" : "Inactivo"}</label></Field>
@@ -148,7 +149,7 @@ export default function RepartoOportunidades() {
       </div>
     </section>
 
-    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Resumen de vista previa</h2><p className="mb-3 text-xs text-gray-500">{preview.rangoFechas ? `Periodo: ${preview.rangoFechas.fechaInicio} al ${preview.rangoFechas.fechaFin}` : "Incluye oportunidades pendientes sin propietario"} · America/Guayaquil</p>{preview.advertencia && <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{preview.advertencia}</div>}<div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"><Metric label="Encontradas" value={preview.totalEncontradas}/><Metric label="Elegibles" value={preview.totalElegibles}/><Metric label="Omitidas" value={preview.totalOmitidas}/><Metric label="Configurados" value={preview.usuariosConfigurados}/><Metric label="En Play" value={preview.usuariosActivos}/><Metric label="Pausados" value={preview.usuariosPausados}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-green-50 p-3 text-sm"><b>{user.name}</b><div>{user.cantidad} oportunidades</div></div>)}{preview.pausados?.map((user) => <div key={user.id} className="rounded bg-gray-100 p-3 text-sm"><b>{user.name}</b><div>Pausado</div></div>)}{preview.invalidos?.map((user) => <div key={user.id} className="rounded bg-amber-50 p-3 text-sm"><b>{user.name}</b><div>Asociación inválida</div></div>)}</div></section>}
+    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Resumen de vista previa</h2><p className="mb-3 text-xs text-gray-500">{preview.rangoFechas ? `Periodo: ${preview.rangoFechas.fechaInicio} al ${preview.rangoFechas.fechaFin}` : `Carga activa dentro de la etapa · límite ${preview.maxPendientesPorAsesor} por asesor`} · America/Guayaquil</p>{preview.advertencia && <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{preview.advertencia}</div>}<div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8"><Metric label="Encontradas" value={preview.totalEncontradas}/><Metric label="Sin propietario" value={preview.totalSinPropietario}/><Metric label="Se asignarán" value={preview.totalPorAsignar}/><Metric label="Pendientes por capacidad" value={preview.totalPendientesCapacidad}/><Metric label="Con propietario" value={preview.totalConPropietario}/><Metric label="En Play" value={preview.usuariosActivos}/><Metric label="Pausados" value={preview.usuariosPausados}/><Metric label="Inválidos" value={preview.usuariosInvalidos}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-green-50 p-3 text-sm"><b>{user.name}</b><div>Carga actual: {user.cargaActual ?? 0}</div><div>Capacidad disponible: {user.capacidadDisponible ?? "-"}</div><div className="font-semibold text-green-800">Planificadas: {user.cantidadPlanificada ?? user.cantidad ?? 0}</div></div>)}{preview.pausados?.map((user) => <div key={user.id} className="rounded bg-gray-100 p-3 text-sm"><b>{user.name}</b><div>Pausado · carga actual: {user.cargaActual ?? 0}</div><div>Capacidad disponible: 0 mientras esté pausado</div></div>)}{preview.invalidos?.map((user) => <div key={user.id} className="rounded bg-amber-50 p-3 text-sm"><b>{user.name}</b><div>Asociación inválida · carga actual: {user.cargaActual ?? 0}</div><div>Capacidad disponible: 0</div></div>)}</div></section>}
 
     <section className="overflow-hidden rounded border bg-white shadow-sm">
       <div className="flex items-center justify-between border-b p-4"><b>Historial de ejecuciones</b>{hasActiveExecution && <span className="text-xs font-semibold text-blue-700">Actualizando automaticamente...</span>}</div>
@@ -159,8 +160,8 @@ export default function RepartoOportunidades() {
             <td className="whitespace-nowrap px-3 py-2">{new Date(run.startedAt).toLocaleString("es-EC")}</td>
             <td className="px-3 py-2">{run.tipo === "scheduled" ? "Programada" : "Manual"}</td>
             <td className="px-3 py-2">{run.pipelineNombre}<br/><span className="text-xs text-gray-500">{run.stageNombre}</span></td>
-            <td className="px-3 py-2"><b>{run.processedCount || 0} de {run.totalElegibles || 0}</b><br/><span className="text-xs text-gray-500">procesadas</span></td>
-            <td className="px-3 py-2">{run.totalAsignadas || 0} asignadas<br/>{run.totalOmitidas || 0} omitidas · {run.totalErrores || 0} errores</td>
+            <td className="px-3 py-2"><b>{run.processedCount || 0} de {run.totalPlanificadas || run.totalElegibles || 0}</b><br/><span className="text-xs text-gray-500">procesadas del plan</span></td>
+            <td className="px-3 py-2"><b>{run.totalAsignadas || 0} asignadas</b><br/><span className="text-xs text-gray-600">{run.totalOmitidasCambioEtapa || 0} por cambio de etapa · {run.totalOmitidasAsesorPausado || 0} por pausa<br/>{run.totalOmitidasPropietarioCambiado || 0} con propietario nuevo · {run.totalPendientesCapacidad || 0} en cola por capacidad<br/>{run.totalErrores || 0} errores técnicos</span></td>
             <td className="px-3 py-2 font-semibold">{STATUS_LABELS[run.estado] || run.estado}{run.isStale && <span className="mt-1 block text-xs text-red-700">Heartbeat vencido</span>}</td>
             <td className="whitespace-nowrap px-3 py-2">{run.heartbeatAt ? new Date(run.heartbeatAt).toLocaleString("es-EC") : "Sin heartbeat"}</td>
             <td className="px-3 py-2">{run.ejecutadoPor?.nombre || "-"}</td>
@@ -176,7 +177,7 @@ export default function RepartoOportunidades() {
       </tbody></table></div>
     </section>
 
-    {detail && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="max-h-[85vh] w-full max-w-4xl overflow-auto rounded bg-white p-4 shadow-xl"><div className="mb-3 flex justify-between"><h2 className="font-bold">Ejecucion #{detail.id}</h2><button onClick={() => setDetail(null)}><X/></button></div>{detail.errorGeneral && <p className="mb-3 rounded bg-red-50 p-2 text-red-700">{detail.errorGeneral}</p>}<table className="w-full text-sm"><thead><tr className="bg-gray-100"><th className="p-2 text-left">Oportunidad</th><th>Anterior</th><th>Nuevo</th><th>Estado</th><th>Error</th></tr></thead><tbody>{detail.detalles?.map((item) => <tr key={item.id} className="border-t"><td className="p-2">{item.opportunityId}</td><td>{item.previousAssignedTo || "-"}</td><td>{item.newAssignedTo || "-"}</td><td>{STATUS_LABELS[item.estado] || item.estado}</td><td>{item.errorMessage || "-"}</td></tr>)}</tbody></table></div></div>}
+    {detail && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="max-h-[85vh] w-full max-w-4xl overflow-auto rounded bg-white p-4 shadow-xl"><div className="mb-3 flex justify-between"><h2 className="font-bold">Ejecucion #{detail.id}</h2><button onClick={() => setDetail(null)}><X/></button></div>{detail.errorGeneral && <p className="mb-3 rounded bg-red-50 p-2 text-red-700">{detail.errorGeneral}</p>}<div className="mb-3 rounded bg-gray-50 p-3 text-sm"><b>{detail.totalAsignadas || 0}</b> asignadas · <b>{detail.totalPendientesCapacidad || 0}</b> permanecieron en cola por capacidad · <b>{detail.totalOmitidasAsesorPausado || 0}</b> omitidas por pausa · <b>{detail.totalOmitidasCambioEtapa || 0}</b> por cambio de etapa</div><table className="w-full text-sm"><thead><tr className="bg-gray-100"><th className="p-2 text-left">Oportunidad</th><th>Anterior</th><th>Nuevo</th><th>Estado</th><th>Motivo / error</th></tr></thead><tbody>{detail.detalles?.map((item) => <tr key={item.id} className="border-t"><td className="p-2">{item.opportunityId}</td><td>{item.previousAssignedTo || "-"}</td><td>{item.newAssignedTo || "-"}</td><td>{STATUS_LABELS[item.estado] || item.estado}</td><td>{item.errorMessage || "-"}</td></tr>)}</tbody></table></div></div>}
   </div>;
 }
 

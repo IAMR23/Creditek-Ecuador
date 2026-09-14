@@ -8,6 +8,8 @@ const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 
 const TIME_ZONE = "America/Guayaquil";
+const DEFAULT_MAX_PENDING_PER_ADVISOR = 10;
+const MAX_PENDING_PER_ADVISOR = 1000;
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
 const ACTIVE_STATES = Object.freeze(["running", "pause_requested", "cancel_requested"]);
 const BLOCKING_STATES = Object.freeze([...ACTIVE_STATES, "paused"]);
@@ -39,6 +41,65 @@ function buildAssignments(opportunities, users, startIndex = 0) {
   const offset = ((Number(startIndex) || 0) % validUsers.length + validUsers.length) % validUsers.length;
   const rotated = validUsers.slice(offset).concat(validUsers.slice(0, offset));
   return sorted.map((opportunity, index) => ({ opportunity, user: rotated[index % rotated.length] }));
+}
+
+function currentLoadsByAdvisor(opportunities, users) {
+  const loads = new Map(uniqueUsers(users).map((user) => [user.id, 0]));
+  opportunities.forEach((opportunity) => {
+    const ownerId = assignedToOf(opportunity);
+    if (ownerId && loads.has(ownerId)) loads.set(ownerId, loads.get(ownerId) + 1);
+  });
+  return loads;
+}
+
+function buildCapacityAssignments(opportunities, users, currentLoads, maxPending, startIndex = 0) {
+  const validUsers = uniqueUsers(users);
+  if (!validUsers.length) throw serviceError("GHL_USERS_REQUIRED", "No hay asesores activos para el reparto", 409);
+  const limit = Number(maxPending);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PENDING_PER_ADVISOR) {
+    throw serviceError("INVALID_MAX_PENDING", `El limite por asesor debe ser un entero entre 1 y ${MAX_PENDING_PER_ADVISOR}`, 400);
+  }
+  const sorted = [...opportunities].sort((a, b) => {
+    const dateDiff = new Date(ghl.getOpportunityDateValue(a) || 0) - new Date(ghl.getOpportunityDateValue(b) || 0);
+    return dateDiff || idOf(a).localeCompare(idOf(b));
+  });
+  const loadOf = (userId) => Number(currentLoads instanceof Map ? currentLoads.get(userId) : currentLoads?.[userId]) || 0;
+  const advisorStates = validUsers.map((user, index) => ({
+    ...user,
+    index,
+    cargaActual: Math.max(0, loadOf(user.id)),
+    cargaProvisional: Math.max(0, loadOf(user.id)),
+    cantidadPlanificada: 0,
+  }));
+  let cursor = ((Number(startIndex) || 0) % validUsers.length + validUsers.length) % validUsers.length;
+  const assignments = [];
+
+  for (const opportunity of sorted) {
+    const candidates = advisorStates.filter((advisor) => advisor.cargaProvisional < limit);
+    if (!candidates.length) break;
+    const minimumLoad = Math.min(...candidates.map((advisor) => advisor.cargaProvisional));
+    const tiedIds = new Set(candidates.filter((advisor) => advisor.cargaProvisional === minimumLoad).map((advisor) => advisor.id));
+    let selected;
+    for (let offset = 0; offset < advisorStates.length; offset += 1) {
+      const candidate = advisorStates[(cursor + offset) % advisorStates.length];
+      if (tiedIds.has(candidate.id)) { selected = candidate; break; }
+    }
+    assignments.push({ opportunity, user: { id: selected.id, name: selected.name, email: selected.email } });
+    selected.cargaProvisional += 1;
+    selected.cantidadPlanificada += 1;
+    cursor = (selected.index + 1) % advisorStates.length;
+  }
+
+  return {
+    assignments,
+    nextUserIndex: cursor,
+    totalPendientesCapacidad: sorted.length - assignments.length,
+    advisors: advisorStates.map(({ index, cargaProvisional, ...advisor }) => ({
+      ...advisor,
+      capacidadDisponible: Math.max(0, limit - advisor.cargaActual),
+      cargaResultante: cargaProvisional,
+    })),
+  };
 }
 
 const eligibleOpportunities = (opportunities, mode) => mode === "unassigned"
@@ -99,13 +160,15 @@ async function validateInput(input) {
   if (!dynamicAdvisors && (users.length < 2 || users.some((user) => !ID_RE.test(user.id)))) throw serviceError("GHL_USERS_MINIMUM", "Seleccione al menos dos usuarios GHL validos y distintos", 400);
   const intervaloMinutos = Number(input.intervaloMinutos ?? 1);
   if (!Number.isInteger(intervaloMinutos) || intervaloMinutos < 1 || intervaloMinutos > 60) throw serviceError("INVALID_INTERVAL", "El intervalo debe estar entre 1 y 60 minutos", 400);
+  const maxPendientesPorAsesor = Number(input.maxPendientesPorAsesor ?? DEFAULT_MAX_PENDING_PER_ADVISOR);
+  if (!Number.isInteger(maxPendientesPorAsesor) || maxPendientesPorAsesor < 1 || maxPendientesPorAsesor > MAX_PENDING_PER_ADVISOR) throw serviceError("INVALID_MAX_PENDING", `El limite por asesor debe ser un entero entre 1 y ${MAX_PENDING_PER_ADVISOR}`, 400);
   const catalogs = await getCatalogs();
   const pipeline = catalogs.pipelines.find((item) => idOf(item) === String(input.pipelineId));
   const stage = pipelineStages(pipeline).find((item) => idOf(item) === String(input.stageId));
   const activeById = new Map(catalogs.users.map((user) => [idOf(user), user]));
   if (!pipeline || !stage) throw serviceError("INVALID_PIPELINE_STAGE", "El pipeline o la etapa ya no existe en GHL", 400);
   if (!dynamicAdvisors && users.some((user) => !activeById.has(user.id))) throw serviceError("INVALID_GHL_USERS", "Uno o mas usuarios no estan activos o no pertenecen a GHL", 400);
-  return { nombre: String(input.nombre || `${pipeline.name} - ${stage.name}`).trim().slice(0, 160), pipelineId: idOf(pipeline), pipelineNombre: String(pipeline.name || "Pipeline"), stageId: idOf(stage), stageNombre: String(stage.name || "Etapa"), hora: input.hora, intervaloMinutos, zonaHoraria: TIME_ZONE, diasSemana: days, modo: input.modo, usuariosGhl: dynamicAdvisors ? [] : users.map((user) => { const raw = activeById.get(user.id); return { id: user.id, name: raw?.name || `${raw?.firstName || ""} ${raw?.lastName || ""}`.trim() || user.name, email: raw?.email || user.email || "" }; }), activo: input.activo !== false };
+  return { nombre: String(input.nombre || `${pipeline.name} - ${stage.name}`).trim().slice(0, 160), pipelineId: idOf(pipeline), pipelineNombre: String(pipeline.name || "Pipeline"), stageId: idOf(stage), stageNombre: String(stage.name || "Etapa"), hora: input.hora, intervaloMinutos, maxPendientesPorAsesor, zonaHoraria: TIME_ZONE, diasSemana: days, modo: input.modo, usuariosGhl: dynamicAdvisors ? [] : users.map((user) => { const raw = activeById.get(user.id); return { id: user.id, name: raw?.name || `${raw?.firstName || ""} ${raw?.lastName || ""}`.trim() || user.name, email: raw?.email || user.email || "" }; }), activo: input.activo !== false };
 }
 
 async function allStageOpportunities(configRow, client, config, now = new Date()) {
@@ -138,13 +201,52 @@ async function preview(configRow) {
   ]);
   const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, now);
   const eligible = eligibleOpportunities(found, configRow.modo);
-  const assignments = advisors.active.length
-    ? buildAssignments(eligible, advisors.active, configRow.indiceSiguienteUsuario)
-    : [];
+  const limit = Number(configRow.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR;
+  let assignments = [];
+  let activeSummaries = advisors.active.map((user) => ({ ...user, cantidad: 0 }));
+  let totalPendientesCapacidad = 0;
+  if (advisors.active.length && configRow.modo === "unassigned") {
+    const capacityPlan = buildCapacityAssignments(
+      eligible,
+      advisors.active,
+      currentLoadsByAdvisor(found, advisors.active),
+      limit,
+      configRow.indiceSiguienteUsuario,
+    );
+    assignments = capacityPlan.assignments;
+    totalPendientesCapacidad = capacityPlan.totalPendientesCapacidad;
+    activeSummaries = capacityPlan.advisors.map((user) => ({ ...user, cantidad: user.cantidadPlanificada }));
+  } else if (advisors.active.length) {
+    assignments = buildAssignments(eligible, advisors.active, configRow.indiceSiguienteUsuario);
+    activeSummaries = advisors.active.map((user) => ({
+      ...user,
+      cantidad: assignments.filter((item) => item.user.id === user.id).length,
+    }));
+  } else if (configRow.modo === "unassigned") {
+    totalPendientesCapacidad = eligible.length;
+  }
+  const inactiveLoads = currentLoadsByAdvisor(found, [...advisors.paused, ...advisors.invalid]);
+  const summarizeInactive = (user) => ({
+    ...user,
+    cargaActual: inactiveLoads.get(user.id) || 0,
+    capacidadDisponible: 0,
+    cantidadPlanificada: 0,
+    cantidad: 0,
+  });
+  const warning = !advisors.active.length
+    ? "No hay asesores en Play; las oportunidades no se modificaran y permaneceran sin propietario"
+    : configRow.modo === "unassigned" && eligible.length > 0 && assignments.length === 0
+      ? "Todos los asesores en Play alcanzaron el limite; la cola permanecera sin propietario"
+      : null;
   return {
     totalEncontradas: found.length,
     totalElegibles: eligible.length,
     totalOmitidas: found.length - eligible.length,
+    totalSinPropietario: found.filter((item) => !assignedToOf(item)).length,
+    totalConPropietario: found.filter((item) => Boolean(assignedToOf(item))).length,
+    totalPorAsignar: assignments.length,
+    totalPendientesCapacidad,
+    maxPendientesPorAsesor: limit,
     rangoFechas: configRow.modo === "refresh_non_management"
       ? opportunityTodayRange(now)
       : configRow.modo === "unassigned" ? null : opportunityDateRange(now),
@@ -152,13 +254,10 @@ async function preview(configRow) {
     usuariosActivos: advisors.active.length,
     usuariosPausados: advisors.paused.length,
     usuariosInvalidos: advisors.invalid.length,
-    advertencia: advisors.active.length ? null : "No hay asesores en Play; las oportunidades no se modificaran",
-    usuarios: advisors.active.map((user) => ({
-      ...user,
-      cantidad: assignments.filter((item) => item.user.id === user.id).length,
-    })),
-    pausados: advisors.paused,
-    invalidos: advisors.invalid,
+    advertencia: warning,
+    usuarios: activeSummaries,
+    pausados: advisors.paused.map(summarizeInactive),
+    invalidos: advisors.invalid.map(summarizeInactive),
   };
 }
 
@@ -204,13 +303,24 @@ async function currentControlState(runId) {
 const isRetryableError = (error) => ["GHL_CONNECTION_ERROR", "GHL_RATE_LIMITED", "GHL_UPSTREAM_ERROR"].includes(error?.code) || Number(error?.upstreamStatus) >= 500;
 
 async function refreshCounters(run) {
-  const details = await Detalle.findAll({ where: { ejecucionId: run.id }, attributes: ["estado"], raw: true });
+  const details = await Detalle.findAll({ where: { ejecucionId: run.id }, attributes: ["estado", "errorCode"], raw: true });
   const count = (state) => details.filter((detail) => detail.estado === state).length;
+  const skippedByCode = (code) => details.filter((detail) => detail.estado === "skipped" && detail.errorCode === code).length;
   const assigned = count("assigned");
   const errors = count("error");
   const processed = details.filter((detail) => detail.estado !== "pending").length;
   const skipped = count("skipped") + count("cancelled");
-  await run.update({ totalAsignadas: assigned, totalErrores: errors, totalOmitidas: Math.max(0, run.totalEncontradas - run.totalElegibles) + skipped, processedCount: processed, heartbeatAt: new Date() });
+  await run.update({
+    totalAsignadas: assigned,
+    totalErrores: errors,
+    totalOmitidas: Math.max(0, run.totalEncontradas - run.totalElegibles) + skipped,
+    totalOmitidasCambioEtapa: skippedByCode("STAGE_CHANGED"),
+    totalOmitidasAsesorPausado: skippedByCode("ADVISOR_PAUSED"),
+    totalOmitidasPropietarioCambiado: skippedByCode("OWNER_CHANGED"),
+    totalPendientesCapacidad: Math.max(0, Number(run.totalElegibles || 0) - Number(run.totalPlanificadas || 0)) + skippedByCode("CAPACITY_REACHED"),
+    processedCount: processed,
+    heartbeatAt: new Date(),
+  });
   return { assigned, errors, processed, skipped };
 }
 
@@ -226,10 +336,14 @@ async function finalizeControl(run, state) {
   return "cancelled";
 }
 
-async function processOneDetail(run, configRow, detail, client) {
+async function processOneDetail(run, configRow, detail, client, capacityTracker = null) {
   await currentControlState(run.id);
   await detail.update({ attemptCount: Number(detail.attemptCount || 0) + 1 });
   try {
+    const advisorStillActive = await advisorAvailability.isGhlUserActiveToday(detail.newAssignedTo);
+    const plannedCapacityAvailable = !capacityTracker
+      || configRow.modo !== "unassigned"
+      || (Number(capacityTracker.loads.get(detail.newAssignedTo)) || 0) < capacityTracker.limit;
     const currentPayload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(detail.opportunityId)}` }, 3, () => currentControlState(run.id));
     const current = currentPayload.opportunity || currentPayload.data || currentPayload;
     const currentOwner = assignedToOf(current);
@@ -237,7 +351,7 @@ async function processOneDetail(run, configRow, detail, client) {
       await detail.update({ estado: "assigned", assignedAt: detail.assignedAt || new Date(), retryable: false, previousAssignedTo: detail.previousAssignedTo || currentOwner, errorCode: null, errorMessage: null });
       return;
     }
-    if (!(await advisorAvailability.isGhlUserActiveToday(detail.newAssignedTo))) {
+    if (!advisorStillActive) {
       await detail.update({ estado: "skipped", retryable: false, errorCode: "ADVISOR_PAUSED", errorMessage: "El asesor dejo de estar en Play antes de la asignacion" });
       return;
     }
@@ -246,6 +360,11 @@ async function processOneDetail(run, configRow, detail, client) {
       await detail.update({ estado: "skipped", retryable: false, previousAssignedTo: currentOwner, errorCode: skipCode, errorMessage: skipCode === "STAGE_CHANGED" ? "La oportunidad abandono la etapa antes de asignarla" : "La oportunidad fue asignada manualmente durante la ejecucion" });
       return;
     }
+    if (!plannedCapacityAvailable) {
+      await detail.update({ estado: "skipped", retryable: false, previousAssignedTo: currentOwner, errorCode: "CAPACITY_REACHED", errorMessage: "La capacidad del asesor cambio antes de completar la asignacion" });
+      return;
+    }
+    await currentControlState(run.id);
     await requestWithRetry(client, { method: "PUT", url: `/opportunities/${encodeURIComponent(detail.opportunityId)}`, data: { assignedTo: detail.newAssignedTo } }, 3, () => currentControlState(run.id));
     try {
       await detail.update({ estado: "assigned", assignedAt: new Date(), retryable: false, previousAssignedTo: currentOwner, errorCode: null, errorMessage: null });
@@ -255,6 +374,7 @@ async function processOneDetail(run, configRow, detail, client) {
       if (assignedToOf(verification) !== detail.newAssignedTo) throw storageError;
       await detail.update({ estado: "assigned", assignedAt: new Date(), retryable: false, previousAssignedTo: currentOwner, errorCode: null, errorMessage: null });
     }
+    if (capacityTracker) capacityTracker.loads.set(detail.newAssignedTo, (Number(capacityTracker.loads.get(detail.newAssignedTo)) || 0) + 1);
   } catch (error) {
     if (error.controlState) throw error;
     const state = await Ejecucion.findByPk(run.id, { attributes: ["estado"] });
@@ -263,13 +383,13 @@ async function processOneDetail(run, configRow, detail, client) {
   } finally { await refreshCounters(run); }
 }
 
-async function processPlan(run, configRow, client) {
+async function processPlan(run, configRow, client, capacityTracker = null) {
   try {
     await currentControlState(run.id);
     const details = await Detalle.findAll({ where: { ejecucionId: run.id, [Op.or]: [{ estado: "pending" }, { estado: "error", retryable: true }] }, order: [["id", "ASC"]] });
     for (const detail of details) {
       await currentControlState(run.id);
-      await processOneDetail(run, configRow, detail, client);
+      await processOneDetail(run, configRow, detail, client, capacityTracker);
       await currentControlState(run.id);
     }
     const counters = await refreshCounters(run);
@@ -288,12 +408,151 @@ async function createPlan(run, configRow, client, config, runDate) {
   ]);
   const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, runDate);
   const eligible = eligibleOpportunities(found, configRow.modo);
-  const assignments = advisors.active.length
-    ? buildAssignments(eligible, advisors.active, configRow.indiceSiguienteUsuario)
-    : [];
-  await run.update({ totalEncontradas: found.length, totalElegibles: eligible.length, totalOmitidas: found.length - eligible.length, heartbeatAt: new Date() });
+  let assignments = [];
+  let nextUserIndex = Number(configRow.indiceSiguienteUsuario) || 0;
+  let totalPendientesCapacidad = 0;
+  if (advisors.active.length && configRow.modo === "unassigned") {
+    const capacityPlan = buildCapacityAssignments(
+      eligible,
+      advisors.active,
+      currentLoadsByAdvisor(found, advisors.active),
+      Number(configRow.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR,
+      configRow.indiceSiguienteUsuario,
+    );
+    assignments = capacityPlan.assignments;
+    nextUserIndex = capacityPlan.nextUserIndex;
+    totalPendientesCapacidad = capacityPlan.totalPendientesCapacidad;
+  } else if (advisors.active.length) {
+    assignments = buildAssignments(eligible, advisors.active, configRow.indiceSiguienteUsuario);
+  } else if (configRow.modo === "unassigned") {
+    totalPendientesCapacidad = eligible.length;
+  }
+  await run.update({
+    totalEncontradas: found.length,
+    totalElegibles: eligible.length,
+    totalPlanificadas: assignments.length,
+    totalOmitidas: found.length - eligible.length,
+    totalPendientesCapacidad,
+    heartbeatAt: new Date(),
+  });
   if (assignments.length) await Detalle.bulkCreate(assignments.map(({ opportunity, user }) => ({ ejecucionId: run.id, opportunityId: idOf(opportunity), previousAssignedTo: assignedToOf(opportunity), newAssignedTo: user.id, estado: "pending", retryable: true })), { ignoreDuplicates: true });
-  return { activeUsers: advisors.active };
+  return {
+    activeUsers: advisors.active,
+    nextUserIndex,
+    capacityTracker: configRow.modo === "unassigned" ? {
+      loads: currentLoadsByAdvisor(found, advisors.active),
+      limit: Number(configRow.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR,
+    } : null,
+  };
+}
+
+async function currentCapacityTracker(configRow, client, config, now = new Date()) {
+  if (configRow.modo !== "unassigned") return null;
+  const [found, currentGhlUsers] = await Promise.all([
+    allStageOpportunities(configRow, client, config, now),
+    ghl.fetchAllAssignableUsers(client, config),
+  ]);
+  const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, now);
+  return {
+    loads: currentLoadsByAdvisor(found, advisors.active),
+    limit: Number(configRow.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR,
+  };
+}
+
+const lockScopeForConfiguration = (configRow) => configRow.modo === "unassigned"
+  ? `unassigned:${configRow.pipelineId}:${configRow.stageId}`
+  : String(configRow.id);
+
+const isOpenOpportunity = (opportunity) => ghl.getOpportunityStatus(opportunity) === "open";
+
+const configurationMatchesOpportunity = (configRow, opportunity) =>
+  configRow.pipelineId === ghl.getOpportunityPipelineId(opportunity)
+  && configRow.stageId === ghl.getOpportunityStageId(opportunity);
+
+async function fetchWebhookOpportunity(client, config, { opportunityId, contactId }, configurations) {
+  if (opportunityId) {
+    try {
+      const payload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(opportunityId)}` });
+      return payload.opportunity || payload.data || payload;
+    } catch (error) {
+      if (error.upstreamStatus === 404 || error.statusCode === 404) return null;
+      throw error;
+    }
+  }
+  if (!contactId) return null;
+  const candidates = await ghl.fetchOpportunitiesByContact(client, config, contactId);
+  const matching = candidates.filter((opportunity) => configurations.some((row) => configurationMatchesOpportunity(row, opportunity)));
+  return matching.find((opportunity) => isOpenOpportunity(opportunity) && !assignedToOf(opportunity))
+    || matching.find((opportunity) => isOpenOpportunity(opportunity))
+    || matching[0]
+    || null;
+}
+
+async function executeWebhookOpportunity({ opportunityId = null, contactId = null, locationId = null } = {}) {
+  const { config, client } = await getClient();
+  if (locationId && String(locationId) !== String(config.locationId)) {
+    return { code: "LOCATION_MISMATCH", assigned: false, deferredToScheduler: true };
+  }
+  const configurations = await Configuracion.findAll({
+    where: { activo: true, modo: "unassigned" },
+    order: [["id", "ASC"]],
+  });
+  if (!configurations.length) return { code: "ACTIVE_CONFIGURATION_NOT_FOUND", assigned: false, deferredToScheduler: true };
+  const opportunity = await fetchWebhookOpportunity(client, config, { opportunityId, contactId }, configurations);
+  if (!opportunity || !idOf(opportunity)) return { code: "OPPORTUNITY_NOT_FOUND", assigned: false, deferredToScheduler: true };
+  const configRow = configurations.find((row) => configurationMatchesOpportunity(row, opportunity));
+  if (!configRow) return { code: "ACTIVE_CONFIGURATION_NOT_FOUND", assigned: false, deferredToScheduler: true };
+  if (!isOpenOpportunity(opportunity)) return { code: "OPPORTUNITY_NOT_OPEN", assigned: false, deferredToScheduler: false };
+  if (assignedToOf(opportunity)) return { code: "ALREADY_ASSIGNED", assigned: false, deferredToScheduler: false };
+
+  const lockScope = lockScopeForConfiguration(configRow);
+  const lock = await acquireLock(lockScope);
+  if (!lock) return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, deferredToScheduler: true };
+  try {
+    const freshConfig = await Configuracion.findByPk(configRow.id);
+    if (!freshConfig?.activo || freshConfig.modo !== "unassigned") {
+      return { code: "ACTIVE_CONFIGURATION_NOT_FOUND", assigned: false, deferredToScheduler: true };
+    }
+    const currentPayload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(idOf(opportunity))}` });
+    const current = currentPayload.opportunity || currentPayload.data || currentPayload;
+    if (!isOpenOpportunity(current)) return { code: "OPPORTUNITY_NOT_OPEN", assigned: false, deferredToScheduler: false };
+    const initialSkipCode = classifyCurrentOpportunity(current, freshConfig);
+    if (initialSkipCode) return { code: initialSkipCode === "OWNER_CHANGED" ? "ALREADY_ASSIGNED" : initialSkipCode, assigned: false, deferredToScheduler: false };
+
+    const [found, currentGhlUsers] = await Promise.all([
+      allStageOpportunities(freshConfig, client, config),
+      ghl.fetchAllAssignableUsers(client, config),
+    ]);
+    const advisors = await advisorsForConfiguration(freshConfig, currentGhlUsers, new Date());
+    if (!advisors.active.length) return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
+    const capacityPlan = buildCapacityAssignments(
+      [current],
+      advisors.active,
+      currentLoadsByAdvisor(found, advisors.active),
+      Number(freshConfig.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR,
+      freshConfig.indiceSiguienteUsuario,
+    );
+    if (!capacityPlan.assignments.length) return { code: "NO_CAPACITY", assigned: false, deferredToScheduler: true };
+    const selectedUser = capacityPlan.assignments[0].user;
+    if (!(await advisorAvailability.isGhlUserActiveToday(selectedUser.id))) {
+      return { code: "ADVISOR_PAUSED", assigned: false, deferredToScheduler: true };
+    }
+
+    const finalPayload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(idOf(current))}` });
+    const finalOpportunity = finalPayload.opportunity || finalPayload.data || finalPayload;
+    if (!isOpenOpportunity(finalOpportunity)) return { code: "OPPORTUNITY_NOT_OPEN", assigned: false, deferredToScheduler: false };
+    const finalSkipCode = classifyCurrentOpportunity(finalOpportunity, freshConfig);
+    if (finalSkipCode) return { code: finalSkipCode === "OWNER_CHANGED" ? "ALREADY_ASSIGNED" : finalSkipCode, assigned: false, deferredToScheduler: false };
+    await requestWithRetry(client, {
+      method: "PUT",
+      url: `/opportunities/${encodeURIComponent(idOf(finalOpportunity))}`,
+      data: { assignedTo: selectedUser.id },
+    });
+    await freshConfig.update({ indiceSiguienteUsuario: capacityPlan.nextUserIndex });
+    return { code: "ASSIGNED", assigned: true, opportunityId: idOf(finalOpportunity), advisorId: selectedUser.id, configuracionId: freshConfig.id };
+  } finally {
+    await releaseLock(lock, lockScope);
+  }
 }
 
 async function blockingExecution(configId, excludeId = null, transaction = null) {
@@ -313,7 +572,8 @@ async function interruptStaleForConfig(configId) {
 }
 
 async function execute(configRow, { type = "manual", userId = null, scheduledFor = null, window = null } = {}) {
-  const lock = await acquireLock(configRow.id);
+  const lockScope = lockScopeForConfiguration(configRow);
+  const lock = await acquireLock(lockScope);
   if (!lock) return { skipped: true, reason: "Ya existe una ejecucion activa", code: "EXECUTION_ALREADY_ACTIVE" };
   let run;
   try {
@@ -340,10 +600,12 @@ async function execute(configRow, { type = "manual", userId = null, scheduledFor
       return run.reload();
     }
     await currentControlState(run.id);
-    const result = await processPlan(run, configRow, client);
+    const result = await processPlan(run, configRow, client, plan.capacityTracker);
     if (["completed", "partial"].includes(result.estado)) {
-      const remainder = Number(result.totalAsignadas || 0) % plan.activeUsers.length;
-      await configRow.update({ indiceSiguienteUsuario: (configRow.indiceSiguienteUsuario + remainder) % plan.activeUsers.length });
+      const nextUserIndex = configRow.modo === "unassigned"
+        ? plan.nextUserIndex
+        : (configRow.indiceSiguienteUsuario + (Number(result.totalAsignadas || 0) % plan.activeUsers.length)) % plan.activeUsers.length;
+      await configRow.update({ indiceSiguienteUsuario: nextUserIndex });
     }
     return result;
   } catch (error) {
@@ -356,7 +618,7 @@ async function execute(configRow, { type = "manual", userId = null, scheduledFor
     throw error;
   } finally {
     if (run) activeAbortControllers.delete(String(run.id));
-    await releaseLock(lock, configRow.id);
+    await releaseLock(lock, lockScope);
   }
 }
 
@@ -414,7 +676,10 @@ async function resume(id) {
   if (!initial) throw serviceError("EXECUTION_NOT_FOUND", "Ejecucion no encontrada", 404);
   if (TERMINAL_STATES.includes(initial.estado)) throw serviceError("EXECUTION_ALREADY_FINISHED", "La ejecucion ya finalizo");
   if (initial.estado !== "paused") throw serviceError("EXECUTION_NOT_RESUMABLE", "Solo una ejecucion pausada puede reanudarse");
-  const lock = await acquireLock(initial.configuracionId);
+  const configRow = await Configuracion.findByPk(initial.configuracionId);
+  if (!configRow) throw serviceError("CONFIGURATION_NOT_FOUND", "La configuracion de esta ejecucion ya no existe", 404);
+  const lockScope = lockScopeForConfiguration(configRow);
+  const lock = await acquireLock(lockScope);
   if (!lock) throw serviceError("EXECUTION_ALREADY_ACTIVE", "Existe otro proceso activo para esta configuracion");
   try {
     const run = await transitionLocked(id, async (current, transaction) => {
@@ -423,12 +688,11 @@ async function resume(id) {
       await current.update({ estado: "running", resumedAt: new Date(), pausedAt: null, heartbeatAt: new Date() }, { transaction });
       return current;
     });
-    const configRow = await Configuracion.findByPk(run.configuracionId);
-    if (!configRow) throw serviceError("CONFIGURATION_NOT_FOUND", "La configuracion de esta ejecucion ya no existe", 404);
     const controller = new AbortController();
     activeAbortControllers.set(String(run.id), controller);
-    const { client } = await getClient(controller.signal);
-    return await processPlan(run, configRow, client);
+    const { config, client } = await getClient(controller.signal);
+    const capacityTracker = await currentCapacityTracker(configRow, client, config);
+    return await processPlan(run, configRow, client, capacityTracker);
   } catch (error) {
     const run = await Ejecucion.findByPk(id).catch(() => null);
     if (run?.estado === "running") {
@@ -438,7 +702,7 @@ async function resume(id) {
     throw error;
   } finally {
     activeAbortControllers.delete(String(id));
-    await releaseLock(lock, initial.configuracionId);
+    await releaseLock(lock, lockScope);
   }
 }
 
@@ -494,10 +758,11 @@ async function listExecutions(query = {}) {
 }
 
 module.exports = {
-  TIME_ZONE, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
-  uniqueUsers, buildAssignments, eligibleOpportunities, classifyCurrentOpportunity,
+  TIME_ZONE, DEFAULT_MAX_PENDING_PER_ADVISOR, MAX_PENDING_PER_ADVISOR, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
+  uniqueUsers, buildAssignments, currentLoadsByAdvisor, buildCapacityAssignments, eligibleOpportunities, classifyCurrentOpportunity,
   executionState, localScheduleParts, opportunityDateRange, opportunityTodayRange, heartbeatExpired, sanitize,
   getCatalogs, pipelineStages, validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
-  releaseLock, refreshCounters, processOneDetail, processPlan, execute, requestPause,
+  releaseLock, lockScopeForConfiguration, refreshCounters, processOneDetail, processPlan, execute, requestPause,
   requestCancel, resume, isExecutionStale, forceFinishStale, listExecutions, recoverStaleRuns,
+  isOpenOpportunity, configurationMatchesOpportunity, fetchWebhookOpportunity, executeWebhookOpportunity,
 };
