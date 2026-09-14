@@ -21,6 +21,20 @@ const CLAVES_OBSERVACION_JAVIER = new Set([
   "darwin javier cacoango toapanta",
 ]);
 
+const formateadorHoraEcuador = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "America/Guayaquil",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+const crearHorasVacias = () =>
+  Object.fromEntries(
+    Array.from({ length: 24 }, (_, hora) => [
+      `${String(hora).padStart(2, "0")}:00`,
+      0,
+    ]),
+  );
+
 const calcularResumenMargen = (ventas = [], rango = {}) => {
   let totalMargen = 0;
   let totalCosto = 0;
@@ -103,6 +117,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     porOrigen: {},
     porFecha: {},
     porDia: {},
+    porHoraCreacion: crearHorasVacias(),
     porMarca: {},
     porModelo: {},
     porTipo: {},
@@ -272,6 +287,19 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
 
       if (fechaKey) {
         stats.porFecha[fechaKey] = (stats.porFecha[fechaKey] || 0) + 1;
+      }
+    }
+
+    if (v.createdAt) {
+      const fechaCreacion = new Date(v.createdAt);
+
+      if (!Number.isNaN(fechaCreacion.getTime())) {
+        const hora = formateadorHoraEcuador.format(fechaCreacion);
+        const horaKey = `${hora}:00`;
+
+        if (Object.prototype.hasOwnProperty.call(stats.porHoraCreacion, horaKey)) {
+          stats.porHoraCreacion[horaKey] += 1;
+        }
       }
     }
 

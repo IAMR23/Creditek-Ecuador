@@ -29,6 +29,7 @@ import {
   WalletCards,
   Settings2,
   RefreshCcw,
+  Link2,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -99,6 +100,11 @@ export default function Sidebar({ auth }) {
             label: "Reporte Entregas",
             icon: <BarChart3 size={20} />,
             path: "/reporte-entregas",
+          },
+          {
+            label: "Ventas con Entrega",
+            icon: <Link2 size={20} />,
+            path: "/ventas-con-entrega",
           },
           {
             label: "Revisar Gestiones",

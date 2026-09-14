@@ -54,6 +54,9 @@ async function setMyAvailability(req, res) {
       actorId: req.user.id,
       motivoCambio: "asesor",
     });
+    if (disponibilidad.estado === "ACTIVO") {
+      service.scheduleRealtimeQueueReview({ trigger: "play" });
+    }
     res.json({ ok: true, disponibilidad });
   } catch (error) { respondError(res, error); }
 }
@@ -86,6 +89,9 @@ async function setAdvisorAvailability(req, res) {
       actorId: req.user.id,
       motivoCambio: "administrador",
     });
+    if (disponibilidad.estado === "ACTIVO") {
+      service.scheduleRealtimeQueueReview({ trigger: "admin-play" });
+    }
     res.json({ ok: true, disponibilidad });
   } catch (error) { respondError(res, error); }
 }
@@ -108,6 +114,9 @@ async function setAdvisorManagementAvailability(req, res) {
       actorId: req.user.id,
       motivoCambio: "administrador",
     });
+    if (disponibilidad.estado === "ACTIVO") {
+      service.scheduleRealtimeQueueReview({ trigger: "admin-play" });
+    }
     res.json({ ok: true, disponibilidad });
   } catch (error) { respondError(res, error); }
 }

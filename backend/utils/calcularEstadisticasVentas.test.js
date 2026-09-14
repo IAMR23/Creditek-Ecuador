@@ -136,4 +136,19 @@ describe("calcularEstadisticasVentas", () => {
     expect(estadisticas.precioVendedorTotal).toBe(0);
     expect(estadisticas.precioVendedorPromedio).toBe(0);
   });
+
+  test("agrupa las ventas por hora de creacion en la zona horaria de Ecuador", () => {
+    const estadisticas = calcularEstadisticasVentas([
+      { createdAt: "2026-09-14T14:05:00.000Z" },
+      { createdAt: "2026-09-14T14:59:00.000Z" },
+      { createdAt: "2026-09-15T04:15:00.000Z" },
+      { createdAt: null },
+      { createdAt: "fecha-invalida" },
+    ]);
+
+    expect(Object.keys(estadisticas.porHoraCreacion)).toHaveLength(24);
+    expect(estadisticas.porHoraCreacion["00:00"]).toBe(0);
+    expect(estadisticas.porHoraCreacion["09:00"]).toBe(2);
+    expect(estadisticas.porHoraCreacion["23:00"]).toBe(1);
+  });
 });

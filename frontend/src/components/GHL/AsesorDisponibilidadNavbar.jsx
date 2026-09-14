@@ -52,9 +52,13 @@ export default function AsesorDisponibilidadNavbar({ auth }) {
     setError("");
     try {
       const response = await api.patch("/api/ghl/repartos/mi-disponibilidad", { estado });
-      setAvailability(response.data.disponibilidad);
+      const disponibilidad = {
+        ...response.data.disponibilidad,
+        aplicaRepartoGhl: true,
+      };
+      setAvailability(disponibilidad);
       window.dispatchEvent(new CustomEvent(AVAILABILITY_EVENT, {
-        detail: response.data.disponibilidad,
+        detail: disponibilidad,
       }));
     } catch (requestError) {
       setError(messageOf(requestError));
@@ -63,7 +67,12 @@ export default function AsesorDisponibilidadNavbar({ auth }) {
     }
   };
 
-  if (!isSeller || loading || !availability?.vinculado) return null;
+  if (
+    !isSeller ||
+    loading ||
+    availability?.aplicaRepartoGhl !== true ||
+    !availability?.vinculado
+  ) return null;
 
   const active = availability.estado === "ACTIVO";
   const label = active ? "Pausar reparto" : "Activar reparto";

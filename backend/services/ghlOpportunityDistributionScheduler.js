@@ -22,6 +22,14 @@ function shouldRunConfiguration(row, local) {
 
 async function tick(now = new Date()) {
   await service.recoverStaleRuns();
+  try {
+    await service.executeRealtimeQueue({ trigger: "scheduler" });
+  } catch (error) {
+    console.error("Fallo respaldo de cola GHL de tiempo real", {
+      code: error.code || "GHL_REALTIME_QUEUE_ERROR",
+      message: service.sanitize(error.message),
+    });
+  }
   const local = service.localScheduleParts(now);
   const rows = await Configuracion.findAll({ where: { activo: true } });
   for (const row of rows.filter((item) => shouldRunConfiguration(item, local))) {

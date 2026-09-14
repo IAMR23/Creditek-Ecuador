@@ -15,6 +15,9 @@ const {
 const {
   asignarEntrega,
 } = require("../controllers/Logistica/usuarioAgenciaEntregaController");
+const {
+  actualizarTipoEntrega,
+} = require("../controllers/Logistica/tipoEntregaController");
 const UsuarioAgenciaEntrega = require("../models/UsuarioAgenciaEntrega");
 const Modelo = require("../models/Modelo");
 const DispositivoMarca = require("../models/DispositivoMarca");
@@ -30,6 +33,10 @@ const {
   authenticate,
   requirePermission,
 } = require("../middleware/authMiddleware");
+const { sequelize } = require("../config/db");
+const {
+  resolverVentaParaEntrega,
+} = require("../services/ventaEntregaRelacionService");
 
 router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -192,7 +199,15 @@ router.get("/entregas", async (req, res) => {
 
     const entregas = await Entrega.findAll({
       where: whereEntrega,
-      attributes: ["id", "fecha", "observacion", "estado", "sectorEntrega" , "errores"],
+      attributes: [
+        "id",
+        "fecha",
+        "observacion",
+        "estado",
+        "sectorEntrega",
+        "tipoEntrega",
+        "errores",
+      ],
       order: [["createdAt", "DESC"]],
 
       include: [
@@ -366,6 +381,13 @@ router.post(
   asignarEntrega,
 );
 
+router.patch(
+  "/:id/tipo-entrega",
+  authenticate,
+  requirePermission("Logistica", "Administracion"),
+  actualizarTipoEntrega,
+);
+
 // --------------------- CONTROLADORES ---------------------
 router.put("/entrega/:id/validar", upload.single("foto"), fotoClienteRespaldo);
 router.put(
@@ -447,10 +469,35 @@ router.get("/:id", async (req, res) => {
 // Crear una nueva entrega
 router.post("/", async (req, res) => {
   const data = req.body;
+  let transaction;
+
   try {
-    const nuevaEntrega = await Entrega.create(data);
-    res.status(201).json(nuevaEntrega);
+    transaction = await sequelize.transaction();
+    const cliente = data.clienteId
+      ? await Cliente.findByPk(data.clienteId, {
+          attributes: ["id", "cedula"],
+          transaction,
+        })
+      : null;
+    const relacionVenta = await resolverVentaParaEntrega({
+      clienteId: cliente?.id ?? data.clienteId,
+      cedula: cliente?.cedula,
+      detalle: data,
+      transaction,
+    });
+    const nuevaEntrega = await Entrega.create(
+      { ...data, ventaId: relacionVenta.ventaId },
+      { transaction },
+    );
+
+    await transaction.commit();
+    res.status(201).json({
+      ...nuevaEntrega.toJSON(),
+      relacionVenta,
+      advertencia: relacionVenta.advertencia,
+    });
   } catch (error) {
+    if (transaction) await transaction.rollback();
     console.error(error);
     res.status(500).json({ mensaje: "Error al crear la entrega." });
   }

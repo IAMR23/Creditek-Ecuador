@@ -1,4 +1,5 @@
 const advisorService = require("../../services/ghlAdvisorAvailabilityService");
+const distributionService = require("../../services/ghlOpportunityDistributionService");
 const controller = require("./repartoOportunidadesController");
 
 const response = () => ({
@@ -10,6 +11,7 @@ afterEach(() => jest.restoreAllMocks());
 
 describe("control de disponibilidad GHL", () => {
   test("el asesor solo cambia su propio estado aunque envie otro usuarioId", async () => {
+    const schedule = jest.spyOn(distributionService, "scheduleRealtimeQueueReview").mockImplementation(() => {});
     const change = jest.spyOn(advisorService, "changeAvailability").mockResolvedValue({
       estado: "ACTIVO",
     });
@@ -30,9 +32,11 @@ describe("control de disponibilidad GHL", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ ok: true, disponibilidad: { estado: "ACTIVO" } }),
     );
+    expect(schedule).toHaveBeenCalledWith({ trigger: "play" });
   });
 
   test("el cambio administrativo registra al actor autenticado", async () => {
+    const schedule = jest.spyOn(distributionService, "scheduleRealtimeQueueReview").mockImplementation(() => {});
     const change = jest.spyOn(advisorService, "changeAvailability").mockResolvedValue({
       estado: "PAUSADO",
     });
@@ -51,5 +55,6 @@ describe("control de disponibilidad GHL", () => {
       actorId: 99,
       motivoCambio: "administrador",
     });
+    expect(schedule).not.toHaveBeenCalled();
   });
 });

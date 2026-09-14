@@ -3,6 +3,7 @@ const Usuario = require("../models/Usuario");
 const Vinculo = require("../models/GhlAsesorVinculo");
 const Historial = require("../models/GhlAsesorDisponibilidadHistorial");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
+const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
 const ghl = require("./ghlService");
 const service = require("./ghlAdvisorAvailabilityService");
 
@@ -30,14 +31,69 @@ beforeEach(() => {
     callback({ LOCK: { UPDATE: "UPDATE" } }),
   );
   jest.spyOn(Detalle, "findAll").mockResolvedValue([]);
+  jest.spyOn(TiempoRealAsignacion, "findAll").mockResolvedValue([]);
 });
 
 afterEach(() => jest.restoreAllMocks());
 
 describe("disponibilidad diaria de asesores GHL", () => {
+  test("identifica solamente el cargo exacto VENDEDOR CALL CENTER", () => {
+    expect(service.isVendedorCallCenterCargo("  vendedor   call center ")).toBe(true);
+    expect(service.isVendedorCallCenterCargo("SUPERVISOR DE CALL CENTER")).toBe(false);
+    expect(service.isVendedorCallCenterCargo("JEFE COMERCIAL DE CALL CENTER")).toBe(false);
+    expect(service.isVendedorCallCenterCargo("VENDEDOR DE PISO")).toBe(false);
+  });
+
+  test("oculta la disponibilidad a usuarios con otro cargo", async () => {
+    jest.spyOn(Usuario, "findOne").mockResolvedValue({
+      id: 10,
+      rolPago: { cargo: "SUPERVISOR DE CALL CENTER" },
+      rolesPago: [],
+    });
+    const findLink = jest.spyOn(Vinculo, "findOne");
+
+    const result = await service.getMyAvailability(10, NOW);
+
+    expect(result).toMatchObject({
+      aplicaRepartoGhl: false,
+      vinculado: false,
+      recibiendoLeads: false,
+    });
+    expect(findLink).not.toHaveBeenCalled();
+  });
+
+  test("muestra la disponibilidad a quien tiene VENDEDOR CALL CENTER como cargo adicional", async () => {
+    jest.spyOn(Usuario, "findOne").mockResolvedValue({
+      id: 10,
+      rolPago: { cargo: "ASISTENTE ADMINISTRATIVO" },
+      rolesPago: [{ cargo: "VENDEDOR CALL CENTER" }],
+    });
+    jest.spyOn(Vinculo, "findOne").mockResolvedValue(null);
+
+    const result = await service.getMyAvailability(10, NOW);
+
+    expect(result).toMatchObject({
+      aplicaRepartoGhl: true,
+      vinculado: false,
+    });
+  });
+
   test("un Play del dia anterior se considera pausado", () => {
     const row = makeLink({ estadoRecepcion: "ACTIVO", estadoFechaLocal: "2026-09-08" });
     expect(service.effectiveState(row, NOW)).toBe("PAUSADO");
+  });
+
+  test("el conteo diario combina asignaciones programadas y de tiempo real", async () => {
+    Detalle.findAll.mockResolvedValue([{ newAssignedTo: "ghl-10", cantidad: "2" }]);
+    TiempoRealAsignacion.findAll.mockResolvedValue([{ ghlUserId: "ghl-10", cantidad: "3" }]);
+
+    const counts = await service.countByGhlUserBetween(
+      ["ghl-10"],
+      new Date("2026-09-09T05:00:00.000Z"),
+      new Date("2026-09-10T04:59:59.999Z"),
+    );
+
+    expect(counts.get("ghl-10")).toBe(5);
   });
 
   test("Play persiste estado, fecha local y auditoria", async () => {

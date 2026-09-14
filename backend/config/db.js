@@ -30,6 +30,40 @@ const addColumnIfMissing = async (
   }
 };
 
+const ensureEntregaTipoSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("entregas")) return;
+
+  await addColumnIfMissing(queryInterface, "entregas", "tipoEntrega", {
+    type: Sequelize.STRING(20),
+    allowNull: true,
+  });
+
+  await sequelize.query(`
+    UPDATE entregas
+    SET "tipoEntrega" = 'Entrega'
+    WHERE "tipoEntrega" IS NULL;
+
+    ALTER TABLE entregas
+      ALTER COLUMN "tipoEntrega" SET DEFAULT 'Entrega',
+      ALTER COLUMN "tipoEntrega" SET NOT NULL;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'entregas_tipo_entrega_check'
+          AND conrelid = 'entregas'::regclass
+      ) THEN
+        ALTER TABLE entregas
+          ADD CONSTRAINT entregas_tipo_entrega_check
+          CHECK ("tipoEntrega" IN ('Entrega', 'Envio'));
+      END IF;
+    END $$;
+  `);
+};
+
 const ensureGhlRepartoExecutionControlSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("ghl_reparto_ejecuciones")) return;
@@ -1775,6 +1809,7 @@ const connectDB = async () => {
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
     await ensureReporteCajaUsuarioAgenciaPreSyncSchema(queryInterface);
     await ensureEgresosCreditekEntradasPreSyncSchema(queryInterface);
+    await ensureEntregaTipoSchema(queryInterface);
     await sequelize.sync({});
     await sequelize.query(require("fs").readFileSync(
       require("path").join(__dirname, "../migrations/202609050004-create-egresos-creditek-tipos.sql"), "utf8",
@@ -2000,6 +2035,7 @@ const connectDB = async () => {
 module.exports = {
   sequelize,
   connectDB,
+  ensureEntregaTipoSchema,
   ensureFacturasFisicasOcrPreSyncSchema,
   ensureGhlAdvisorAvailabilitySchema,
   ensureGhlRepartoCapacitySchema,

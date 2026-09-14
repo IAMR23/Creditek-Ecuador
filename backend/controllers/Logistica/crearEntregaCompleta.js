@@ -12,6 +12,9 @@ const {
   resolverProcesoLlamada,
 } = require("../../utils/procesoLlamadaEntrega");
 const { registrarPersona } = require("../../services/personasService");
+const {
+  resolverVentaParaEntrega,
+} = require("../../services/ventaEntregaRelacionService");
 
 function calcularSemana(fecha) {
   const f = new Date(fecha);
@@ -67,11 +70,18 @@ const crearEntregaCompleta = async (req, res) => {
 
     // 1️⃣ Cliente
     const clienteDB = await registrarPersona(cliente, { transaction: t });
+    const relacionVenta = await resolverVentaParaEntrega({
+      clienteId: clienteDB.id,
+      cedula: clienteDB.cedula,
+      detalle,
+      transaction: t,
+    });
 
     const entregaDB = await Entrega.create(
       {
         usuarioAgenciaId: entrega.usuarioAgenciaId,
         clienteId: clienteDB.id,
+        ventaId: relacionVenta.ventaId,
         origenId: entrega.origenId,
         observacion: entrega.observacion,
         fecha: entrega.fecha,
@@ -150,6 +160,14 @@ const crearEntregaCompleta = async (req, res) => {
       entrega: entregaDB,
       detalle: detalleDB,
       obsequios,
+      relacionVenta: {
+        ventaId: relacionVenta.ventaId,
+        tipoCoincidencia: relacionVenta.tipoCoincidencia,
+        criterioDesambiguacion: relacionVenta.criterioDesambiguacion,
+        ambigua: relacionVenta.ambigua,
+        cantidadCandidatas: relacionVenta.cantidadCandidatas,
+      },
+      advertencia: relacionVenta.advertencia,
     });
   } catch (error) {
     await t.rollback();

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Pause, Play, RefreshCcw } from "lucide-react";
+import { AlertTriangle, Pause, Play } from "lucide-react";
 import api from "../../api/client";
 
 const AVAILABILITY_EVENT = "ghl:availability-updated";
@@ -43,9 +43,13 @@ export default function AsesorDisponibilidadCard() {
     setError("");
     try {
       const response = await api.patch("/api/ghl/repartos/mi-disponibilidad", { estado });
-      setData(response.data.disponibilidad);
+      const disponibilidad = {
+        ...response.data.disponibilidad,
+        aplicaRepartoGhl: true,
+      };
+      setData(disponibilidad);
       window.dispatchEvent(new CustomEvent(AVAILABILITY_EVENT, {
-        detail: response.data.disponibilidad,
+        detail: disponibilidad,
       }));
     } catch (requestError) {
       setError(messageOf(requestError));
@@ -54,9 +58,7 @@ export default function AsesorDisponibilidadCard() {
     }
   };
 
-  if (loading && !data) {
-    return <section className="mb-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-500"><RefreshCcw className="animate-spin" size={17} /> Cargando estado de reparto...</div></section>;
-  }
+  if ((loading && !data) || data?.aplicaRepartoGhl !== true) return null;
 
   if (!data?.vinculado) {
     return <section className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-start gap-3 text-amber-800"><AlertTriangle className="mt-0.5 shrink-0" size={20} /><div><h2 className="font-bold">Reparto GHL no configurado</h2><p className="mt-1 text-sm">Un administrador debe asociar tu usuario RVE con tu usuario de GHL.</p>{error && <p className="mt-2 text-sm font-semibold">{error}</p>}</div></div></section>;

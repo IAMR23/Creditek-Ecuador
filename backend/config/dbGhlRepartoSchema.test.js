@@ -118,4 +118,17 @@ describe("esquema previo al arranque para reparto GHL", () => {
     expect(sql).not.toMatch(/phone|payload/i);
     expect(sql).not.toMatch(/DROP TABLE/i);
   });
+
+  test("la migracion de tiempo real conserva trazabilidad sin datos personales", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "../migrations/202609140003-create-ghl-reparto-tiempo-real-asignaciones.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS ghl_reparto_tiempo_real_asignaciones");
+    expect(sql).toContain('"opportunityId" VARCHAR(100) NOT NULL');
+    expect(sql).toContain('"ghlUserId" VARCHAR(100) NOT NULL');
+    expect(sql).toContain("ghl_reparto_tiempo_real_asesor_fecha_idx");
+    expect(sql).not.toMatch(/phone|token|secret|payload/i);
+    expect(sql).not.toMatch(/DROP TABLE/i);
+  });
 });

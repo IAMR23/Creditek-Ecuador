@@ -31,6 +31,9 @@ const {
   sanitize,
   uniqueUsers,
   lockScopeForConfiguration,
+  REALTIME_LOCK_SCOPE,
+  realtimeStageChannel,
+  realtimeMaxPendingPerAdvisor,
 } = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
@@ -93,10 +96,22 @@ describe("reparto determinista de oportunidades GHL", () => {
     ], users.slice(0, 2));
     expect(Object.fromEntries(loads)).toEqual({ u1: 2, u2: 0 });
   });
-  test("el bloqueo de capacidad se comparte por pipeline y etapa", () => {
+  test("todo reparto sin propietario comparte el bloqueo de tiempo real", () => {
     expect(lockScopeForConfiguration({ id: 1, modo: "unassigned", pipelineId: "p", stageId: "s" }))
-      .toBe(lockScopeForConfiguration({ id: 2, modo: "unassigned", pipelineId: "p", stageId: "s" }));
+      .toBe(REALTIME_LOCK_SCOPE);
+    expect(lockScopeForConfiguration({ id: 2, modo: "unassigned", pipelineId: "otro", stageId: "otra" }))
+      .toBe(REALTIME_LOCK_SCOPE);
     expect(lockScopeForConfiguration({ id: 1, modo: "all", pipelineId: "p", stageId: "s" })).toBe("1");
+  });
+  test("reconoce las etapas WhatsApp y Facebook por su nombre actual", () => {
+    expect(realtimeStageChannel({ name: "Nuevos - Whats App" })).toBe("whatsapp");
+    expect(realtimeStageChannel({ name: "Leads Facebook" })).toBe("facebook");
+    expect(realtimeStageChannel({ name: "Gestion" })).toBeNull();
+  });
+  test("el limite de tiempo real usa 10 por defecto y acepta configuracion de entorno", () => {
+    expect(realtimeMaxPendingPerAdvisor({})).toBe(10);
+    expect(realtimeMaxPendingPerAdvisor({ GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "15" })).toBe(15);
+    expect(realtimeMaxPendingPerAdvisor({ GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "0" })).toBe(10);
   });
   test("solo sin propietario excluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "unassigned").map((o) => o.id)).toEqual(["a"]));
   test("redistribuir todas incluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "all")).toHaveLength(2));

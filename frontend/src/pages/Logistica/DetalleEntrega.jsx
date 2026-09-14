@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_URL } from "../../../config";
+import api from "../../api/client";
 import Swal from "sweetalert2";
 import Field from "../../components/Field";
 import { MdCancel } from "react-icons/md";
@@ -16,6 +16,7 @@ export default function DetalleEntrega() {
   const [fechaHoraAsignacion, setFechaHoraAsignacion] = useState("");
   const [horaEstimadaEntrega, setHoraEstimadaEntrega] = useState("");
   const [sectorEntrega, setSectorEntrega] = useState("");
+  const [tipoEntrega, setTipoEntrega] = useState("");
   const rangosHorarios = [
     "7 - 9",
     "9 - 11",
@@ -32,11 +33,12 @@ export default function DetalleEntrega() {
   useEffect(() => {
     const fetchEntrega = async () => {
       try {
-        const { data } = await axios.get(
-          `${API_URL}/vendedor/entrega-logistica/${id}`,
-        );
+        const { data } = await api.get(`/vendedor/entrega-logistica/${id}`);
 
-        if (data.ok) setForm(data.entrega);
+        if (data.ok) {
+          setForm(data.entrega);
+          setTipoEntrega(data.entrega.tipoEntrega || "Entrega");
+        }
       } catch (error) {
         console.error(error);
       }
@@ -48,8 +50,8 @@ export default function DetalleEntrega() {
     const fetchRepartidores = async () => {
       try {
         setLoadingRepartidores(true);
-        const { data } = await axios.get(
-          `${API_URL}/api/usuario-permisos/usuarios-repartidores`,
+        const { data } = await api.get(
+          "/api/usuario-permisos/usuarios-repartidores",
         );
         setRepartidores(data);
       } catch (error) {
@@ -63,6 +65,15 @@ export default function DetalleEntrega() {
   }, []);
 
   const asignarRepartidor = async () => {
+    if (!tipoEntrega) {
+      Swal.fire({
+        icon: "warning",
+        title: "Tipo requerido",
+        text: "Debe seleccionar si se trata de una entrega o un envío",
+      });
+      return;
+    }
+
     if (!repartidorSeleccionado) {
       Swal.fire({
         icon: "warning",
@@ -82,11 +93,13 @@ export default function DetalleEntrega() {
     }
 
     try {
-      await axios.post(`${API_URL}/entregas/${id}/asignar-repartidor`, {
+      await api.patch(`/entregas/${id}/tipo-entrega`, { tipoEntrega });
+
+      await api.post(`/entregas/${id}/asignar-repartidor`, {
         usuarioAgenciaId: repartidorSeleccionado,
       });
 
-      await axios.put(`${API_URL}/entregas/${id}`, {
+      await api.put(`/entregas/${id}`, {
         fechaHoraAsignacion,
         horaEstimadaEntrega,
         sectorEntrega,
@@ -111,12 +124,12 @@ export default function DetalleEntrega() {
         });
 
         if (result.isConfirmed) {
-          await axios.post(`${API_URL}/entregas/${id}/asignar-repartidor`, {
+          await api.post(`/entregas/${id}/asignar-repartidor`, {
             usuarioAgenciaId: repartidorSeleccionado,
             forzarReasignacion: true,
           });
 
-          await axios.put(`${API_URL}/entregas/${id}`, {
+          await api.put(`/entregas/${id}`, {
             fechaHoraAsignacion,
             horaEstimadaEntrega,
             sectorEntrega,
@@ -147,7 +160,7 @@ export default function DetalleEntrega() {
 
   const actualizarEstado = async (nuevoEstado) => {
     try {
-      await axios.put(`${API_URL}/entregas/${id}`, {
+      await api.put(`/entregas/${id}`, {
         estado: nuevoEstado,
         observacionLogistica: observacionesLogistica,
       });
@@ -470,6 +483,60 @@ export default function DetalleEntrega() {
                   <Field label="Cantidad" value={ob.cantidad} />
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="relative space-y-4 rounded-2xl border border-green-200 bg-white/80 p-6 shadow-lg backdrop-blur-xl">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">
+              Tipo de gestión logística
+            </h3>
+            <p className="text-sm text-gray-500">
+              Seleccione cómo se gestionará este pedido.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              {
+                value: "Entrega",
+                label: "Entrega",
+                description: "Entrega gestionada directamente por logística.",
+              },
+              {
+                value: "Envio",
+                label: "Envío",
+                description: "Envio por cooperativa.",
+              },
+            ].map((opcion) => (
+              <label
+                key={opcion.value}
+                className={`cursor-pointer rounded-xl border p-4 transition ${
+                  tipoEntrega === opcion.value
+                    ? "border-green-500 bg-green-50 ring-2 ring-green-100"
+                    : "border-gray-200 bg-white hover:border-green-300"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    name="tipoEntrega"
+                    value={opcion.value}
+                    checked={tipoEntrega === opcion.value}
+                    onChange={(event) => setTipoEntrega(event.target.value)}
+                    className="mt-1 accent-green-600"
+                  />
+                  <span>
+                    <span className="block font-semibold text-gray-800">
+                      {opcion.label}
+                    </span>
+                    <span className="block text-sm text-gray-500">
+                      {opcion.description}
+                    </span>
+                  </span>
+                </div>
+              </label>
             ))}
           </div>
         </div>

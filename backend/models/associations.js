@@ -61,6 +61,7 @@ const GhlRepartoConfiguracion = require('./GhlRepartoConfiguracion');
 const GhlRepartoEjecucion = require('./GhlRepartoEjecucion');
 const GhlRepartoEjecucionDetalle = require('./GhlRepartoEjecucionDetalle');
 require('./GhlRepartoWebhookEvento');
+require('./GhlRepartoTiempoRealAsignacion');
 const GhlAsesorVinculo = require('./GhlAsesorVinculo');
 const GhlAsesorDisponibilidadHistorial = require('./GhlAsesorDisponibilidadHistorial');
 const ComisionConfiguracion = require('./ComisionConfiguracion');

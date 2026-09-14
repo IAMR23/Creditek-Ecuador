@@ -23,6 +23,30 @@ const {
 const {
   calcularIndicadoresCostoHistorico,
 } = require("../../utils/calcularIndicadoresCostoHistorico");
+const {
+  obtenerInformeVentasConEntrega,
+} = require("../../services/ventaEntregaRelacionService");
+
+exports.obtenerVentasConEntrega = async (req, res) => {
+  try {
+    const ventas = await obtenerInformeVentasConEntrega(req.query);
+
+    return res.json({
+      ok: true,
+      ventas,
+      totalVentas: ventas.length,
+    });
+  } catch (error) {
+    console.error("Error obteniendo ventas relacionadas con entregas:", error);
+    return res.status(error.status || 500).json({
+      ok: false,
+      message:
+        error.status === 400
+          ? error.message
+          : "No se pudo obtener el informe de ventas relacionadas con entregas.",
+    });
+  }
+};
 
 exports.obtenerReporte = async ({
   fechaInicio,

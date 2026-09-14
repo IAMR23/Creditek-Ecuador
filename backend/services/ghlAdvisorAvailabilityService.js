@@ -1,17 +1,62 @@
 const { Op, fn, col } = require("sequelize");
 const { sequelize } = require("../config/db");
 const Usuario = require("../models/Usuario");
+const RolPago = require("../models/RolPago");
 const Vinculo = require("../models/GhlAsesorVinculo");
 const Historial = require("../models/GhlAsesorDisponibilidadHistorial");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
+const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
 const ghl = require("./ghlService");
 
 const TIME_ZONE = "America/Guayaquil";
 const ESTADOS = Object.freeze(["ACTIVO", "PAUSADO"]);
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
+const CARGO_VENDEDOR_CALL_CENTER = "VENDEDOR CALL CENTER";
 
 const availabilityError = (code, message, statusCode = 409) =>
   Object.assign(new Error(message), { code, statusCode });
+
+const normalizeCargo = (cargo) =>
+  String(cargo || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+const isVendedorCallCenterCargo = (cargo) =>
+  normalizeCargo(cargo) === CARGO_VENDEDOR_CALL_CENTER;
+
+const hasVendedorCallCenterCargo = (usuario) => {
+  const cargos = [
+    usuario?.rolPago?.cargo,
+    ...(usuario?.rolesPago || []).map((rolPago) => rolPago?.cargo),
+  ];
+  return cargos.some(isVendedorCallCenterCargo);
+};
+
+async function isVendedorCallCenter(usuarioId) {
+  const usuario = await Usuario.findOne({
+    where: { id: usuarioId, activo: true },
+    attributes: ["id"],
+    include: [
+      {
+        model: RolPago,
+        as: "rolPago",
+        attributes: ["cargo"],
+        required: false,
+      },
+      {
+        model: RolPago,
+        as: "rolesPago",
+        attributes: ["cargo"],
+        through: { attributes: [] },
+        required: false,
+      },
+    ],
+  });
+  return hasVendedorCallCenterCargo(usuario);
+}
 
 function localDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -63,17 +108,36 @@ async function countTodayByGhlUser(ghlUserIds, now = new Date()) {
 
 async function countByGhlUserBetween(ghlUserIds, start, end) {
   if (!ghlUserIds.length) return new Map();
-  const rows = await Detalle.findAll({
-    where: {
-      estado: "assigned",
-      newAssignedTo: { [Op.in]: ghlUserIds },
-      assignedAt: { [Op.between]: [start, end] },
-    },
-    attributes: ["newAssignedTo", [fn("COUNT", col("id")), "cantidad"]],
-    group: ["newAssignedTo"],
-    raw: true,
+  const [scheduledRows, realtimeRows] = await Promise.all([
+    Detalle.findAll({
+      where: {
+        estado: "assigned",
+        newAssignedTo: { [Op.in]: ghlUserIds },
+        assignedAt: { [Op.between]: [start, end] },
+      },
+      attributes: ["newAssignedTo", [fn("COUNT", col("id")), "cantidad"]],
+      group: ["newAssignedTo"],
+      raw: true,
+    }),
+    TiempoRealAsignacion.findAll({
+      where: {
+        ghlUserId: { [Op.in]: ghlUserIds },
+        assignedAt: { [Op.between]: [start, end] },
+      },
+      attributes: ["ghlUserId", [fn("COUNT", col("id")), "cantidad"]],
+      group: ["ghlUserId"],
+      raw: true,
+    }),
+  ]);
+  const counts = new Map();
+  scheduledRows.forEach((row) => {
+    counts.set(String(row.newAssignedTo), Number(row.cantidad) || 0);
   });
-  return new Map(rows.map((row) => [String(row.newAssignedTo), Number(row.cantidad) || 0]));
+  realtimeRows.forEach((row) => {
+    const userId = String(row.ghlUserId);
+    counts.set(userId, (counts.get(userId) || 0) + (Number(row.cantidad) || 0));
+  });
+  return counts;
 }
 
 function reportDayBounds(fecha) {
@@ -187,10 +251,18 @@ function serializeAvailability(row, leadsHoy = 0, now = new Date()) {
 }
 
 async function getMyAvailability(usuarioId, now = new Date()) {
+  const aplicaRepartoGhl = await isVendedorCallCenter(usuarioId);
+  if (!aplicaRepartoGhl) {
+    return { ...serializeAvailability(null, 0, now), aplicaRepartoGhl: false };
+  }
+
   const row = await Vinculo.findOne({ where: { usuarioId } });
-  if (!row) return serializeAvailability(null, 0, now);
+  if (!row) return { ...serializeAvailability(null, 0, now), aplicaRepartoGhl: true };
   const counts = await countTodayByGhlUser([row.ghlUserId], now);
-  return serializeAvailability(row, counts.get(String(row.ghlUserId)) || 0, now);
+  return {
+    ...serializeAvailability(row, counts.get(String(row.ghlUserId)) || 0, now),
+    aplicaRepartoGhl: true,
+  };
 }
 
 async function listAdvisorAvailability(now = new Date()) {
@@ -478,6 +550,10 @@ module.exports = {
   TIME_ZONE,
   ESTADOS,
   availabilityError,
+  normalizeCargo,
+  isVendedorCallCenterCargo,
+  hasVendedorCallCenterCargo,
+  isVendedorCallCenter,
   localDate,
   localDayBounds,
   effectiveState,

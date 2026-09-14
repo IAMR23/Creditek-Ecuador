@@ -78,6 +78,7 @@ import Caja from "./pages/Vendedores/Caja";
 import MisCierresCaja from "./pages/Vendedores/MisCierresCaja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 import BDDVentas from "./pages/Admin/BDDVentas";
+import VentasConEntrega from "./pages/Gerencia/VentasConEntrega";
 import Bonos from "./pages/Admin/Bonos";
 import TasksPage from "./pages/Tareas/TaskPage";
 import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
@@ -395,6 +396,13 @@ function App() {
                   element={protect(<RevisionGestionesComercial />, "/revision-gestiones-comercial")}
                 />
                 <Route path="bdd-ventas" element={protect(<BDDVentas />, "/bdd-ventas")} />
+                <Route
+                  path="ventas-con-entrega"
+                  element={protect(
+                    <VentasConEntrega />,
+                    "/ventas-con-entrega",
+                  )}
+                />
                 <Route path="conciliacion-facturas" element={protect(<ConciliacionFacturas />, "/conciliacion-facturas")} />
                 <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
                 <Route path="secretarios-ejecutivos" element={protect(<SecretariosEjecutivos />, "/secretarios-ejecutivos")} />

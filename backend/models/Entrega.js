@@ -22,6 +22,16 @@ const Entrega = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    ventaId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "ventas",
+        key: "id",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
 
     origenId: {
       type: DataTypes.INTEGER,
@@ -85,11 +95,19 @@ const Entrega = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
-errores: {
-  type: DataTypes.JSONB,
-  allowNull: true,
-  defaultValue: [],
-}
+    tipoEntrega: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "Entrega",
+      validate: {
+        isIn: [["Entrega", "Envio"]],
+      },
+    },
+    errores: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: [],
+    },
   },
   {
     tableName: "entregas",

@@ -61,6 +61,7 @@ export const ROUTE_PERMISSIONS = {
   "/revision-gestiones": "Gerencia",
   "/revision-gestiones-comercial": "Gerencia",
   "/bdd-ventas": "Gerencia",
+  "/ventas-con-entrega": "Gerencia",
   "/conciliacion-facturas": "Gerencia",
   "/bonos": "Gerencia",
   "/secretarios-ejecutivos": "Gerencia",

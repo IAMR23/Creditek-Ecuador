@@ -216,6 +216,7 @@ exports.obtenerEntregaPorId = async (req, res) => {
       fotoValidacion: entrega.fotoValidacion,
       validada: entrega.validada,
       estado: entrega.estado,
+      tipoEntrega: entrega.tipoEntrega || "Entrega",
       observacionLogistica: entrega.observacionLogistica,
       observacion : entrega.observacion,
 

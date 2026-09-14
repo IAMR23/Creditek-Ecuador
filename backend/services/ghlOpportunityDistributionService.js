@@ -3,6 +3,7 @@ const { sequelize } = require("../config/db");
 const Configuracion = require("../models/GhlRepartoConfiguracion");
 const Ejecucion = require("../models/GhlRepartoEjecucion");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
+const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
 const Usuario = require("../models/Usuario");
 const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
@@ -10,6 +11,7 @@ const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 const TIME_ZONE = "America/Guayaquil";
 const DEFAULT_MAX_PENDING_PER_ADVISOR = 10;
 const MAX_PENDING_PER_ADVISOR = 1000;
+const REALTIME_LOCK_SCOPE = "realtime:whatsapp-facebook";
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
 const ACTIVE_STATES = Object.freeze(["running", "pause_requested", "cancel_requested"]);
 const BLOCKING_STATES = Object.freeze([...ACTIVE_STATES, "paused"]);
@@ -17,6 +19,7 @@ const TERMINAL_STATES = Object.freeze(["completed", "partial", "failed", "cancel
 const requestedStaleMs = Number(process.env.GHL_EXECUTION_STALE_MS);
 const STALE_AFTER_MS = Number.isFinite(requestedStaleMs) && requestedStaleMs >= 60_000 ? requestedStaleMs : 180_000;
 const activeAbortControllers = new Map();
+let realtimeNextUserIndex = 0;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const serviceError = (code, message, statusCode = 409) => Object.assign(new Error(message), { code, statusCode });
 const sanitize = (value) => String(value || "Error no especificado")
@@ -147,6 +150,62 @@ async function getCatalogs() {
 }
 
 const pipelineStages = (pipeline) => (pipeline?.stages || pipeline?.pipelineStages || []).filter(Boolean);
+
+const normalizeStageName = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
+const realtimeStageChannel = (stage) => {
+  const name = normalizeStageName(stage?.name || stage?.title || stage?.label);
+  if (name.includes("WHATSAPP")) return "whatsapp";
+  if (name.includes("FACEBOOK")) return "facebook";
+  return null;
+};
+
+function realtimeMaxPendingPerAdvisor(env = process.env) {
+  const value = Number(env.GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR);
+  return Number.isInteger(value) && value >= 1 && value <= MAX_PENDING_PER_ADVISOR
+    ? value
+    : DEFAULT_MAX_PENDING_PER_ADVISOR;
+}
+
+async function getRealtimePipelineContext(client, config) {
+  const pipelines = await ghl.fetchPipelines(client, config);
+  const pipeline = pipelines[0];
+  if (!pipeline || !idOf(pipeline)) {
+    throw serviceError("GHL_PIPELINE_NOT_FOUND", "GHL no devolvio el pipeline de oportunidades", 502);
+  }
+  const stages = pipelineStages(pipeline)
+    .map((stage) => ({ ...stage, channel: realtimeStageChannel(stage) }))
+    .filter((stage) => stage.channel && idOf(stage));
+  if (!stages.length) {
+    throw serviceError("GHL_REALTIME_STAGES_NOT_FOUND", "GHL no devolvio las etapas WhatsApp o Facebook", 502);
+  }
+  return {
+    pipeline,
+    pipelineId: idOf(pipeline),
+    stages,
+    stageIds: new Set(stages.map(idOf)),
+  };
+}
+
+const isRealtimeStageOpportunity = (opportunity, context) =>
+  ghl.getOpportunityPipelineId(opportunity) === context.pipelineId
+  && context.stageIds.has(ghl.getOpportunityStageId(opportunity));
+
+async function fetchRealtimeOpenOpportunities(client, config, context) {
+  const opportunities = await ghl.fetchOpportunitiesByStatus(
+    client,
+    { ...config, pipelineId: context.pipelineId },
+    "open",
+    {},
+  );
+  return opportunities.filter((opportunity) =>
+    isOpenOpportunity(opportunity) && isRealtimeStageOpportunity(opportunity, context));
+}
 
 async function validateInput(input) {
   const days = [...new Set((input.diasSemana || []).map(Number))].filter((day) => Number.isInteger(day) && day >= 0 && day <= 6).sort();
@@ -460,7 +519,7 @@ async function currentCapacityTracker(configRow, client, config, now = new Date(
 }
 
 const lockScopeForConfiguration = (configRow) => configRow.modo === "unassigned"
-  ? `unassigned:${configRow.pipelineId}:${configRow.stageId}`
+  ? REALTIME_LOCK_SCOPE
   : String(configRow.id);
 
 const isOpenOpportunity = (opportunity) => ghl.getOpportunityStatus(opportunity) === "open";
@@ -469,7 +528,7 @@ const configurationMatchesOpportunity = (configRow, opportunity) =>
   configRow.pipelineId === ghl.getOpportunityPipelineId(opportunity)
   && configRow.stageId === ghl.getOpportunityStageId(opportunity);
 
-async function fetchWebhookOpportunity(client, config, { opportunityId, contactId }, configurations) {
+async function fetchWebhookOpportunity(client, config, { opportunityId, contactId }, context) {
   if (opportunityId) {
     try {
       const payload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(opportunityId)}` });
@@ -481,78 +540,225 @@ async function fetchWebhookOpportunity(client, config, { opportunityId, contactI
   }
   if (!contactId) return null;
   const candidates = await ghl.fetchOpportunitiesByContact(client, config, contactId);
-  const matching = candidates.filter((opportunity) => configurations.some((row) => configurationMatchesOpportunity(row, opportunity)));
+  const matching = candidates.filter((opportunity) => isRealtimeStageOpportunity(opportunity, context));
   return matching.find((opportunity) => isOpenOpportunity(opportunity) && !assignedToOf(opportunity))
     || matching.find((opportunity) => isOpenOpportunity(opportunity))
     || matching[0]
     || null;
 }
 
+function classifyRealtimeOpportunity(opportunity, context) {
+  if (!isRealtimeStageOpportunity(opportunity, context)) return "STAGE_NOT_ELIGIBLE";
+  if (!isOpenOpportunity(opportunity)) return "OPPORTUNITY_NOT_OPEN";
+  if (assignedToOf(opportunity)) return "ALREADY_ASSIGNED";
+  return null;
+}
+
+async function assignRealtimeOpportunity({
+  client,
+  context,
+  opportunity,
+  user,
+  loads,
+  limit,
+  trigger = "webhook",
+}) {
+  if (!(await advisorAvailability.isGhlUserActiveToday(user.id))) {
+    return { code: "ADVISOR_PAUSED", assigned: false };
+  }
+  if ((Number(loads.get(user.id)) || 0) >= limit) {
+    return { code: "NO_CAPACITY", assigned: false };
+  }
+  let payload;
+  try {
+    payload = await requestWithRetry(client, {
+      method: "GET",
+      url: `/opportunities/${encodeURIComponent(idOf(opportunity))}`,
+    });
+  } catch (error) {
+    if (error.upstreamStatus === 404 || error.statusCode === 404) {
+      return { code: "OPPORTUNITY_NOT_FOUND", assigned: false };
+    }
+    throw error;
+  }
+  const current = payload.opportunity || payload.data || payload;
+  const skipCode = classifyRealtimeOpportunity(current, context);
+  if (skipCode) return { code: skipCode, assigned: false };
+  await requestWithRetry(client, {
+    method: "PUT",
+    url: `/opportunities/${encodeURIComponent(idOf(current))}`,
+    data: { assignedTo: user.id },
+  });
+  const assignedAt = new Date();
+  let tracePersisted = true;
+  try {
+    await TiempoRealAsignacion.create({
+      opportunityId: idOf(current),
+      ghlUserId: user.id,
+      pipelineId: context.pipelineId,
+      stageId: ghl.getOpportunityStageId(current),
+      trigger: String(trigger || "realtime").replace(/[^a-z0-9_-]/gi, "").slice(0, 30) || "realtime",
+      assignedAt,
+    });
+  } catch (error) {
+    tracePersisted = false;
+    console.error("No se pudo guardar la trazabilidad de una asignacion GHL", {
+      code: error.code || "GHL_REALTIME_TRACE_ERROR",
+    });
+  }
+  loads.set(user.id, (Number(loads.get(user.id)) || 0) + 1);
+  return {
+    code: "ASSIGNED",
+    assigned: true,
+    opportunityId: idOf(current),
+    advisorId: user.id,
+    assignedAt,
+    tracePersisted,
+  };
+}
+
 async function executeWebhookOpportunity({ opportunityId = null, contactId = null, locationId = null } = {}) {
   const { config, client } = await getClient();
   if (locationId && String(locationId) !== String(config.locationId)) {
-    return { code: "LOCATION_MISMATCH", assigned: false, deferredToScheduler: true };
+    return { code: "LOCATION_MISMATCH", assigned: false, deferredToScheduler: false };
   }
-  const configurations = await Configuracion.findAll({
-    where: { activo: true, modo: "unassigned" },
-    order: [["id", "ASC"]],
-  });
-  if (!configurations.length) return { code: "ACTIVE_CONFIGURATION_NOT_FOUND", assigned: false, deferredToScheduler: true };
-  const opportunity = await fetchWebhookOpportunity(client, config, { opportunityId, contactId }, configurations);
-  if (!opportunity || !idOf(opportunity)) return { code: "OPPORTUNITY_NOT_FOUND", assigned: false, deferredToScheduler: true };
-  const configRow = configurations.find((row) => configurationMatchesOpportunity(row, opportunity));
-  if (!configRow) return { code: "ACTIVE_CONFIGURATION_NOT_FOUND", assigned: false, deferredToScheduler: true };
-  if (!isOpenOpportunity(opportunity)) return { code: "OPPORTUNITY_NOT_OPEN", assigned: false, deferredToScheduler: false };
-  if (assignedToOf(opportunity)) return { code: "ALREADY_ASSIGNED", assigned: false, deferredToScheduler: false };
-
-  const lockScope = lockScopeForConfiguration(configRow);
-  const lock = await acquireLock(lockScope);
+  const lock = await acquireLock(REALTIME_LOCK_SCOPE);
   if (!lock) return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, deferredToScheduler: true };
   try {
-    const freshConfig = await Configuracion.findByPk(configRow.id);
-    if (!freshConfig?.activo || freshConfig.modo !== "unassigned") {
-      return { code: "ACTIVE_CONFIGURATION_NOT_FOUND", assigned: false, deferredToScheduler: true };
+    const context = await getRealtimePipelineContext(client, config);
+    const opportunity = await fetchWebhookOpportunity(
+      client,
+      config,
+      { opportunityId, contactId },
+      context,
+    );
+    if (!opportunity || !idOf(opportunity)) {
+      return { code: "OPPORTUNITY_NOT_FOUND", assigned: false, deferredToScheduler: true };
     }
-    const currentPayload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(idOf(opportunity))}` });
-    const current = currentPayload.opportunity || currentPayload.data || currentPayload;
-    if (!isOpenOpportunity(current)) return { code: "OPPORTUNITY_NOT_OPEN", assigned: false, deferredToScheduler: false };
-    const initialSkipCode = classifyCurrentOpportunity(current, freshConfig);
-    if (initialSkipCode) return { code: initialSkipCode === "OWNER_CHANGED" ? "ALREADY_ASSIGNED" : initialSkipCode, assigned: false, deferredToScheduler: false };
-
+    const initialSkipCode = classifyRealtimeOpportunity(opportunity, context);
+    if (initialSkipCode) {
+      return { code: initialSkipCode, assigned: false, deferredToScheduler: false };
+    }
     const [found, currentGhlUsers] = await Promise.all([
-      allStageOpportunities(freshConfig, client, config),
+      fetchRealtimeOpenOpportunities(client, config, context),
       ghl.fetchAllAssignableUsers(client, config),
     ]);
-    const advisors = await advisorsForConfiguration(freshConfig, currentGhlUsers, new Date());
+    const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
     if (!advisors.active.length) return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
+    const limit = realtimeMaxPendingPerAdvisor();
+    const loads = currentLoadsByAdvisor(found, advisors.active);
     const capacityPlan = buildCapacityAssignments(
-      [current],
+      [opportunity],
       advisors.active,
-      currentLoadsByAdvisor(found, advisors.active),
-      Number(freshConfig.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR,
-      freshConfig.indiceSiguienteUsuario,
+      loads,
+      limit,
+      realtimeNextUserIndex,
     );
     if (!capacityPlan.assignments.length) return { code: "NO_CAPACITY", assigned: false, deferredToScheduler: true };
-    const selectedUser = capacityPlan.assignments[0].user;
-    if (!(await advisorAvailability.isGhlUserActiveToday(selectedUser.id))) {
-      return { code: "ADVISOR_PAUSED", assigned: false, deferredToScheduler: true };
-    }
-
-    const finalPayload = await requestWithRetry(client, { method: "GET", url: `/opportunities/${encodeURIComponent(idOf(current))}` });
-    const finalOpportunity = finalPayload.opportunity || finalPayload.data || finalPayload;
-    if (!isOpenOpportunity(finalOpportunity)) return { code: "OPPORTUNITY_NOT_OPEN", assigned: false, deferredToScheduler: false };
-    const finalSkipCode = classifyCurrentOpportunity(finalOpportunity, freshConfig);
-    if (finalSkipCode) return { code: finalSkipCode === "OWNER_CHANGED" ? "ALREADY_ASSIGNED" : finalSkipCode, assigned: false, deferredToScheduler: false };
-    await requestWithRetry(client, {
-      method: "PUT",
-      url: `/opportunities/${encodeURIComponent(idOf(finalOpportunity))}`,
-      data: { assignedTo: selectedUser.id },
+    const result = await assignRealtimeOpportunity({
+      client,
+      context,
+      opportunity,
+      user: capacityPlan.assignments[0].user,
+      loads,
+      limit,
+      trigger: "webhook",
     });
-    await freshConfig.update({ indiceSiguienteUsuario: capacityPlan.nextUserIndex });
-    return { code: "ASSIGNED", assigned: true, opportunityId: idOf(finalOpportunity), advisorId: selectedUser.id, configuracionId: freshConfig.id };
+    if (result.assigned) realtimeNextUserIndex = capacityPlan.nextUserIndex;
+    return {
+      ...result,
+      deferredToScheduler: ["ADVISOR_PAUSED", "NO_CAPACITY", "OPPORTUNITY_NOT_FOUND"].includes(result.code),
+    };
   } finally {
-    await releaseLock(lock, lockScope);
+    await releaseLock(lock, REALTIME_LOCK_SCOPE);
   }
+}
+
+async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
+  const lock = await acquireLock(REALTIME_LOCK_SCOPE);
+  if (!lock) return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, assignedCount: 0, trigger };
+  try {
+    const { config, client } = await getClient();
+    const context = await getRealtimePipelineContext(client, config);
+    const [found, currentGhlUsers] = await Promise.all([
+      fetchRealtimeOpenOpportunities(client, config, context),
+      ghl.fetchAllAssignableUsers(client, config),
+    ]);
+    const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
+    const pending = eligibleOpportunities(found, "unassigned");
+    if (!advisors.active.length) {
+      return { code: "NO_ACTIVE_ADVISORS", assigned: false, assignedCount: 0, pendingCount: pending.length, trigger };
+    }
+    if (!pending.length) {
+      return { code: "NO_PENDING_OPPORTUNITIES", assigned: false, assignedCount: 0, pendingCount: 0, trigger };
+    }
+    const limit = realtimeMaxPendingPerAdvisor();
+    const loads = currentLoadsByAdvisor(found, advisors.active);
+    const capacityPlan = buildCapacityAssignments(
+      pending,
+      advisors.active,
+      loads,
+      limit,
+      realtimeNextUserIndex,
+    );
+    if (!capacityPlan.assignments.length) {
+      return { code: "NO_CAPACITY", assigned: false, assignedCount: 0, pendingCount: pending.length, trigger };
+    }
+    let assignedCount = 0;
+    let errorCount = 0;
+    for (const assignment of capacityPlan.assignments) {
+      try {
+        const result = await assignRealtimeOpportunity({
+          client,
+          context,
+          opportunity: assignment.opportunity,
+          user: assignment.user,
+          loads,
+          limit,
+          trigger,
+        });
+        if (result.assigned) assignedCount += 1;
+      } catch (error) {
+        errorCount += 1;
+      }
+    }
+    if (errorCount > 0) {
+      console.error("Una o mas oportunidades GHL no pudieron procesarse", {
+        trigger,
+        errorCount,
+      });
+    }
+    realtimeNextUserIndex = capacityPlan.nextUserIndex;
+    return {
+      code: errorCount ? (assignedCount ? "QUEUE_PARTIAL" : "QUEUE_FAILED") : "QUEUE_PROCESSED",
+      assigned: assignedCount > 0,
+      assignedCount,
+      errorCount,
+      pendingCount: Math.max(0, pending.length - assignedCount),
+      trigger,
+    };
+  } finally {
+    await releaseLock(lock, REALTIME_LOCK_SCOPE);
+  }
+}
+
+function scheduleRealtimeQueueReview({ trigger = "play" } = {}) {
+  setImmediate(() => {
+    executeRealtimeQueue({ trigger }).then((result) => {
+      if (result.assignedCount > 0) {
+        console.log("Cola GHL de tiempo real procesada", {
+          trigger,
+          assignedCount: result.assignedCount,
+          pendingCount: result.pendingCount,
+        });
+      }
+    }).catch((error) => {
+      console.error("Fallo revision de cola GHL de tiempo real", {
+        trigger,
+        code: error.code || "GHL_REALTIME_QUEUE_ERROR",
+      });
+    });
+  });
 }
 
 async function blockingExecution(configId, excludeId = null, transaction = null) {
@@ -758,11 +964,14 @@ async function listExecutions(query = {}) {
 }
 
 module.exports = {
-  TIME_ZONE, DEFAULT_MAX_PENDING_PER_ADVISOR, MAX_PENDING_PER_ADVISOR, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
+  TIME_ZONE, DEFAULT_MAX_PENDING_PER_ADVISOR, MAX_PENDING_PER_ADVISOR, REALTIME_LOCK_SCOPE, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
   uniqueUsers, buildAssignments, currentLoadsByAdvisor, buildCapacityAssignments, eligibleOpportunities, classifyCurrentOpportunity,
   executionState, localScheduleParts, opportunityDateRange, opportunityTodayRange, heartbeatExpired, sanitize,
-  getCatalogs, pipelineStages, validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
+  getCatalogs, pipelineStages, normalizeStageName, realtimeStageChannel, realtimeMaxPendingPerAdvisor,
+  getRealtimePipelineContext, isRealtimeStageOpportunity, fetchRealtimeOpenOpportunities,
+  validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
   releaseLock, lockScopeForConfiguration, refreshCounters, processOneDetail, processPlan, execute, requestPause,
   requestCancel, resume, isExecutionStale, forceFinishStale, listExecutions, recoverStaleRuns,
-  isOpenOpportunity, configurationMatchesOpportunity, fetchWebhookOpportunity, executeWebhookOpportunity,
+  isOpenOpportunity, configurationMatchesOpportunity, fetchWebhookOpportunity, classifyRealtimeOpportunity,
+  assignRealtimeOpportunity, executeWebhookOpportunity, executeRealtimeQueue, scheduleRealtimeQueueReview,
 };

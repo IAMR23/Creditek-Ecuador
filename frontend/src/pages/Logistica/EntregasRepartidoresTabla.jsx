@@ -38,6 +38,7 @@ export default function EntregasRepartidoresTabla() {
   const [filaAbierta, setFilaAbierta] = useState(null);
   const [erroresTemp, setErroresTemp] = useState({});
   const [guardandoErrores, setGuardandoErrores] = useState({});
+  const [guardandoTipoEntrega, setGuardandoTipoEntrega] = useState({});
   const [entregaReasignacion, setEntregaReasignacion] = useState(null);
   const [nuevoRepartidorId, setNuevoRepartidorId] = useState("");
   const [reasignando, setReasignando] = useState(false);
@@ -160,6 +161,84 @@ export default function EntregasRepartidoresTabla() {
     } finally {
       setGuardandoErrores((prev) => ({ ...prev, [id]: false }));
     }
+  };
+
+  const cambiarTipoEntrega = async (entregaId, nuevoTipo) => {
+    const entregaActual = entregas.find((entrega) => entrega.id === entregaId);
+    const tipoAnterior = entregaActual?.tipoEntrega || "Entrega";
+
+    if (nuevoTipo === tipoAnterior) return;
+
+    setEntregas((prev) =>
+      prev.map((entrega) =>
+        entrega.id === entregaId
+          ? { ...entrega, tipoEntrega: nuevoTipo }
+          : entrega,
+      ),
+    );
+    setGuardandoTipoEntrega((prev) => ({ ...prev, [entregaId]: true }));
+
+    try {
+      await api.patch(`/entregas/${entregaId}/tipo-entrega`, {
+        tipoEntrega: nuevoTipo,
+      });
+
+      await Swal.fire({
+        icon: "success",
+        title:
+          nuevoTipo === "Envio" ? "Cambiado a envío" : "Cambiado a entrega",
+        toast: true,
+        position: "top-end",
+        timer: 1600,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      console.error(err);
+      setEntregas((prev) =>
+        prev.map((entrega) =>
+          entrega.id === entregaId
+            ? { ...entrega, tipoEntrega: tipoAnterior }
+            : entrega,
+        ),
+      );
+
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo cambiar el tipo",
+        text:
+          err.response?.data?.message ||
+          "Ocurrió un error al actualizar la entrega.",
+      });
+    } finally {
+      setGuardandoTipoEntrega((prev) => ({ ...prev, [entregaId]: false }));
+    }
+  };
+
+  const renderTipoEntrega = (entrega) => {
+    const guardando = Boolean(guardandoTipoEntrega[entrega.id]);
+    const estadoAsignacion =
+      entrega.repartidores?.[0]?.UsuarioAgenciaEntrega?.estado;
+
+    return (
+      <div className="min-w-32 space-y-1">
+        <select
+          value={entrega.tipoEntrega || "Entrega"}
+          onChange={(event) =>
+            cambiarTipoEntrega(entrega.id, event.target.value)
+          }
+          disabled={guardando}
+          aria-label={`Forma de entrega ${entrega.id}`}
+          className="w-full rounded-lg border border-green-300 bg-white px-2 py-1.5 text-xs font-semibold text-gray-700 disabled:cursor-wait disabled:opacity-60"
+        >
+          <option value="Entrega">Entrega</option>
+          <option value="Envio">Envío</option>
+        </select>
+
+        <span className="block text-xs text-gray-400">
+          {guardando ? "Guardando..." : estadoAsignacion || "Sin asignación"}
+        </span>
+      </div>
+    );
   };
 
   const abrirReasignacion = (entrega) => {
@@ -474,10 +553,14 @@ export default function EntregasRepartidoresTabla() {
                           {d.formaPago?.nombre ?? "—"}
                         </td>
 
-                        <td className="px-4 py-2">
-                          {entrega.repartidores?.[0]?.UsuarioAgenciaEntrega
-                            ?.estado ?? "—"}
-                        </td>
+                        {index === 0 && (
+                          <td
+                            className="px-4 py-2"
+                            rowSpan={entrega.detalleEntregas.length}
+                          >
+                            {renderTipoEntrega(entrega)}
+                          </td>
+                        )}
 
                         <td className="px-4 py-2">${d.entrada ?? "0.00"}</td>
 
@@ -589,10 +672,16 @@ export default function EntregasRepartidoresTabla() {
                   : [
                       <tr key={entrega.id}>
                         <td
-                          colSpan="17"
+                          colSpan="12"
                           className="text-center py-4 text-gray-400"
                         >
                           Entrega sin productos
+                        </td>
+                        <td className="px-4 py-2">
+                          {renderTipoEntrega(entrega)}
+                        </td>
+                        <td colSpan="4" className="px-4 py-2 text-gray-400">
+                          —
                         </td>
                         <td className="px-4 py-2">
                           {renderAccionReasignar(entrega)}

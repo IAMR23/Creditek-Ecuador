@@ -105,11 +105,18 @@ export default function DashboardGraficas({
   const entregasPorHoraCreacion = toEntregasPorHoraCreacion(
     estadisticas.entregasPorHoraCreacion,
   );
+  const ventasPorHoraCreacion = toArray(estadisticas.porHoraCreacion).sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
   const proyeccionEntregasPorHora = toEntregasPorHoraCreacion(
     estadisticas.entregasPorHoraCreacion,
     "promedioDiario",
   );
   const horaPico = entregasPorHoraCreacion.reduce(
+    (mayor, item) => (item.value > mayor.value ? item : mayor),
+    { name: "Sin datos", value: 0 },
+  );
+  const horaPicoVentas = ventasPorHoraCreacion.reduce(
     (mayor, item) => (item.value > mayor.value ? item : mayor),
     { name: "Sin datos", value: 0 },
   );
@@ -127,6 +134,13 @@ export default function DashboardGraficas({
       type: "bar",
       data: toArray(estadisticas.porVendedor),
       color: COLORS[1],
+    },
+    {
+      title: "Ventas subidas por hora",
+      type: "line",
+      data: ventasPorHoraCreacion,
+      color: COLORS[7],
+      showXAxis: true,
     },
     {
       title: "Entregas subidas por Vendedor",
@@ -188,7 +202,7 @@ export default function DashboardGraficas({
   return (
     <section className="mt-6 space-y-6">
       {!soloSupervisores && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard label="Total ventas" value={estadisticas.totalVentas || 0} />
           <KpiCard
             label="Precio vendedor promedio"
@@ -198,6 +212,14 @@ export default function DashboardGraficas({
           <KpiCard
             label="Hora con más entregas subidas"
             value={horaPico.value ? `${horaPico.name} (${horaPico.value})` : "Sin datos"}
+          />
+          <KpiCard
+            label="Hora con más ventas subidas"
+            value={
+              horaPicoVentas.value
+                ? `${horaPicoVentas.name} (${horaPicoVentas.value})`
+                : "Sin datos"
+            }
           />
           <KpiCard
             label="Agencias con ventas"

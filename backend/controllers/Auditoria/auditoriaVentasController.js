@@ -514,6 +514,7 @@ exports.obtenerReporteGerencia = async ({
       "comentarioAuditoria",
       "activo",
       "semana",
+      "createdAt",
     ],
     order: [["fecha", "ASC"]],
     include: [
@@ -2019,6 +2020,7 @@ exports.formatearReporte = (ventas) => {
         valorAcumulado: null,
 
         fecha: fechaISO,
+        createdAt: venta.createdAt || null,
 
         local: venta.usuarioAgencia?.agencia?.nombre || "",
         origen: venta.origen?.nombre || "",
