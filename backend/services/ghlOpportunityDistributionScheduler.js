@@ -11,7 +11,7 @@ const minutesOf = (time) => {
 
 function shouldRunConfiguration(row, local) {
   if (!row.diasSemana.includes(local.day)) return false;
-  if (row.modo === "all") return row.hora === local.time;
+  if (row.modo !== "unassigned") return row.hora === local.time;
 
   const start = minutesOf(row.hora);
   const current = minutesOf(local.time);

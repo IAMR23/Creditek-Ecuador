@@ -22,6 +22,9 @@ describe("seguridad de endpoints de reparto GHL", () => {
     expect(paths).toEqual(expect.arrayContaining([
       "GET /mi-disponibilidad",
       "PATCH /mi-disponibilidad",
+      "GET /reporte-gestiones",
+      "PATCH /reporte-gestiones/:usuarioId/disponibilidad",
+      "POST /vista-previa",
       "GET /asesores",
       "PUT /asesores/:usuarioId/asociacion",
       "PATCH /asesores/:usuarioId/disponibilidad",
@@ -31,6 +34,14 @@ describe("seguridad de endpoints de reparto GHL", () => {
       "POST /ejecuciones/:id/force-finish-stale",
     ]));
     expect(router.stack.filter((layer) => !layer.route)).toHaveLength(2);
+  });
+
+  test("el reporte de supervisores conserva autenticacion y permiso propio", () => {
+    const reportLayer = router.stack.find((layer) => layer.route?.path === "/reporte-gestiones");
+    const controlLayer = router.stack.find((layer) => layer.route?.path === "/reporte-gestiones/:usuarioId/disponibilidad");
+
+    expect(reportLayer.route.stack).toHaveLength(2);
+    expect(controlLayer.route.stack).toHaveLength(2);
   });
 
   test("las rutas propias estan antes del permiso administrativo", () => {

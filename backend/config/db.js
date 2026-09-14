@@ -89,6 +89,10 @@ const ensureGhlAdvisorAvailabilitySchema = async (queryInterface) => {
 
   if (tables.includes("ghl_reparto_configuraciones")) {
     await sequelize.query(`
+      ALTER TYPE enum_ghl_reparto_configuraciones_modo
+        ADD VALUE IF NOT EXISTS 'refresh_non_management';
+    `);
+    await sequelize.query(`
       ALTER TABLE ghl_reparto_configuraciones
         ADD COLUMN IF NOT EXISTS "intervaloMinutos" INTEGER NOT NULL DEFAULT 1;
     `);

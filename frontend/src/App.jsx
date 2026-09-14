@@ -128,7 +128,9 @@ import {
 const GhlOportunidadesMatriz = lazy(() => import("./pages/GHL/OportunidadesMatriz"));
 const GhlRendimientoPautas = lazy(() => import("./pages/GHL/RendimientoPautas"));
 const GhlRepartoOportunidades = lazy(() => import("./pages/GHL/RepartoOportunidades"));
+const GhlRefrescoOportunidades = lazy(() => import("./pages/GHL/RefrescoOportunidades"));
 const GhlDisponibilidadAsesores = lazy(() => import("./pages/GHL/DisponibilidadAsesores"));
+const ReporteGestionesSupervisores = lazy(() => import("./pages/Supervisores/ReporteGestiones"));
 
 const emptyAuth = {
   isAuthenticated: false,
@@ -330,6 +332,13 @@ function App() {
                     "/supervisores/powerbi",
                   )}
                 />
+                <Route
+                  path="supervisores/reporte-gestiones"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}><ReporteGestionesSupervisores /></Suspense>,
+                    "/supervisores/reporte-gestiones",
+                  )}
+                />
                 <Route path="powerbi" element={protect(<Powerbi />, "/powerbi")} />
                 <Route
                   path="ghl/oportunidades-matriz"
@@ -354,6 +363,13 @@ function App() {
                   element={protect(
                     <Suspense fallback={<div className="p-4">Cargando...</div>}><GhlRepartoOportunidades /></Suspense>,
                     "/ghl/reparto-oportunidades",
+                  )}
+                />
+                <Route
+                  path="ghl/refresco-oportunidades"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}><GhlRefrescoOportunidades /></Suspense>,
+                    "/ghl/refresco-oportunidades",
                   )}
                 />
                 <Route

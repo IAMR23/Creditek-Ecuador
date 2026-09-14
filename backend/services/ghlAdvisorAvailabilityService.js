@@ -58,6 +58,11 @@ const ghlUserNameOf = (user) =>
 async function countTodayByGhlUser(ghlUserIds, now = new Date()) {
   if (!ghlUserIds.length) return new Map();
   const { start, end } = localDayBounds(now);
+  return countByGhlUserBetween(ghlUserIds, start, end);
+}
+
+async function countByGhlUserBetween(ghlUserIds, start, end) {
+  if (!ghlUserIds.length) return new Map();
   const rows = await Detalle.findAll({
     where: {
       estado: "assigned",
@@ -69,6 +74,88 @@ async function countTodayByGhlUser(ghlUserIds, now = new Date()) {
     raw: true,
   });
   return new Map(rows.map((row) => [String(row.newAssignedTo), Number(row.cantidad) || 0]));
+}
+
+function reportDayBounds(fecha) {
+  const normalizedDate = String(fecha || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    throw availabilityError("INVALID_REPORT_DATE", "La fecha debe tener formato YYYY-MM-DD", 400);
+  }
+  const start = new Date(`${normalizedDate}T00:00:00-05:00`);
+  const end = new Date(`${normalizedDate}T23:59:59.999-05:00`);
+  if (Number.isNaN(start.getTime()) || localDate(start) !== normalizedDate) {
+    throw availabilityError("INVALID_REPORT_DATE", "La fecha indicada no es valida", 400);
+  }
+  return { date: normalizedDate, start, end };
+}
+
+async function getAdvisorManagementReport({ fecha = localDate(), now = new Date() } = {}) {
+  const { date, start, end } = reportDayBounds(fecha);
+  const vinculos = await Vinculo.findAll({
+    where: { activo: true },
+    include: [{
+      model: Usuario,
+      as: "usuario",
+      attributes: ["id", "nombre", "email", "activo"],
+      where: { activo: true },
+      required: true,
+    }],
+    order: [[{ model: Usuario, as: "usuario" }, "nombre", "ASC"]],
+  });
+  const usuarioIds = vinculos.map((row) => row.usuarioId);
+  const ghlUserIds = vinculos.map((row) => String(row.ghlUserId));
+  const [historial, counts] = await Promise.all([
+    usuarioIds.length
+      ? Historial.findAll({
+        where: {
+          usuarioId: { [Op.in]: usuarioIds },
+          accion: "ESTADO",
+          createdAt: { [Op.between]: [start, end] },
+        },
+        attributes: ["usuarioId", "estadoNuevo", "createdAt", "cambiadoPorId", "motivoCambio"],
+        include: [{
+          model: Usuario,
+          as: "cambiadoPor",
+          attributes: ["id", "nombre"],
+          required: false,
+        }],
+        order: [["createdAt", "ASC"]],
+      })
+      : [],
+    countByGhlUserBetween(ghlUserIds, start, end),
+  ]);
+  const eventsByUser = new Map();
+  historial.forEach((eventRow) => {
+    const event = typeof eventRow.toJSON === "function" ? eventRow.toJSON() : eventRow;
+    const key = String(event.usuarioId);
+    if (!eventsByUser.has(key)) eventsByUser.set(key, []);
+    eventsByUser.get(key).push(event);
+  });
+  const isToday = date === localDate(now);
+
+  return vinculos.map((row) => {
+    const plain = typeof row.toJSON === "function" ? row.toJSON() : row;
+    const events = eventsByUser.get(String(plain.usuarioId)) || [];
+    const playEvents = events.filter((event) => event.estadoNuevo === "ACTIVO");
+    const pauseEvents = events.filter((event) => event.estadoNuevo === "PAUSADO");
+    return {
+      usuarioId: plain.usuarioId,
+      nombre: plain.usuario?.nombre || plain.ghlNombre || "Sin nombre",
+      email: plain.usuario?.email || plain.ghlEmail || "",
+      estado: isToday ? effectiveState(plain, now) : (events.at(-1)?.estadoNuevo || "SIN_REGISTRO"),
+      momentoPlay: playEvents.at(-1)?.createdAt || null,
+      momentoDescanso: pauseEvents.at(-1)?.createdAt || null,
+      leadsGestionados: counts.get(String(plain.ghlUserId)) || 0,
+      cambiosEstado: events.length,
+      historial: events.map((event) => ({
+        estado: event.estadoNuevo,
+        momento: event.createdAt,
+        cambiadoPorId: event.cambiadoPorId || null,
+        cambiadoPor: event.cambiadoPor?.nombre || null,
+        origen: event.motivoCambio,
+      })),
+    };
+  });
 }
 
 function serializeAvailability(row, leadsHoy = 0, now = new Date()) {
@@ -354,6 +441,39 @@ async function isGhlUserActiveToday(ghlUserId, now = new Date()) {
   return Boolean(row?.usuario?.activo === true && effectiveState(row, now) === "ACTIVO");
 }
 
+async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
+  const rows = await Vinculo.findAll({
+    where: { activo: true },
+    include: [{
+      model: Usuario,
+      as: "usuario",
+      attributes: ["id", "activo"],
+      where: { activo: true },
+      required: true,
+    }],
+  });
+  const currentById = new Map(
+    (currentGhlUsers || [])
+      .filter((user) => user?.deleted !== true && user?.active !== false && user?.status !== "inactive")
+      .map((user) => [ghlUserIdOf(user), user]),
+  );
+  const result = { active: [], paused: [], invalid: [] };
+
+  rows.forEach((row) => {
+    const ghlUser = currentById.get(String(row.ghlUserId));
+    const user = {
+      id: String(row.ghlUserId),
+      name: ghlUser ? ghlUserNameOf(ghlUser) : row.ghlNombre,
+      email: String(ghlUser?.email || row.ghlEmail || ""),
+    };
+    if (!ghlUser) result.invalid.push({ ...user, reason: "El usuario vinculado ya no es asignable en GHL" });
+    else if (effectiveState(row, now) === "ACTIVO") result.active.push(user);
+    else result.paused.push(user);
+  });
+
+  return result;
+}
+
 module.exports = {
   TIME_ZONE,
   ESTADOS,
@@ -363,11 +483,15 @@ module.exports = {
   effectiveState,
   fetchCurrentGhlUsers,
   countTodayByGhlUser,
+  countByGhlUserBetween,
+  reportDayBounds,
+  getAdvisorManagementReport,
   serializeAvailability,
   getMyAvailability,
   listAdvisorAvailability,
   saveAssociation,
   changeAvailability,
   resolveConfiguredAdvisors,
+  resolveActiveAdvisors,
   isGhlUserActiveToday,
 };

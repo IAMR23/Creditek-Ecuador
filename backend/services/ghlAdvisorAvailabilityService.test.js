@@ -186,4 +186,56 @@ describe("disponibilidad diaria de asesores GHL", () => {
     );
     expect(result.estado).toBe("PAUSADO");
   });
+
+  test("arma el reporte diario con ultimo Play, descanso y leads", async () => {
+    const row = makeLink({
+      estadoRecepcion: "ACTIVO",
+      estadoFechaLocal: "2026-09-09",
+      usuario: { id: 10, nombre: "Ana", email: "ana@example.com", activo: true },
+      toJSON() { return { ...this }; },
+    });
+    jest.spyOn(Vinculo, "findAll").mockResolvedValue([row]);
+    jest.spyOn(Historial, "findAll").mockResolvedValue([
+      { usuarioId: 10, estadoNuevo: "ACTIVO", createdAt: new Date("2026-09-09T13:00:00.000Z"), cambiadoPorId: 10, motivoCambio: "asesor", cambiadoPor: { nombre: "Ana" } },
+      { usuarioId: 10, estadoNuevo: "PAUSADO", createdAt: new Date("2026-09-09T17:00:00.000Z"), cambiadoPorId: 99, motivoCambio: "administrador", cambiadoPor: { nombre: "Supervisor" } },
+      { usuarioId: 10, estadoNuevo: "ACTIVO", createdAt: new Date("2026-09-09T18:00:00.000Z"), cambiadoPorId: 10, motivoCambio: "asesor", cambiadoPor: { nombre: "Ana" } },
+    ]);
+    Detalle.findAll.mockResolvedValue([{ newAssignedTo: "ghl-10", cantidad: "7" }]);
+
+    const result = await service.getAdvisorManagementReport({ fecha: "2026-09-09", now: NOW });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        usuarioId: 10,
+        nombre: "Ana",
+        estado: "ACTIVO",
+        momentoPlay: new Date("2026-09-09T18:00:00.000Z"),
+        momentoDescanso: new Date("2026-09-09T17:00:00.000Z"),
+        leadsGestionados: 7,
+        historial: [
+          expect.objectContaining({ estado: "ACTIVO", origen: "asesor" }),
+          expect.objectContaining({ estado: "PAUSADO", cambiadoPor: "Supervisor" }),
+          expect.objectContaining({ estado: "ACTIVO", origen: "asesor" }),
+        ],
+      }),
+    ]);
+  });
+
+  test("rechaza fechas invalidas en el reporte", () => {
+    expect(() => service.reportDayBounds("2026-02-31")).toThrow("fecha indicada no es valida");
+  });
+
+  test("selecciona dinamicamente solo vinculados que dieron Play hoy", async () => {
+    const active = makeLink({ ghlUserId: "g1", estadoRecepcion: "ACTIVO", estadoFechaLocal: "2026-09-09", usuario: { id: 10, activo: true } });
+    const paused = makeLink({ id: 2, usuarioId: 11, ghlUserId: "g2", usuario: { id: 11, activo: true } });
+    jest.spyOn(Vinculo, "findAll").mockResolvedValue([active, paused]);
+
+    const result = await service.resolveActiveAdvisors([
+      { id: "g1", name: "Ana" },
+      { id: "g2", name: "Luis" },
+    ], NOW);
+
+    expect(result.active.map((user) => user.id)).toEqual(["g1"]);
+    expect(result.paused.map((user) => user.id)).toEqual(["g2"]);
+  });
 });

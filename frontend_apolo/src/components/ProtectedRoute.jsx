@@ -3,6 +3,11 @@ import { Navigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 
 const normalizeRole = (value) => String(value || "").trim().toUpperCase();
+const USER_ALLOWED_PATHS = ["/evaluacion", "/simulador"];
+const isUserAllowedPath = (pathname) =>
+  USER_ALLOWED_PATHS.some(
+    (allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`)
+  );
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const auth = useContext(AuthContext);
@@ -11,7 +16,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   if (!auth?.isAuthenticated) return <Navigate to="/login" replace />;
 
   const role = normalizeRole(auth?.user?.rol?.nombre);
-  if (role === "USUARIO" && location.pathname !== "/evaluacion") {
+  if (role === "USUARIO" && !isUserAllowedPath(location.pathname)) {
     return <Navigate to="/evaluacion" replace />;
   }
 

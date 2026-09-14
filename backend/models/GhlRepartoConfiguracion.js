@@ -12,7 +12,7 @@ const GhlRepartoConfiguracion = sequelize.define("GhlRepartoConfiguracion", {
   intervaloMinutos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, validate: { min: 1, max: 60 } },
   zonaHoraria: { type: DataTypes.STRING(50), allowNull: false, defaultValue: "America/Guayaquil" },
   diasSemana: { type: DataTypes.ARRAY(DataTypes.INTEGER), allowNull: false },
-  modo: { type: DataTypes.ENUM("unassigned", "all"), allowNull: false },
+  modo: { type: DataTypes.ENUM("unassigned", "all", "refresh_non_management"), allowNull: false },
   usuariosGhl: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
   activo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   indiceSiguienteUsuario: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },

@@ -5,11 +5,13 @@ import {
   BadgeCheck,
   Bell,
   Building2,
+  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   FileText,
   GraduationCap,
   LayoutDashboard,
+  MonitorPlay,
   Shield,
   UserCheck,
   Users,
@@ -26,6 +28,7 @@ export default function Sidebar() {
   const role = normalizeRole(auth?.user?.rol?.nombre);
   const isUser = role === "USUARIO";
   const isAdmin = role === "ADMIN";
+  const [simuladorAbierto, setSimuladorAbierto] = useState(true);
   const [notificaciones90Dias, setNotificaciones90Dias] = useState(0);
   const [resumenPostulaciones, setResumenPostulaciones] = useState({
     totalGeneral: 0,
@@ -44,6 +47,34 @@ export default function Sidebar() {
         ? "bg-slate-900 text-white shadow-sm"
         : "text-slate-700 hover:bg-white border border-transparent hover:border-slate-200",
     ].join(" ");
+
+  const simuladorMenu = (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
+      <button
+        type="button"
+        onClick={() => setSimuladorAbierto((current) => !current)}
+        aria-expanded={simuladorAbierto}
+        aria-controls="simulador-menu"
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-extrabold text-slate-800 transition hover:bg-white"
+      >
+        <MonitorPlay size={18} className="text-orange-500" aria-hidden="true" />
+        <span className="flex-1 text-left">Simulador</span>
+        <ChevronDown
+          size={16}
+          className={`transition-transform ${simuladorAbierto ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {simuladorAbierto && (
+        <div id="simulador-menu" className="mt-1 border-l border-slate-300 pl-3">
+          <NavLink to="/simulador" className={linkClass}>
+            <MonitorPlay size={17} aria-hidden="true" /> Ingreso al sistema
+          </NavLink>
+        </div>
+      )}
+    </div>
+  );
 
   useEffect(() => {
     if (isUser) return undefined;
@@ -101,11 +132,15 @@ export default function Sidebar() {
 
       <nav className="p-3 flex flex-col gap-2">
         {isUser ? (
-          <NavLink to="/evaluacion" className={linkClass}><ClipboardCheck size={18} /> Evaluación</NavLink>
+          <>
+            <NavLink to="/evaluacion" className={linkClass}><ClipboardCheck size={18} /> Evaluación</NavLink>
+            {simuladorMenu}
+          </>
         ) : (
           <>
             <NavLink to="/dashboard" className={linkClass}><LayoutDashboard size={18} /> Dashboard</NavLink>
             {isAdmin && <NavLink to="/evaluacion" className={linkClass}><ClipboardCheck size={18} /> Evaluación</NavLink>}
+            {isAdmin && simuladorMenu}
             <NavLink to="/agencias" className={linkClass}><Building2 size={18} /> Agencias</NavLink>
             <NavLink to="/roles" className={linkClass}><Shield size={18} /> Roles</NavLink>
             <NavLink to="/usuarios" className={linkClass}><Users size={18} /> Usuarios</NavLink>

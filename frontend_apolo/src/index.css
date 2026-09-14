@@ -23,6 +23,52 @@
   }
 }
 
+.simulador-escritorio-layout {
+  flex-direction: row;
+}
+
+.simulador-escritorio-sidebar {
+  width: 18rem;
+}
+
+.workflow-stepper {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: start;
+}
+
+.workflow-step {
+  position: relative;
+}
+
+.workflow-step-line {
+  position: absolute;
+  z-index: 0;
+  top: 1.4rem;
+  left: calc(50% + 2rem);
+  right: calc(-50% + 2rem);
+  height: 0.25rem;
+}
+
+@media (max-width: 767px) {
+  .simulador-escritorio-layout {
+    flex-direction: column;
+  }
+
+  .simulador-escritorio-sidebar {
+    width: 100%;
+  }
+
+  .workflow-stepper {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 1.5rem;
+  }
+
+  .workflow-step:nth-child(3) .workflow-step-line {
+    display: none;
+  }
+}
+
 @media print {
   @page {
     size: A4 landscape;

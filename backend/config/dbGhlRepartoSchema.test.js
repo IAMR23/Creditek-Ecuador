@@ -45,6 +45,7 @@ describe("esquema previo al arranque para reparto GHL", () => {
 
     const sql = query.mock.calls.map(([statement]) => statement).join("\n");
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS "intervaloMinutos"');
+    expect(sql).toContain("refresh_non_management");
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS "assignedAt"');
     expect(sql).toContain('SET "assignedAt" = COALESCE');
   });
@@ -67,5 +68,14 @@ describe("esquema previo al arranque para reparto GHL", () => {
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS "intervaloMinutos"');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS "assignedAt"');
     expect(sql).toContain("ghl_asesor_vinculo_disponibilidad_idx");
+  });
+
+  test("la migracion de refresco agrega el modo sin alterar configuraciones existentes", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "../migrations/202609110001-add-ghl-refresh-non-management-mode.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("ADD VALUE IF NOT EXISTS 'refresh_non_management'");
+    expect(sql).toContain("SELECT enumlabel");
   });
 });

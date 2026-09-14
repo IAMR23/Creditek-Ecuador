@@ -31,7 +31,7 @@ export default function RepartoOportunidades() {
   const [error, setError] = useState("");
 
   const loadHistory = useCallback(async () => {
-    const response = await api.get("/api/ghl/repartos/ejecuciones");
+    const response = await api.get("/api/ghl/repartos/ejecuciones", { params: { tipo: "reparto" } });
     setHistory(response.data.ejecuciones || []);
   }, []);
 
@@ -42,8 +42,8 @@ export default function RepartoOportunidades() {
       const [pipelineResponse, userResponse, configResponse, historyResponse] = await Promise.all([
         api.get("/api/ghl/repartos/catalogos/pipelines"),
         api.get("/api/ghl/repartos/catalogos/users"),
-        api.get("/api/ghl/repartos/configuraciones"),
-        api.get("/api/ghl/repartos/ejecuciones"),
+        api.get("/api/ghl/repartos/configuraciones", { params: { tipo: "reparto" } }),
+        api.get("/api/ghl/repartos/ejecuciones", { params: { tipo: "reparto" } }),
       ]);
       setPipelines(pipelineResponse.data.pipelines || []);
       setUsers(userResponse.data.users || []);

@@ -20,4 +20,11 @@ describe("scheduler periodico de reparto GHL", () => {
     expect(shouldRunConfiguration(row, { day: 1, time: "09:00" })).toBe(true);
     expect(shouldRunConfiguration(row, { day: 1, time: "09:05" })).toBe(false);
   });
+
+  test("refresco fuera de Gestion se ejecuta una vez a la hora elegida", () => {
+    const row = { ...base, modo: "refresh_non_management" };
+    expect(shouldRunConfiguration(row, { day: 1, time: "09:00" })).toBe(true);
+    expect(shouldRunConfiguration(row, { day: 1, time: "09:05" })).toBe(false);
+    expect(shouldRunConfiguration(row, { day: 2, time: "09:00" })).toBe(false);
+  });
 });

@@ -28,6 +28,7 @@ import {
   UsersRound,
   WalletCards,
   Settings2,
+  RefreshCcw,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -366,6 +367,11 @@ export default function Sidebar({ auth }) {
                 path: "/ghl/reparto-oportunidades",
               },
               {
+                label: "Refresco de oportunidades",
+                icon: <RefreshCcw size={18} />,
+                path: "/ghl/refresco-oportunidades",
+              },
+              {
                 label: "Disponibilidad de asesores",
                 icon: <UserPlus size={18} />,
                 path: "/ghl/disponibilidad-asesores",
@@ -387,6 +393,11 @@ export default function Sidebar({ auth }) {
             label: "Power BI",
             icon: <BarChart3 size={20} />,
             path: "/supervisores/powerbi",
+          },
+          {
+            label: "Reporte gestiones",
+            icon: <FileSpreadsheet size={20} />,
+            path: "/supervisores/reporte-gestiones",
           },
         ],
       },

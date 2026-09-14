@@ -45,7 +45,11 @@ const eligibleOpportunities = (opportunities, mode) => mode === "unassigned"
   ? opportunities.filter((item) => !assignedToOf(item)) : [...opportunities];
 
 function classifyCurrentOpportunity(opportunity, configRow) {
-  if (ghl.getOpportunityStageId(opportunity) !== configRow.stageId || ghl.getOpportunityPipelineId(opportunity) !== configRow.pipelineId) return "STAGE_CHANGED";
+  const stageId = ghl.getOpportunityStageId(opportunity);
+  const invalidStage = configRow.modo === "refresh_non_management"
+    ? stageId === configRow.stageId
+    : stageId !== configRow.stageId;
+  if (invalidStage || ghl.getOpportunityPipelineId(opportunity) !== configRow.pipelineId) return "STAGE_CHANGED";
   if (configRow.modo === "unassigned" && assignedToOf(opportunity)) return "OWNER_CHANGED";
   return null;
 }
@@ -62,6 +66,11 @@ function localScheduleParts(date = new Date()) {
 
 function opportunityDateRange(now = new Date()) {
   return { fechaInicio: localScheduleParts(new Date(now.getTime() - 86_400_000)).date, fechaFin: localScheduleParts(now).date };
+}
+
+function opportunityTodayRange(now = new Date()) {
+  const date = localScheduleParts(now).date;
+  return { fechaInicio: date, fechaFin: date };
 }
 
 async function getClient(signal) {
@@ -85,8 +94,9 @@ async function validateInput(input) {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.hora || "")) throw serviceError("INVALID_TIME", "La hora debe usar formato HH:mm", 400);
   if (!days.length) throw serviceError("INVALID_DAYS", "Seleccione al menos un dia", 400);
   if (input.zonaHoraria && input.zonaHoraria !== TIME_ZONE) throw serviceError("INVALID_TIMEZONE", `La zona horaria debe ser ${TIME_ZONE}`, 400);
-  if (!["unassigned", "all"].includes(input.modo)) throw serviceError("INVALID_MODE", "Modo de reparto invalido", 400);
-  if (users.length < 2 || users.some((user) => !ID_RE.test(user.id))) throw serviceError("GHL_USERS_MINIMUM", "Seleccione al menos dos usuarios GHL validos y distintos", 400);
+  if (!["unassigned", "all", "refresh_non_management"].includes(input.modo)) throw serviceError("INVALID_MODE", "Modo de reparto invalido", 400);
+  const dynamicAdvisors = input.modo === "refresh_non_management";
+  if (!dynamicAdvisors && (users.length < 2 || users.some((user) => !ID_RE.test(user.id)))) throw serviceError("GHL_USERS_MINIMUM", "Seleccione al menos dos usuarios GHL validos y distintos", 400);
   const intervaloMinutos = Number(input.intervaloMinutos ?? 1);
   if (!Number.isInteger(intervaloMinutos) || intervaloMinutos < 1 || intervaloMinutos > 60) throw serviceError("INVALID_INTERVAL", "El intervalo debe estar entre 1 y 60 minutos", 400);
   const catalogs = await getCatalogs();
@@ -94,14 +104,29 @@ async function validateInput(input) {
   const stage = pipelineStages(pipeline).find((item) => idOf(item) === String(input.stageId));
   const activeById = new Map(catalogs.users.map((user) => [idOf(user), user]));
   if (!pipeline || !stage) throw serviceError("INVALID_PIPELINE_STAGE", "El pipeline o la etapa ya no existe en GHL", 400);
-  if (users.some((user) => !activeById.has(user.id))) throw serviceError("INVALID_GHL_USERS", "Uno o mas usuarios no estan activos o no pertenecen a GHL", 400);
-  return { nombre: String(input.nombre || `${pipeline.name} - ${stage.name}`).trim().slice(0, 160), pipelineId: idOf(pipeline), pipelineNombre: String(pipeline.name || "Pipeline"), stageId: idOf(stage), stageNombre: String(stage.name || "Etapa"), hora: input.hora, intervaloMinutos, zonaHoraria: TIME_ZONE, diasSemana: days, modo: input.modo, usuariosGhl: users.map((user) => { const raw = activeById.get(user.id); return { id: user.id, name: raw?.name || `${raw?.firstName || ""} ${raw?.lastName || ""}`.trim() || user.name, email: raw?.email || user.email || "" }; }), activo: input.activo !== false };
+  if (!dynamicAdvisors && users.some((user) => !activeById.has(user.id))) throw serviceError("INVALID_GHL_USERS", "Uno o mas usuarios no estan activos o no pertenecen a GHL", 400);
+  return { nombre: String(input.nombre || `${pipeline.name} - ${stage.name}`).trim().slice(0, 160), pipelineId: idOf(pipeline), pipelineNombre: String(pipeline.name || "Pipeline"), stageId: idOf(stage), stageNombre: String(stage.name || "Etapa"), hora: input.hora, intervaloMinutos, zonaHoraria: TIME_ZONE, diasSemana: days, modo: input.modo, usuariosGhl: dynamicAdvisors ? [] : users.map((user) => { const raw = activeById.get(user.id); return { id: user.id, name: raw?.name || `${raw?.firstName || ""} ${raw?.lastName || ""}`.trim() || user.name, email: raw?.email || user.email || "" }; }), activo: input.activo !== false };
 }
 
 async function allStageOpportunities(configRow, client, config, now = new Date()) {
+  if (configRow.modo === "refresh_non_management") {
+    const all = await ghl.fetchAllOpportunityStatuses(
+      client,
+      { ...config, pipelineId: configRow.pipelineId },
+      opportunityTodayRange(now),
+    );
+    return all.filter((item) => ghl.getOpportunityPipelineId(item) === configRow.pipelineId && ghl.getOpportunityStageId(item) !== configRow.stageId);
+  }
   const dateRange = configRow.modo === "unassigned" ? {} : opportunityDateRange(now);
   const all = await ghl.fetchOpportunitiesByStatus(client, { ...config, pipelineId: configRow.pipelineId }, "open", dateRange);
   return all.filter((item) => ghl.getOpportunityPipelineId(item) === configRow.pipelineId && ghl.getOpportunityStageId(item) === configRow.stageId);
+}
+
+async function advisorsForConfiguration(configRow, currentGhlUsers, now) {
+  if (configRow.modo === "refresh_non_management") {
+    return advisorAvailability.resolveActiveAdvisors(currentGhlUsers, now);
+  }
+  return advisorAvailability.resolveConfiguredAdvisors(configRow.usuariosGhl, currentGhlUsers, now);
 }
 
 async function preview(configRow) {
@@ -111,11 +136,7 @@ async function preview(configRow) {
     allStageOpportunities(configRow, client, config, now),
     ghl.fetchAllAssignableUsers(client, config),
   ]);
-  const advisors = await advisorAvailability.resolveConfiguredAdvisors(
-    configRow.usuariosGhl,
-    currentGhlUsers,
-    now,
-  );
+  const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, now);
   const eligible = eligibleOpportunities(found, configRow.modo);
   const assignments = advisors.active.length
     ? buildAssignments(eligible, advisors.active, configRow.indiceSiguienteUsuario)
@@ -124,12 +145,14 @@ async function preview(configRow) {
     totalEncontradas: found.length,
     totalElegibles: eligible.length,
     totalOmitidas: found.length - eligible.length,
-    rangoFechas: configRow.modo === "unassigned" ? null : opportunityDateRange(now),
-    usuariosConfigurados: configRow.usuariosGhl.length,
+    rangoFechas: configRow.modo === "refresh_non_management"
+      ? opportunityTodayRange(now)
+      : configRow.modo === "unassigned" ? null : opportunityDateRange(now),
+    usuariosConfigurados: configRow.modo === "refresh_non_management" ? advisors.active.length + advisors.paused.length + advisors.invalid.length : configRow.usuariosGhl.length,
     usuariosActivos: advisors.active.length,
     usuariosPausados: advisors.paused.length,
     usuariosInvalidos: advisors.invalid.length,
-    advertencia: advisors.active.length ? null : "No hay asesores en Play; las oportunidades permaneceran sin propietario",
+    advertencia: advisors.active.length ? null : "No hay asesores en Play; las oportunidades no se modificaran",
     usuarios: advisors.active.map((user) => ({
       ...user,
       cantidad: assignments.filter((item) => item.user.id === user.id).length,
@@ -263,11 +286,7 @@ async function createPlan(run, configRow, client, config, runDate) {
     allStageOpportunities(configRow, client, config, runDate),
     ghl.fetchAllAssignableUsers(client, config),
   ]);
-  const advisors = await advisorAvailability.resolveConfiguredAdvisors(
-    configRow.usuariosGhl,
-    currentGhlUsers,
-    runDate,
-  );
+  const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, runDate);
   const eligible = eligibleOpportunities(found, configRow.modo);
   const assignments = advisors.active.length
     ? buildAssignments(eligible, advisors.active, configRow.indiceSiguienteUsuario)
@@ -462,15 +481,23 @@ async function recoverStaleRuns() {
 
 async function listExecutions(query = {}) {
   const where = query.configuracionId ? { configuracionId: query.configuracionId } : {};
-  const rows = await Ejecucion.findAll({ where, include: [{ model: Usuario, as: "ejecutadoPor", attributes: ["id", "nombre", "email"] }], order: [["startedAt", "DESC"]], limit: Math.min(Number(query.limit) || 50, 100) });
+  const configWhere = query.tipo === "refresco"
+    ? { modo: "refresh_non_management" }
+    : query.tipo === "reparto"
+      ? { modo: { [Op.in]: ["unassigned", "all"] } }
+      : undefined;
+  const rows = await Ejecucion.findAll({ where, include: [
+    { model: Usuario, as: "ejecutadoPor", attributes: ["id", "nombre", "email"] },
+    { association: "configuracion", attributes: ["id", "modo"], ...(configWhere ? { where: configWhere, required: true } : {}) },
+  ], order: [["startedAt", "DESC"]], limit: Math.min(Number(query.limit) || 50, 100) });
   return Promise.all(rows.map(async (run) => ({ ...run.toJSON(), isStale: await isExecutionStale(run) })));
 }
 
 module.exports = {
   TIME_ZONE, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
   uniqueUsers, buildAssignments, eligibleOpportunities, classifyCurrentOpportunity,
-  executionState, localScheduleParts, opportunityDateRange, heartbeatExpired, sanitize,
-  getCatalogs, pipelineStages, validateInput, preview, requestWithRetry, acquireLock,
+  executionState, localScheduleParts, opportunityDateRange, opportunityTodayRange, heartbeatExpired, sanitize,
+  getCatalogs, pipelineStages, validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
   releaseLock, refreshCounters, processOneDetail, processPlan, execute, requestPause,
   requestCancel, resume, isExecutionStale, forceFinishStale, listExecutions, recoverStaleRuns,
 };

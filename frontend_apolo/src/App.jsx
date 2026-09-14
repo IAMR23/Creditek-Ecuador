@@ -18,6 +18,7 @@ import PublicRoute from "./components/PublicRoute.jsx";
 import { AuthContext } from "./context/AuthContext.jsx";
 import Pruebas from "./pages/Pruebas/Pruebas.jsx";
 import AdminEvaluacion from "./pages/Pruebas/AdminEvaluacion.jsx";
+import Simulador from "./pages/Simulador/Simulador.jsx";
 
 function Evaluacion() {
   const auth = useContext(AuthContext);
@@ -62,6 +63,14 @@ export default function App() {
                       }
                     />
                     <Route path="/usuarios" element={<Usuarios />} />
+                    <Route
+                      path="/simulador"
+                      element={
+                        <ProtectedRoute allowedRoles={["USUARIO", "ADMIN"]}>
+                          <Simulador />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route path="/agencias" element={<Agencias />} />
                     <Route path="/roles" element={<Roles />} />
                     <Route path="/usuarios-agencias" element={<UsuariosAgencias />} />
