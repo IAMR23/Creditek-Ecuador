@@ -13,8 +13,6 @@ async function recibirWebhookStevo(req, res) {
 
     const isFromMe = info?.IsFromMe === true;
 
-    console.dir(payload, { depth: null });
-
     const sourceId = findValueDeep(payload, [
       "sourceId",
       "source_id",
@@ -141,16 +139,12 @@ async function recibirWebhookStevo(req, res) {
         isFromMe,
       });
 
-      console.dir(ghlResponse, { depth: null });
     } catch (ghlError) {
-      console.error("\n❌ ERROR ENVIANDO A GHL");
-
-      if (ghlError.response) {
-        console.error("Status:", ghlError.response.status);
-        console.error("Data:", ghlError.response.data);
-      } else {
-        console.error(ghlError.message);
-      }
+      console.error("Error GHL", {
+        code: ghlError.code || null,
+        status: ghlError.response?.status || null,
+        message: opportunityWebhookService.logWebhookMessage(ghlError.message),
+      });
     }
 
     return res.json({
@@ -170,7 +164,11 @@ async function recibirWebhookStevo(req, res) {
       ghl: ghlResponse,
     });
   } catch (error) {
-    console.error("Error en webhook Stevo:", error);
+    console.error("Error en webhook Stevo", {
+      code: error.code || null,
+      status: error.response?.status || error.statusCode || null,
+      message: opportunityWebhookService.logWebhookMessage(error.message),
+    });
 
     return res.status(500).json({
       ok: false,
@@ -180,28 +178,18 @@ async function recibirWebhookStevo(req, res) {
 }
 
 async function recibirWebhookReparto(req, res) {
-  console.log("[GHL-DEBUG]", {
-    paso: "WEBHOOK_RECEIVED",
-  });
   const providedSecret = req.get("X-GHL-Webhook-Secret");
   const secretValid = opportunityWebhookService.isValidWebhookSecret(providedSecret);
-  console.log("[GHL-DEBUG]", {
-    paso: "WEBHOOK_SECRET_VALIDATED",
-    secretConfigured: Boolean(process.env.GHL_REPARTO_WEBHOOK_SECRET),
-    secretProvided: Boolean(providedSecret),
-    secretValid,
-  });
   if (!secretValid) {
+    opportunityWebhookService.logWebhookResult({
+      resultado: "FAILED",
+      motivo: "INVALID_WEBHOOK_SECRET",
+      error: Object.assign(new Error("Webhook no autorizado"), { code: "INVALID_WEBHOOK_SECRET" }),
+    });
     return res.status(401).json({ ok: false, code: "INVALID_WEBHOOK_SECRET", message: "Webhook no autorizado" });
   }
   try {
     const result = await opportunityWebhookService.enqueueWebhookEvent(req.body, req.headers);
-    console.log("[GHL-DEBUG]", {
-      paso: "WEBHOOK_ENQUEUE_RESULT",
-      eventId: result.eventId,
-      duplicate: result.duplicate,
-      accepted: result.accepted,
-    });
     return res.status(result.duplicate ? 200 : 202).json({
       ok: true,
       accepted: true,
@@ -210,13 +198,10 @@ async function recibirWebhookReparto(req, res) {
       message: result.duplicate ? "Evento recibido anteriormente" : "Evento aceptado para procesamiento",
     });
   } catch (error) {
-    console.log("[GHL-DEBUG]", {
-      paso: "WEBHOOK_RECEIVE_ERROR",
-      code: error.code,
-      message: error.message,
-      statusCode: error.statusCode,
-      upstreamStatus: error.upstreamStatus,
-      responseStatus: error.response?.status,
+    opportunityWebhookService.logWebhookResult({
+      resultado: "FAILED",
+      motivo: error.code || "GHL_WEBHOOK_ERROR",
+      error,
     });
     return res.status(error.statusCode || 500).json({
       ok: false,

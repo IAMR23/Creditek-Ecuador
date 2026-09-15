@@ -47,55 +47,18 @@ async function myAvailability(req, res) {
 }
 
 async function setMyAvailability(req, res) {
-  console.log("[GHL-DEBUG]", {
-    paso: "PLAY_REQUEST_RECEIVED",
-    usuarioId: req.user.id,
-    estadoSolicitado: req.body.estado,
-  });
   try {
-    console.log("[GHL-DEBUG]", {
-      paso: "CHANGE_AVAILABILITY_START",
-      usuarioId: req.user.id,
-      estadoSolicitado: req.body.estado,
-    });
     const disponibilidad = await advisorService.changeAvailability({
       usuarioId: req.user.id,
       estado: req.body.estado,
       actorId: req.user.id,
       motivoCambio: "asesor",
     });
-    console.log("[GHL-DEBUG]", {
-      paso: "CHANGE_AVAILABILITY_RESULT",
-      usuarioId: disponibilidad.usuarioId || req.user.id,
-      ghlUserId: disponibilidad.ghlUserId || null,
-      estado: disponibilidad.estado,
-      recibiendoLeads: disponibilidad.recibiendoLeads,
-    });
-    console.log("[GHL-DEBUG]", {
-      paso: "ADVISOR_ACTIVE_CONFIRMED",
-      usuarioId: disponibilidad.usuarioId || req.user.id,
-      ghlUserId: disponibilidad.ghlUserId || null,
-      activo: disponibilidad.estado === "ACTIVO",
-    });
     if (disponibilidad.estado === "ACTIVO") {
-      console.log("[GHL-DEBUG]", {
-        paso: "REALTIME_QUEUE_SCHEDULED",
-        usuarioId: disponibilidad.usuarioId || req.user.id,
-        ghlUserId: disponibilidad.ghlUserId || null,
-        trigger: "play",
-      });
       service.scheduleRealtimeQueueReview({ trigger: "play" });
     }
     res.json({ ok: true, disponibilidad });
   } catch (error) {
-    console.log("[GHL-DEBUG]", {
-      paso: "PLAY_REQUEST_ERROR",
-      usuarioId: req.user.id,
-      code: error.code,
-      message: error.message,
-      statusCode: error.statusCode,
-      upstreamStatus: error.upstreamStatus,
-    });
     respondError(res, error);
   }
 }
