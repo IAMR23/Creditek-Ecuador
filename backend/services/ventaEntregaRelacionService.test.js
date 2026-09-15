@@ -17,6 +17,7 @@ const { sequelize } = require("../config/db");
 const {
   consolidarFilasInforme,
   normalizarCedula,
+  obtenerDashboardVentasConEntrega,
   obtenerInformeVentasConEntrega,
   resolverVentaParaEntrega,
   seleccionarVentaInequivoca,
@@ -219,28 +220,93 @@ describe("relacion entre ventas y entregas", () => {
       fechaInicio: "2026-09-01",
       fechaFin: "2026-09-14",
       horaRegistroDesde: "13:30",
-      agenciaId: "2",
-      vendedorId: "3",
+      agenciaIds: "2,5,2",
+      vendedorIds: ["3", "7"],
       origenId: "4",
       soloOrigenEntrega: "true",
       estadoEntrega: "Entregado",
+      tipoEntrega: "Envio",
     });
 
     expect(sequelize.query).toHaveBeenCalledWith(
       expect.stringMatching(
-        /createdAt[\s\S]+America\/Guayaquil[\s\S]+LOWER\(TRIM[\s\S]+INNER JOIN relaciones/,
+        /createdAt[\s\S]+America\/Guayaquil[\s\S]+::DATE[\s\S]+createdAt[\s\S]+America\/Guayaquil[\s\S]+::TIME[\s\S]+LOWER\(TRIM[\s\S]+INNER JOIN relaciones/,
       ),
       expect.objectContaining({
         replacements: {
           fechaInicio: "2026-09-01",
           fechaFin: "2026-09-14",
           horaRegistroDesde: "13:30",
-          agenciaId: 2,
-          vendedorId: 3,
+          agenciaIds: "2,5",
+          vendedorIds: "3,7",
           origenId: 4,
           soloOrigenEntrega: true,
           estadoEntrega: "Entregado",
+          tipoEntrega: "Envio",
         },
+      }),
+    );
+  });
+
+  test("aplica el rango y la hora diaria sobre la fecha de creacion en Ecuador", async () => {
+    sequelize.query.mockResolvedValue([]);
+
+    await obtenerInformeVentasConEntrega({
+      fechaInicio: "2026-09-01",
+      fechaFin: "2026-09-15",
+      horaRegistroDesde: "21:00",
+    });
+
+    const [sql] = sequelize.query.mock.calls[0];
+
+    expect(sql).toMatch(
+      /\(v\."createdAt" AT TIME ZONE 'America\/Guayaquil'\)::DATE\s+>= CAST\(:fechaInicio AS DATE\)/,
+    );
+    expect(sql).toMatch(
+      /\(v\."createdAt" AT TIME ZONE 'America\/Guayaquil'\)::DATE\s+<= CAST\(:fechaFin AS DATE\)/,
+    );
+    expect(sql).toMatch(
+      /\(v\."createdAt" AT TIME ZONE 'America\/Guayaquil'\)::TIME\s+>= CAST\(:horaRegistroDesde AS TIME\)/,
+    );
+    expect(sql).not.toMatch(/v\.fecha\s+[<>]= CAST\(:fecha(?:Inicio|Fin) AS DATE\)/);
+  });
+
+  test("agrupa entregas y ventas desde la hora por mes", async () => {
+    sequelize.query.mockResolvedValue([
+      { tipo: "ENTREGAS", mes: "2026-08", cantidad: "12" },
+      { tipo: "ENTREGAS", mes: "2026-09", cantidad: 8 },
+      { tipo: "VENTAS_DESDE_HORA", mes: "2026-08", cantidad: "5" },
+    ]);
+
+    const dashboard = await obtenerDashboardVentasConEntrega({
+      fechaInicio: "2026-08-01",
+      fechaFin: "2026-09-30",
+      horaRegistroDesde: "21:00",
+      agenciaId: "2",
+      soloOrigenEntrega: "true",
+      tipoEntrega: "Entrega",
+    });
+
+    expect(dashboard).toEqual({
+      entregasPorMes: [
+        { mes: "2026-08", cantidad: 12 },
+        { mes: "2026-09", cantidad: 8 },
+      ],
+      ventasDesdeHoraPorMes: [{ mes: "2026-08", cantidad: 5 }],
+    });
+    expect(sequelize.query).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /COUNT\(DISTINCT relacion\."entregaId"\)[\s\S]+COUNT\(DISTINCT relacion\."ventaId"\)[\s\S]+horaRegistroDesde/,
+      ),
+      expect.objectContaining({
+        replacements: expect.objectContaining({
+          fechaInicio: "2026-08-01",
+          fechaFin: "2026-09-30",
+          horaRegistroDesde: "21:00",
+          agenciaIds: "2",
+          soloOrigenEntrega: true,
+          tipoEntrega: "Entrega",
+        }),
       }),
     );
   });
@@ -248,7 +314,10 @@ describe("relacion entre ventas y entregas", () => {
   test("descarta una hora invalida y desactiva el filtro de origen por defecto", async () => {
     sequelize.query.mockResolvedValue([]);
 
-    await obtenerInformeVentasConEntrega({ horaRegistroDesde: "25:90" });
+    await obtenerInformeVentasConEntrega({
+      horaRegistroDesde: "25:90",
+      tipoEntrega: "Retiro",
+    });
 
     expect(sequelize.query).toHaveBeenCalledWith(
       expect.any(String),
@@ -256,6 +325,7 @@ describe("relacion entre ventas y entregas", () => {
         replacements: expect.objectContaining({
           horaRegistroDesde: null,
           soloOrigenEntrega: false,
+          tipoEntrega: null,
         }),
       }),
     );

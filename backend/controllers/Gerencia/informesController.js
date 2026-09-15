@@ -24,17 +24,36 @@ const {
   calcularIndicadoresCostoHistorico,
 } = require("../../utils/calcularIndicadoresCostoHistorico");
 const {
+  obtenerDashboardVentasConEntrega,
   obtenerInformeVentasConEntrega,
 } = require("../../services/ventaEntregaRelacionService");
 
 exports.obtenerVentasConEntrega = async (req, res) => {
   try {
-    const ventas = await obtenerInformeVentasConEntrega(req.query);
+    const [ventasResultado, dashboardResultado] = await Promise.allSettled([
+      obtenerInformeVentasConEntrega(req.query),
+      obtenerDashboardVentasConEntrega(req.query),
+    ]);
+    if (ventasResultado.status === "rejected") throw ventasResultado.reason;
+
+    const ventas = ventasResultado.value;
+    const dashboard =
+      dashboardResultado.status === "fulfilled"
+        ? dashboardResultado.value
+        : { entregasPorMes: [], ventasDesdeHoraPorMes: [] };
+
+    if (dashboardResultado.status === "rejected") {
+      console.error(
+        "Error obteniendo dashboard de ventas con entrega:",
+        dashboardResultado.reason,
+      );
+    }
 
     return res.json({
       ok: true,
       ventas,
       totalVentas: ventas.length,
+      dashboard,
     });
   } catch (error) {
     console.error("Error obteniendo ventas relacionadas con entregas:", error);

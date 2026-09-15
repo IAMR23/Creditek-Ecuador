@@ -160,8 +160,33 @@ const normalizeStageName = (value) =>
 
 const realtimeStageChannel = (stage) => {
   const name = normalizeStageName(stage?.name || stage?.title || stage?.label);
-  if (name.includes("WHATSAPP")) return "whatsapp";
-  if (name.includes("FACEBOOK")) return "facebook";
+  if (name.includes("WHATSAPP")) {
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_STAGE_CHANNEL_DETECTED",
+      stageId: idOf(stage),
+      nombre: stage?.name || stage?.title || stage?.label || "",
+      nombreNormalizado: name,
+      canal: "whatsapp",
+    });
+    return "whatsapp";
+  }
+  if (name.includes("FACEBOOK")) {
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_STAGE_CHANNEL_DETECTED",
+      stageId: idOf(stage),
+      nombre: stage?.name || stage?.title || stage?.label || "",
+      nombreNormalizado: name,
+      canal: "facebook",
+    });
+    return "facebook";
+  }
+  console.log("[GHL-DEBUG]", {
+    paso: "REALTIME_STAGE_CHANNEL_DETECTED",
+    stageId: idOf(stage),
+    nombre: stage?.name || stage?.title || stage?.label || "",
+    nombreNormalizado: name,
+    canal: null,
+  });
   return null;
 };
 
@@ -173,15 +198,59 @@ function realtimeMaxPendingPerAdvisor(env = process.env) {
 }
 
 async function getRealtimePipelineContext(client, config) {
+  console.log("[GHL-DEBUG]", {
+    paso: "PIPELINES_REQUEST_START",
+    locationId: config.locationId,
+  });
   const pipelines = await ghl.fetchPipelines(client, config);
+  console.log("[GHL-DEBUG]", {
+    paso: "PIPELINES_RECEIVED",
+    cantidadPipelines: pipelines.length,
+  });
   const pipeline = pipelines[0];
   if (!pipeline || !idOf(pipeline)) {
+    console.log("[GHL-DEBUG]", {
+      paso: "GHL_PIPELINE_NOT_FOUND",
+      code: "GHL_PIPELINE_NOT_FOUND",
+      cantidadPipelines: pipelines.length,
+    });
     throw serviceError("GHL_PIPELINE_NOT_FOUND", "GHL no devolvio el pipeline de oportunidades", 502);
   }
-  const stages = pipelineStages(pipeline)
-    .map((stage) => ({ ...stage, channel: realtimeStageChannel(stage) }))
-    .filter((stage) => stage.channel && idOf(stage));
+  console.log("[GHL-DEBUG]", {
+    paso: "REALTIME_PIPELINE_SELECTED",
+    pipelineId: idOf(pipeline),
+    nombre: pipeline.name || pipeline.title || "",
+  });
+  const receivedStages = pipelineStages(pipeline)
+    .map((stage) => ({ ...stage, channel: realtimeStageChannel(stage) }));
+  console.log("[GHL-DEBUG]", {
+    paso: "PIPELINE_STAGES_RECEIVED",
+    pipelineId: idOf(pipeline),
+    etapas: receivedStages.map((stage) => ({
+      stageId: idOf(stage),
+      nombre: stage?.name || stage?.title || stage?.label || "",
+      nombreNormalizado: normalizeStageName(stage?.name || stage?.title || stage?.label),
+      canal: stage.channel,
+    })),
+  });
+  const stages = receivedStages.filter((stage) => stage.channel && idOf(stage));
+  console.log("[GHL-DEBUG]", {
+    paso: "REALTIME_STAGES_DETECTED",
+    pipelineId: idOf(pipeline),
+    etapas: stages.map((stage) => ({
+      stageId: idOf(stage),
+      nombre: stage?.name || stage?.title || stage?.label || "",
+      nombreNormalizado: normalizeStageName(stage?.name || stage?.title || stage?.label),
+      canal: stage.channel,
+    })),
+    stageIds: stages.map(idOf),
+  });
   if (!stages.length) {
+    console.log("[GHL-DEBUG]", {
+      paso: "GHL_REALTIME_STAGES_NOT_FOUND",
+      code: "GHL_REALTIME_STAGES_NOT_FOUND",
+      pipelineId: idOf(pipeline),
+    });
     throw serviceError("GHL_REALTIME_STAGES_NOT_FOUND", "GHL no devolvio las etapas WhatsApp o Facebook", 502);
   }
   return {
@@ -197,14 +266,31 @@ const isRealtimeStageOpportunity = (opportunity, context) =>
   && context.stageIds.has(ghl.getOpportunityStageId(opportunity));
 
 async function fetchRealtimeOpenOpportunities(client, config, context) {
+  console.log("[GHL-DEBUG]", {
+    paso: "OPPORTUNITIES_REQUEST_START",
+    pipelineId: context.pipelineId,
+    estado: "open",
+  });
   const opportunities = await ghl.fetchOpportunitiesByStatus(
     client,
     { ...config, pipelineId: context.pipelineId },
     "open",
     {},
   );
-  return opportunities.filter((opportunity) =>
+  const eligible = opportunities.filter((opportunity) =>
     isOpenOpportunity(opportunity) && isRealtimeStageOpportunity(opportunity, context));
+  console.log("[GHL-DEBUG]", {
+    paso: "OPPORTUNITIES_RECEIVED",
+    pipelineId: context.pipelineId,
+    cantidadAbiertasRecibidas: opportunities.length,
+    cantidadDescartadaPorPipeline: opportunities.filter((opportunity) =>
+      ghl.getOpportunityPipelineId(opportunity) !== context.pipelineId).length,
+    cantidadDescartadaPorEtapa: opportunities.filter((opportunity) =>
+      ghl.getOpportunityPipelineId(opportunity) === context.pipelineId
+      && !context.stageIds.has(ghl.getOpportunityStageId(opportunity))).length,
+    cantidadFinalElegible: eligible.length,
+  });
+  return eligible;
 }
 
 async function validateInput(input) {
@@ -563,31 +649,116 @@ async function assignRealtimeOpportunity({
   limit,
   trigger = "webhook",
 }) {
-  if (!(await advisorAvailability.isGhlUserActiveToday(user.id))) {
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_STARTED",
+    opportunityId: idOf(opportunity),
+    ghlUserId: user.id,
+    trigger,
+  });
+  try {
+  const activeToday = await advisorAvailability.isGhlUserActiveToday(user.id);
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_ADVISOR_STATUS_CHECKED",
+    opportunityId: idOf(opportunity),
+    ghlUserId: user.id,
+    activoHoy: activeToday,
+  });
+  if (!activeToday) {
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_SKIPPED",
+      opportunityId: idOf(opportunity),
+      ghlUserId: user.id,
+      code: "ADVISOR_PAUSED",
+      motivo: "El asesor no esta activo hoy",
+    });
     return { code: "ADVISOR_PAUSED", assigned: false };
   }
-  if ((Number(loads.get(user.id)) || 0) >= limit) {
+  const currentLoad = Number(loads.get(user.id)) || 0;
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_CAPACITY_CHECKED",
+    opportunityId: idOf(opportunity),
+    ghlUserId: user.id,
+    cargaActual: currentLoad,
+    limite: limit,
+  });
+  if (currentLoad >= limit) {
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_SKIPPED",
+      opportunityId: idOf(opportunity),
+      ghlUserId: user.id,
+      code: "NO_CAPACITY",
+      motivo: "El asesor alcanzo el limite de pendientes",
+    });
     return { code: "NO_CAPACITY", assigned: false };
   }
   let payload;
   try {
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_OPPORTUNITY_REFRESH_START",
+      opportunityId: idOf(opportunity),
+      ghlUserId: user.id,
+    });
     payload = await requestWithRetry(client, {
       method: "GET",
       url: `/opportunities/${encodeURIComponent(idOf(opportunity))}`,
     });
   } catch (error) {
     if (error.upstreamStatus === 404 || error.statusCode === 404) {
+      console.log("[GHL-DEBUG]", {
+        paso: "ASSIGNMENT_SKIPPED",
+        opportunityId: idOf(opportunity),
+        ghlUserId: user.id,
+        code: "OPPORTUNITY_NOT_FOUND",
+        motivo: "GHL no devolvio la oportunidad actualizada",
+        statusCode: error.statusCode,
+        upstreamStatus: error.upstreamStatus,
+      });
       return { code: "OPPORTUNITY_NOT_FOUND", assigned: false };
     }
     throw error;
   }
   const current = payload.opportunity || payload.data || payload;
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_OPPORTUNITY_REFRESH_RESULT",
+    opportunityId: idOf(current),
+    estado: ghl.getOpportunityStatus(current),
+    pipelineId: ghl.getOpportunityPipelineId(current),
+    stageId: ghl.getOpportunityStageId(current),
+    tienePropietario: Boolean(assignedToOf(current)),
+    propietarioId: assignedToOf(current),
+  });
   const skipCode = classifyRealtimeOpportunity(current, context);
-  if (skipCode) return { code: skipCode, assigned: false };
-  await requestWithRetry(client, {
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_OPPORTUNITY_CLASSIFIED",
+    opportunityId: idOf(current),
+    ghlUserId: user.id,
+    resultado: skipCode || "ELIGIBLE",
+  });
+  if (skipCode) {
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_SKIPPED",
+      opportunityId: idOf(current),
+      ghlUserId: user.id,
+      code: skipCode,
+      motivo: skipCode,
+    });
+    return { code: skipCode, assigned: false };
+  }
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_PUT_START",
+    opportunityId: idOf(current),
+    ghlUserId: user.id,
+  });
+  const updateResponse = await requestWithRetry(client, {
     method: "PUT",
     url: `/opportunities/${encodeURIComponent(idOf(current))}`,
     data: { assignedTo: user.id },
+  });
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_PUT_SUCCESS",
+    opportunityId: idOf(current),
+    ghlUserId: user.id,
+    status: updateResponse?.status,
   });
   const assignedAt = new Date();
   let tracePersisted = true;
@@ -600,13 +771,38 @@ async function assignRealtimeOpportunity({
       trigger: String(trigger || "realtime").replace(/[^a-z0-9_-]/gi, "").slice(0, 30) || "realtime",
       assignedAt,
     });
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_TRACE_PERSISTED",
+      opportunityId: idOf(current),
+      ghlUserId: user.id,
+      pipelineId: context.pipelineId,
+      stageId: ghl.getOpportunityStageId(current),
+      persistida: true,
+    });
   } catch (error) {
     tracePersisted = false;
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_TRACE_ERROR",
+      opportunityId: idOf(current),
+      ghlUserId: user.id,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+    });
     console.error("No se pudo guardar la trazabilidad de una asignacion GHL", {
       code: error.code || "GHL_REALTIME_TRACE_ERROR",
     });
   }
   loads.set(user.id, (Number(loads.get(user.id)) || 0) + 1);
+  console.log("[GHL-DEBUG]", {
+    paso: "ASSIGNMENT_COMPLETED",
+    code: "ASSIGNED",
+    assigned: true,
+    opportunityId: idOf(current),
+    ghlUserId: user.id,
+    tracePersisted,
+  });
   return {
     code: "ASSIGNED",
     assigned: true,
@@ -615,38 +811,168 @@ async function assignRealtimeOpportunity({
     assignedAt,
     tracePersisted,
   };
+  } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "ASSIGNMENT_ERROR",
+      opportunityId: idOf(opportunity),
+      ghlUserId: user.id,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+      responseData: (error.response?.data || error.upstreamData) && typeof (error.response?.data || error.upstreamData) === "object"
+        ? {
+          code: (error.response?.data || error.upstreamData).code,
+          status: (error.response?.data || error.upstreamData).status,
+          statusCode: (error.response?.data || error.upstreamData).statusCode,
+          type: (error.response?.data || error.upstreamData).type,
+        }
+        : (error.response?.data || error.upstreamData) ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+    });
+    throw error;
+  }
 }
 
 async function executeWebhookOpportunity({ opportunityId = null, contactId = null, locationId = null } = {}) {
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_OPPORTUNITY_EXECUTION_START",
+    opportunityId,
+    contactId,
+    locationId,
+  });
+  try {
   const { config, client } = await getClient();
   if (locationId && String(locationId) !== String(config.locationId)) {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_RESULT",
+      code: "LOCATION_MISMATCH",
+      assigned: false,
+      opportunityId,
+      contactId,
+    });
     return { code: "LOCATION_MISMATCH", assigned: false, deferredToScheduler: false };
   }
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_LOCK_ATTEMPT",
+    opportunityId,
+    scope: REALTIME_LOCK_SCOPE,
+  });
   const lock = await acquireLock(REALTIME_LOCK_SCOPE);
-  if (!lock) return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, deferredToScheduler: true };
+  console.log("[GHL-DEBUG]", {
+    paso: lock ? "WEBHOOK_LOCK_ACQUIRED" : "WEBHOOK_LOCK_REJECTED",
+    opportunityId,
+    lockObtenido: Boolean(lock),
+    scope: REALTIME_LOCK_SCOPE,
+  });
+  if (!lock) {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_RESULT",
+      code: "DEFERRED_ACTIVE_EXECUTION",
+      assigned: false,
+      opportunityId,
+      motivo: "Ya existe una ejecucion activa con el advisory lock",
+    });
+    return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, deferredToScheduler: true };
+  }
   try {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_PIPELINE_CONTEXT_START",
+      opportunityId,
+    });
     const context = await getRealtimePipelineContext(client, config);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_PIPELINE_CONTEXT_SUCCESS",
+      opportunityId,
+      pipelineId: context.pipelineId,
+      stageIds: [...context.stageIds],
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_FETCH_START",
+      opportunityId,
+      contactId,
+    });
     const opportunity = await fetchWebhookOpportunity(
       client,
       config,
       { opportunityId, contactId },
       context,
     );
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_FOUND",
+      opportunityId: idOf(opportunity),
+      encontrada: Boolean(opportunity && idOf(opportunity)),
+      pipelineId: opportunity ? ghl.getOpportunityPipelineId(opportunity) : null,
+      stageId: opportunity ? ghl.getOpportunityStageId(opportunity) : null,
+      estado: opportunity ? ghl.getOpportunityStatus(opportunity) : null,
+      tienePropietario: Boolean(opportunity && assignedToOf(opportunity)),
+      propietarioId: opportunity ? assignedToOf(opportunity) : null,
+    });
     if (!opportunity || !idOf(opportunity)) {
+      console.log("[GHL-DEBUG]", {
+        paso: "WEBHOOK_OPPORTUNITY_RESULT",
+        code: "OPPORTUNITY_NOT_FOUND",
+        assigned: false,
+        opportunityId,
+        contactId,
+      });
       return { code: "OPPORTUNITY_NOT_FOUND", assigned: false, deferredToScheduler: true };
     }
     const initialSkipCode = classifyRealtimeOpportunity(opportunity, context);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_CLASSIFIED",
+      opportunityId: idOf(opportunity),
+      resultado: initialSkipCode || "ELIGIBLE",
+    });
     if (initialSkipCode) {
+      console.log("[GHL-DEBUG]", {
+        paso: "WEBHOOK_OPPORTUNITY_RESULT",
+        code: initialSkipCode,
+        assigned: false,
+        opportunityId: idOf(opportunity),
+      });
       return { code: initialSkipCode, assigned: false, deferredToScheduler: false };
     }
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_ASSIGNMENT_CONTEXT_REQUEST_START",
+      opportunityId: idOf(opportunity),
+    });
     const [found, currentGhlUsers] = await Promise.all([
       fetchRealtimeOpenOpportunities(client, config, context),
       ghl.fetchAllAssignableUsers(client, config),
     ]);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_ASSIGNMENT_CONTEXT_REQUEST_SUCCESS",
+      opportunityId: idOf(opportunity),
+      cantidadOportunidades: found.length,
+      cantidadUsuariosGhl: currentGhlUsers.length,
+    });
     const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
-    if (!advisors.active.length) return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_ACTIVE_ADVISORS_RESOLVED",
+      opportunityId: idOf(opportunity),
+      cantidadActivos: advisors.active.length,
+      cantidadPausados: advisors.paused.length,
+      cantidadInvalidos: advisors.invalid.length,
+      asesoresActivosIds: advisors.active.map((advisor) => advisor.id),
+    });
+    if (!advisors.active.length) {
+      console.log("[GHL-DEBUG]", {
+        paso: "WEBHOOK_OPPORTUNITY_RESULT",
+        code: "NO_ACTIVE_ADVISORS",
+        assigned: false,
+        opportunityId: idOf(opportunity),
+      });
+      return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
+    }
     const limit = realtimeMaxPendingPerAdvisor();
     const loads = currentLoadsByAdvisor(found, advisors.active);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_ASSIGNMENT_PLANNING_START",
+      opportunityId: idOf(opportunity),
+      limitePendientes: limit,
+      cargas: [...loads.entries()].map(([ghlUserId, cargaActual]) => ({ ghlUserId, cargaActual })),
+    });
     const capacityPlan = buildCapacityAssignments(
       [opportunity],
       advisors.active,
@@ -654,7 +980,21 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
       limit,
       realtimeNextUserIndex,
     );
-    if (!capacityPlan.assignments.length) return { code: "NO_CAPACITY", assigned: false, deferredToScheduler: true };
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_CAPACITY_PLAN_CREATED",
+      opportunityId: idOf(opportunity),
+      cantidadAsignacionesPlanificadas: capacityPlan.assignments.length,
+      siguienteIndice: capacityPlan.nextUserIndex,
+    });
+    if (!capacityPlan.assignments.length) {
+      console.log("[GHL-DEBUG]", {
+        paso: "WEBHOOK_OPPORTUNITY_RESULT",
+        code: "NO_CAPACITY",
+        assigned: false,
+        opportunityId: idOf(opportunity),
+      });
+      return { code: "NO_CAPACITY", assigned: false, deferredToScheduler: true };
+    }
     const result = await assignRealtimeOpportunity({
       client,
       context,
@@ -665,35 +1005,194 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
       trigger: "webhook",
     });
     if (result.assigned) realtimeNextUserIndex = capacityPlan.nextUserIndex;
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_RESULT",
+      code: result.code,
+      assigned: result.assigned,
+      opportunityId: result.opportunityId || idOf(opportunity),
+      ghlUserId: result.advisorId || capacityPlan.assignments[0].user.id,
+    });
     return {
       ...result,
       deferredToScheduler: ["ADVISOR_PAUSED", "NO_CAPACITY", "OPPORTUNITY_NOT_FOUND"].includes(result.code),
     };
   } finally {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_LOCK_RELEASE_START",
+      opportunityId,
+      scope: REALTIME_LOCK_SCOPE,
+    });
     await releaseLock(lock, REALTIME_LOCK_SCOPE);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_LOCK_RELEASED",
+      opportunityId,
+      scope: REALTIME_LOCK_SCOPE,
+    });
+  }
+  } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_OPPORTUNITY_ERROR",
+      opportunityId,
+      contactId,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+      responseData: (error.response?.data || error.upstreamData) && typeof (error.response?.data || error.upstreamData) === "object"
+        ? {
+          code: (error.response?.data || error.upstreamData).code,
+          status: (error.response?.data || error.upstreamData).status,
+          statusCode: (error.response?.data || error.upstreamData).statusCode,
+          type: (error.response?.data || error.upstreamData).type,
+        }
+        : (error.response?.data || error.upstreamData) ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+    });
+    throw error;
   }
 }
 
 async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
+  console.log("[GHL-DEBUG]", {
+    paso: "REALTIME_QUEUE_STARTED",
+    trigger,
+  });
+  console.log("[GHL-DEBUG]", {
+    paso: "LOCK_ATTEMPT",
+    trigger,
+    scope: REALTIME_LOCK_SCOPE,
+  });
   const lock = await acquireLock(REALTIME_LOCK_SCOPE);
-  if (!lock) return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, assignedCount: 0, trigger };
+  console.log("[GHL-DEBUG]", {
+    paso: lock ? "LOCK_ACQUIRED" : "LOCK_REJECTED",
+    trigger,
+    scope: REALTIME_LOCK_SCOPE,
+    lockObtenido: Boolean(lock),
+  });
+  if (!lock) {
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_QUEUE_DEFERRED",
+      code: "DEFERRED_ACTIVE_EXECUTION",
+      trigger,
+      motivo: "Ya existe una ejecucion activa con el advisory lock",
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_QUEUE_COMPLETED",
+      code: "DEFERRED_ACTIVE_EXECUTION",
+      assigned: false,
+      assignedCount: 0,
+      errorCount: 0,
+      pendingCount: undefined,
+      trigger,
+    });
+    return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, assignedCount: 0, trigger };
+  }
   try {
     const { config, client } = await getClient();
+    console.log("[GHL-DEBUG]", {
+      paso: "GHL_CONFIG_READ",
+      trigger,
+      tokenExiste: Boolean(config.token),
+      locationId: config.locationId,
+      apiVersion: config.apiVersion,
+      baseUrl: config.baseUrl,
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_PIPELINE_CONTEXT_START",
+      trigger,
+    });
     const context = await getRealtimePipelineContext(client, config);
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_PIPELINE_CONTEXT_SUCCESS",
+      trigger,
+      pipelineId: context.pipelineId,
+      stageIds: [...context.stageIds],
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_OPPORTUNITIES_REQUEST_START",
+      trigger,
+      pipelineId: context.pipelineId,
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_GHL_USERS_REQUEST_START",
+      trigger,
+    });
     const [found, currentGhlUsers] = await Promise.all([
       fetchRealtimeOpenOpportunities(client, config, context),
       ghl.fetchAllAssignableUsers(client, config),
     ]);
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_OPPORTUNITIES_REQUEST_SUCCESS",
+      trigger,
+      cantidadOportunidades: found.length,
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_GHL_USERS_REQUEST_SUCCESS",
+      trigger,
+      cantidadUsuarios: currentGhlUsers.length,
+    });
     const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
+    console.log("[GHL-DEBUG]", {
+      paso: "ACTIVE_ADVISORS_RESOLVED",
+      trigger,
+      cantidadActivos: advisors.active.length,
+      cantidadPausados: advisors.paused.length,
+      cantidadInvalidos: advisors.invalid.length,
+      asesoresActivosIds: advisors.active.map((advisor) => advisor.id),
+    });
     const pending = eligibleOpportunities(found, "unassigned");
+    console.log("[GHL-DEBUG]", {
+      paso: "UNASSIGNED_OPPORTUNITIES_RESOLVED",
+      trigger,
+      cantidadOportunidades: found.length,
+      cantidadSinPropietario: pending.length,
+    });
     if (!advisors.active.length) {
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_NO_ACTIVE_ADVISORS",
+        code: "NO_ACTIVE_ADVISORS",
+        trigger,
+        pendingCount: pending.length,
+        motivo: "No existen asesores activos para recibir oportunidades",
+      });
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_COMPLETED",
+        code: "NO_ACTIVE_ADVISORS",
+        assigned: false,
+        assignedCount: 0,
+        errorCount: 0,
+        pendingCount: pending.length,
+        trigger,
+      });
       return { code: "NO_ACTIVE_ADVISORS", assigned: false, assignedCount: 0, pendingCount: pending.length, trigger };
     }
     if (!pending.length) {
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_NO_PENDING_OPPORTUNITIES",
+        code: "NO_PENDING_OPPORTUNITIES",
+        trigger,
+        pendingCount: 0,
+        motivo: "No existen oportunidades elegibles sin propietario",
+      });
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_COMPLETED",
+        code: "NO_PENDING_OPPORTUNITIES",
+        assigned: false,
+        assignedCount: 0,
+        errorCount: 0,
+        pendingCount: 0,
+        trigger,
+      });
       return { code: "NO_PENDING_OPPORTUNITIES", assigned: false, assignedCount: 0, pendingCount: 0, trigger };
     }
     const limit = realtimeMaxPendingPerAdvisor();
     const loads = currentLoadsByAdvisor(found, advisors.active);
+    console.log("[GHL-DEBUG]", {
+      paso: "ADVISOR_CURRENT_LOADS",
+      trigger,
+      limitePendientes: limit,
+      cargas: [...loads.entries()].map(([ghlUserId, cargaActual]) => ({ ghlUserId, cargaActual })),
+    });
     const capacityPlan = buildCapacityAssignments(
       pending,
       advisors.active,
@@ -701,13 +1200,49 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
       limit,
       realtimeNextUserIndex,
     );
+    console.log("[GHL-DEBUG]", {
+      paso: "CAPACITY_PLAN_CREATED",
+      trigger,
+      cantidadAsignacionesPlanificadas: capacityPlan.assignments.length,
+      pendientesSinCapacidad: capacityPlan.totalPendientesCapacidad,
+      siguienteIndice: capacityPlan.nextUserIndex,
+      asesores: capacityPlan.advisors.map((advisor) => ({
+        ghlUserId: advisor.id,
+        cargaActual: advisor.cargaActual,
+        cantidadPlanificada: advisor.cantidadPlanificada,
+        capacidadDisponible: advisor.capacidadDisponible,
+        cargaResultante: advisor.cargaResultante,
+      })),
+    });
     if (!capacityPlan.assignments.length) {
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_NO_CAPACITY",
+        code: "NO_CAPACITY",
+        trigger,
+        pendingCount: pending.length,
+        motivo: "Todos los asesores activos alcanzaron el limite de pendientes",
+      });
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_COMPLETED",
+        code: "NO_CAPACITY",
+        assigned: false,
+        assignedCount: 0,
+        errorCount: 0,
+        pendingCount: pending.length,
+        trigger,
+      });
       return { code: "NO_CAPACITY", assigned: false, assignedCount: 0, pendingCount: pending.length, trigger };
     }
     let assignedCount = 0;
     let errorCount = 0;
     for (const assignment of capacityPlan.assignments) {
       try {
+        console.log("[GHL-DEBUG]", {
+          paso: "ASSIGNMENT_ATTEMPT_START",
+          trigger,
+          opportunityId: idOf(assignment.opportunity),
+          ghlUserId: assignment.user?.id,
+        });
         const result = await assignRealtimeOpportunity({
           client,
           context,
@@ -717,9 +1252,35 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
           limit,
           trigger,
         });
+        console.log("[GHL-DEBUG]", {
+          paso: "ASSIGNMENT_INDIVIDUAL_RESULT",
+          trigger,
+          opportunityId: result.opportunityId || idOf(assignment.opportunity),
+          ghlUserId: result.advisorId || assignment.user?.id,
+          code: result.code,
+          assigned: result.assigned,
+        });
         if (result.assigned) assignedCount += 1;
       } catch (error) {
         errorCount += 1;
+        console.log("[GHL-DEBUG]", {
+          paso: "ERROR_ASIGNACION_INDIVIDUAL",
+          opportunityId: idOf(assignment.opportunity),
+          ghlUserId: assignment.user?.id,
+          code: error.code,
+          message: error.message,
+          statusCode: error.statusCode,
+          upstreamStatus: error.upstreamStatus,
+          responseStatus: error.response?.status,
+          responseData: (error.response?.data || error.upstreamData) && typeof (error.response?.data || error.upstreamData) === "object"
+            ? {
+              code: (error.response?.data || error.upstreamData).code,
+              status: (error.response?.data || error.upstreamData).status,
+              statusCode: (error.response?.data || error.upstreamData).statusCode,
+              type: (error.response?.data || error.upstreamData).type,
+            }
+            : (error.response?.data || error.upstreamData) ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+        });
       }
     }
     if (errorCount > 0) {
@@ -729,7 +1290,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
       });
     }
     realtimeNextUserIndex = capacityPlan.nextUserIndex;
-    return {
+    const queueResult = {
       code: errorCount ? (assignedCount ? "QUEUE_PARTIAL" : "QUEUE_FAILED") : "QUEUE_PROCESSED",
       assigned: assignedCount > 0,
       assignedCount,
@@ -737,14 +1298,74 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
       pendingCount: Math.max(0, pending.length - assignedCount),
       trigger,
     };
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_QUEUE_COMPLETED",
+      code: queueResult.code,
+      assigned: queueResult.assigned,
+      assignedCount: queueResult.assignedCount,
+      errorCount: queueResult.errorCount,
+      pendingCount: queueResult.pendingCount,
+      trigger: queueResult.trigger,
+    });
+    return queueResult;
+  } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_QUEUE_ERROR",
+      trigger,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+      responseData: (error.response?.data || error.upstreamData) && typeof (error.response?.data || error.upstreamData) === "object"
+        ? {
+          code: (error.response?.data || error.upstreamData).code,
+          status: (error.response?.data || error.upstreamData).status,
+          statusCode: (error.response?.data || error.upstreamData).statusCode,
+          type: (error.response?.data || error.upstreamData).type,
+        }
+        : (error.response?.data || error.upstreamData) ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+    });
+    throw error;
   } finally {
+    console.log("[GHL-DEBUG]", {
+      paso: "LOCK_RELEASE_START",
+      trigger,
+      scope: REALTIME_LOCK_SCOPE,
+    });
     await releaseLock(lock, REALTIME_LOCK_SCOPE);
+    console.log("[GHL-DEBUG]", {
+      paso: "LOCK_RELEASED",
+      trigger,
+      scope: REALTIME_LOCK_SCOPE,
+    });
   }
 }
 
 function scheduleRealtimeQueueReview({ trigger = "play" } = {}) {
+  console.log("[GHL-DEBUG]", {
+    paso: "REALTIME_QUEUE_REVIEW_SCHEDULE_ENTERED",
+    trigger,
+  });
   setImmediate(() => {
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_QUEUE_SET_IMMEDIATE_ENTERED",
+      trigger,
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "REALTIME_QUEUE_EXECUTION_START",
+      trigger,
+    });
     executeRealtimeQueue({ trigger }).then((result) => {
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_EXECUTION_RESULT",
+        code: result.code,
+        assigned: result.assigned,
+        assignedCount: result.assignedCount,
+        errorCount: result.errorCount,
+        pendingCount: result.pendingCount,
+        trigger: result.trigger || trigger,
+      });
       if (result.assignedCount > 0) {
         console.log("Cola GHL de tiempo real procesada", {
           trigger,
@@ -753,6 +1374,23 @@ function scheduleRealtimeQueueReview({ trigger = "play" } = {}) {
         });
       }
     }).catch((error) => {
+      console.log("[GHL-DEBUG]", {
+        paso: "REALTIME_QUEUE_EXECUTION_ERROR",
+        trigger,
+        code: error.code,
+        message: error.message,
+        statusCode: error.statusCode,
+        upstreamStatus: error.upstreamStatus,
+        responseStatus: error.response?.status,
+        responseData: (error.response?.data || error.upstreamData) && typeof (error.response?.data || error.upstreamData) === "object"
+          ? {
+            code: (error.response?.data || error.upstreamData).code,
+            status: (error.response?.data || error.upstreamData).status,
+            statusCode: (error.response?.data || error.upstreamData).statusCode,
+            type: (error.response?.data || error.upstreamData).type,
+          }
+          : (error.response?.data || error.upstreamData) ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+      });
       console.error("Fallo revision de cola GHL de tiempo real", {
         trigger,
         code: error.code || "GHL_REALTIME_QUEUE_ERROR",

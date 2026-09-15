@@ -180,12 +180,28 @@ async function recibirWebhookStevo(req, res) {
 }
 
 async function recibirWebhookReparto(req, res) {
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_RECEIVED",
+  });
   const providedSecret = req.get("X-GHL-Webhook-Secret");
-  if (!opportunityWebhookService.isValidWebhookSecret(providedSecret)) {
+  const secretValid = opportunityWebhookService.isValidWebhookSecret(providedSecret);
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_SECRET_VALIDATED",
+    secretConfigured: Boolean(process.env.GHL_REPARTO_WEBHOOK_SECRET),
+    secretProvided: Boolean(providedSecret),
+    secretValid,
+  });
+  if (!secretValid) {
     return res.status(401).json({ ok: false, code: "INVALID_WEBHOOK_SECRET", message: "Webhook no autorizado" });
   }
   try {
     const result = await opportunityWebhookService.enqueueWebhookEvent(req.body, req.headers);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_ENQUEUE_RESULT",
+      eventId: result.eventId,
+      duplicate: result.duplicate,
+      accepted: result.accepted,
+    });
     return res.status(result.duplicate ? 200 : 202).json({
       ok: true,
       accepted: true,
@@ -194,6 +210,14 @@ async function recibirWebhookReparto(req, res) {
       message: result.duplicate ? "Evento recibido anteriormente" : "Evento aceptado para procesamiento",
     });
   } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_RECEIVE_ERROR",
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+    });
     return res.status(error.statusCode || 500).json({
       ok: false,
       code: error.code || "GHL_WEBHOOK_ERROR",

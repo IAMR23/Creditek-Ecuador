@@ -102,7 +102,7 @@ export default function Sidebar({ auth }) {
             path: "/reporte-entregas",
           },
           {
-            label: "Ventas con Entrega",
+            label: "Reporte de Entregas 2",
             icon: <Link2 size={20} />,
             path: "/ventas-con-entrega",
           },

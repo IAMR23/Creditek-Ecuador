@@ -159,10 +159,49 @@ const requestGhl = async (client, options) => {
   const { beforeRetry, ...requestOptions } = options;
   for (let attempt = 0; ; attempt += 1) {
     try {
+      console.log("[GHL-DEBUG]", {
+        paso: "GHL_HTTP_REQUEST",
+        method: requestOptions.method,
+        url: requestOptions.url,
+        ...(String(requestOptions.method || "").toUpperCase() === "PUT"
+          ? {
+            opportunityId: String(requestOptions.url || "").split("/").filter(Boolean).pop() || null,
+            assignedToPresent: Object.prototype.hasOwnProperty.call(requestOptions.data || {}, "assignedTo"),
+            assignedTo: requestOptions.data?.assignedTo || null,
+          }
+          : {
+            params: Object.fromEntries(Object.entries(requestOptions.params || {}).filter(([key]) =>
+              /^(locationId|pipelineId|status|limit|startAfter|startAfterId|page|offset|companyId|assignedTo|contactId|stageId|startDate|endDate|startDateMillis|endDateMillis)$/i.test(key))),
+          }),
+      });
       const response = await client.request(requestOptions);
+      console.log("[GHL-DEBUG]", {
+        paso: "GHL_HTTP_RESPONSE",
+        method: requestOptions.method,
+        url: requestOptions.url,
+        status: response?.status,
+      });
       return response.data || {};
     } catch (rawError) {
       const error = normalizeGhlError(rawError);
+      console.log("[GHL-DEBUG]", {
+        paso: "GHL_HTTP_ERROR",
+        method: requestOptions.method,
+        url: requestOptions.url,
+        code: error.code,
+        message: error.message,
+        statusCode: error.statusCode,
+        upstreamStatus: error.upstreamStatus,
+        responseStatus: rawError.response?.status,
+        responseData: rawError.response?.data && typeof rawError.response.data === "object"
+          ? {
+            code: rawError.response.data.code,
+            status: rawError.response.data.status,
+            statusCode: rawError.response.data.statusCode,
+            type: rawError.response.data.type,
+          }
+          : rawError.response?.data ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+      });
       if (error.upstreamStatus !== 429 || attempt >= maxRetries) throw error;
       if (typeof beforeRetry === "function") await beforeRetry();
       const delay = Math.min(error.retryAfterMs ?? baseDelay * (2 ** attempt), 10000);

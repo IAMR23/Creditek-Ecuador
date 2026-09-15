@@ -77,14 +77,54 @@ function idempotencyKey(payload, normalized) {
 }
 
 async function processWebhookEvent(eventId, normalized) {
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_ASYNC_PROCESSING_START",
+    eventId,
+    payloadEventId: normalized.eventId,
+    opportunityId: normalized.opportunityId,
+    contactId: normalized.contactId,
+    locationId: normalized.locationId,
+  });
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_EVENT_CLAIM_ATTEMPT",
+    eventId,
+  });
   const [claimed] = await WebhookEvento.update({
     estado: "processing",
     lockedAt: new Date(),
     attemptCount: 1,
   }, { where: { id: eventId, estado: "received" } });
-  if (!claimed) return { code: "DUPLICATE_OR_PROCESSING", assigned: false };
+  console.log("[GHL-DEBUG]", {
+    paso: claimed ? "WEBHOOK_EVENT_CLAIMED" : "WEBHOOK_EVENT_CLAIM_REJECTED",
+    eventId,
+    claimed: Boolean(claimed),
+  });
+  if (!claimed) {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_PROCESSING_RESULT",
+      eventId,
+      code: "DUPLICATE_OR_PROCESSING",
+      assigned: false,
+    });
+    return { code: "DUPLICATE_OR_PROCESSING", assigned: false };
+  }
   try {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_DISTRIBUTION_START",
+      eventId,
+      opportunityId: normalized.opportunityId,
+      contactId: normalized.contactId,
+    });
     const result = await distribution.executeWebhookOpportunity(normalized);
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_DISTRIBUTION_RESULT",
+      eventId,
+      code: result.code,
+      assigned: result.assigned,
+      opportunityId: result.opportunityId || normalized.opportunityId,
+      ghlUserId: result.advisorId || null,
+      deferredToScheduler: result.deferredToScheduler,
+    });
     await WebhookEvento.update({
       estado: result.assigned ? "completed" : "ignored",
       resultCode: result.code,
@@ -93,20 +133,79 @@ async function processWebhookEvent(eventId, normalized) {
       processedAt: new Date(),
       lastError: null,
     }, { where: { id: eventId } });
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_EVENT_FINAL_STATE_SAVED",
+      eventId,
+      estado: result.assigned ? "completed" : "ignored",
+      code: result.code,
+      assigned: result.assigned,
+      opportunityId: result.opportunityId || normalized.opportunityId,
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_PROCESSING_RESULT",
+      eventId,
+      code: result.code,
+      assigned: result.assigned,
+      opportunityId: result.opportunityId || normalized.opportunityId,
+      ghlUserId: result.advisorId || null,
+    });
     return result;
   } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_PROCESSING_ERROR",
+      eventId,
+      opportunityId: normalized.opportunityId,
+      contactId: normalized.contactId,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+      responseData: (error.response?.data || error.upstreamData) && typeof (error.response?.data || error.upstreamData) === "object"
+        ? {
+          code: (error.response?.data || error.upstreamData).code,
+          status: (error.response?.data || error.upstreamData).status,
+          statusCode: (error.response?.data || error.upstreamData).statusCode,
+          type: (error.response?.data || error.upstreamData).type,
+        }
+        : (error.response?.data || error.upstreamData) ? "[OMITIDO_POR_SEGURIDAD]" : undefined,
+    });
     await WebhookEvento.update({
       estado: "failed",
       resultCode: error.code || "GHL_WEBHOOK_PROCESSING_ERROR",
       processedAt: new Date(),
       lastError: String(error.code || "GHL_WEBHOOK_PROCESSING_ERROR").slice(0, 80),
     }, { where: { id: eventId } });
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_EVENT_FINAL_STATE_SAVED",
+      eventId,
+      estado: "failed",
+      code: error.code || "GHL_WEBHOOK_PROCESSING_ERROR",
+      assigned: false,
+    });
     return { code: error.code || "GHL_WEBHOOK_PROCESSING_ERROR", assigned: false, failed: true };
   }
 }
 
 const defaultSchedule = (eventId, normalized) => setImmediate(() => {
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_SET_IMMEDIATE_ENTERED",
+    eventId,
+    opportunityId: normalized.opportunityId,
+    contactId: normalized.contactId,
+  });
   processWebhookEvent(eventId, normalized).catch((error) => {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_ASYNC_UNHANDLED_ERROR",
+      eventId,
+      opportunityId: normalized.opportunityId,
+      contactId: normalized.contactId,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+    });
     console.error("Fallo interno procesando webhook de reparto GHL", {
       eventoId: eventId,
       code: error.code || "GHL_WEBHOOK_PROCESSING_ERROR",
@@ -116,9 +215,23 @@ const defaultSchedule = (eventId, normalized) => setImmediate(() => {
 
 async function enqueueWebhookEvent(payload, headers = {}, schedule = defaultSchedule) {
   const normalized = normalizeWebhookPayload(payload, headers);
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_IDS_NORMALIZED",
+    payloadEventId: normalized.eventId,
+    opportunityId: normalized.opportunityId,
+    contactId: normalized.contactId,
+    locationId: normalized.locationId,
+    workflowId: normalized.workflowId,
+  });
   const key = idempotencyKey(payload, normalized);
   let event;
   try {
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_EVENT_CREATE_START",
+      payloadEventId: normalized.eventId,
+      opportunityId: normalized.opportunityId,
+      contactId: normalized.contactId,
+    });
     event = await WebhookEvento.create({
       idempotencyKey: key,
       estado: "received",
@@ -128,11 +241,44 @@ async function enqueueWebhookEvent(payload, headers = {}, schedule = defaultSche
       workflowId: normalized.workflowId,
       source: normalized.source,
     });
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_EVENT_CREATED",
+      eventId: event.id,
+      payloadEventId: normalized.eventId,
+      opportunityId: normalized.opportunityId,
+      contactId: normalized.contactId,
+    });
   } catch (error) {
-    if (error.name !== "SequelizeUniqueConstraintError") throw error;
+    if (error.name !== "SequelizeUniqueConstraintError") {
+      console.log("[GHL-DEBUG]", {
+        paso: "WEBHOOK_EVENT_CREATE_ERROR",
+        payloadEventId: normalized.eventId,
+        opportunityId: normalized.opportunityId,
+        contactId: normalized.contactId,
+        code: error.code,
+        message: error.message,
+        statusCode: error.statusCode,
+        upstreamStatus: error.upstreamStatus,
+      });
+      throw error;
+    }
     event = await WebhookEvento.findOne({ where: { idempotencyKey: key } });
+    console.log("[GHL-DEBUG]", {
+      paso: "WEBHOOK_DUPLICATE_DETECTED",
+      eventId: event?.id || null,
+      payloadEventId: normalized.eventId,
+      opportunityId: normalized.opportunityId,
+      contactId: normalized.contactId,
+      duplicate: true,
+    });
     return { accepted: true, duplicate: true, eventId: event?.id || null };
   }
+  console.log("[GHL-DEBUG]", {
+    paso: "WEBHOOK_ASYNC_PROCESSING_SCHEDULED",
+    eventId: event.id,
+    opportunityId: normalized.opportunityId,
+    contactId: normalized.contactId,
+  });
   schedule(event.id, normalized);
   return { accepted: true, duplicate: false, eventId: event.id };
 }

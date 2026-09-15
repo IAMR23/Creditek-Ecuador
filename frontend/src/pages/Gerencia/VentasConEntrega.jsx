@@ -16,11 +16,44 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import Swal from "sweetalert2";
+import Select from "react-select";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { api } from "../../api/client";
-import SelectUsuarios from "../../components/common/SelectUsuarios";
 import { getHoyLocal } from "../../utils/dateUtils";
+import { nombreCortoUsuario } from "../../utils/nombres";
 
 const REGISTROS_POR_PAGINA = 25;
+
+const ESTILOS_SELECTOR_MULTIPLE = {
+  control: (base, estado) => ({
+    ...base,
+    minHeight: 44,
+    borderRadius: 12,
+    borderColor: estado.isFocused ? "#10b981" : "#e2e8f0",
+    boxShadow: estado.isFocused ? "0 0 0 4px #d1fae5" : "none",
+    ":hover": { borderColor: estado.isFocused ? "#10b981" : "#cbd5e1" },
+  }),
+  multiValue: (base) => ({
+    ...base,
+    borderRadius: 8,
+    backgroundColor: "#d1fae5",
+  }),
+  multiValueLabel: (base) => ({ ...base, color: "#065f46" }),
+  multiValueRemove: (base) => ({
+    ...base,
+    color: "#047857",
+    ":hover": { backgroundColor: "#a7f3d0", color: "#064e3b" },
+  }),
+  menuPortal: (base) => ({ ...base, zIndex: 50 }),
+};
 
 const COLUMNAS = [
   { key: "ventaId", label: "ID venta" },
@@ -36,6 +69,7 @@ const COLUMNAS = [
     className: "min-w-[170px]",
   },
   { key: "estadoEntrega", label: "Estado entrega" },
+  { key: "tipoEntrega", label: "Tipo de entrega" },
   { key: "cliente", label: "Cliente", className: "min-w-[210px]" },
   { key: "cedula", label: "Cédula" },
   { key: "telefono", label: "Teléfono" },
@@ -81,20 +115,56 @@ const clasesRelacion = (fila) => {
     : "bg-blue-100 text-blue-800";
 };
 
+const formatoMes = new Intl.DateTimeFormat("es-EC", {
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+const etiquetaMes = (mes) => {
+  const [anio, numeroMes] = String(mes || "").split("-").map(Number);
+  if (!anio || !numeroMes) return mes;
+  return formatoMes.format(new Date(Date.UTC(anio, numeroMes - 1, 1)));
+};
+
+const mesesDelPeriodo = (fechaInicio, fechaFin) => {
+  if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) return [];
+
+  const [anioInicio, mesInicio] = fechaInicio.split("-").map(Number);
+  const [anioFin, mesFin] = fechaFin.split("-").map(Number);
+  const actual = new Date(Date.UTC(anioInicio, mesInicio - 1, 1));
+  const fin = new Date(Date.UTC(anioFin, mesFin - 1, 1));
+  const meses = [];
+
+  while (actual <= fin && meses.length < 240) {
+    meses.push(
+      `${actual.getUTCFullYear()}-${String(actual.getUTCMonth() + 1).padStart(2, "0")}`,
+    );
+    actual.setUTCMonth(actual.getUTCMonth() + 1);
+  }
+
+  return meses;
+};
+
 export default function VentasConEntrega() {
   const hoy = getHoyLocal();
   const inicioMes = `${hoy.slice(0, 8)}01`;
   const [ventas, setVentas] = useState([]);
+  const [dashboard, setDashboard] = useState({
+    entregasPorMes: [],
+    ventasDesdeHoraPorMes: [],
+  });
   const [agencias, setAgencias] = useState([]);
+  const [vendedores, setVendedores] = useState([]);
   const [origenes, setOrigenes] = useState([]);
   const [fechaInicio, setFechaInicio] = useState(inicioMes);
   const [fechaFin, setFechaFin] = useState(hoy);
   const [horaRegistroDesde, setHoraRegistroDesde] = useState("");
-  const [agenciaId, setAgenciaId] = useState("");
-  const [vendedorId, setVendedorId] = useState("");
+  const [agenciaIds, setAgenciaIds] = useState([]);
+  const [vendedorIds, setVendedorIds] = useState([]);
   const [origenId, setOrigenId] = useState("");
-  const [soloOrigenEntrega, setSoloOrigenEntrega] = useState(true);
   const [estadoEntrega, setEstadoEntrega] = useState("");
+  const [tipoEntrega, setTipoEntrega] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -104,15 +174,22 @@ export default function VentasConEntrega() {
     let activo = true;
 
     const cargarCatalogos = async () => {
-      const [agenciasResult, origenesResult] = await Promise.allSettled([
-        api.get("/agencias"),
-        api.get("/origen"),
-      ]);
+      const [agenciasResult, vendedoresResult, origenesResult] =
+        await Promise.allSettled([
+          api.get("/agencias"),
+          api.get("/usuarios", { params: { rol: "Vendedor" } }),
+          api.get("/origen"),
+        ]);
 
       if (!activo) return;
       setAgencias(
         agenciasResult.status === "fulfilled"
           ? agenciasResult.value.data || []
+          : [],
+      );
+      setVendedores(
+        vendedoresResult.status === "fulfilled"
+          ? vendedoresResult.value.data || []
           : [],
       );
       setOrigenes(
@@ -131,6 +208,7 @@ export default function VentasConEntrega() {
   const cargarInforme = useCallback(async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setVentas([]);
+      setDashboard({ entregasPorMes: [], ventasDesdeHoraPorMes: [] });
       setError("La fecha inicial no puede ser mayor que la fecha final.");
       return;
     }
@@ -143,11 +221,11 @@ export default function VentasConEntrega() {
         fechaInicio: fechaInicio || undefined,
         fechaFin: fechaFin || undefined,
         horaRegistroDesde: horaRegistroDesde || undefined,
-        agenciaId: agenciaId || undefined,
-        vendedorId: vendedorId || undefined,
+        agenciaIds: agenciaIds.length ? agenciaIds.join(",") : undefined,
+        vendedorIds: vendedorIds.length ? vendedorIds.join(",") : undefined,
         origenId: origenId || undefined,
-        soloOrigenEntrega,
         estadoEntrega: estadoEntrega || undefined,
+        tipoEntrega: tipoEntrega || undefined,
       };
       const { data } = await api.get(
         "/api/gerencia/informe-ventas-con-entrega",
@@ -156,9 +234,20 @@ export default function VentasConEntrega() {
 
       if (!data.ok) throw new Error("Respuesta inválida del informe.");
       setVentas(Array.isArray(data.ventas) ? data.ventas : []);
+      setDashboard({
+        entregasPorMes: Array.isArray(data.dashboard?.entregasPorMes)
+          ? data.dashboard.entregasPorMes
+          : [],
+        ventasDesdeHoraPorMes: Array.isArray(
+          data.dashboard?.ventasDesdeHoraPorMes,
+        )
+          ? data.dashboard.ventasDesdeHoraPorMes
+          : [],
+      });
     } catch (requestError) {
       console.error(requestError);
       setVentas([]);
+      setDashboard({ entregasPorMes: [], ventasDesdeHoraPorMes: [] });
       setError(
         requestError.response?.data?.message ||
           requestError.message ||
@@ -168,14 +257,14 @@ export default function VentasConEntrega() {
       setLoading(false);
     }
   }, [
-    agenciaId,
+    agenciaIds,
     estadoEntrega,
     fechaFin,
     fechaInicio,
     horaRegistroDesde,
     origenId,
-    soloOrigenEntrega,
-    vendedorId,
+    tipoEntrega,
+    vendedorIds,
   ]);
 
   useEffect(() => {
@@ -221,15 +310,68 @@ export default function VentasConEntrega() {
     [ventasFiltradas],
   );
 
+  const opcionesAgencias = useMemo(
+    () =>
+      agencias.map((agencia) => ({
+        value: String(agencia.id),
+        label: agencia.nombre,
+      })),
+    [agencias],
+  );
+  const opcionesVendedores = useMemo(
+    () =>
+      vendedores.map((vendedor) => ({
+        value: String(vendedor.id),
+        label: nombreCortoUsuario(vendedor),
+      })),
+    [vendedores],
+  );
+
+  const datosDashboard = useMemo(() => {
+    const entregas = new Map(
+      dashboard.entregasPorMes.map((registro) => [
+        registro.mes,
+        Number(registro.cantidad || 0),
+      ]),
+    );
+    const ventasDesdeHora = new Map(
+      dashboard.ventasDesdeHoraPorMes.map((registro) => [
+        registro.mes,
+        Number(registro.cantidad || 0),
+      ]),
+    );
+    const mesesConDatos = new Set([
+      ...entregas.keys(),
+      ...ventasDesdeHora.keys(),
+    ]);
+    const meses = mesesDelPeriodo(fechaInicio, fechaFin);
+
+    return (meses.length ? meses : [...mesesConDatos].sort()).map((mes) => ({
+      mes,
+      etiqueta: etiquetaMes(mes),
+      entregas: entregas.get(mes) || 0,
+      ventasDesdeHora: ventasDesdeHora.get(mes) || 0,
+    }));
+  }, [dashboard, fechaFin, fechaInicio]);
+
+  const totalEntregasDashboard = datosDashboard.reduce(
+    (total, registro) => total + registro.entregas,
+    0,
+  );
+  const totalVentasDesdeHora = datosDashboard.reduce(
+    (total, registro) => total + registro.ventasDesdeHora,
+    0,
+  );
+
   const limpiarFiltros = () => {
     setFechaInicio(inicioMes);
     setFechaFin(hoy);
     setHoraRegistroDesde("");
-    setAgenciaId("");
-    setVendedorId("");
+    setAgenciaIds([]);
+    setVendedorIds([]);
     setOrigenId("");
-    setSoloOrigenEntrega(true);
     setEstadoEntrega("");
+    setTipoEntrega("");
     setBusqueda("");
   };
 
@@ -245,6 +387,7 @@ export default function VentasConEntrega() {
       "ID entrega relacionada": venta.entregaId,
       "Fecha y hora entrega": mostrarFechaHora(venta.fechaRegistroEntrega),
       "Estado entrega": venta.estadoEntrega,
+      "Tipo de entrega": venta.tipoEntrega,
       Cliente: venta.cliente,
       Cédula: venta.cedula,
       Teléfono: venta.telefono,
@@ -378,7 +521,7 @@ export default function VentasConEntrega() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             <label>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <CalendarDays size={14} /> Fecha inicial
+                <CalendarDays size={14} /> Registro inicial
               </span>
               <input
                 type="date"
@@ -389,7 +532,7 @@ export default function VentasConEntrega() {
             </label>
             <label>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <Clock3 size={14} /> Registrada desde
+                <Clock3 size={14} /> Hora diaria desde
               </span>
               <input
                 type="time"
@@ -400,7 +543,7 @@ export default function VentasConEntrega() {
             </label>
             <label>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <CalendarDays size={14} /> Fecha final
+                <CalendarDays size={14} /> Registro final
               </span>
               <input
                 type="date"
@@ -409,29 +552,52 @@ export default function VentasConEntrega() {
                 className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
               />
             </label>
-            <label>
+            <div>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
                 <Building2 size={14} /> Agencia
               </span>
-              <select
-                value={agenciaId}
-                onChange={(event) => setAgenciaId(event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
-              >
-                <option value="">Todas</option>
-                {agencias.map((agencia) => (
-                  <option key={agencia.id} value={agencia.id}>
-                    {agencia.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="[&_label]:mb-2 [&_label]:flex [&_label]:text-xs [&_label]:font-bold [&_label]:uppercase [&_label]:text-slate-500 [&_select]:h-11 [&_select]:w-full [&_select]:rounded-xl [&_select]:border-slate-200 [&_select]:text-sm [&_select]:focus:border-emerald-500 [&_select]:focus:ring-4 [&_select]:focus:ring-emerald-100">
-              <SelectUsuarios
-                label="Vendedor"
-                value={vendedorId}
-                onChange={setVendedorId}
-                rol="Vendedor"
+              <Select
+                isMulti
+                isClearable
+                closeMenuOnSelect={false}
+                hideSelectedOptions={false}
+                options={opcionesAgencias}
+                value={opcionesAgencias.filter((opcion) =>
+                  agenciaIds.includes(opcion.value),
+                )}
+                onChange={(seleccion) =>
+                  setAgenciaIds(
+                    (seleccion || []).map((opcion) => opcion.value),
+                  )
+                }
+                placeholder="Todas"
+                noOptionsMessage={() => "Sin agencias"}
+                styles={ESTILOS_SELECTOR_MULTIPLE}
+                aria-label="Agencias"
+              />
+            </div>
+            <div>
+              <span className="mb-2 block text-xs font-bold uppercase text-slate-500">
+                Vendedor
+              </span>
+              <Select
+                isMulti
+                isClearable
+                closeMenuOnSelect={false}
+                hideSelectedOptions={false}
+                options={opcionesVendedores}
+                value={opcionesVendedores.filter((opcion) =>
+                  vendedorIds.includes(opcion.value),
+                )}
+                onChange={(seleccion) =>
+                  setVendedorIds(
+                    (seleccion || []).map((opcion) => opcion.value),
+                  )
+                }
+                placeholder="Todos"
+                noOptionsMessage={() => "Sin vendedores"}
+                styles={ESTILOS_SELECTOR_MULTIPLE}
+                aria-label="Vendedores"
               />
             </div>
             <label>
@@ -441,7 +607,6 @@ export default function VentasConEntrega() {
               <select
                 value={origenId}
                 onChange={(event) => setOrigenId(event.target.value)}
-                disabled={soloOrigenEntrega}
                 className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
               >
                 <option value="">Todos</option>
@@ -451,18 +616,6 @@ export default function VentasConEntrega() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="flex h-11 items-center gap-3 self-end rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800">
-              <input
-                type="checkbox"
-                checked={soloOrigenEntrega}
-                onChange={(event) => {
-                  setSoloOrigenEntrega(event.target.checked);
-                  if (event.target.checked) setOrigenId("");
-                }}
-                className="h-4 w-4 accent-emerald-600"
-              />
-              Solo origen Entrega
             </label>
             <label>
               <span className="mb-2 block text-xs font-bold uppercase text-slate-500">
@@ -480,6 +633,20 @@ export default function VentasConEntrega() {
                 <option value="No Entregado">No entregado</option>
               </select>
             </label>
+            <label>
+              <span className="mb-2 block text-xs font-bold uppercase text-slate-500">
+                Tipo de entrega
+              </span>
+              <select
+                value={tipoEntrega}
+                onChange={(event) => setTipoEntrega(event.target.value)}
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+              >
+                <option value="">Todos</option>
+                <option value="Entrega">Entrega</option>
+                <option value="Envio">Envío</option>
+              </select>
+            </label>
           </div>
         </section>
 
@@ -495,6 +662,118 @@ export default function VentasConEntrega() {
             </button>
           </div>
         )}
+
+        <section className="grid gap-4 xl:grid-cols-2">
+          <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-950">
+                  Entregas registradas por mes
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Fecha de registro de la entrega en horario de Ecuador.
+                </p>
+              </div>
+              <span className="rounded-xl bg-emerald-100 px-3 py-2 text-lg font-bold text-emerald-700">
+                {totalEntregasDashboard.toLocaleString("es-EC")}
+              </span>
+            </div>
+            <div className="h-72">
+              {loading ? (
+                <div className="h-full animate-pulse rounded-xl bg-slate-100" />
+              ) : datosDashboard.some((registro) => registro.entregas > 0) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={datosDashboard}
+                    margin={{ top: 10, right: 18, left: -14, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="etiqueta" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(valor) => [
+                        Number(valor).toLocaleString("es-EC"),
+                        "Entregas",
+                      ]}
+                      labelFormatter={(_, elementos) =>
+                        elementos?.[0]?.payload?.mes || ""
+                      }
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="entregas"
+                      stroke="#059669"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
+                  No existen entregas en el período seleccionado.
+                </div>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-950">
+                  Ventas registradas por mes
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {horaRegistroDesde
+                    ? `Creadas diariamente desde las ${horaRegistroDesde} (hora Ecuador).`
+                    : "Todas las horas; selecciona una hora diaria para aplicar el corte."}
+                </p>
+              </div>
+              <span className="rounded-xl bg-blue-100 px-3 py-2 text-lg font-bold text-blue-700">
+                {totalVentasDesdeHora.toLocaleString("es-EC")}
+              </span>
+            </div>
+            <div className="h-72">
+              {loading ? (
+                <div className="h-full animate-pulse rounded-xl bg-slate-100" />
+              ) : datosDashboard.some(
+                  (registro) => registro.ventasDesdeHora > 0,
+                ) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={datosDashboard}
+                    margin={{ top: 10, right: 18, left: -14, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="etiqueta" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={(valor) => [
+                        Number(valor).toLocaleString("es-EC"),
+                        "Ventas",
+                      ]}
+                      labelFormatter={(_, elementos) =>
+                        elementos?.[0]?.payload?.mes || ""
+                      }
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="ventasDesdeHora"
+                      stroke="#2563eb"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500">
+                  No existen ventas desde la hora indicada en el período.
+                </div>
+              )}
+            </div>
+          </article>
+        </section>
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">

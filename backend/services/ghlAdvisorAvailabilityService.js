@@ -388,6 +388,12 @@ async function changeAvailability({
   motivoCambio,
   now = new Date(),
 }) {
+  console.log("[GHL-DEBUG]", {
+    paso: "CHANGE_AVAILABILITY_START",
+    usuarioId,
+    estadoSolicitado: estado,
+  });
+  try {
   const normalizedState = String(estado || "").trim().toUpperCase();
   if (!ESTADOS.includes(normalizedState)) {
     throw availabilityError("INVALID_AVAILABILITY_STATE", "El estado debe ser ACTIVO o PAUSADO", 400);
@@ -395,12 +401,23 @@ async function changeAvailability({
 
   if (normalizedState === "ACTIVO") {
     const usuario = await Usuario.findOne({ where: { id: usuarioId, activo: true } });
+    console.log("[GHL-DEBUG]", {
+      paso: "RVE_USER_VALIDATED",
+      usuarioId,
+      existeYActivo: Boolean(usuario),
+    });
     if (!usuario) throw availabilityError("RVE_USER_INACTIVE", "El asesor RVE no esta activo", 409);
   }
 
   let assignableGhlIds = null;
   if (normalizedState === "ACTIVO") {
     const preliminaryLink = await Vinculo.findOne({ where: { usuarioId, activo: true } });
+    console.log("[GHL-DEBUG]", {
+      paso: "RVE_GHL_ASSOCIATION_VALIDATED",
+      usuarioId,
+      asociacionExiste: Boolean(preliminaryLink),
+      ghlUserId: preliminaryLink?.ghlUserId || null,
+    });
     if (!preliminaryLink) {
       throw availabilityError(
         "GHL_ASSOCIATION_REQUIRED",
@@ -408,15 +425,44 @@ async function changeAvailability({
         409,
       );
     }
-    assignableGhlIds = new Set((await fetchCurrentGhlUsers()).map(ghlUserIdOf));
+    console.log("[GHL-DEBUG]", {
+      paso: "GHL_USERS_REQUEST_START",
+      usuarioId,
+      ghlUserId: preliminaryLink.ghlUserId,
+    });
+    const currentGhlUsers = await fetchCurrentGhlUsers();
+    console.log("[GHL-DEBUG]", {
+      paso: "GHL_USERS_REQUEST_SUCCESS",
+      usuarioId,
+      cantidadUsuarios: currentGhlUsers.length,
+    });
+    assignableGhlIds = new Set(currentGhlUsers.map(ghlUserIdOf));
+    console.log("[GHL-DEBUG]", {
+      paso: "GHL_USER_ASSIGNABLE_CHECK",
+      usuarioId,
+      ghlUserId: preliminaryLink.ghlUserId,
+      asignable: assignableGhlIds.has(String(preliminaryLink.ghlUserId)),
+    });
   }
 
   const today = localDate(now);
+  console.log("[GHL-DEBUG]", {
+    paso: "AVAILABILITY_LOCAL_DATE",
+    usuarioId,
+    fechaLocal: today,
+  });
   return sequelize.transaction(async (transaction) => {
     const row = await Vinculo.findOne({
       where: { usuarioId },
       transaction,
       lock: transaction.LOCK.UPDATE,
+    });
+    console.log("[GHL-DEBUG]", {
+      paso: "RVE_GHL_ASSOCIATION_LOCKED",
+      usuarioId,
+      asociacionExiste: Boolean(row),
+      asociacionActiva: row?.activo === true,
+      ghlUserId: row?.ghlUserId || null,
     });
     if (!row || !row.activo) {
       throw availabilityError(
@@ -437,8 +483,22 @@ async function changeAvailability({
     }
 
     const previousState = effectiveState(row, now);
+    console.log("[GHL-DEBUG]", {
+      paso: "ADVISOR_STATE_CHANGE_EVALUATED",
+      usuarioId,
+      ghlUserId: row.ghlUserId,
+      estadoAnterior: previousState,
+      estadoNuevo: normalizedState,
+      fechaLocal: today,
+    });
     if (previousState === normalizedState) {
       const counts = await countTodayByGhlUser([row.ghlUserId], now);
+      console.log("[GHL-DEBUG]", {
+        paso: "ADVISOR_STATE_ALREADY_CURRENT",
+        usuarioId,
+        ghlUserId: row.ghlUserId,
+        estado: normalizedState,
+      });
       return serializeAvailability(row, counts.get(String(row.ghlUserId)) || 0, now);
     }
 
@@ -452,6 +512,15 @@ async function changeAvailability({
       },
       { transaction },
     );
+    console.log("[GHL-DEBUG]", {
+      paso: "ADVISOR_STATE_UPDATED",
+      usuarioId,
+      ghlUserId: row.ghlUserId,
+      estadoAnterior: previousState,
+      estadoNuevo: normalizedState,
+      fechaLocal: today,
+      baseDatosActualizada: true,
+    });
     await Historial.create(
       {
         vinculoId: row.id,
@@ -466,9 +535,29 @@ async function changeAvailability({
       },
       { transaction },
     );
+    console.log("[GHL-DEBUG]", {
+      paso: "ADVISOR_HISTORY_CREATED",
+      usuarioId,
+      ghlUserId: row.ghlUserId,
+      estadoAnterior: previousState,
+      estadoNuevo: normalizedState,
+      fechaLocal: today,
+    });
     const counts = await countTodayByGhlUser([row.ghlUserId], now);
     return serializeAvailability(row, counts.get(String(row.ghlUserId)) || 0, now);
   });
+  } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "CHANGE_AVAILABILITY_ERROR",
+      usuarioId,
+      estadoSolicitado: estado,
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+    });
+    throw error;
+  }
 }
 
 async function resolveConfiguredAdvisors(configuredUsers, currentGhlUsers, now = new Date()) {
@@ -524,6 +613,11 @@ async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
       required: true,
     }],
   });
+  console.log("[GHL-DEBUG]", {
+    paso: "ADVISOR_LINKS_FOUND",
+    cantidadVinculos: rows.length,
+    cantidadUsuariosGhl: (currentGhlUsers || []).length,
+  });
   const currentById = new Map(
     (currentGhlUsers || [])
       .filter((user) => user?.deleted !== true && user?.active !== false && user?.status !== "inactive")
@@ -538,9 +632,30 @@ async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
       name: ghlUser ? ghlUserNameOf(ghlUser) : row.ghlNombre,
       email: String(ghlUser?.email || row.ghlEmail || ""),
     };
-    if (!ghlUser) result.invalid.push({ ...user, reason: "El usuario vinculado ya no es asignable en GHL" });
+    if (!ghlUser) {
+      console.log("[GHL-DEBUG]", {
+        paso: "ADVISOR_ASSOCIATION_INVALID",
+        usuarioId: row.usuarioId,
+        ghlUserId: row.ghlUserId,
+        motivo: "El usuario vinculado ya no es asignable en GHL",
+      });
+      result.invalid.push({ ...user, reason: "El usuario vinculado ya no es asignable en GHL" });
+    }
     else if (effectiveState(row, now) === "ACTIVO") result.active.push(user);
     else result.paused.push(user);
+  });
+
+  console.log("[GHL-DEBUG]", {
+    paso: "ACTIVE_ADVISORS_RESOLVED",
+    cantidadVinculos: rows.length,
+    cantidadUsuariosGhl: (currentGhlUsers || []).length,
+    asesoresActivosIds: result.active.map((user) => user.id),
+    asesoresPausadosIds: result.paused.map((user) => user.id),
+    asociacionesInvalidasIds: result.invalid.map((user) => user.id),
+    asociacionesInvalidas: result.invalid.map((user) => ({
+      ghlUserId: user.id,
+      motivo: user.reason,
+    })),
   });
 
   return result;

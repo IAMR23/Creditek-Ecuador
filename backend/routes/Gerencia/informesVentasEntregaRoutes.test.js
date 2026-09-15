@@ -56,13 +56,29 @@ describe("GET /api/gerencia/informe-ventas-con-entrega", () => {
   test("permite consultar con autenticacion y permiso", async () => {
     const response = await request(crearAplicacion())
       .get("/api/gerencia/informe-ventas-con-entrega")
-      .query({ estadoEntrega: "Entregado" })
+      .query({
+        fechaInicio: "2026-09-01",
+        fechaFin: "2026-09-15",
+        horaRegistroDesde: "21:00",
+        agenciaIds: "1,2",
+        vendedorIds: "3,4",
+        estadoEntrega: "Entregado",
+        tipoEntrega: "Envio",
+      })
       .set("Authorization", "Bearer valido")
       .set("x-test-permisos", "Gerencia");
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       ok: true,
-      filtros: { estadoEntrega: "Entregado" },
+      filtros: {
+        fechaInicio: "2026-09-01",
+        fechaFin: "2026-09-15",
+        horaRegistroDesde: "21:00",
+        agenciaIds: "1,2",
+        vendedorIds: "3,4",
+        estadoEntrega: "Entregado",
+        tipoEntrega: "Envio",
+      },
     });
   });
 });

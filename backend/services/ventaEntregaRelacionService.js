@@ -225,15 +225,33 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
     LEFT JOIN usuarios usuario ON usuario.id = ua."usuarioId"
     LEFT JOIN origenes origen ON origen.id = v."origenId"
     WHERE v.activo IS TRUE
-      AND (:fechaInicio IS NULL OR v.fecha >= CAST(:fechaInicio AS DATE))
-      AND (:fechaFin IS NULL OR v.fecha <= CAST(:fechaFin AS DATE))
+      AND (
+        :fechaInicio IS NULL
+        OR (v."createdAt" AT TIME ZONE 'America/Guayaquil')::DATE
+          >= CAST(:fechaInicio AS DATE)
+      )
+      AND (
+        :fechaFin IS NULL
+        OR (v."createdAt" AT TIME ZONE 'America/Guayaquil')::DATE
+          <= CAST(:fechaFin AS DATE)
+      )
       AND (
         :horaRegistroDesde IS NULL
         OR (v."createdAt" AT TIME ZONE 'America/Guayaquil')::TIME
           >= CAST(:horaRegistroDesde AS TIME)
       )
-      AND (:agenciaId IS NULL OR ua."agenciaId" = :agenciaId)
-      AND (:vendedorId IS NULL OR ua."usuarioId" = :vendedorId)
+      AND (
+        :agenciaIds IS NULL
+        OR ua."agenciaId" = ANY(
+          string_to_array(:agenciaIds, ',')::INTEGER[]
+        )
+      )
+      AND (
+        :vendedorIds IS NULL
+        OR ua."usuarioId" = ANY(
+          string_to_array(:vendedorIds, ',')::INTEGER[]
+        )
+      )
       AND (:origenId IS NULL OR v."origenId" = :origenId)
       AND (
         :soloOrigenEntrega IS FALSE
@@ -285,11 +303,13 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
       entrega.fecha AS "fechaEntrega",
       entrega."createdAt" AS "fechaRegistroEntrega",
       entrega.estado AS "estadoEntrega",
+      entrega."tipoEntrega",
       'DIRECTA'::TEXT AS "tipoRelacion"
     FROM ventas_filtradas venta
     INNER JOIN entregas entrega ON entrega."ventaId" = venta."ventaId"
     WHERE COALESCE(entrega.activo, TRUE) IS TRUE
       AND (:estadoEntrega IS NULL OR entrega.estado = :estadoEntrega)
+      AND (:tipoEntrega IS NULL OR entrega."tipoEntrega" = :tipoEntrega)
 
     UNION ALL
 
@@ -299,6 +319,7 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
       entrega.fecha AS "fechaEntrega",
       entrega."createdAt" AS "fechaRegistroEntrega",
       entrega.estado AS "estadoEntrega",
+      entrega."tipoEntrega",
       'POR_CEDULA'::TEXT AS "tipoRelacion"
     FROM ventas_filtradas venta
     INNER JOIN entregas entrega ON entrega."ventaId" IS NULL
@@ -312,6 +333,7 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
         'g'
       ) = venta."cedulaNormalizada"
       AND (:estadoEntrega IS NULL OR entrega.estado = :estadoEntrega)
+      AND (:tipoEntrega IS NULL OR entrega."tipoEntrega" = :tipoEntrega)
   )
   SELECT
     venta.*,
@@ -319,6 +341,7 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
     relacion."fechaEntrega",
     relacion."fechaRegistroEntrega",
     relacion."estadoEntrega",
+    relacion."tipoEntrega",
     relacion."tipoRelacion",
     COALESCE(ventas_cedula."cantidadVentas", 0) AS "cantidadVentasCedula",
     detalle.dispositivo,
@@ -334,6 +357,124 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
   ORDER BY venta."fechaVenta" DESC, venta."ventaId" DESC,
     CASE WHEN relacion."tipoRelacion" = 'DIRECTA' THEN 0 ELSE 1 END,
     relacion."fechaRegistroEntrega" DESC, relacion."entregaId" DESC
+`;
+
+const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
+  WITH ventas_base AS (
+    SELECT
+      v.id AS "ventaId",
+      v."createdAt" AS "fechaRegistroVenta",
+      REGEXP_REPLACE(COALESCE(cliente_venta.cedula, ''), '[^0-9]', '', 'g')
+        AS "cedulaNormalizada"
+    FROM ventas v
+    INNER JOIN clientes cliente_venta ON cliente_venta.id = v."clienteId"
+    INNER JOIN usuario_agencia ua ON ua.id = v."usuarioAgenciaId"
+    LEFT JOIN origenes origen ON origen.id = v."origenId"
+    WHERE v.activo IS TRUE
+      AND (
+        :agenciaIds IS NULL
+        OR ua."agenciaId" = ANY(
+          string_to_array(:agenciaIds, ',')::INTEGER[]
+        )
+      )
+      AND (
+        :vendedorIds IS NULL
+        OR ua."usuarioId" = ANY(
+          string_to_array(:vendedorIds, ',')::INTEGER[]
+        )
+      )
+      AND (:origenId IS NULL OR v."origenId" = :origenId)
+      AND (
+        :soloOrigenEntrega IS FALSE
+        OR LOWER(TRIM(COALESCE(origen.nombre, ''))) = 'entrega'
+      )
+  ),
+  relaciones_dashboard AS (
+    SELECT
+      venta."ventaId",
+      venta."fechaRegistroVenta",
+      entrega.id AS "entregaId",
+      entrega."createdAt" AS "fechaRegistroEntrega"
+    FROM ventas_base venta
+    INNER JOIN entregas entrega ON entrega."ventaId" = venta."ventaId"
+    WHERE COALESCE(entrega.activo, TRUE) IS TRUE
+      AND (:estadoEntrega IS NULL OR entrega.estado = :estadoEntrega)
+      AND (:tipoEntrega IS NULL OR entrega."tipoEntrega" = :tipoEntrega)
+
+    UNION ALL
+
+    SELECT
+      venta."ventaId",
+      venta."fechaRegistroVenta",
+      entrega.id AS "entregaId",
+      entrega."createdAt" AS "fechaRegistroEntrega"
+    FROM ventas_base venta
+    INNER JOIN entregas entrega ON entrega."ventaId" IS NULL
+    INNER JOIN clientes cliente_entrega ON cliente_entrega.id = entrega."clienteId"
+    WHERE COALESCE(entrega.activo, TRUE) IS TRUE
+      AND LENGTH(venta."cedulaNormalizada") IN (10, 13)
+      AND REGEXP_REPLACE(
+        COALESCE(cliente_entrega.cedula, ''),
+        '[^0-9]',
+        '',
+        'g'
+      ) = venta."cedulaNormalizada"
+      AND (:estadoEntrega IS NULL OR entrega.estado = :estadoEntrega)
+      AND (:tipoEntrega IS NULL OR entrega."tipoEntrega" = :tipoEntrega)
+  ),
+  entregas_por_mes AS (
+    SELECT
+      TO_CHAR(
+        relacion."fechaRegistroEntrega" AT TIME ZONE 'America/Guayaquil',
+        'YYYY-MM'
+      ) AS mes,
+      COUNT(DISTINCT relacion."entregaId")::INTEGER AS cantidad
+    FROM relaciones_dashboard relacion
+    WHERE relacion."fechaRegistroEntrega" IS NOT NULL
+      AND (
+        :fechaInicio IS NULL
+        OR (relacion."fechaRegistroEntrega" AT TIME ZONE 'America/Guayaquil')::DATE
+          >= CAST(:fechaInicio AS DATE)
+      )
+      AND (
+        :fechaFin IS NULL
+        OR (relacion."fechaRegistroEntrega" AT TIME ZONE 'America/Guayaquil')::DATE
+          <= CAST(:fechaFin AS DATE)
+      )
+    GROUP BY mes
+  ),
+  ventas_desde_hora_por_mes AS (
+    SELECT
+      TO_CHAR(
+        relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil',
+        'YYYY-MM'
+      ) AS mes,
+      COUNT(DISTINCT relacion."ventaId")::INTEGER AS cantidad
+    FROM relaciones_dashboard relacion
+    WHERE relacion."fechaRegistroVenta" IS NOT NULL
+      AND (
+        :fechaInicio IS NULL
+        OR (relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil')::DATE
+          >= CAST(:fechaInicio AS DATE)
+      )
+      AND (
+        :fechaFin IS NULL
+        OR (relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil')::DATE
+          <= CAST(:fechaFin AS DATE)
+      )
+      AND (
+        :horaRegistroDesde IS NULL
+        OR (relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil')::TIME
+          >= CAST(:horaRegistroDesde AS TIME)
+      )
+    GROUP BY mes
+  )
+  SELECT 'ENTREGAS'::TEXT AS tipo, mes, cantidad
+  FROM entregas_por_mes
+  UNION ALL
+  SELECT 'VENTAS_DESDE_HORA'::TEXT AS tipo, mes, cantidad
+  FROM ventas_desde_hora_por_mes
+  ORDER BY mes ASC, tipo ASC
 `;
 
 const ordenarEntregasDesc = (a, b) => {
@@ -368,6 +509,7 @@ const consolidarFilasInforme = (registros = []) => {
       fechaEntrega: registro.fechaEntrega,
       fechaRegistroEntrega: registro.fechaRegistroEntrega,
       estadoEntrega: registro.estadoEntrega,
+      tipoEntrega: registro.tipoEntrega,
       tipoRelacion: registro.tipoRelacion,
     });
   });
@@ -394,6 +536,7 @@ const consolidarFilasInforme = (registros = []) => {
       fechaRegistroEntrega:
         entregaRepresentativa?.fechaRegistroEntrega ?? null,
       estadoEntrega: entregaRepresentativa?.estadoEntrega ?? null,
+      tipoEntrega: entregaRepresentativa?.tipoEntrega ?? null,
       tipoRelacion: tieneDirecta ? "DIRECTA" : "POR_CEDULA",
       cantidadEntregas: entregas.length,
       relacionAmbigua,
@@ -409,6 +552,21 @@ const idFiltro = (valor) => {
   return Number.isInteger(numero) && numero > 0 ? numero : null;
 };
 
+const idsFiltro = (valor) => {
+  const valores = Array.isArray(valor)
+    ? valor
+    : String(valor ?? "").split(",");
+  const ids = [
+    ...new Set(
+      valores
+        .map((item) => Number(String(item).trim()))
+        .filter((item) => Number.isInteger(item) && item > 0),
+    ),
+  ];
+
+  return ids.length ? ids.join(",") : null;
+};
+
 const fechaFiltro = (valor) =>
   /^\d{4}-\d{2}-\d{2}$/.test(String(valor || "")) ? valor : null;
 
@@ -417,6 +575,13 @@ const horaFiltro = (valor) => {
   return /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(hora)
     ? hora
     : null;
+};
+
+const tipoEntregaFiltro = (valor) => {
+  const tipo = String(valor || "").trim().toLowerCase();
+  if (tipo === "entrega") return "Entrega";
+  if (tipo === "envio" || tipo === "envío") return "Envio";
+  return null;
 };
 
 const booleanoFiltro = (valor) =>
@@ -429,11 +594,12 @@ const obtenerInformeVentasConEntrega = async (filtros = {}) => {
     fechaInicio: fechaFiltro(filtros.fechaInicio),
     fechaFin: fechaFiltro(filtros.fechaFin),
     horaRegistroDesde: horaFiltro(filtros.horaRegistroDesde),
-    agenciaId: idFiltro(filtros.agenciaId),
-    vendedorId: idFiltro(filtros.vendedorId),
+    agenciaIds: idsFiltro(filtros.agenciaIds ?? filtros.agenciaId),
+    vendedorIds: idsFiltro(filtros.vendedorIds ?? filtros.vendedorId),
     origenId: idFiltro(filtros.origenId),
     soloOrigenEntrega: booleanoFiltro(filtros.soloOrigenEntrega),
     estadoEntrega: String(filtros.estadoEntrega || "").trim() || null,
+    tipoEntrega: tipoEntregaFiltro(filtros.tipoEntrega),
   };
 
   if (
@@ -454,11 +620,57 @@ const obtenerInformeVentasConEntrega = async (filtros = {}) => {
   return consolidarFilasInforme(registros);
 };
 
+const obtenerDashboardVentasConEntrega = async (filtros = {}) => {
+  const replacements = {
+    fechaInicio: fechaFiltro(filtros.fechaInicio),
+    fechaFin: fechaFiltro(filtros.fechaFin),
+    horaRegistroDesde: horaFiltro(filtros.horaRegistroDesde),
+    agenciaIds: idsFiltro(filtros.agenciaIds ?? filtros.agenciaId),
+    vendedorIds: idsFiltro(filtros.vendedorIds ?? filtros.vendedorId),
+    origenId: idFiltro(filtros.origenId),
+    soloOrigenEntrega: booleanoFiltro(filtros.soloOrigenEntrega),
+    estadoEntrega: String(filtros.estadoEntrega || "").trim() || null,
+    tipoEntrega: tipoEntregaFiltro(filtros.tipoEntrega),
+  };
+
+  if (
+    replacements.fechaInicio &&
+    replacements.fechaFin &&
+    replacements.fechaInicio > replacements.fechaFin
+  ) {
+    const error = new Error("La fecha inicial no puede ser mayor que la fecha final.");
+    error.status = 400;
+    throw error;
+  }
+
+  const registros = await sequelize.query(SQL_DASHBOARD_VENTAS_CON_ENTREGA, {
+    replacements,
+    type: QueryTypes.SELECT,
+  });
+
+  return {
+    entregasPorMes: registros
+      .filter((registro) => registro.tipo === "ENTREGAS")
+      .map((registro) => ({
+        mes: registro.mes,
+        cantidad: Number(registro.cantidad || 0),
+      })),
+    ventasDesdeHoraPorMes: registros
+      .filter((registro) => registro.tipo === "VENTAS_DESDE_HORA")
+      .map((registro) => ({
+        mes: registro.mes,
+        cantidad: Number(registro.cantidad || 0),
+      })),
+  };
+};
+
 module.exports = {
+  SQL_DASHBOARD_VENTAS_CON_ENTREGA,
   SQL_INFORME_VENTAS_CON_ENTREGA,
   buscarVentasActivasPorCedula,
   consolidarFilasInforme,
   normalizarCedula,
+  obtenerDashboardVentasConEntrega,
   obtenerInformeVentasConEntrega,
   resolverVentaParaEntrega,
   seleccionarVentaInequivoca,

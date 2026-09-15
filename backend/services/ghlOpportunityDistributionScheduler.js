@@ -21,10 +21,35 @@ function shouldRunConfiguration(row, local) {
 }
 
 async function tick(now = new Date()) {
+  console.log("[GHL-DEBUG]", {
+    paso: "SCHEDULER_TICK_START",
+    horaRecibida: now.toISOString(),
+  });
   await service.recoverStaleRuns();
   try {
-    await service.executeRealtimeQueue({ trigger: "scheduler" });
+    console.log("[GHL-DEBUG]", {
+      paso: "SCHEDULER_REALTIME_QUEUE_START",
+      trigger: "scheduler",
+    });
+    const realtimeResult = await service.executeRealtimeQueue({ trigger: "scheduler" });
+    console.log("[GHL-DEBUG]", {
+      paso: "SCHEDULER_REALTIME_QUEUE_RESULT",
+      code: realtimeResult.code,
+      assigned: realtimeResult.assigned,
+      assignedCount: realtimeResult.assignedCount,
+      errorCount: realtimeResult.errorCount,
+      pendingCount: realtimeResult.pendingCount,
+      trigger: realtimeResult.trigger,
+    });
   } catch (error) {
+    console.log("[GHL-DEBUG]", {
+      paso: "SCHEDULER_REALTIME_QUEUE_ERROR",
+      code: error.code,
+      message: error.message,
+      statusCode: error.statusCode,
+      upstreamStatus: error.upstreamStatus,
+      responseStatus: error.response?.status,
+    });
     console.error("Fallo respaldo de cola GHL de tiempo real", {
       code: error.code || "GHL_REALTIME_QUEUE_ERROR",
       message: service.sanitize(error.message),
@@ -40,6 +65,10 @@ async function tick(now = new Date()) {
       console.error("Fallo reparto GHL programado", { configuracionId: row.id, code: error.code, message: service.sanitize(error.message) });
     }
   }
+  console.log("[GHL-DEBUG]", {
+    paso: "SCHEDULER_TICK_END",
+    horaRecibida: now.toISOString(),
+  });
 }
 async function start() {
   if (task) return task;
