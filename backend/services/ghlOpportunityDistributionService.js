@@ -7,6 +7,7 @@ const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion")
 const Usuario = require("../models/Usuario");
 const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
+const distributionLock = require("./ghlDistributionExecutionLock");
 
 const TIME_ZONE = "America/Guayaquil";
 const DEFAULT_MAX_PENDING_PER_ADVISOR = 10;
@@ -20,7 +21,18 @@ const requestedStaleMs = Number(process.env.GHL_EXECUTION_STALE_MS);
 const STALE_AFTER_MS = Number.isFinite(requestedStaleMs) && requestedStaleMs >= 60_000 ? requestedStaleMs : 180_000;
 const activeAbortControllers = new Map();
 let realtimeNextUserIndex = 0;
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms, signal = null) => new Promise((resolve, reject) => {
+  if (signal?.aborted) return reject(signal.reason);
+  const timer = setTimeout(() => {
+    signal?.removeEventListener("abort", onAbort);
+    resolve();
+  }, ms);
+  const onAbort = () => {
+    clearTimeout(timer);
+    reject(signal.reason);
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+});
 const serviceError = (code, message, statusCode = 409) => Object.assign(new Error(message), { code, statusCode });
 const sanitize = (value) => String(value || "Error no especificado")
   .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
@@ -141,11 +153,20 @@ function opportunityTodayRange(now = new Date()) {
   return { fechaInicio: date, fechaFin: date };
 }
 
-async function getClient(signal) {
-  const config = ghl.getGhlConfig({ requirePipelineId: false });
+async function getClient(signal, existingConfig = null) {
+  const config = existingConfig || ghl.getGhlConfig({ requirePipelineId: false });
   const rawClient = ghl.createGhlClient(config);
-  return { config, client: signal ? { request: (options) => rawClient.request({ ...options, signal }) } : rawClient };
+  return {
+    config,
+    client: signal
+      ? { signal, request: (options) => rawClient.request({ ...options, signal }) }
+      : rawClient,
+  };
 }
+
+const throwIfClientAborted = (client) => {
+  if (client?.signal?.aborted) throw client.signal.reason;
+};
 
 async function getCatalogs() {
   const { config, client } = await getClient();
@@ -335,10 +356,12 @@ class ExecutionControlSignal extends Error {
 
 async function requestWithRetry(client, options, maxRetries = 3, beforeRetry = null) {
   for (let attempt = 0; ; attempt += 1) {
-    try { return await ghl.requestGhl(client, { ...options, beforeRetry }); } catch (error) {
+    throwIfClientAborted(client);
+    try { return await ghl.requestGhl(client, { ...options, beforeRetry, maxRetries: 0 }); } catch (error) {
       if (error.upstreamStatus !== 429 || attempt >= maxRetries) throw error;
       if (beforeRetry) await beforeRetry();
-      await sleep(Math.min(error.retryAfterMs ?? 500 * (2 ** attempt), 10000));
+      await sleep(error.retryAfterMs ?? 500 * (2 ** attempt), client.signal);
+      if (beforeRetry) await beforeRetry();
     }
   }
 }
@@ -405,6 +428,7 @@ async function finalizeControl(run, state) {
 }
 
 async function processOneDetail(run, configRow, detail, client, capacityTracker = null) {
+  throwIfClientAborted(client);
   await currentControlState(run.id);
   await detail.update({ attemptCount: Number(detail.attemptCount || 0) + 1 });
   try {
@@ -444,7 +468,7 @@ async function processOneDetail(run, configRow, detail, client, capacityTracker 
     }
     if (capacityTracker) capacityTracker.loads.set(detail.newAssignedTo, (Number(capacityTracker.loads.get(detail.newAssignedTo)) || 0) + 1);
   } catch (error) {
-    if (error.controlState) throw error;
+    if (error.controlState || error.code === "GHL_EXECUTION_TIMEOUT") throw error;
     const state = await Ejecucion.findByPk(run.id, { attributes: ["estado"] });
     if (["pause_requested", "cancel_requested"].includes(state?.estado)) throw new ExecutionControlSignal(state.estado);
     await detail.update({ estado: "error", retryable: isRetryableError(error), errorCode: error.code || "GHL_UPDATE_ERROR", errorMessage: sanitize(error.message) });
@@ -453,9 +477,11 @@ async function processOneDetail(run, configRow, detail, client, capacityTracker 
 
 async function processPlan(run, configRow, client, capacityTracker = null) {
   try {
+    throwIfClientAborted(client);
     await currentControlState(run.id);
     const details = await Detalle.findAll({ where: { ejecucionId: run.id, [Op.or]: [{ estado: "pending" }, { estado: "error", retryable: true }] }, order: [["id", "ASC"]] });
     for (const detail of details) {
+      throwIfClientAborted(client);
       await currentControlState(run.id);
       await processOneDetail(run, configRow, detail, client, capacityTracker);
       await currentControlState(run.id);
@@ -470,11 +496,23 @@ async function processPlan(run, configRow, client, capacityTracker = null) {
 }
 
 async function createPlan(run, configRow, client, config, runDate) {
-  const [found, currentGhlUsers] = await Promise.all([
-    allStageOpportunities(configRow, client, config, runDate),
-    ghl.fetchAllAssignableUsers(client, config),
-  ]);
+  const currentGhlUsers = await ghl.fetchAllAssignableUsers(client, config);
+  throwIfClientAborted(client);
   const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, runDate);
+  throwIfClientAborted(client);
+  if (!advisors.active.length) {
+    await run.update({
+      totalEncontradas: 0,
+      totalElegibles: 0,
+      totalPlanificadas: 0,
+      totalOmitidas: 0,
+      totalPendientesCapacidad: 0,
+      heartbeatAt: new Date(),
+    });
+    return { activeUsers: [], nextUserIndex: Number(configRow.indiceSiguienteUsuario) || 0, capacityTracker: null };
+  }
+  const found = await allStageOpportunities(configRow, client, config, runDate);
+  throwIfClientAborted(client);
   const eligible = eligibleOpportunities(found, configRow.modo);
   let assignments = [];
   let nextUserIndex = Number(configRow.indiceSiguienteUsuario) || 0;
@@ -516,20 +554,22 @@ async function createPlan(run, configRow, client, config, runDate) {
 
 async function currentCapacityTracker(configRow, client, config, now = new Date()) {
   if (configRow.modo !== "unassigned") return null;
-  const [found, currentGhlUsers] = await Promise.all([
-    allStageOpportunities(configRow, client, config, now),
-    ghl.fetchAllAssignableUsers(client, config),
-  ]);
+  const currentGhlUsers = await ghl.fetchAllAssignableUsers(client, config);
+  throwIfClientAborted(client);
   const advisors = await advisorsForConfiguration(configRow, currentGhlUsers, now);
+  throwIfClientAborted(client);
+  if (!advisors.active.length) return { loads: new Map(), limit: Number(configRow.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR };
+  const found = await allStageOpportunities(configRow, client, config, now);
+  throwIfClientAborted(client);
   return {
     loads: currentLoadsByAdvisor(found, advisors.active),
     limit: Number(configRow.maxPendientesPorAsesor) || DEFAULT_MAX_PENDING_PER_ADVISOR,
   };
 }
 
-const lockScopeForConfiguration = (configRow) => configRow.modo === "unassigned"
-  ? REALTIME_LOCK_SCOPE
-  : String(configRow.id);
+const lockScopeForConfiguration = (_configRow = null, locationId = null) => distributionLock.advisoryScope(
+  locationId || ghl.getGhlConfig({ requirePipelineId: false }).locationId,
+);
 
 const isOpenOpportunity = (opportunity) => ghl.getOpportunityStatus(opportunity) === "open";
 
@@ -636,16 +676,23 @@ async function assignRealtimeOpportunity({
 }
 
 async function executeWebhookOpportunity({ opportunityId = null, contactId = null, locationId = null } = {}) {
-  try {
-  const { config, client } = await getClient();
+  const config = ghl.getGhlConfig({ requirePipelineId: false });
   if (locationId && String(locationId) !== String(config.locationId)) {
     return { code: "LOCATION_MISMATCH", assigned: false, deferredToScheduler: false };
   }
-  const lock = await acquireLock(REALTIME_LOCK_SCOPE);
+  const lock = await distributionLock.acquire(config.locationId);
   if (!lock) {
-    return { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, deferredToScheduler: true };
+    return { code: "PREVIOUS_EXECUTION_RUNNING", assigned: false, deferredToScheduler: true, repartoOmitido: true };
   }
   try {
+    return await distributionLock.runWithTimeout(lock, async () => {
+    const { client } = await getClient(lock.controller.signal, config);
+    const currentGhlUsers = await ghl.fetchAllAssignableUsers(client, config);
+    const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
+    distributionLock.throwIfAborted(lock);
+    if (!advisors.active.length) {
+      return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
+    }
     const context = await getRealtimePipelineContext(client, config);
     const opportunity = await fetchWebhookOpportunity(
       client,
@@ -660,14 +707,8 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
     if (initialSkipCode) {
       return { code: initialSkipCode, assigned: false, deferredToScheduler: false };
     }
-    const [found, currentGhlUsers] = await Promise.all([
-      fetchRealtimeOpenOpportunities(client, config, context),
-      ghl.fetchAllAssignableUsers(client, config),
-    ]);
-    const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
-    if (!advisors.active.length) {
-      return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
-    }
+    const found = await fetchRealtimeOpenOpportunities(client, config, context);
+    distributionLock.throwIfAborted(lock);
     const limit = realtimeMaxPendingPerAdvisor();
     const loads = currentLoadsByAdvisor(found, advisors.active);
     const capacityPlan = buildCapacityAssignments(
@@ -694,11 +735,9 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
       ...result,
       deferredToScheduler: ["ADVISOR_PAUSED", "NO_CAPACITY", "OPPORTUNITY_NOT_FOUND"].includes(result.code),
     };
+    });
   } finally {
-    await releaseLock(lock, REALTIME_LOCK_SCOPE);
-  }
-  } catch (error) {
-    throw error;
+    await distributionLock.release(lock);
   }
 }
 
@@ -709,6 +748,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
   let queueResult = null;
   let finalError = null;
   let firstError = null;
+  let omitted = false;
   const summary = {
     fechaHora: null,
     origen: trigger,
@@ -765,27 +805,24 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
   };
 
   try {
-    lock = await acquireLock(REALTIME_LOCK_SCOPE);
+    phase = "GHL_CLIENT";
+    const config = ghl.getGhlConfig({ requirePipelineId: false });
+    lock = await distributionLock.acquire(config.locationId);
     if (!lock) {
-      queueResult = { code: "DEFERRED_ACTIVE_EXECUTION", assigned: false, assignedCount: 0, trigger };
+      omitted = true;
+      queueResult = { code: "PREVIOUS_EXECUTION_RUNNING", assigned: false, assignedCount: 0, trigger, repartoOmitido: true };
       return queueResult;
     }
+    return await distributionLock.runWithTimeout(lock, async () => {
     summary.omitidasPorMotivo = {};
     summary.erroresPorCodigo = {};
     summary.mensajesErrorPorCodigo = {};
-    phase = "GHL_CLIENT";
-    const { config, client } = await getClient();
-    phase = "PIPELINE_CONTEXT";
-    const context = await getRealtimePipelineContext(client, config);
-    phase = "QUEUE_DATA";
-    const [found, currentGhlUsers] = await Promise.all([
-      fetchRealtimeOpenOpportunities(client, config, context),
-      ghl.fetchAllAssignableUsers(client, config),
-    ]);
+    const { client } = await getClient(lock.controller.signal, config);
+    phase = "ADVISOR_CATALOG";
+    const currentGhlUsers = await ghl.fetchAllAssignableUsers(client, config);
     phase = "ADVISOR_RESOLUTION";
     const advisors = await advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date());
-    const pending = eligibleOpportunities(found, "unassigned");
-    summary.enColaAlInicio = pending.length;
+    distributionLock.throwIfAborted(lock);
     summary.asesoresActivos = advisors.active.length;
     summary.asesoresPausados = advisors.paused.length;
     summary.asociacionesInvalidas = advisors.invalid.length;
@@ -793,11 +830,17 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
       summary.capacidadDisponibleTotal = 0;
       summary.asignacionesPlanificadas = 0;
       summary.asignacionesExitosas = 0;
-      summary.pendientesEstimados = pending.length;
-      countByCode("omitidasPorMotivo", "NO_ACTIVE_ADVISORS", pending.length);
-      queueResult = { code: "NO_ACTIVE_ADVISORS", assigned: false, assignedCount: 0, pendingCount: pending.length, trigger };
+      summary.pendientesEstimados = null;
+      queueResult = { code: "NO_ACTIVE_ADVISORS", assigned: false, assignedCount: 0, pendingCount: null, trigger };
       return queueResult;
     }
+    phase = "PIPELINE_CONTEXT";
+    const context = await getRealtimePipelineContext(client, config);
+    phase = "QUEUE_DATA";
+    const found = await fetchRealtimeOpenOpportunities(client, config, context);
+    distributionLock.throwIfAborted(lock);
+    const pending = eligibleOpportunities(found, "unassigned");
+    summary.enColaAlInicio = pending.length;
     if (!pending.length) {
       summary.asignacionesPlanificadas = 0;
       summary.asignacionesExitosas = 0;
@@ -832,6 +875,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
     let errorCount = 0;
     phase = "ASSIGNMENTS";
     for (const assignment of capacityPlan.assignments) {
+      distributionLock.throwIfAborted(lock);
       try {
         const result = await assignRealtimeOpportunity({
           client,
@@ -846,6 +890,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
         if (result.assigned) assignedCount += 1;
         else countByCode("omitidasPorMotivo", result.code || "ASSIGNMENT_SKIPPED");
       } catch (error) {
+        distributionLock.throwIfAborted(lock);
         errorCount += 1;
         recordError(error, "ASSIGNMENT");
       }
@@ -862,6 +907,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
     summary.asignacionesExitosas = assignedCount;
     summary.pendientesEstimados = queueResult.pendingCount;
     return queueResult;
+    });
   } catch (error) {
     finalError = error;
     recordError(error, phase);
@@ -869,7 +915,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
   } finally {
     if (lock) {
       try {
-        await releaseLock(lock, REALTIME_LOCK_SCOPE);
+        await distributionLock.release(lock);
       } catch (error) {
         finalError = error;
         phase = "LOCK_RELEASE";
@@ -878,7 +924,7 @@ async function executeRealtimeQueue({ trigger = "scheduler" } = {}) {
       } finally {
         emitSummary();
       }
-    } else {
+    } else if (!omitted) {
       emitSummary();
     }
   }
@@ -907,12 +953,14 @@ async function interruptStaleForConfig(configId) {
 }
 
 async function execute(configRow, { type = "manual", userId = null, scheduledFor = null, window = null } = {}) {
-  const lockScope = lockScopeForConfiguration(configRow);
-  const lock = await acquireLock(lockScope);
-  if (!lock) return { skipped: true, reason: "Ya existe una ejecucion activa", code: "EXECUTION_ALREADY_ACTIVE" };
+  const config = ghl.getGhlConfig({ requirePipelineId: false });
+  const lock = await distributionLock.acquire(config.locationId);
+  if (!lock) return { skipped: true, reason: "Ya existe una ejecucion activa", code: "PREVIOUS_EXECUTION_RUNNING", repartoOmitido: true };
   let run;
   try {
+    return await distributionLock.runWithTimeout(lock, async () => {
     await interruptStaleForConfig(configRow.id);
+    distributionLock.throwIfAborted(lock);
     const blocking = await blockingExecution(configRow.id);
     if (blocking) return { skipped: true, reason: blocking.estado === "paused" ? "Existe una ejecucion pausada; reanudela o cancelela antes de iniciar otra" : "Ya existe una ejecucion activa", code: "EXECUTION_ALREADY_ACTIVE" };
     try {
@@ -921,10 +969,10 @@ async function execute(configRow, { type = "manual", userId = null, scheduledFor
       if (error.name === "SequelizeUniqueConstraintError") return { skipped: true, reason: "Esta ventana programada ya fue procesada o existe una ejecucion activa", code: "EXECUTION_ALREADY_ACTIVE" };
       throw error;
     }
-    const controller = new AbortController();
-    activeAbortControllers.set(String(run.id), controller);
-    const { config, client } = await getClient(controller.signal);
+    activeAbortControllers.set(String(run.id), lock.controller);
+    const { client } = await getClient(lock.controller.signal, config);
     const plan = await createPlan(run, configRow, client, config, scheduledFor || new Date());
+    distributionLock.throwIfAborted(lock);
     if (!plan.activeUsers.length) {
       await run.update({
         estado: "skipped",
@@ -943,6 +991,7 @@ async function execute(configRow, { type = "manual", userId = null, scheduledFor
       await configRow.update({ indiceSiguienteUsuario: nextUserIndex });
     }
     return result;
+    });
   } catch (error) {
     if (run) {
       const fresh = await Ejecucion.findByPk(run.id).catch(() => null);
@@ -953,7 +1002,7 @@ async function execute(configRow, { type = "manual", userId = null, scheduledFor
     throw error;
   } finally {
     if (run) activeAbortControllers.delete(String(run.id));
-    await releaseLock(lock, lockScope);
+    await distributionLock.release(lock);
   }
 }
 
@@ -993,7 +1042,8 @@ async function requestCancel(id) {
     activeAbortControllers.get(String(id))?.abort();
     return run;
   }
-  const lock = await acquireLock(initial.configuracionId);
+  const lockScope = lockScopeForConfiguration();
+  const lock = await acquireLock(lockScope);
   if (!lock) throw serviceError("EXECUTION_ALREADY_ACTIVE", "La ejecucion esta siendo procesada; intente nuevamente");
   try {
     const run = await transitionLocked(id, async (run, transaction) => {
@@ -1003,7 +1053,7 @@ async function requestCancel(id) {
     });
     await finalizeControl(run, "cancel_requested");
     return run.reload();
-  } finally { await releaseLock(lock, initial.configuracionId); }
+  } finally { await releaseLock(lock, lockScope); }
 }
 
 async function resume(id) {
@@ -1013,21 +1063,22 @@ async function resume(id) {
   if (initial.estado !== "paused") throw serviceError("EXECUTION_NOT_RESUMABLE", "Solo una ejecucion pausada puede reanudarse");
   const configRow = await Configuracion.findByPk(initial.configuracionId);
   if (!configRow) throw serviceError("CONFIGURATION_NOT_FOUND", "La configuracion de esta ejecucion ya no existe", 404);
-  const lockScope = lockScopeForConfiguration(configRow);
-  const lock = await acquireLock(lockScope);
+  const config = ghl.getGhlConfig({ requirePipelineId: false });
+  const lock = await distributionLock.acquire(config.locationId);
   if (!lock) throw serviceError("EXECUTION_ALREADY_ACTIVE", "Existe otro proceso activo para esta configuracion");
   try {
+    return await distributionLock.runWithTimeout(lock, async () => {
     const run = await transitionLocked(id, async (current, transaction) => {
       if (current.estado !== "paused") throw serviceError("EXECUTION_NOT_RESUMABLE", "La ejecucion ya no esta pausada");
       if (await blockingExecution(current.configuracionId, current.id, transaction)) throw serviceError("EXECUTION_ALREADY_ACTIVE", "Existe otra ejecucion activa para esta configuracion");
       await current.update({ estado: "running", resumedAt: new Date(), pausedAt: null, heartbeatAt: new Date() }, { transaction });
       return current;
     });
-    const controller = new AbortController();
-    activeAbortControllers.set(String(run.id), controller);
-    const { config, client } = await getClient(controller.signal);
+    activeAbortControllers.set(String(run.id), lock.controller);
+    const { client } = await getClient(lock.controller.signal, config);
     const capacityTracker = await currentCapacityTracker(configRow, client, config);
     return await processPlan(run, configRow, client, capacityTracker);
+    });
   } catch (error) {
     const run = await Ejecucion.findByPk(id).catch(() => null);
     if (run?.estado === "running") {
@@ -1037,15 +1088,16 @@ async function resume(id) {
     throw error;
   } finally {
     activeAbortControllers.delete(String(id));
-    await releaseLock(lock, lockScope);
+    await distributionLock.release(lock);
   }
 }
 
 async function isExecutionStale(run) {
   if (!heartbeatExpired(run)) return false;
-  const lock = await acquireLock(run.configuracionId);
+  const lockScope = lockScopeForConfiguration();
+  const lock = await acquireLock(lockScope);
   if (!lock) return false;
-  await releaseLock(lock, run.configuracionId);
+  await releaseLock(lock, lockScope);
   return true;
 }
 
@@ -1054,7 +1106,8 @@ async function forceFinishStale(id) {
   if (!initial) throw serviceError("EXECUTION_NOT_FOUND", "Ejecucion no encontrada", 404);
   if (TERMINAL_STATES.includes(initial.estado) || initial.estado === "paused") throw serviceError("EXECUTION_ALREADY_FINISHED", "La ejecucion no esta activa");
   if (!heartbeatExpired(initial)) throw serviceError("EXECUTION_NOT_STALE", "La ejecucion mantiene un heartbeat saludable");
-  const lock = await acquireLock(initial.configuracionId);
+  const lockScope = lockScopeForConfiguration();
+  const lock = await acquireLock(lockScope);
   if (!lock) throw serviceError("EXECUTION_NOT_STALE", "La ejecucion aun tiene un proceso activo");
   try {
     const run = await transitionLocked(id, async (current, transaction) => {
@@ -1066,7 +1119,7 @@ async function forceFinishStale(id) {
     await refreshCounters(run);
     await run.update({ estado: "interrupted", finishedAt: new Date(), heartbeatAt: new Date(), errorGeneral: "Ejecucion finalizada administrativamente por heartbeat vencido" });
     return run.reload();
-  } finally { await releaseLock(lock, initial.configuracionId); }
+  } finally { await releaseLock(lock, lockScope); }
 }
 
 async function recoverStaleRuns() {

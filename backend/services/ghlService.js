@@ -18,6 +18,19 @@ const pautasDataCache = new Map();
 const pautasInFlight = new Map();
 const contactSourceIdCache = new Map();
 
+const waitForRetry = (delayMs, signal = null) => new Promise((resolve, reject) => {
+  if (signal?.aborted) return reject(signal.reason || Object.assign(new Error("Solicitud GHL cancelada"), { code: "GHL_REQUEST_ABORTED" }));
+  const timer = setTimeout(() => {
+    signal?.removeEventListener("abort", onAbort);
+    resolve();
+  }, delayMs);
+  const onAbort = () => {
+    clearTimeout(timer);
+    reject(signal.reason || Object.assign(new Error("Solicitud GHL cancelada"), { code: "GHL_REQUEST_ABORTED" }));
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+});
+
 const getNonNegativeEnvNumber = (name, fallback) => {
   const parsedValue = Number(process.env[name] ?? fallback);
   return Number.isFinite(parsedValue) && parsedValue >= 0
@@ -113,6 +126,9 @@ const normalizeGhlError = (error) => {
   const retryAfterSeconds = Number(retryAfterHeader);
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
     serviceError.retryAfterMs = retryAfterSeconds * 1000;
+  } else if (retryAfterHeader) {
+    const retryAt = Date.parse(retryAfterHeader);
+    if (Number.isFinite(retryAt)) serviceError.retryAfterMs = Math.max(0, retryAt - Date.now());
   }
 
   if (status === 401) {
@@ -153,11 +169,16 @@ const normalizeGhlError = (error) => {
 
 const requestGhl = async (client, options) => {
   const requestedRetries = Number(process.env.GHL_MAX_RETRIES);
-  const maxRetries = Number.isInteger(requestedRetries) && requestedRetries >= 0
-    ? Math.min(requestedRetries, 10) : 3;
+  const optionRetries = Number(options.maxRetries);
+  const maxRetries = Number.isInteger(optionRetries) && optionRetries >= 0
+    ? Math.min(optionRetries, 10)
+    : Number.isInteger(requestedRetries) && requestedRetries >= 0
+      ? Math.min(requestedRetries, 10) : 3;
   const baseDelay = getPositiveEnvNumber("GHL_RETRY_BASE_MS", 500);
-  const { beforeRetry, ...requestOptions } = options;
+  const { beforeRetry, maxRetries: _maxRetries, ...requestOptions } = options;
+  const signal = requestOptions.signal || client.signal || null;
   for (let attempt = 0; ; attempt += 1) {
+    if (signal?.aborted) throw signal.reason || Object.assign(new Error("Solicitud GHL cancelada"), { code: "GHL_REQUEST_ABORTED" });
     try {
       const response = await client.request(requestOptions);
       return response.data || {};
@@ -165,8 +186,8 @@ const requestGhl = async (client, options) => {
       const error = normalizeGhlError(rawError);
       if (error.upstreamStatus !== 429 || attempt >= maxRetries) throw error;
       if (typeof beforeRetry === "function") await beforeRetry();
-      const delay = Math.min(error.retryAfterMs ?? baseDelay * (2 ** attempt), 10000);
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      const delay = error.retryAfterMs ?? baseDelay * (2 ** attempt);
+      await waitForRetry(delay, signal);
       if (typeof beforeRetry === "function") await beforeRetry();
     }
   }

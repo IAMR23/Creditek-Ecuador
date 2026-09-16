@@ -118,12 +118,14 @@ async function processWebhookEvent(eventId, normalized) {
       processedAt: new Date(),
       lastError: null,
     }, { where: { id: eventId } });
-    logWebhookResult({
-      eventId,
-      resultado: result.assigned ? "COMPLETED" : "IGNORED",
-      asignado: result.assigned,
-      motivo: result.tracePersisted === false ? "GHL_REALTIME_TRACE_ERROR" : result.code,
-    });
+    if (!result.repartoOmitido) {
+      logWebhookResult({
+        eventId,
+        resultado: result.assigned ? "COMPLETED" : "IGNORED",
+        asignado: result.assigned,
+        motivo: result.tracePersisted === false ? "GHL_REALTIME_TRACE_ERROR" : result.code,
+      });
+    }
     return result;
   } catch (error) {
     await WebhookEvento.update({

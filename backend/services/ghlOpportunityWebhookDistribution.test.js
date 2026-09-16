@@ -96,6 +96,20 @@ describe("reparto GHL de tiempo real", () => {
 
     expect(result).toMatchObject({ code: "NO_ACTIVE_ADVISORS", assigned: false });
     expect(putCalls()).toHaveLength(0);
+    expect(ghl.fetchPipelines).not.toHaveBeenCalled();
+    expect(ghl.fetchOpportunitiesByStatus).not.toHaveBeenCalled();
+    expect(ghl.requestGhl).not.toHaveBeenCalled();
+  });
+
+  test("el respaldo finaliza antes de consultar o paginar oportunidades cuando no hay asesores", async () => {
+    mockBase({ active: [], open: [opportunity()] });
+    advisorAvailability.resolveActiveAdvisors.mockResolvedValue({ active: [], paused: [], invalid: [] });
+
+    const result = await service.executeRealtimeQueue({ trigger: "scheduler" });
+
+    expect(result).toMatchObject({ code: "NO_ACTIVE_ADVISORS", assigned: false, pendingCount: null });
+    expect(ghl.fetchPipelines).not.toHaveBeenCalled();
+    expect(ghl.fetchOpportunitiesByStatus).not.toHaveBeenCalled();
   });
 
   test("la cola elige oportunidades abiertas de WhatsApp y Facebook", async () => {
@@ -200,7 +214,7 @@ describe("reparto GHL de tiempo real", () => {
 
     expect(results.map((result) => result.code).sort()).toEqual([
       "ASSIGNED",
-      "DEFERRED_ACTIVE_EXECUTION",
+      "PREVIOUS_EXECUTION_RUNNING",
     ]);
     expect(putCalls()).toHaveLength(1);
   });

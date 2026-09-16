@@ -105,6 +105,7 @@ describe("control de ejecuciones GHL", () => {
     expect(result.estado).toBe("skipped");
     expect(result.errorGeneral).toContain("pendientes sin propietario");
     expect(Detalle.bulkCreate).not.toHaveBeenCalled();
+    expect(ghl.fetchOpportunitiesByStatus).not.toHaveBeenCalled();
   });
 
   test("error antes de encontrar oportunidades finaliza failed y libera el lock", async () => {
@@ -113,7 +114,7 @@ describe("control de ejecuciones GHL", () => {
     const config = { id: 3, pipelineId: "p", stageId: "s", modo: "all", pipelineNombre: "P", stageNombre: "S", usuariosGhl: [{ id: "u1" }, { id: "u2" }], indiceSiguienteUsuario: 0, update: jest.fn() };
     await expect(service.execute(config)).rejects.toMatchObject({ code: "GHL_CONNECTION_ERROR" });
     expect(run).toMatchObject({ estado: "failed", finishedAt: expect.any(Date) });
-    expect(connection.query).toHaveBeenLastCalledWith("SELECT pg_advisory_unlock(hashtext($1))", ["ghl-reparto:3"]);
+    expect(connection.query).toHaveBeenLastCalledWith("SELECT pg_advisory_unlock(hashtext($1))", ["ghl-reparto:location:l"]);
   });
 
   test("solicita pausa con transicion atomica", async () => {
@@ -181,6 +182,7 @@ describe("control de ejecuciones GHL", () => {
     const connection = { query: jest.fn().mockResolvedValueOnce({ rows: [{ locked: true }] }).mockResolvedValueOnce({ rows: [{ pg_advisory_unlock: true }] }) };
     jest.spyOn(sequelize.connectionManager, "getConnection").mockResolvedValue(connection);
     jest.spyOn(sequelize.connectionManager, "releaseConnection").mockResolvedValue();
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
     transactionMock();
     jest.spyOn(Ejecucion, "findByPk").mockResolvedValue(run);
     jest.spyOn(Detalle, "update").mockResolvedValue([1]);

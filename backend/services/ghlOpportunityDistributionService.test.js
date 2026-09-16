@@ -46,6 +46,7 @@ const counts = (assignments, selectedUsers) => selectedUsers.map((user) => assig
 
 describe("reparto determinista de oportunidades GHL", () => {
   beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.useRealTimers());
 
   test("maneja cero oportunidades", () => expect(buildAssignments([], users.slice(0, 2))).toEqual([]));
   test("maneja menos oportunidades que usuarios", () => expect(counts(buildAssignments(opportunities(2), users), users)).toEqual([1, 1, 0, 0, 0]));
@@ -96,12 +97,13 @@ describe("reparto determinista de oportunidades GHL", () => {
     ], users.slice(0, 2));
     expect(Object.fromEntries(loads)).toEqual({ u1: 2, u2: 0 });
   });
-  test("todo reparto sin propietario comparte el bloqueo de tiempo real", () => {
-    expect(lockScopeForConfiguration({ id: 1, modo: "unassigned", pipelineId: "p", stageId: "s" }))
-      .toBe(REALTIME_LOCK_SCOPE);
-    expect(lockScopeForConfiguration({ id: 2, modo: "unassigned", pipelineId: "otro", stageId: "otra" }))
-      .toBe(REALTIME_LOCK_SCOPE);
-    expect(lockScopeForConfiguration({ id: 1, modo: "all", pipelineId: "p", stageId: "s" })).toBe("1");
+  test("todos los puntos de entrada comparten el bloqueo por locationId", () => {
+    expect(lockScopeForConfiguration({ id: 1, modo: "unassigned" }, "location-1"))
+      .toBe("location:location-1");
+    expect(lockScopeForConfiguration({ id: 2, modo: "all" }, "location-1"))
+      .toBe("location:location-1");
+    expect(lockScopeForConfiguration({ id: 3, modo: "refresh_non_management" }, "location-2"))
+      .toBe("location:location-2");
   });
   test("reconoce las etapas WhatsApp y Facebook por su nombre actual", () => {
     expect(realtimeStageChannel({ name: "Nuevos - Whats App" })).toBe("whatsapp");
@@ -272,10 +274,18 @@ describe("reparto determinista de oportunidades GHL", () => {
   });
 
   test("429 respeta reintento limitado y Retry-After", async () => {
-    const limited = Object.assign(new Error("limit"), { upstreamStatus: 429, retryAfterMs: 0 });
+    jest.useFakeTimers();
+    const limited = Object.assign(new Error("limit"), { upstreamStatus: 429, retryAfterMs: 2500 });
     jest.spyOn(ghl, "requestGhl").mockRejectedValueOnce(limited).mockResolvedValueOnce({ ok: true });
-    await expect(requestWithRetry({}, { method: "PUT" }, 1)).resolves.toEqual({ ok: true });
+    const result = requestWithRetry({}, { method: "PUT" }, 1);
+    await Promise.resolve();
+    expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(2499);
+    expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toEqual({ ok: true });
     expect(ghl.requestGhl).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -304,6 +314,7 @@ describe("reparto determinista de oportunidades GHL", () => {
     jest.spyOn(Detalle, "findAll").mockResolvedValue([]);
     jest.spyOn(sequelize.connectionManager, "getConnection").mockResolvedValue(connection);
     jest.spyOn(sequelize.connectionManager, "releaseConnection").mockResolvedValue();
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "location-1" });
     await recoverStaleRuns();
     expect(run.update).toHaveBeenCalledWith(expect.objectContaining({ estado: "interrupted", finishedAt: expect.any(Date) }));
     jest.restoreAllMocks();

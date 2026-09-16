@@ -22,14 +22,17 @@ function shouldRunConfiguration(row, local) {
 
 async function tick(now = new Date()) {
   await service.recoverStaleRuns();
+  let queueResult;
   try {
-    await service.executeRealtimeQueue({ trigger: "scheduler" });
+    queueResult = await service.executeRealtimeQueue({ trigger: "scheduler" });
   } catch {}
+  if (queueResult?.code === "PREVIOUS_EXECUTION_RUNNING") return queueResult;
   const local = service.localScheduleParts(now);
   const rows = await Configuracion.findAll({ where: { activo: true } });
   for (const row of rows.filter((item) => shouldRunConfiguration(item, local))) {
     try {
-      await service.execute(row, { type: "scheduled", scheduledFor: now, window: local.window });
+      const result = await service.execute(row, { type: "scheduled", scheduledFor: now, window: local.window });
+      if (result?.code === "PREVIOUS_EXECUTION_RUNNING") return result;
     } catch (error) {
       console.error("Fallo reparto GHL programado", { configuracionId: row.id, code: error.code, message: service.sanitize(error.message) });
     }
