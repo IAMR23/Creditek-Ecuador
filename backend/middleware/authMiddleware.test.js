@@ -6,7 +6,9 @@ jest.mock("../utils/tokenConfig", () => ({
   JWT_SECRET: "test-secret",
 }));
 
-const { requirePermission } = require("./authMiddleware");
+const jwt = require("jsonwebtoken");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
+const { authenticate, requirePermission } = require("./authMiddleware");
 
 const crearRes = () => {
   const res = {
@@ -65,5 +67,52 @@ describe("requirePermission", () => {
     requirePermission("Gerencia", "Administracion")(req, res, next);
 
     expect(next).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("authenticate y relacion usuario-agencia", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  test("no confia en una relacion inactiva del token y resuelve una relacion activa real", async () => {
+    jest.spyOn(jwt, "verify").mockReturnValue({
+      usuario: {
+        id: 7,
+        rol: { nombre: "Repartidor" },
+        permisosAsignados: ["Logistica"],
+        agenciaPrincipal: { agenciaId: 1, usuarioAgenciaId: 12 },
+      },
+    });
+    UsuarioAgencia.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 118, agenciaId: 2 });
+    const req = { headers: { authorization: "Bearer token" } };
+    const res = crearRes();
+    const next = jest.fn();
+
+    await authenticate(req, res, next);
+
+    expect(req.user).toMatchObject({ id: 7, usuarioAgenciaId: 118, agenciaId: 2 });
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test("rechaza la sesion si no existe ninguna relacion activa", async () => {
+    jest.spyOn(jwt, "verify").mockReturnValue({
+      usuario: {
+        id: 7,
+        permisosAsignados: ["Logistica"],
+        agenciaPrincipal: { agenciaId: 1, usuarioAgenciaId: 12 },
+      },
+    });
+    UsuarioAgencia.findOne.mockResolvedValue(null);
+    const req = { headers: { authorization: "Bearer token" } };
+    const res = crearRes();
+
+    await authenticate(req, res, jest.fn());
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "USUARIO_AGENCIA_INACTIVA" }),
+    );
   });
 });

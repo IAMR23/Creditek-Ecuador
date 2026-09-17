@@ -3,6 +3,7 @@ const { default: upload } = require("../../middleware/multer.js");
 const { editarVentaCompleta, obtenerVentaCompleta } = require("../../controllers/Vendedores/editarVentaCompleta.js");
 const { crearEntregaCompleta } = require("../../controllers/Logistica/crearEntregaCompleta.js");
 const { obtenerEntregaCompleta, editarEntregaCompleta } = require("../../controllers/Vendedores/editarEntregaCompleta.js");
+const { authenticate } = require("../../middleware/authMiddleware.js");
 
 const router = express.Router();
  
@@ -12,12 +13,12 @@ router.post(
   crearEntregaCompleta
 );
 
-router.get("/entrega-completa/:id", obtenerEntregaCompleta) ;
+router.get("/entrega-completa/:id", authenticate, obtenerEntregaCompleta) ;
 
 router.put(
   "/entrega-completa/:id",
+  authenticate,
   upload.single("foto"),
   editarEntregaCompleta
-); 
+);
 module.exports = router;
-  

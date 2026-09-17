@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { API_URL } from "../../../config";
+import api from "../../api/client";
+
+const nuevaClaveOperacion = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `usuario-agencia-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 export default function UsuarioAgencia() {
   const [usuarios, setUsuarios] = useState([]);
   const [agencias, setAgencias] = useState([]);
   const [relaciones, setRelaciones] = useState([]);
+  const [repartidores, setRepartidores] = useState([]);
 
   const [filtro, setFiltro] = useState("");
   const [loading, setLoading] = useState(false);
@@ -14,6 +18,8 @@ export default function UsuarioAgencia() {
     usuarioId: "",
     agenciaId: "",
     activo: true,
+    responsableDestinoId: "",
+    motivo: "",
   });
 
   const [editingId, setEditingId] = useState(null);
@@ -37,16 +43,18 @@ export default function UsuarioAgencia() {
     try {
       setLoading(true);
 
-      const [u, a, r] = await Promise.all([
-        axios.get(`${API_URL}/usuarios`),
-        axios.get(`${API_URL}/agencias`),
-        axios.get(`${API_URL}/usuario-agencia`),
+      const [u, a, r, repartidoresRes] = await Promise.all([
+        api.get("/usuarios"),
+        api.get("/agencias"),
+        api.get("/usuario-agencia"),
+        api.get("/api/usuario-permisos/usuarios-repartidores"),
       ]);
 
       setUsuarios(u.data);
       setAgencias(a.data);
       setRelaciones(r.data);
-    } catch (err) {
+      setRepartidores(repartidoresRes.data);
+    } catch {
       setError("Error cargando datos");
     } finally {
       setLoading(false);
@@ -93,9 +101,15 @@ export default function UsuarioAgencia() {
       setLoading(true);
 
       if (editingId) {
-        await axios.put(`${API_URL}/usuario-agencia/${editingId}`, form);
+        await api.put(`/usuario-agencia/${editingId}`, {
+          ...form,
+          responsableDestinoId: form.responsableDestinoId
+            ? Number(form.responsableDestinoId)
+            : null,
+          idempotencyKey: nuevaClaveOperacion(),
+        });
       } else {
-        await axios.post(`${API_URL}/usuario-agencia`, form);
+        await api.post("/usuario-agencia", form);
       }
 
       await cargarDatos();
@@ -113,6 +127,8 @@ export default function UsuarioAgencia() {
       usuarioId: "",
       agenciaId: "",
       activo: true,
+      responsableDestinoId: "",
+      motivo: "",
     });
     setEditingId(null);
   };
@@ -127,6 +143,8 @@ export default function UsuarioAgencia() {
       usuarioId: rel.usuario?.id || "",
       agenciaId: rel.agencia?.id || "",
       activo: rel.activo,
+      responsableDestinoId: "",
+      motivo: "",
     });
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -137,13 +155,23 @@ export default function UsuarioAgencia() {
   // ================================
   const handleDelete = async (id) => {
     const confirmacion = window.confirm(
-      "¿Seguro que deseas eliminar esta relación?"
+      "¿Seguro que deseas desactivar esta relación? Si tiene entregas abiertas, la operación será bloqueada hasta elegir un responsable de destino."
     );
 
     if (!confirmacion) return;
 
-    await axios.delete(`${API_URL}/usuario-agencia/${id}`);
-    cargarDatos();
+    try {
+      await api.put(`/usuario-agencia/${id}`, {
+        activo: false,
+        motivo: "Desactivación administrativa",
+        idempotencyKey: nuevaClaveOperacion(),
+      });
+      cargarDatos();
+    } catch (err) {
+      setError(err.response?.data?.message || "No se pudo desactivar");
+      const relacion = relaciones.find((item) => item.id === id);
+      if (relacion) handleEdit({ ...relacion, activo: false });
+    }
   };
 
   return (
@@ -179,6 +207,7 @@ export default function UsuarioAgencia() {
             name="usuarioId"
             value={form.usuarioId}
             onChange={handleChange}
+            disabled={Boolean(editingId)}
             className="border p-2 rounded w-full mt-1"
           >
             <option value="">Seleccionar usuario</option>
@@ -199,6 +228,7 @@ export default function UsuarioAgencia() {
             name="agenciaId"
             value={form.agenciaId}
             onChange={handleChange}
+            disabled={Boolean(editingId)}
             className="border p-2 rounded w-full mt-1"
           >
             <option value="">Seleccionar agencia</option>
@@ -223,6 +253,39 @@ export default function UsuarioAgencia() {
 
           <span className="font-medium">Activo</span>
         </div>
+
+        {editingId && !form.activo && (
+          <>
+            <div>
+              <label className="text-sm font-semibold">Transferir entregas abiertas a</label>
+              <select
+                name="responsableDestinoId"
+                value={form.responsableDestinoId}
+                onChange={handleChange}
+                className="border p-2 rounded w-full mt-1"
+              >
+                <option value="">Sin transferencia (solo si no tiene abiertas)</option>
+                {repartidores
+                  .filter((item) => Number(item.id) !== Number(editingId))
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.usuario?.nombre} — {item.agencia?.nombre}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold">Motivo de desactivación/transferencia</label>
+              <input
+                name="motivo"
+                value={form.motivo}
+                onChange={handleChange}
+                required
+                className="border p-2 rounded w-full mt-1"
+              />
+            </div>
+          </>
+        )}
 
         {/* BOTONES */}
         <div className="col-span-3 flex gap-3 mt-2">
@@ -320,7 +383,7 @@ export default function UsuarioAgencia() {
                     onClick={() => handleDelete(r.id)}
                     className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
                   >
-                    Eliminar
+                    Desactivar
                   </button>
 
                 </td>

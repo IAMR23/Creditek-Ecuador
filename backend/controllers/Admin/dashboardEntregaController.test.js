@@ -86,7 +86,7 @@ describe("getDashboardEntregas", () => {
     await getDashboardEntregas({ query: {} }, res);
     for (const [options] of Entrega.count.mock.calls) {
       expect(options.include[0].required).toBe(false);
-      expect(options.include[0].where).toBeUndefined();
+      expect(options.include[0].where).toEqual({ activo: true });
       expect(options.where.activo).toBe(true);
       expect(options.distinct).toBe(true);
     }

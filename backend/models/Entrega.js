@@ -22,6 +22,11 @@ const Entrega = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    version: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
     ventaId: {
       type: DataTypes.INTEGER,
       allowNull: true,

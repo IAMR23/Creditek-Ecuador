@@ -108,10 +108,20 @@ router.get(
   },
 );
 
-router.get("/usuarios-repartidores", async (req, res) => {
+router.get(
+  "/usuarios-repartidores",
+  authenticate,
+  requirePermission("Logistica", "Administracion"),
+  async (req, res) => {
   try {
+    const esAdministrador = (req.user.permisos || []).some(
+      (permiso) => String(permiso).trim().toLowerCase() === "administracion",
+    );
     const relaciones = await UsuarioAgencia.findAll({
-      where: { activo: true },
+      where: {
+        activo: true,
+        ...(!esAdministrador ? { agenciaId: req.user.agenciaId } : {}),
+      },
       include: [
         {
           model: Usuario,

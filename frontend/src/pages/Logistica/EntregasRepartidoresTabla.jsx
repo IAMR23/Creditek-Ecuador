@@ -20,6 +20,9 @@ const normalizarTexto = (value) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+const nuevaClaveOperacion = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `entrega-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 export default function EntregasRepartidoresTabla() {
   const [repartidores, setRepartidores] = useState([]);
@@ -144,20 +147,31 @@ export default function EntregasRepartidoresTabla() {
 
       const errores = erroresTemp[id] || [];
 
-      await api.put(`/entregas/${id}`, {
+      const actual = entregas.find((entrega) => entrega.id === id);
+      const response = await api.put(`/entregas/${id}`, {
         errores,
+        expectedVersion: actual?.version,
+        motivo: "Actualizacion de errores logisticos",
+        idempotencyKey: nuevaClaveOperacion(),
       });
 
       setEntregas((prev) =>
         prev.map((entrega) =>
-          entrega.id === id ? { ...entrega, errores } : entrega,
+          entrega.id === id
+            ? { ...entrega, errores, version: response.data.version }
+            : entrega,
         ),
       );
 
       setFilaAbierta(null);
     } catch (err) {
       console.error(err);
-      alert("No se pudieron guardar los errores");
+      if (err.response?.status === 409) await fetchEntregas();
+      alert(
+        err.response?.status === 409
+          ? "La entrega cambio mientras la editabas. Se recargaron los datos."
+          : "No se pudieron guardar los errores",
+      );
     } finally {
       setGuardandoErrores((prev) => ({ ...prev, [id]: false }));
     }
@@ -179,9 +193,19 @@ export default function EntregasRepartidoresTabla() {
     setGuardandoTipoEntrega((prev) => ({ ...prev, [entregaId]: true }));
 
     try {
-      await api.patch(`/entregas/${entregaId}/tipo-entrega`, {
+      const response = await api.patch(`/entregas/${entregaId}/tipo-entrega`, {
         tipoEntrega: nuevoTipo,
+        expectedVersion: entregaActual?.version,
+        idempotencyKey: nuevaClaveOperacion(),
       });
+
+      setEntregas((prev) =>
+        prev.map((entrega) =>
+          entrega.id === entregaId
+            ? { ...entrega, version: response.data.version }
+            : entrega,
+        ),
+      );
 
       await Swal.fire({
         icon: "success",
@@ -209,6 +233,7 @@ export default function EntregasRepartidoresTabla() {
           err.response?.data?.message ||
           "Ocurrió un error al actualizar la entrega.",
       });
+      if (err.response?.status === 409) await fetchEntregas();
     } finally {
       setGuardandoTipoEntrega((prev) => ({ ...prev, [entregaId]: false }));
     }
@@ -276,10 +301,14 @@ export default function EntregasRepartidoresTabla() {
 
     const confirmacion = await Swal.fire({
       icon: "warning",
-      title: "Confirmar reasignación",
+      title: "Cambiar responsable",
       text: `La entrega #${entregaReasignacion.id} pasará de ${entregaReasignacion.motorizado || "su repartidor actual"} a ${nombreNuevo}.`,
+      input: "textarea",
+      inputLabel: "Motivo obligatorio",
+      inputValidator: (value) =>
+        !value?.trim() ? "Ingresa el motivo" : undefined,
       showCancelButton: true,
-      confirmButtonText: "Sí, reasignar",
+      confirmButtonText: "Confirmar cambio",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#2563eb",
     });
@@ -294,6 +323,9 @@ export default function EntregasRepartidoresTabla() {
         {
           usuarioAgenciaId: Number(nuevoRepartidorId),
           forzarReasignacion: true,
+          expectedVersion: entregaReasignacion.version,
+          motivo: confirmacion.value.trim(),
+          idempotencyKey: nuevaClaveOperacion(),
         },
       );
 
@@ -303,7 +335,7 @@ export default function EntregasRepartidoresTabla() {
 
       await Swal.fire({
         icon: "success",
-        title: "Entrega reasignada",
+        title: "Responsable actualizado",
         text: `Ahora está asignada a ${nombreNuevo}.`,
         timer: 1800,
         showConfirmButton: false,
@@ -312,28 +344,78 @@ export default function EntregasRepartidoresTabla() {
       console.error(err);
       await Swal.fire({
         icon: "error",
-        title: "No se pudo reasignar",
+        title: "No se pudo cambiar el responsable",
         text:
           err.response?.data?.message ||
           "Ocurrió un error al cambiar el repartidor.",
       });
+      if (err.response?.status === 409) await fetchEntregas();
     } finally {
       setReasignando(false);
     }
   };
 
-  const renderAccionReasignar = (entrega) =>
-    entrega.estado === "Transito" ? (
-      <button
-        type="button"
-        onClick={() => abrirReasignacion(entrega)}
-        className="whitespace-nowrap rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-      >
-        Reasignar
-      </button>
+  const cambiarEstado = async (entrega) => {
+    const opciones = {
+      Pendiente: ["Transito", "Revisar"],
+      Revisar: ["Pendiente", "Transito"],
+      Transito: ["Entregado", "No Entregado", "Revisar"],
+    }[entrega.estado] || [];
+    if (!opciones.length) return;
+
+    const estadoResultado = await Swal.fire({
+      title: `Actualizar estado de #${entrega.id}`,
+      input: "select",
+      inputOptions: Object.fromEntries(opciones.map((valor) => [valor, valor])),
+      inputPlaceholder: "Selecciona el nuevo estado",
+      showCancelButton: true,
+      inputValidator: (value) =>
+        !value ? "Selecciona un estado" : undefined,
+    });
+    if (!estadoResultado.isConfirmed) return;
+
+    const motivoResultado = await Swal.fire({
+      title: "Motivo del cambio",
+      input: "textarea",
+      showCancelButton: true,
+      inputValidator: (value) =>
+        !value?.trim() ? "Ingresa el motivo" : undefined,
+    });
+    if (!motivoResultado.isConfirmed) return;
+
+    try {
+      await api.patch(`/entregas/${entrega.id}/estado`, {
+        estado: estadoResultado.value,
+        expectedVersion: entrega.version,
+        motivo: motivoResultado.value.trim(),
+        idempotencyKey: nuevaClaveOperacion(),
+      });
+      await fetchEntregas();
+    } catch (err) {
+      await Swal.fire({
+        icon: "error",
+        title: "No se pudo cambiar el estado",
+        text: err.response?.data?.message || "Ocurrió un error.",
+      });
+      if (err.response?.status === 409) await fetchEntregas();
+    }
+  };
+
+  const renderAcciones = (entrega) => {
+    const editable = !["Entregado", "No Entregado"].includes(entrega.estado);
+    return editable ? (
+      <div className="flex min-w-40 flex-col gap-2">
+        <button type="button" onClick={() => cambiarEstado(entrega)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+          Actualizar estado
+        </button>
+        <button type="button" onClick={() => abrirReasignacion(entrega)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+          Cambiar responsable
+        </button>
+      </div>
     ) : (
       <span className="text-gray-400">—</span>
     );
+  };
 
   const renderErroresGuardados = (errores) => {
     if (!Array.isArray(errores) || errores.length === 0) {
@@ -568,6 +650,11 @@ export default function EntregasRepartidoresTabla() {
 
                         <td className="px-4 py-2">
                           {entrega.motorizado ?? "—"}
+                          {entrega.advertenciaResponsable && (
+                            <span className="mt-1 block rounded bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                              {entrega.advertenciaResponsable}
+                            </span>
+                          )}
                         </td>
 
                         {/* NUEVA COLUMNA ERRORES */}
@@ -664,7 +751,7 @@ export default function EntregasRepartidoresTabla() {
 
                         <td className="px-4 py-2">
                           {index === 0
-                            ? renderAccionReasignar(entrega)
+                            ? renderAcciones(entrega)
                             : null}
                         </td>
                       </tr>
@@ -684,7 +771,7 @@ export default function EntregasRepartidoresTabla() {
                           —
                         </td>
                         <td className="px-4 py-2">
-                          {renderAccionReasignar(entrega)}
+                          {renderAcciones(entrega)}
                         </td>
                       </tr>,
                     ],
@@ -705,7 +792,7 @@ export default function EntregasRepartidoresTabla() {
               id="titulo-reasignacion"
               className="text-lg font-bold text-gray-800"
             >
-              Reasignar entrega #{entregaReasignacion.id}
+              Cambiar responsable de entrega #{entregaReasignacion.id}
             </h3>
             <p className="mt-2 text-sm text-gray-600">
               Repartidor actual: {entregaReasignacion.motorizado || "Sin información"}
@@ -749,7 +836,7 @@ export default function EntregasRepartidoresTabla() {
                 disabled={!nuevoRepartidorId || reasignando}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {reasignando ? "Reasignando..." : "Reasignar"}
+                {reasignando ? "Actualizando..." : "Cambiar responsable"}
               </button>
             </div>
           </div>

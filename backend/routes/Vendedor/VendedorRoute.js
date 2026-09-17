@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const vendedorController = require("../../controllers/Vendedores/ventaVendedorController");
 const entregaVendedorController = require("../../controllers/Vendedores/entregaVendedorController");
+const { authenticate } = require("../../middleware/authMiddleware");
 
 
 
@@ -39,7 +40,11 @@ router.get("/entrega/:id", async (req, res) => {
 
   
 /* OBTENER UNA Entrega ESPECIFICA */
-router.get("/entrega-logistica/:id", entregaVendedorController.obtenerEntregaPorId);
+router.get(
+  "/entrega-logistica/:id",
+  authenticate,
+  entregaVendedorController.obtenerEntregaPorId,
+);
 
 
 /* TODAS LAS VENTAS DEL VENDEDOR*/   

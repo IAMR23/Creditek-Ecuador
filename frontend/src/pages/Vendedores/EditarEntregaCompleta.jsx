@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api/client";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { jwtDecode } from "jwt-decode";
@@ -47,7 +47,7 @@ const EditarEntregaCompleta = () => {
   useEffect(() => {
     const fetchObsequios = async () => {
       try {
-        const res = await axios.get(`${API_URL}/obsequios`);
+        const res = await api.get("/obsequios");
         setObsequiosDisponibles(res.data);
       } catch (err) {
         console.error(err);
@@ -87,9 +87,7 @@ const EditarEntregaCompleta = () => {
   useEffect(() => {
     const cargarEntrega = async () => {
       try {
-        const res = await axios.get(
-          `${API_URL}/registrar2/entrega-completa/${id}`,
-        );
+        const res = await api.get(`/registrar2/entrega-completa/${id}`);
 
         const {
           cliente: clienteDB,
@@ -118,7 +116,7 @@ const EditarEntregaCompleta = () => {
           fecha: fechaFormateada,
           FechaHoraLlamada: formatDatetimeLocal(entregaDB?.FechaHoraLlamada),
           procesoCompleto: Boolean(entregaDB?.procesoCompleto),
-          estado: entregaDB?.estado || "Pendiente",
+          expectedVersion: entregaDB?.version,
         });
 
       
@@ -153,8 +151,8 @@ const EditarEntregaCompleta = () => {
 
         // 🔹 Cargar modelos del dispositivo seleccionado (CLAVE)
         if (detalleDB?.dispositivoMarcaId) {
-          const resModelos = await axios.get(
-            `${API_URL}/dispositivoMarca/${detalleDB.dispositivoMarcaId}`,
+          const resModelos = await api.get(
+            `/dispositivoMarca/${detalleDB.dispositivoMarcaId}`,
           );
           setModelos(resModelos.data || []);
         }
@@ -187,7 +185,7 @@ const EditarEntregaCompleta = () => {
     fecha: hoy,
     FechaHoraLlamada: "",
     procesoCompleto: false,
-    estado: "Pendiente",
+    expectedVersion: null,
   });
 
   const [detalle, setDetalle] = useState({
@@ -232,10 +230,10 @@ const EditarEntregaCompleta = () => {
     const fetchSelects = async () => {
       try {
         const [dmRes, fpRes] = await Promise.all([
-          axios.get(`${API_URL}/dispositivoMarca`, {
+          api.get("/dispositivoMarca", {
             params: { soloActivos: true },
           }),
-          axios.get(`${API_URL}/formaPago`),
+          api.get("/formaPago"),
         ]);
         setDispositivoMarcas(dmRes.data);
         setFormasPago(fpRes.data);
@@ -252,8 +250,8 @@ const EditarEntregaCompleta = () => {
       if (!detalle.modeloId || !detalle.formaPagoId) return;
 
       try {
-        const res = await axios.get(
-          `${API_URL}/precio/${detalle.modeloId}/${detalle.formaPagoId}`,
+        const res = await api.get(
+          `/precio/${detalle.modeloId}/${detalle.formaPagoId}`,
         );
 
         setDetalle((prev) => ({
@@ -268,30 +266,6 @@ const EditarEntregaCompleta = () => {
 
     fetchPrecio();
   }, [detalle.modeloId, detalle.formaPagoId]);
-
-  const handleDispositivoMarcaChange = async (e) => {
-    const dispositivoMarcaId = e.target.value;
-
-    setDetalle((prev) => ({
-      ...prev,
-      dispositivoMarcaId,
-      modeloId: "",
-    }));
-
-    if (!dispositivoMarcaId) {
-      setModelos([]);
-      return;
-    }
-
-    try {
-      const res = await axios.get(
-        `${API_URL}/dispositivoMarca/${dispositivoMarcaId}`,
-      );
-      setModelos(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -314,7 +288,7 @@ const EditarEntregaCompleta = () => {
   useEffect(() => {
     const cargarOrigenes = async () => {
       try {
-        const res = await axios.get(`${API_URL}/origen`);
+        const res = await api.get("/origen");
         setOrigenes(res.data);
       } catch (error) {
         console.error(error);
@@ -371,10 +345,6 @@ useEffect(() => {
       FechaHoraLlamada: procesoCompleto ? "" : prev.FechaHoraLlamada,
     }));
   };
-
-  const handleDetalleChange = (e) =>
-    setDetalle({ ...detalle, [e.target.name]: e.target.value });
-
 
     useEffect(() => {
   if (detalle.dispositivoMarcaId && dispositivoMarcas.length > 0) {
@@ -460,11 +430,16 @@ const handleSubmit = async (e) => {
     }
 
     // 🚀 Envío
-    const response = await axios.put(
-      `${API_URL}/registrar2/entrega-completa/${id}`,
+    const response = await api.put(
+      `/registrar2/entrega-completa/${id}`,
       formData,
       {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          "Content-Type": "multipart/form-data",
+          "Idempotency-Key":
+            globalThis.crypto?.randomUUID?.() ||
+            `edicion-${id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        },
       },
     );
 
@@ -515,7 +490,14 @@ const handleSubmit = async (e) => {
     const mensaje =
       error.response?.data?.message || "No se pudo actualizar la entrega";
 
-    Swal.fire("Error", mensaje, "error");
+    await Swal.fire(
+      "Error",
+      error.response?.status === 409
+        ? "La entrega cambió mientras la editabas. La página se recargará para evitar sobrescribir información."
+        : mensaje,
+      "error",
+    );
+    if (error.response?.status === 409) window.location.reload();
   } finally {
     setLoading(false);
   }
@@ -802,8 +784,8 @@ ${
 
                   // Cargar modelos si existe
                   if (seleccionado) {
-                    axios
-                      .get(`${API_URL}/dispositivoMarca/${seleccionado.id}`)
+                    api
+                      .get(`/dispositivoMarca/${seleccionado.id}`)
                       .then((res) => setModelos(res.data))
                       .catch(console.error);
                   } else {

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { API_URL } from "../../../config";
-import { jwtDecode } from "jwt-decode";
+import api from "../../api/client";
 
 import {
   MdLocalShipping,
@@ -14,7 +12,6 @@ import {
   MdCalendarToday,
   MdCardGiftcard,
 } from "react-icons/md";
-import Swal from "sweetalert2";
 
 export default function MisEntregasRealizadas() {
   const [entregas, setEntregas] = useState([]);
@@ -25,17 +22,7 @@ export default function MisEntregasRealizadas() {
   }, []);
 
   const cargarEntregas = async () => {
-    const token = localStorage.getItem("token");
-    const decoded = jwtDecode(token);
-    const usuarioAgenciaId =
-      decoded.usuario?.agenciaPrincipal?.usuarioAgenciaId;
-
-    const res = await axios.get(
-      `${API_URL}/entregas/mis-entregas-realizadas/${usuarioAgenciaId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
+    const res = await api.get("/entregas/mis-entregas-realizadas/actual");
 
     setEntregas(res.data);
     setLoading(false);
@@ -48,45 +35,6 @@ export default function MisEntregasRealizadas() {
       </div>
     );
   }
-
-  const actualizarEstado = async (id, nuevoEstado) => {
-    const result = await Swal.fire({
-      title: "¿Confirmar acción?",
-      text: `¿Deseas cambiar el estado a "${nuevoEstado}"?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#16a34a", // green-600
-      cancelButtonColor: "#dc2626", // red-600
-      confirmButtonText: "Sí, actualizar",
-      cancelButtonText: "Cancelar",
-      reverseButtons: true,
-    });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      await axios.put(`${API_URL}/entregas/${id}`, {
-        estado: nuevoEstado,
-      });
-
-      Swal.fire({
-        icon: "success",
-        title: "Estado actualizado",
-        text: `El estado cambió a: ${nuevoEstado}`,
-        timer: 1500,
-        showConfirmButton: false,
-      });
-
-      cargarEntregas();
-    } catch (error) {
-      console.error(error);
-      Swal.fire({
-        icon: "error",
-        title: "Error al actualizar",
-        text: "Ocurrió un problema al guardar el estado.",
-      });
-    }
-  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">

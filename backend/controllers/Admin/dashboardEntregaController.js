@@ -1,17 +1,16 @@
 const { Op } = require("sequelize");
 const Entrega = require("../../models/Entrega");
 const UsuarioAgencia = require("../../models/UsuarioAgencia");
+const {
+  criteriosAsignacionVigente,
+  criteriosEntregaVisible,
+} = require("../../services/entregaConsultaService");
 
 exports.getDashboardEntregas = async (req, res) => {
   try {
     let { fechaInicio, fechaFin, userId } = req.query;
 
-    const whereBase = {
-      activo: true,
-      estado: {  
-        [Op.ne]: "Eliminado",
-      },
-    };
+    const whereBase = criteriosEntregaVisible();
 
     if (fechaInicio || fechaFin) {
   const rango = {};
@@ -33,11 +32,12 @@ const includeMotorizado = {
   attributes: [],
   // Las asignaciones reasignadas se conservan como historial (activo=false).
   // Solo la asignacion vigente debe atribuir la entrega al repartidor.
-  through: { attributes: [], where: { activo: true } },
+  through: { attributes: [], where: criteriosAsignacionVigente() },
   required: !!userId,
-  ...(userId && {
-    where: { id: userId },
-  }),
+  where: {
+    activo: true,
+    ...(userId ? { id: userId } : {}),
+  },
 };
 
     const estados = [

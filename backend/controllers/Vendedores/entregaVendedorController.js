@@ -18,6 +18,9 @@ const {
 const { Op } = require("sequelize");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 const { sequelize } = require("../../config/db");
+const {
+  validarEntregaEnAgencia,
+} = require("../../services/entregaOperacionService");
 
 
 exports.obtenerReporte = async ({ id, page = 1, limit = 10 }) => {
@@ -193,8 +196,32 @@ exports.obtenerEntregaPorId = async (req, res) => {
       return res.status(404).json({ ok: false, msg: "Entrega no encontrada" });
     }
 
+    const permisos = (req.user?.permisos || []).map((permiso) =>
+      String(permiso).trim().toLowerCase(),
+    );
+    const esAdministrador = permisos.includes("administracion");
+    const esLogistica = permisos.includes("logistica");
+    if (
+      !esAdministrador &&
+      !esLogistica &&
+      Number(entrega.usuarioAgencia?.id) !== Number(req.user?.usuarioAgenciaId)
+    ) {
+      return res.status(403).json({
+        ok: false,
+        code: "ENTREGA_NO_AUTORIZADA",
+        message: "No puede consultar una entrega de otra relación usuario-agencia.",
+      });
+    }
+    if (esLogistica && !esAdministrador) {
+      await validarEntregaEnAgencia({
+        entrega,
+        scopeAgenciaId: req.user.agenciaId,
+      });
+    }
+
     const entregaFormateada = {
       id: entrega.id,
+      version: entrega.version,
       fecha: entrega.fecha,
       dia: entrega.dia,
       local: entrega.local,

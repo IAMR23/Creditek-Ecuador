@@ -10,6 +10,12 @@ const Obsequio = require("../../models/Obsequio");
 const Origen = require("../../models/Origen");
 const DetalleEntrega = require("../../models/DetalleEntrega");
 const EntregaObsequio = require("../../models/EntregaObsequio");
+const EntregaEvento = require("../../models/EntregaEvento");
+const {
+  crearError,
+  validarEntregaEnAgencia,
+  validarVersion,
+} = require("../../services/entregaOperacionService");
 const {
   esUbicacionClienteValida,
   MENSAJE_UBICACION_CLIENTE_INVALIDA,
@@ -41,7 +47,10 @@ const editarEntregaCompleta = async (req, res) => {
     const fotoUrl = req.file ? `/uploads/ventas/${req.file.filename}` : null;
 
     // 1️⃣ Buscar entrega
-    const entregaDB = await Entrega.findByPk(id, { transaction: t });
+    const entregaDB = await Entrega.findByPk(id, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
 
     if (!entregaDB) {
       await t.rollback();
@@ -50,6 +59,59 @@ const editarEntregaCompleta = async (req, res) => {
         message: "Entrega no encontrada",
       });
     }
+    const permisos = (req.user.permisos || []).map((item) =>
+      String(item).trim().toLowerCase(),
+    );
+    const esAdministrador = permisos.includes("administracion");
+    const esLogistica = permisos.includes("logistica");
+    if (
+      !esAdministrador &&
+      !esLogistica &&
+      Number(entregaDB.usuarioAgenciaId) !== Number(req.user.usuarioAgenciaId)
+    ) {
+      throw crearError(
+        403,
+        "ENTREGA_NO_AUTORIZADA",
+        "No puede editar una entrega de otra relacion usuario-agencia.",
+      );
+    }
+    if (esLogistica && !esAdministrador) {
+      await validarEntregaEnAgencia({
+        entrega: entregaDB,
+        scopeAgenciaId: req.user.agenciaId,
+        transaction: t,
+      });
+    }
+    const idempotencyKey = req.get("Idempotency-Key") || null;
+    if (idempotencyKey) {
+      const eventoPrevio = await EntregaEvento.findOne({
+        where: { idempotencyKey },
+        transaction: t,
+      });
+      if (eventoPrevio) {
+        if (
+          eventoPrevio.tipo !== "DATOS_ACTUALIZADOS" ||
+          Number(eventoPrevio.entregaId) !== Number(id)
+        ) {
+          throw crearError(
+            409,
+            "IDEMPOTENCY_KEY_REUTILIZADA",
+            "La clave de idempotencia ya fue utilizada por otra operacion.",
+          );
+        }
+        await t.commit();
+        return res.json({
+          ok: true,
+          idempotente: true,
+          entrega: {
+            id: entregaDB.id,
+            fecha: entregaDB.fecha,
+            version: entregaDB.version,
+          },
+        });
+      }
+    }
+    validarVersion(entregaDB, entrega.expectedVersion);
 
     const procesoLlamada = resolverProcesoLlamada({
       entrega,
@@ -120,8 +182,8 @@ const editarEntregaCompleta = async (req, res) => {
         observacion: entrega.observacion,
         fecha: entrega.fecha,
         FechaHoraLlamada: procesoLlamada.fechaHoraLlamada,
-        estado: entrega.estado,
         fotoFechaLlamada: procesoLlamada.fotoFechaLlamada,
+        version: Number(entregaDB.version) + 1,
       },
       { transaction: t }
     );
@@ -178,6 +240,20 @@ const editarEntregaCompleta = async (req, res) => {
       }
     }
 
+    await EntregaEvento.create(
+      {
+        entregaId: entregaDB.id,
+        tipo: "DATOS_ACTUALIZADOS",
+        estadoAnterior: entregaDB.estado,
+        estadoNuevo: entregaDB.estado,
+        actorUsuarioId: req.user.id,
+        motivo: "Edicion general de la entrega",
+        idempotencyKey,
+        metadata: { origen: "edicion_completa" },
+      },
+      { transaction: t },
+    );
+
     await t.commit();
 
     return res.json({
@@ -188,9 +264,10 @@ const editarEntregaCompleta = async (req, res) => {
     await t.rollback();
     console.error(error);
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       ok: false,
-      message: "Error al editar la entrega",
+      code: error.code || "ERROR_EDITANDO_ENTREGA",
+      message: error.message || "Error al editar la entrega",
       error: error.message,
     });
   }
@@ -259,6 +336,27 @@ const obtenerEntregaCompleta = async (req, res) => {
     if (!entrega) {
       return res.status(404).json({ message: "Entrega no encontrada" });
     }
+    const permisos = (req.user.permisos || []).map((item) =>
+      String(item).trim().toLowerCase(),
+    );
+    const esAdministrador = permisos.includes("administracion");
+    const esLogistica = permisos.includes("logistica");
+    if (
+      !esAdministrador &&
+      !esLogistica &&
+      Number(entrega.usuarioAgenciaId) !== Number(req.user.usuarioAgenciaId)
+    ) {
+      return res.status(403).json({
+        code: "ENTREGA_NO_AUTORIZADA",
+        message: "No puede consultar una entrega de otra relacion usuario-agencia.",
+      });
+    }
+    if (esLogistica && !esAdministrador) {
+      await validarEntregaEnAgencia({
+        entrega,
+        scopeAgenciaId: req.user.agenciaId,
+      });
+    }
 
     res.json({
       cliente: entrega.cliente || { cliente: "", cedula: "", telefono: "" },
@@ -272,6 +370,7 @@ const obtenerEntregaCompleta = async (req, res) => {
         observacion: entrega.observacion,
         fecha: entrega.fecha,
         estado: entrega.estado,
+        version: entrega.version,
         
       },
       detalle: entrega.detalleEntregas?.[0] || {

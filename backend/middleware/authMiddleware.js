@@ -39,17 +39,21 @@ const authenticate = async (req, res, next) => {
         ?.usuarioAgenciaId ||
       agencias[0]?.usuarioAgenciaId;
 
-    if (usuarioAgenciaId && !agenciaId) {
+    // El token puede conservar una relacion usuario-agencia que fue
+    // desactivada despues de emitirse. Siempre se revalida contra la base.
+    if (usuarioAgenciaId) {
       const relacion = await UsuarioAgencia.findOne({
         where: {
           id: usuarioAgenciaId,
+          usuarioId: decoded.usuario.id,
           activo: true,
+          ...(agenciaId ? { agenciaId } : {}),
         },
         attributes: ["id", "agenciaId"],
       });
 
-      agenciaId = relacion?.agenciaId;
-      usuarioAgenciaId = relacion?.id || usuarioAgenciaId;
+      usuarioAgenciaId = relacion?.id || null;
+      agenciaId = relacion?.agenciaId || agenciaId;
     }
 
     if (!usuarioAgenciaId && agenciaId) {
@@ -66,6 +70,16 @@ const authenticate = async (req, res, next) => {
       agenciaId = relacion?.agenciaId || agenciaId;
     }
 
+    if (!usuarioAgenciaId) {
+      const relacion = await UsuarioAgencia.findOne({
+        where: { usuarioId: decoded.usuario.id, activo: true },
+        attributes: ["id", "agenciaId"],
+        order: [["id", "ASC"]],
+      });
+      usuarioAgenciaId = relacion?.id;
+      agenciaId = relacion?.agenciaId || agenciaId;
+    }
+
     req.user = {
       id: decoded.usuario.id,
       agenciaId,
@@ -74,8 +88,11 @@ const authenticate = async (req, res, next) => {
       permisos: decoded.usuario.permisosAsignados || [],
     };
 
-    if (!req.user.agenciaId) {
-      return res.status(400).json({ message: "Usuario sin agencia asignada" });
+    if (!req.user.agenciaId || !req.user.usuarioAgenciaId) {
+      return res.status(400).json({
+        code: "USUARIO_AGENCIA_INACTIVA",
+        message: "Usuario sin relacion usuario-agencia activa",
+      });
     }
 
     next();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../../api/client";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -10,10 +10,10 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { API_URL } from "../../../config";
 
 const ESTADOS_BASE = ["Entregado", "No Entregado", "Transito", "Pendiente"];
 
+// eslint-disable-next-line react/prop-types
 export default function ResumenEntregas({ userId }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +24,7 @@ export default function ResumenEntregas({ userId }) {
         const params = {};
         if (userId) params.userId = userId;
 
-        const response = await axios.get(`${API_URL}/contador`, { params });
+        const response = await api.get("/entregas/contador", { params });
 
         // 🔹 Normalizar para que todos los estados existan
         const normalizado = ESTADOS_BASE.map((estado) => {

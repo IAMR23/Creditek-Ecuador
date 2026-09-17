@@ -22,6 +22,7 @@ const DispositivoMarca = require('./DispositivoMarca');
 const formaPago = require('./FormaPago');
 const DetalleEntrega = require('./DetalleEntrega');
 const UsuarioAgenciaEntrega = require('./UsuarioAgenciaEntrega');
+const EntregaEvento = require('./EntregaEvento');
 const Traslado = require('./Traslado');
 const DetalleTraslado = require('./DetalleTraslado');
 const Gestion = require('./Gestion');
@@ -438,14 +439,14 @@ formaPago.hasMany(DetalleEntrega, {
 /* USUARIO AGNCIAS ENTREGAS ENTREGAS */
 
 UsuarioAgencia.belongsToMany(Entrega, {
-  through: UsuarioAgenciaEntrega,
+  through: { model: UsuarioAgenciaEntrega, unique: false },
   foreignKey: "usuario_agencia_id",
   otherKey: "entrega_id",
   as: "entregas",
 });
 
 Entrega.belongsToMany(UsuarioAgencia, {
-  through: UsuarioAgenciaEntrega,
+  through: { model: UsuarioAgenciaEntrega, unique: false },
   foreignKey: "entrega_id",
   otherKey: "usuario_agencia_id",
   as: "repartidores",
@@ -1272,6 +1273,27 @@ AuditoriaVentaPdf.belongsTo(ControlFinancieroCarga, {
 MapaUbicacionNormalizada.belongsTo(MapaComercialZona, {
   foreignKey: "zonaId",
   as: "zona",
+});
+
+Entrega.hasMany(EntregaEvento, {
+  foreignKey: "entregaId",
+  as: "eventos",
+});
+EntregaEvento.belongsTo(Entrega, {
+  foreignKey: "entregaId",
+  as: "entrega",
+});
+EntregaEvento.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaAnteriorId",
+  as: "responsableAnterior",
+});
+EntregaEvento.belongsTo(UsuarioAgencia, {
+  foreignKey: "usuarioAgenciaNuevoId",
+  as: "responsableNuevo",
+});
+EntregaEvento.belongsTo(Usuario, {
+  foreignKey: "actorUsuarioId",
+  as: "actor",
 });
 
 GhlRepartoConfiguracion.hasMany(GhlRepartoEjecucion, { foreignKey: "configuracionId", as: "ejecuciones" });

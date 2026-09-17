@@ -37,6 +37,13 @@ const UsuarioAgenciaEntrega = sequelize.define(
       allowNull: true,
     },
 
+    // Momento en que esta asignacion dejo de ser la vigente por un cambio
+    // de responsable. fecha_finalizacion se reserva para el cierre operativo.
+    fecha_desasignacion: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
@@ -46,13 +53,15 @@ const UsuarioAgenciaEntrega = sequelize.define(
     timestamps: true,
     tableName: "usuario_agencia_entrega",
     indexes: [
+      { fields: ["usuario_agencia_id", "entrega_id"] },
       {
+        name: "usuario_agencia_entrega_una_activa_por_entrega",
         unique: true,
-        fields: ["usuario_agencia_id", "entrega_id"],
+        fields: ["entrega_id"],
+        where: { activo: true },
       },
     ],
   }
 );
 
 module.exports = UsuarioAgenciaEntrega;
-  

@@ -92,18 +92,21 @@ export default function DetalleEntrega() {
       return;
     }
 
+    const idempotencyKey = globalThis.crypto?.randomUUID?.() || `${id}-${Date.now()}`;
+    const payload = {
+      usuarioAgenciaId: Number(repartidorSeleccionado),
+      expectedVersion: form.version,
+      motivo: "Asignacion operativa desde detalle de entrega",
+      iniciarTransito: true,
+      fechaHoraAsignacion,
+      horaEstimadaEntrega,
+      sectorEntrega,
+      tipoEntrega,
+      idempotencyKey,
+    };
+
     try {
-      await api.patch(`/entregas/${id}/tipo-entrega`, { tipoEntrega });
-
-      await api.post(`/entregas/${id}/asignar-repartidor`, {
-        usuarioAgenciaId: repartidorSeleccionado,
-      });
-
-      await api.put(`/entregas/${id}`, {
-        fechaHoraAsignacion,
-        horaEstimadaEntrega,
-        sectorEntrega,
-      });
+      await api.post(`/entregas/${id}/asignar-repartidor`, payload);
       Swal.fire({
         icon: "success",
         title: "Repartidor asignado",
@@ -111,9 +114,9 @@ export default function DetalleEntrega() {
         showConfirmButton: false,
       });
 
-      actualizarEstado("Transito");
+      navigate("/entregas-pendientes");
     } catch (error) {
-      if (error.response?.status === 409) {
+      if (error.response?.data?.code === "REASIGNACION_REQUIERE_CONFIRMACION") {
         const result = await Swal.fire({
           title: "Entrega ya asignada",
           text: "¿Deseas reasignarla?",
@@ -124,26 +127,34 @@ export default function DetalleEntrega() {
         });
 
         if (result.isConfirmed) {
-          await api.post(`/entregas/${id}/asignar-repartidor`, {
-            usuarioAgenciaId: repartidorSeleccionado,
-            forzarReasignacion: true,
-          });
-
-          await api.put(`/entregas/${id}`, {
-            fechaHoraAsignacion,
-            horaEstimadaEntrega,
-            sectorEntrega,
-          });
-
-          Swal.fire({
-            icon: "success",
-            title: "Reasignado correctamente",
-            timer: 1500,
-            showConfirmButton: false,
-          });
-
-          actualizarEstado("Transito");
+          try {
+            await api.post(`/entregas/${id}/asignar-repartidor`, {
+              ...payload,
+              forzarReasignacion: true,
+            });
+            await Swal.fire({
+              icon: "success",
+              title: "Reasignado correctamente",
+              timer: 1500,
+              showConfirmButton: false,
+            });
+            navigate("/entregas-pendientes");
+          } catch (retryError) {
+            await Swal.fire({
+              icon: "error",
+              title: "No se pudo reasignar",
+              text: retryError.response?.data?.message || "Recargaremos la información actual.",
+            });
+            if (retryError.response?.status === 409) window.location.reload();
+          }
         }
+      } else if (error.response?.status === 409) {
+        await Swal.fire({
+          icon: "warning",
+          title: "La entrega cambio",
+          text: error.response?.data?.message || "Recargaremos la informacion actual.",
+        });
+        window.location.reload();
       } else {
         console.error(error);
         Swal.fire({
@@ -160,9 +171,12 @@ export default function DetalleEntrega() {
 
   const actualizarEstado = async (nuevoEstado) => {
     try {
-      await api.put(`/entregas/${id}`, {
+      await api.patch(`/entregas/${id}/estado`, {
         estado: nuevoEstado,
+        expectedVersion: form.version,
+        motivo: observacionesLogistica || `Cambio operativo a ${nuevoEstado}`,
         observacionLogistica: observacionesLogistica,
+        idempotencyKey: globalThis.crypto?.randomUUID?.() || `${id}-${Date.now()}`,
       });
 
       Swal.fire({
@@ -176,6 +190,15 @@ export default function DetalleEntrega() {
       navigate("/entregas-pendientes");
     } catch (error) {
       console.error(error);
+      if (error.response?.status === 409) {
+        await Swal.fire({
+          icon: "warning",
+          title: "La entrega cambio",
+          text: error.response?.data?.message || "Recargaremos la informacion actual.",
+        });
+        window.location.reload();
+        return;
+      }
       Swal.fire({
         icon: "error",
         title: "Error al actualizar",

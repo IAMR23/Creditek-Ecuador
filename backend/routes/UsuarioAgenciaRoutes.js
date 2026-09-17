@@ -4,129 +4,130 @@ const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
 const { authenticate, requirePermission } = require("../middleware/authMiddleware");
+const {
+  desactivarUsuarioAgencia,
+} = require("../services/entregaOperacionService");
 
-// ===========================
-// 🔹 CONTROLADORES
-// ===========================
+const accesoAdministracion = [authenticate, requirePermission("Administracion")];
+const manejarError = (res, error, fallback) =>
+  res.status(error.statusCode || 500).json({
+    code: error.code || "USUARIO_AGENCIA_ERROR",
+    message: error.message || fallback,
+    ...(error.details || {}),
+  });
 
-// Crear relación usuario-agencia
-router.post("/", authenticate, requirePermission("Administracion"), async (req, res) => {
+router.post("/", ...accesoAdministracion, async (req, res) => {
   try {
     const { usuarioId, agenciaId, activo } = req.body;
-
-    // Verificar si usuario y agencia existen
     const usuario = await Usuario.findByPk(usuarioId);
     if (!usuario) return res.status(400).json({ message: "Usuario no encontrado" });
-
     const agencia = await Agencia.findByPk(agenciaId);
     if (!agencia) return res.status(400).json({ message: "Agencia no encontrada" });
-
-    // Verificar si la relación ya existe
     const existing = await UsuarioAgencia.findOne({ where: { usuarioId, agenciaId } });
-    if (existing) return res.status(400).json({ message: "El usuario ya está asignado a esta agencia" });
-
+    if (existing) {
+      return res.status(400).json({ message: "El usuario ya esta asignado a esta agencia" });
+    }
     const relacion = await UsuarioAgencia.create({
       usuarioId,
       agenciaId,
       activo: activo ?? true,
     });
-
-    res.status(201).json(relacion);
+    return res.status(201).json(relacion);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al asignar usuario a agencia", error });
+    return manejarError(res, error, "Error al asignar usuario a agencia");
   }
 });
 
-// Obtener todas las relaciones
-router.get("/", authenticate, requirePermission("Administracion"), async (req, res) => {
+router.get("/", ...accesoAdministracion, async (req, res) => {
   try {
-  const relaciones = await UsuarioAgencia.findAll({
-  include: [
-    { model: Usuario, as: "usuario" },
-    { model: Agencia, as: "agencia" }
-  ]
-});
-
-    res.json(relaciones);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener relaciones", error });
-  }
-});
-
-
-router.get(
-  "/activos",
-  authenticate,
-  requirePermission("Administracion"),
-  async (req, res) => {
-  try {
-    const relacionesActivas = await UsuarioAgencia.findAll({
-      where: { activo: true }, // Solo activos
+    const relaciones = await UsuarioAgencia.findAll({
       include: [
         { model: Usuario, as: "usuario" },
         { model: Agencia, as: "agencia" },
       ],
-      order: [
-        ["id", "ASC"], // opcional, orden por id
+    });
+    return res.json(relaciones);
+  } catch (error) {
+    console.error(error);
+    return manejarError(res, error, "Error al obtener relaciones");
+  }
+});
+
+router.get("/activos", ...accesoAdministracion, async (req, res) => {
+  try {
+    const relaciones = await UsuarioAgencia.findAll({
+      where: { activo: true },
+      include: [
+        { model: Usuario, as: "usuario" },
+        { model: Agencia, as: "agencia" },
+      ],
+      order: [["id", "ASC"]],
+    });
+    return res.json(relaciones);
+  } catch (error) {
+    console.error(error);
+    return manejarError(res, error, "Error al obtener relaciones activas");
+  }
+});
+
+router.get("/:id", ...accesoAdministracion, async (req, res) => {
+  try {
+    const relacion = await UsuarioAgencia.findByPk(req.params.id, {
+      include: [
+        { model: Usuario, as: "usuario" },
+        { model: Agencia, as: "agencia" },
       ],
     });
-
-    res.json(relacionesActivas);
+    if (!relacion) return res.status(404).json({ message: "Relacion no encontrada" });
+    return res.json(relacion);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al obtener relaciones activas", error });
-  }
-  },
-);
-
-// Obtener relación por ID
-router.get("/:id", authenticate, requirePermission("Administracion"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const relacion = await UsuarioAgencia.findByPk(id, { include: [Usuario, Agencia] });
-
-    if (!relacion) return res.status(404).json({ message: "Relación no encontrada" });
-
-    res.json(relacion);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener relación", error });
+    return manejarError(res, error, "Error al obtener relacion");
   }
 });
 
-// Actualizar relación
-router.put("/:id", authenticate, requirePermission("Administracion"), async (req, res) => {
+router.put("/:id", ...accesoAdministracion, async (req, res) => {
   try {
-    const { id } = req.params;
-    const {  activo } = req.body;
+    const { activo, responsableDestinoId, motivo, idempotencyKey } = req.body;
+    if (activo === false) {
+      const resultado = await desactivarUsuarioAgencia({
+        usuarioAgenciaId: req.params.id,
+        responsableDestinoId,
+        actorUsuarioId: req.user.id,
+        motivo: motivo || "Desactivacion de relacion usuario-agencia",
+        idempotencyKey: idempotencyKey || req.get("Idempotency-Key") || null,
+        scopeAgenciaId: null,
+      });
+      return res.json(resultado);
+    }
 
-    const relacion = await UsuarioAgencia.findByPk(id);
-    if (!relacion) return res.status(404).json({ message: "Relación no encontrada" });
-
+    const relacion = await UsuarioAgencia.findByPk(req.params.id);
+    if (!relacion) return res.status(404).json({ message: "Relacion no encontrada" });
     relacion.activo = activo ?? relacion.activo;
-
     await relacion.save();
-    res.json(relacion);
+    return res.json(relacion);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al actualizar relación", error });
+    return manejarError(res, error, "Error al actualizar relacion");
   }
 });
 
-// Eliminar relación
-router.delete("/:id", authenticate, requirePermission("Administracion"), async (req, res) => {
+// Se conserva la ruta por compatibilidad, pero ya no elimina historial.
+router.delete("/:id", ...accesoAdministracion, async (req, res) => {
   try {
-    const { id } = req.params;
-    const relacion = await UsuarioAgencia.findByPk(id);
-    if (!relacion) return res.status(404).json({ message: "Relación no encontrada" });
-
-    await relacion.destroy();
-    res.json({ message: "Relación eliminada correctamente" });
+    const resultado = await desactivarUsuarioAgencia({
+      usuarioAgenciaId: req.params.id,
+      responsableDestinoId: req.body?.responsableDestinoId,
+      actorUsuarioId: req.user.id,
+      motivo: req.body?.motivo || "Desactivacion solicitada desde eliminar relacion",
+      idempotencyKey: req.body?.idempotencyKey || req.get("Idempotency-Key") || null,
+      scopeAgenciaId: null,
+    });
+    return res.json({ message: "Relacion desactivada correctamente", ...resultado });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al eliminar relación", error });
+    return manejarError(res, error, "Error al desactivar relacion");
   }
 });
 

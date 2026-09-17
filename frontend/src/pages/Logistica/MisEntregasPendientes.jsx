@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { API_URL } from "../../../config";
-import { jwtDecode } from "jwt-decode";
+import api from "../../api/client";
 
 import {
   MdLocalShipping,
@@ -18,6 +16,10 @@ import {
 } from "react-icons/md";
 import Swal from "sweetalert2";
 
+const nuevaClaveOperacion = () =>
+  globalThis.crypto?.randomUUID?.() ||
+  `estado-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 export default function MisEntregasPendientes() {
   const [entregas, setEntregas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,17 +30,7 @@ export default function MisEntregasPendientes() {
   }, []);
 
   const cargarEntregas = async () => {
-    const token = localStorage.getItem("token");
-    const decoded = jwtDecode(token);
-    const usuarioAgenciaId =
-      decoded.usuario?.agenciaPrincipal?.usuarioAgenciaId;
-
-    const res = await axios.get(
-      `${API_URL}/entregas/mis-entregas-pendientes/${usuarioAgenciaId}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
+    const res = await api.get("/entregas/mis-entregas-pendientes/actual");
 
     setEntregas(res.data);
     setLoading(false);
@@ -55,7 +47,8 @@ export default function MisEntregasPendientes() {
 
 
 
-  const actualizarEstado = async (id, nuevoEstado) => {
+  const actualizarEstado = async (entrega, nuevoEstado) => {
+  const id = entrega.id;
   const observacion = observacionesEntrega[id] || "";
 
   const result = await Swal.fire({
@@ -73,9 +66,12 @@ export default function MisEntregasPendientes() {
   if (!result.isConfirmed) return;
 
   try {
-    await axios.put(`${API_URL}/entregas/${id}`, {
+    await api.patch(`/entregas/${id}/estado`, {
       estado: nuevoEstado,
       observacionEntrega: observacion,
+      expectedVersion: entrega.version,
+      motivo: `Resultado de entrega: ${nuevoEstado}`,
+      idempotencyKey: nuevaClaveOperacion(),
     });
 
     Swal.fire({
@@ -93,8 +89,12 @@ export default function MisEntregasPendientes() {
     Swal.fire({
       icon: "error",
       title: "Error",
-      text: "Ocurrió un problema al actualizar.",
+      text:
+        error.response?.status === 409
+          ? "La entrega fue modificada por otra persona. Se recargaron los datos."
+          : error.response?.data?.message || "Ocurrió un problema al actualizar.",
     });
+    if (error.response?.status === 409) cargarEntregas();
   }
 };
 
@@ -245,7 +245,7 @@ export default function MisEntregasPendientes() {
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
-              onClick={() => actualizarEstado(entrega.id, "Entregado")}
+              onClick={() => actualizarEstado(entrega, "Entregado")}
               className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow"
             >
               <MdCheckCircle />
@@ -253,7 +253,7 @@ export default function MisEntregasPendientes() {
             </button>
 
             <button
-              onClick={() => actualizarEstado(entrega.id, "No Entregado")}
+              onClick={() => actualizarEstado(entrega, "No Entregado")}
               className="flex items-center gap-2 bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow"
             >
               <MdCancel />

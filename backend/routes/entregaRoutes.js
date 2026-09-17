@@ -37,23 +37,41 @@ const { sequelize } = require("../config/db");
 const {
   resolverVentaParaEntrega,
 } = require("../services/ventaEntregaRelacionService");
+const {
+  actualizarCamposGenerales,
+  cambiarEstado,
+} = require("../controllers/Logistica/entregaOperacionController");
+const {
+  criteriosAsignacionVigente,
+  criteriosEntregaPendiente,
+  criteriosEntregaVisible,
+  responsableRequiereRevision,
+} = require("../services/entregaConsultaService");
 
-router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
-  const { userId } = req.params;
+const accesoInformeEntregas = [
+  authenticate,
+  requirePermission("Logistica", "Administracion"),
+];
+const tienePermiso = (req, permiso) =>
+  (req.user?.permisos || []).some(
+    (item) => String(item).trim().toLowerCase() === permiso.toLowerCase(),
+  );
+
+router.get("/mis-entregas-pendientes/:userId", authenticate, async (req, res) => {
+  const userId = req.user.usuarioAgenciaId;
 
   try {
-    const usuario = await UsuarioAgencia.findByPk(userId, {
+    const usuario = await UsuarioAgencia.findOne({
+      where: { id: userId, usuarioId: req.user.id, activo: true },
       include: [
         {
           model: Entrega,
           as: "entregas",
-          where: {
-            estado: "Transito",
-          },
+          where: criteriosEntregaPendiente(),
           through: {
-            where: {
+            where: criteriosAsignacionVigente({
               estado: "Asignada", // estado en la tabla intermedia
-            },
+            }),
           },
           required: false, // evita que falle si no tiene entregas pendientes
           include: [
@@ -108,20 +126,20 @@ router.get("/mis-entregas-pendientes/:userId", async (req, res) => {
   }
 });
 
-router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
-  const { userId } = req.params;
+router.get("/mis-entregas-realizadas/:userId", authenticate, async (req, res) => {
+  const userId = req.user.usuarioAgenciaId;
 
   try {
-    const usuario = await UsuarioAgencia.findByPk(userId, {
+    const usuario = await UsuarioAgencia.findOne({
+      where: { id: userId, usuarioId: req.user.id, activo: true },
       include: [
         {
           model: Entrega,
           as: "entregas",
-          where: {
-            estado: {
-              [Op.in]: ["Entregado", "No Entregado"],
-            },
-          },
+          where: criteriosEntregaVisible({
+            estado: { [Op.in]: ["Entregado", "No Entregado"] },
+          }),
+          through: { where: criteriosAsignacionVigente() },
           required: false, // evita que falle si no tiene entregas con esos estados
           include: [
             {
@@ -175,13 +193,34 @@ router.get("/mis-entregas-realizadas/:userId", async (req, res) => {
   }
 });
 
-router.get("/entregas", async (req, res) => {
+router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
   const { userId, fechaInicio, fechaFin, estado, agenciaId } = req.query;
+  const agenciaEfectiva = tienePermiso(req, "Administracion")
+    ? agenciaId
+    : req.user.agenciaId;
 
   try {
-    const whereEntrega = {
-      estado: { [Op.ne]: "Eliminado" },
-    };
+    if (
+      userId &&
+      userId !== "todos" &&
+      !tienePermiso(req, "Administracion")
+    ) {
+      const responsablePermitido = await UsuarioAgencia.findOne({
+        where: {
+          id: Number(userId),
+          agenciaId: req.user.agenciaId,
+          activo: true,
+        },
+        attributes: ["id"],
+      });
+      if (!responsablePermitido) {
+        return res.status(403).json({
+          code: "RESPONSABLE_FUERA_DE_AGENCIA",
+          message: "El responsable no pertenece a la agencia autorizada.",
+        });
+      }
+    }
+    const whereEntrega = criteriosEntregaVisible();
 
     // 📅 Filtro por fechas
     if (fechaInicio && fechaFin) {
@@ -201,6 +240,7 @@ router.get("/entregas", async (req, res) => {
       where: whereEntrega,
       attributes: [
         "id",
+        "version",
         "fecha",
         "observacion",
         "estado",
@@ -215,20 +255,21 @@ router.get("/entregas", async (req, res) => {
         {
           model: UsuarioAgencia,
           as: "usuarioAgencia",
-          attributes: ["id"],
+          attributes: ["id", "activo", "agenciaId"],
+          required: Boolean(agenciaEfectiva && agenciaEfectiva !== "todas"),
           include: [
             {
               model: Usuario,
               as: "usuario",
-              attributes: ["id", "nombre"],
+              attributes: ["id", "nombre", "activo"],
             },
             {
               model: Agencia,
               as: "agencia",
               attributes: ["id", "nombre"],
-              ...(agenciaId &&
-                agenciaId !== "todas" && {
-                  where: { id: agenciaId },
+              ...(agenciaEfectiva &&
+                agenciaEfectiva !== "todas" && {
+                  where: { id: agenciaEfectiva },
                 }),
             },
           ],
@@ -236,23 +277,22 @@ router.get("/entregas", async (req, res) => {
         {
           model: UsuarioAgencia,
           as: "repartidores",
-          attributes: ["id"],
+          attributes: ["id", "activo", "agenciaId"],
           required: !!(userId && userId !== "todos"), // fuerza INNER JOIN si hay filtro
           through: {
             attributes: ["estado" , "activo"],
-            where: {
-              activo: true,
+            where: criteriosAsignacionVigente({
               ...(userId &&
                 userId !== "todos" && {
                   usuario_agencia_id: Number(userId),
                 }),
-            },
+            }),
           },
           include: [
             {
               model: Usuario,
               as: "usuario",
-              attributes: ["id", "nombre"],
+              attributes: ["id", "nombre", "activo"],
             },
             {
               model: Agencia,
@@ -319,6 +359,7 @@ router.get("/entregas", async (req, res) => {
     const resultado = entregas.map((e) => {
       const motorizado = e.repartidores?.[0];
 
+      const requiereRevision = responsableRequiereRevision(e, motorizado);
       return {
         ...e.toJSON(),
 
@@ -327,6 +368,11 @@ router.get("/entregas", async (req, res) => {
 
         motorizado: motorizado?.usuario?.nombre ?? null,
         agenciaMotorizado: motorizado?.agencia?.nombre ?? null,
+        responsableRequiereRevision: requiereRevision,
+        advertenciaResponsable:
+          requiereRevision
+            ? "Responsable inactivo: requiere revision"
+            : null,
       };
     });
 
@@ -339,11 +385,11 @@ router.get("/entregas", async (req, res) => {
   }
 });
 
-router.get("/contador", async (req, res) => {
+router.get("/contador", ...accesoInformeEntregas, async (req, res) => {
   const { userId } = req.query;
 
   try {
-    const wherePivot = {};
+    const wherePivot = criteriosAsignacionVigente();
 
     // 🔹 userId opcional
     if (userId) {
@@ -353,7 +399,13 @@ router.get("/contador", async (req, res) => {
     const resumen = await UsuarioAgenciaEntrega.findAll({
       attributes: [
         [Sequelize.col("entrega.estado"), "estado"],
-        [Sequelize.fn("COUNT", Sequelize.literal("*")), "total"],
+        [
+          Sequelize.fn(
+            "COUNT",
+            Sequelize.fn("DISTINCT", Sequelize.col("entrega_id")),
+          ),
+          "total",
+        ],
       ],
       where: wherePivot,
       include: [
@@ -361,7 +413,18 @@ router.get("/contador", async (req, res) => {
           model: Entrega,
           as: "entrega",
           attributes: [],
+          where: criteriosEntregaVisible(),
         },
+        ...(!tienePermiso(req, "Administracion")
+          ? [
+              {
+                model: UsuarioAgencia,
+                as: "usuarioAgencia",
+                attributes: [],
+                where: { agenciaId: req.user.agenciaId, activo: true },
+              },
+            ]
+          : []),
       ],
       group: ["entrega.estado"],
       raw: true,
@@ -379,6 +442,13 @@ router.post(
   authenticate,
   requirePermission("Logistica", "Administracion"),
   asignarEntrega,
+);
+
+router.patch(
+  "/:id/estado",
+  authenticate,
+  requirePermission("Logistica", "Administracion"),
+  cambiarEstado,
 );
 
 router.patch(
@@ -503,20 +573,12 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
-  const { id } = req.params;
-  const data = req.body;
-  try {
-    const entrega = await Entrega.findByPk(id);
-    if (!entrega)
-      return res.status(404).json({ mensaje: "Entrega no encontrada." });
-    await entrega.update(data);
-    res.json(entrega);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: "Error al actualizar la entrega." });
-  }
-});
+router.put(
+  "/:id",
+  authenticate,
+  requirePermission("Logistica", "Administracion"),
+  actualizarCamposGenerales,
+);
 
 // Eliminar una entrega
 router.delete("/:id", async (req, res) => {
