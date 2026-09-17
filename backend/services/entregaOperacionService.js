@@ -330,7 +330,7 @@ const actualizarEstadoEnTransaccion = async ({
   observacionEntrega,
   observacionLogistica,
   idempotencyKey,
-  responsableRequeridoId,
+  responsableRequeridoUsuarioId,
   scopeAgenciaId,
   transaction,
 }) => {
@@ -360,15 +360,24 @@ const actualizarEstadoEnTransaccion = async ({
   }
 
   const asignacion = await obtenerAsignacionActiva(entregaId, transaction);
-  if (
-    responsableRequeridoId &&
-    Number(asignacion?.usuario_agencia_id) !== Number(responsableRequeridoId)
-  ) {
-    throw crearError(
-      403,
-      "ENTREGA_NO_AUTORIZADA",
-      "La entrega no pertenece al responsable autenticado.",
-    );
+  if (responsableRequeridoUsuarioId) {
+    const relacionDelResponsable = asignacion
+      ? await UsuarioAgencia.findOne({
+          where: {
+            id: asignacion.usuario_agencia_id,
+            usuarioId: responsableRequeridoUsuarioId,
+          },
+          attributes: ["id"],
+          transaction,
+        })
+      : null;
+    if (!relacionDelResponsable) {
+      throw crearError(
+        403,
+        "ENTREGA_NO_AUTORIZADA",
+        "La entrega no pertenece al responsable autenticado.",
+      );
+    }
   }
   if (nuevoEstado === "Transito" && !asignacion) {
     throw crearError(

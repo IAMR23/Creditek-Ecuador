@@ -64,6 +64,30 @@ const ensureEntregaTipoSchema = async (queryInterface) => {
   `);
 };
 
+const ensureEntregaOperacionSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+
+  if (tables.includes("entregas")) {
+    await addColumnIfMissing(queryInterface, "entregas", "version", {
+      type: Sequelize.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    });
+  }
+
+  if (tables.includes("usuario_agencia_entrega")) {
+    await addColumnIfMissing(
+      queryInterface,
+      "usuario_agencia_entrega",
+      "fecha_desasignacion",
+      {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
+    );
+  }
+};
+
 const ensureGhlRepartoExecutionControlSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("ghl_reparto_ejecuciones")) return;
@@ -632,6 +656,12 @@ const ensureSistemasTareasSchema = async (queryInterface, tables) => {
 
 const ensureInventarioSistemasSchema = async (queryInterface, tables) => {
   if (!tables.includes("sistemas_inventarios")) return;
+
+  await addColumnIfMissing(queryInterface, "sistemas_inventarios", "cantidad", {
+    type: Sequelize.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+  });
 
   await addColumnIfMissing(queryInterface, "sistemas_inventarios", "precio", {
     type: Sequelize.DECIMAL(12, 2),
@@ -1809,6 +1839,7 @@ const connectDB = async () => {
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
     await ensureReporteCajaUsuarioAgenciaPreSyncSchema(queryInterface);
     await ensureEgresosCreditekEntradasPreSyncSchema(queryInterface);
+    await ensureEntregaOperacionSchema(queryInterface);
     await ensureEntregaTipoSchema(queryInterface);
     await sequelize.sync({});
     await sequelize.query(require("fs").readFileSync(
@@ -2035,6 +2066,7 @@ const connectDB = async () => {
 module.exports = {
   sequelize,
   connectDB,
+  ensureEntregaOperacionSchema,
   ensureEntregaTipoSchema,
   ensureFacturasFisicasOcrPreSyncSchema,
   ensureGhlAdvisorAvailabilitySchema,

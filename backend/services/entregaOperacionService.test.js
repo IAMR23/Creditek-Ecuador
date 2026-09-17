@@ -195,7 +195,7 @@ describe("entregaOperacionService", () => {
       expectedVersion: 8,
       actorUsuarioId: 7,
       motivo: "Cliente recibio",
-      responsableRequeridoId: 22,
+      responsableRequeridoUsuarioId: 7,
     });
 
     expect(entrega).toMatchObject({ estado: "Entregado", version: 9 });
@@ -207,6 +207,49 @@ describe("entregaOperacionService", () => {
       expect.objectContaining({ tipo: "ESTADO_CAMBIADO", estadoAnterior: "Transito", estadoNuevo: "Entregado" }),
       { transaction: mockTransaction },
     );
+  });
+
+  test("autoriza al mismo usuario aunque la asignacion pertenezca a una agencia anterior", async () => {
+    const entrega = instancia({ id: 10, estado: "Transito", version: 2 });
+    const asignacion = instancia({ id: 31, usuario_agencia_id: 12, activo: true });
+    Entrega.findByPk.mockResolvedValue(entrega);
+    UsuarioAgenciaEntrega.findOne.mockResolvedValue(asignacion);
+    UsuarioAgencia.findOne.mockResolvedValue({ id: 12, usuarioId: 13, activo: false });
+
+    await actualizarEstado({
+      entregaId: 10,
+      nuevoEstado: "Entregado",
+      expectedVersion: 2,
+      actorUsuarioId: 13,
+      motivo: "Cliente recibio",
+      responsableRequeridoUsuarioId: 13,
+    });
+
+    expect(UsuarioAgencia.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 12, usuarioId: 13 } }),
+    );
+    expect(entrega).toMatchObject({ estado: "Entregado", version: 3 });
+  });
+
+  test("rechaza a otro usuario aunque tenga una relacion de agencia activa", async () => {
+    const entrega = instancia({ id: 10, estado: "Transito", version: 2 });
+    Entrega.findByPk.mockResolvedValue(entrega);
+    UsuarioAgenciaEntrega.findOne.mockResolvedValue(
+      instancia({ id: 31, usuario_agencia_id: 12, activo: true }),
+    );
+    UsuarioAgencia.findOne.mockResolvedValue(null);
+
+    await expect(
+      actualizarEstado({
+        entregaId: 10,
+        nuevoEstado: "Entregado",
+        expectedVersion: 2,
+        actorUsuarioId: 99,
+        motivo: "Intento ajeno",
+        responsableRequeridoUsuarioId: 99,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403, code: "ENTREGA_NO_AUTORIZADA" });
+    expect(mockTransaction.rollback).toHaveBeenCalled();
   });
 
   test("una entrega finalizada no puede reabrirse por la operacion de estado", async () => {

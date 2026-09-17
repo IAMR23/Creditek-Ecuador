@@ -230,7 +230,7 @@ describe("relacion entre ventas y entregas", () => {
 
     expect(sequelize.query).toHaveBeenCalledWith(
       expect.stringMatching(
-        /createdAt[\s\S]+America\/Guayaquil[\s\S]+::DATE[\s\S]+createdAt[\s\S]+America\/Guayaquil[\s\S]+::TIME[\s\S]+LOWER\(TRIM[\s\S]+INNER JOIN relaciones/,
+        /control_financiero_registros[\s\S]+fechaControlLocal[\s\S]+::DATE[\s\S]+fechaControlLocal[\s\S]+::TIME[\s\S]+LOWER\(TRIM[\s\S]+INNER JOIN relaciones/,
       ),
       expect.objectContaining({
         replacements: {
@@ -248,7 +248,7 @@ describe("relacion entre ventas y entregas", () => {
     );
   });
 
-  test("aplica el rango y la hora diaria sobre la fecha de creacion en Ecuador", async () => {
+  test("aplica el rango y la hora diaria sobre la fecha de Control Financiero", async () => {
     sequelize.query.mockResolvedValue([]);
 
     await obtenerInformeVentasConEntrega({
@@ -260,14 +260,18 @@ describe("relacion entre ventas y entregas", () => {
     const [sql] = sequelize.query.mock.calls[0];
 
     expect(sql).toMatch(
-      /\(v\."createdAt" AT TIME ZONE 'America\/Guayaquil'\)::DATE\s+>= CAST\(:fechaInicio AS DATE\)/,
+      /control\."fechaControlLocal"::DATE\s+>= CAST\(:fechaInicio AS DATE\)/,
     );
     expect(sql).toMatch(
-      /\(v\."createdAt" AT TIME ZONE 'America\/Guayaquil'\)::DATE\s+<= CAST\(:fechaFin AS DATE\)/,
+      /control\."fechaControlLocal"::DATE\s+<= CAST\(:fechaFin AS DATE\)/,
     );
     expect(sql).toMatch(
-      /\(v\."createdAt" AT TIME ZONE 'America\/Guayaquil'\)::TIME\s+>= CAST\(:horaRegistroDesde AS TIME\)/,
+      /control\."fechaControlLocal"::TIME\s+>= CAST\(:horaRegistroDesde AS TIME\)/,
     );
+    expect(sql).toMatch(/control_financiero_registros registro/);
+    expect(sql).toMatch(/registro\.imei[\s\S]+detalle\."referenciaPdf"/);
+    expect(sql).toMatch(/registro\.contrato[\s\S]+detalle\.contrato/);
+    expect(sql).not.toMatch(/v\."createdAt" AT TIME ZONE/);
     expect(sql).not.toMatch(/v\.fecha\s+[<>]= CAST\(:fecha(?:Inicio|Fin) AS DATE\)/);
   });
 

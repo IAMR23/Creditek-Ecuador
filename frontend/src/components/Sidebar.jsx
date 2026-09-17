@@ -179,11 +179,11 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/copa-creditek",
           },
-          {
+       /*    {
             label: "Goleadores ⚽",
             icon: <BarChart3 size={20} />,
             path: "/goleadores",
-          },
+          }, */
         ],
       },
 

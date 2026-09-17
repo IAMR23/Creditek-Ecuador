@@ -57,18 +57,29 @@ const tienePermiso = (req, permiso) =>
     (item) => String(item).trim().toLowerCase() === permiso.toLowerCase(),
   );
 
-router.get("/mis-entregas-pendientes/:userId", authenticate, async (req, res) => {
-  const userId = req.user.usuarioAgenciaId;
+const entregasUnicasDeRelaciones = (relaciones = []) =>
+  Array.from(
+    new Map(
+      relaciones
+        .flatMap((relacion) => relacion.entregas || [])
+        .map((entrega) => [Number(entrega.id), entrega]),
+    ).values(),
+  );
 
+router.get("/mis-entregas-pendientes/:userId", authenticate, async (req, res) => {
   try {
-    const usuario = await UsuarioAgencia.findOne({
-      where: { id: userId, usuarioId: req.user.id, activo: true },
+    // Un usuario puede cambiar de agencia. Se consultan todas sus relaciones
+    // historicas para que la responsabilidad no dependa de la agencia actual.
+    const relaciones = await UsuarioAgencia.findAll({
+      where: { usuarioId: req.user.id },
+      attributes: ["id"],
       include: [
         {
           model: Entrega,
           as: "entregas",
           where: criteriosEntregaPendiente(),
           through: {
+            attributes: ["fecha_asignacion", "estado", "activo"],
             where: criteriosAsignacionVigente({
               estado: "Asignada", // estado en la tabla intermedia
             }),
@@ -119,7 +130,7 @@ router.get("/mis-entregas-pendientes/:userId", authenticate, async (req, res) =>
       ],
     });
 
-    res.json(usuario?.entregas || []);
+    res.json(entregasUnicasDeRelaciones(relaciones));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener tus entregas" });
@@ -127,11 +138,10 @@ router.get("/mis-entregas-pendientes/:userId", authenticate, async (req, res) =>
 });
 
 router.get("/mis-entregas-realizadas/:userId", authenticate, async (req, res) => {
-  const userId = req.user.usuarioAgenciaId;
-
   try {
-    const usuario = await UsuarioAgencia.findOne({
-      where: { id: userId, usuarioId: req.user.id, activo: true },
+    const relaciones = await UsuarioAgencia.findAll({
+      where: { usuarioId: req.user.id },
+      attributes: ["id"],
       include: [
         {
           model: Entrega,
@@ -139,7 +149,15 @@ router.get("/mis-entregas-realizadas/:userId", authenticate, async (req, res) =>
           where: criteriosEntregaVisible({
             estado: { [Op.in]: ["Entregado", "No Entregado"] },
           }),
-          through: { where: criteriosAsignacionVigente() },
+          through: {
+            attributes: [
+              "fecha_asignacion",
+              "fecha_finalizacion",
+              "estado",
+              "activo",
+            ],
+            where: criteriosAsignacionVigente(),
+          },
           required: false, // evita que falle si no tiene entregas con esos estados
           include: [
             {
@@ -186,7 +204,7 @@ router.get("/mis-entregas-realizadas/:userId", authenticate, async (req, res) =>
       ],
     });
 
-    res.json(usuario?.entregas || []);
+    res.json(entregasUnicasDeRelaciones(relaciones));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener tus entregas" });

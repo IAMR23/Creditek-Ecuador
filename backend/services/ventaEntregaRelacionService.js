@@ -200,12 +200,146 @@ const resolverVentaParaEntrega = async ({
   };
 };
 
+const SQL_CONTROL_FINANCIERO_POR_VENTA = `
+  control_candidatos AS (
+    SELECT
+      detalle."ventaId",
+      registro.id AS "controlFinancieroRegistroId",
+      registro.fecha AS "fechaControlOriginal",
+      fecha_control."fechaControlLocal",
+      ROW_NUMBER() OVER (
+        PARTITION BY detalle."ventaId"
+        ORDER BY
+          CASE
+            WHEN registro."tipoRegistro" = 'VENTA_CELULAR'
+              AND NULLIF(TRIM(registro.imei), '') =
+                NULLIF(TRIM(detalle."referenciaPdf"), '')
+            THEN 0
+            ELSE 1
+          END,
+          fecha_control."fechaControlLocal" DESC NULLS LAST,
+          registro.id DESC
+      ) AS orden
+    FROM detalle_ventas detalle
+    LEFT JOIN "DispositivoMarcas" dispositivo_marca
+      ON dispositivo_marca.id = detalle."dispositivoMarcaId"
+    LEFT JOIN dispositivos dispositivo
+      ON dispositivo.id = dispositivo_marca.dispositivo_id
+    INNER JOIN control_financiero_registros registro
+      ON (
+        registro."tipoRegistro" = 'VENTA_CELULAR'
+        AND (
+          (
+            NULLIF(TRIM(registro.imei), '') IS NOT NULL
+            AND NULLIF(TRIM(registro.imei), '') =
+              NULLIF(TRIM(detalle."referenciaPdf"), '')
+          )
+          OR (
+            (
+              LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%celular%'
+              OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%telefono%'
+              OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%smartphone%'
+            )
+            AND NULLIF(
+              REGEXP_REPLACE(
+                UPPER(COALESCE(registro.contrato, '')),
+                '[^A-Z0-9]',
+                '',
+                'g'
+              ),
+              ''
+            ) = NULLIF(
+              REGEXP_REPLACE(
+                UPPER(COALESCE(detalle.contrato, '')),
+                '[^A-Z0-9]',
+                '',
+                'g'
+              ),
+              ''
+            )
+          )
+        )
+      )
+      OR (
+        registro."tipoRegistro" = 'VENTA_TV'
+        AND (
+          LOWER(TRIM(COALESCE(dispositivo.nombre, ''))) = 'tv'
+          OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%televisor%'
+          OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%television%'
+        )
+        AND NULLIF(
+          REGEXP_REPLACE(
+            UPPER(COALESCE(registro.contrato, '')),
+            '[^A-Z0-9]',
+            '',
+            'g'
+          ),
+          ''
+        ) = NULLIF(
+          REGEXP_REPLACE(
+            UPPER(COALESCE(detalle.contrato, '')),
+            '[^A-Z0-9]',
+            '',
+            'g'
+          ),
+          ''
+        )
+      )
+    INNER JOIN control_financiero_cargas carga
+      ON carga.id = registro."cargaId"
+      AND carga.estado = 'ACTIVA'
+    CROSS JOIN LATERAL (
+      SELECT CASE
+        WHEN TRIM(registro.fecha) ~
+          '^\\d{1,2}/\\d{1,2}/\\d{2} \\d{1,2}:\\d{2}:\\d{2} (AM|PM)$'
+        THEN TO_TIMESTAMP(
+          UPPER(TRIM(registro.fecha)),
+          'MM/DD/YY HH12:MI:SS AM'
+        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
+        WHEN TRIM(registro.fecha) ~
+          '^\\d{1,2}/\\d{1,2}/\\d{2} \\d{1,2}:\\d{2} (AM|PM)$'
+        THEN TO_TIMESTAMP(
+          UPPER(TRIM(registro.fecha)),
+          'MM/DD/YY HH12:MI AM'
+        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
+        WHEN TRIM(registro.fecha) ~
+          '^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{2}:\\d{2} (AM|PM)$'
+        THEN TO_TIMESTAMP(
+          UPPER(TRIM(registro.fecha)),
+          'MM/DD/YYYY HH12:MI:SS AM'
+        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
+        WHEN TRIM(registro.fecha) ~
+          '^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{2} (AM|PM)$'
+        THEN TO_TIMESTAMP(
+          UPPER(TRIM(registro.fecha)),
+          'MM/DD/YYYY HH12:MI AM'
+        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
+        ELSE NULL
+      END AS "fechaControlLocal"
+    ) fecha_control
+  ),
+  control_por_venta AS (
+    SELECT
+      "ventaId",
+      "controlFinancieroRegistroId",
+      "fechaControlOriginal",
+      "fechaControlLocal"
+    FROM control_candidatos
+    WHERE orden = 1
+      AND "fechaControlLocal" IS NOT NULL
+  )
+`;
+
 const SQL_INFORME_VENTAS_CON_ENTREGA = `
-  WITH ventas_filtradas AS (
+  WITH ${SQL_CONTROL_FINANCIERO_POR_VENTA},
+  ventas_filtradas AS (
     SELECT
       v.id AS "ventaId",
       v.fecha AS "fechaVenta",
-      v."createdAt" AS "fechaRegistroVenta",
+      control."controlFinancieroRegistroId",
+      control."fechaControlOriginal",
+      control."fechaControlLocal" AT TIME ZONE 'America/Guayaquil'
+        AS "fechaControlFinanciero",
       v."clienteId",
       cliente_venta.cliente,
       cliente_venta.cedula,
@@ -221,24 +355,22 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
     FROM ventas v
     INNER JOIN clientes cliente_venta ON cliente_venta.id = v."clienteId"
     INNER JOIN usuario_agencia ua ON ua.id = v."usuarioAgenciaId"
+    INNER JOIN control_por_venta control ON control."ventaId" = v.id
     LEFT JOIN agencias agencia ON agencia.id = ua."agenciaId"
     LEFT JOIN usuarios usuario ON usuario.id = ua."usuarioId"
     LEFT JOIN origenes origen ON origen.id = v."origenId"
     WHERE v.activo IS TRUE
       AND (
         :fechaInicio IS NULL
-        OR (v."createdAt" AT TIME ZONE 'America/Guayaquil')::DATE
-          >= CAST(:fechaInicio AS DATE)
+        OR control."fechaControlLocal"::DATE >= CAST(:fechaInicio AS DATE)
       )
       AND (
         :fechaFin IS NULL
-        OR (v."createdAt" AT TIME ZONE 'America/Guayaquil')::DATE
-          <= CAST(:fechaFin AS DATE)
+        OR control."fechaControlLocal"::DATE <= CAST(:fechaFin AS DATE)
       )
       AND (
         :horaRegistroDesde IS NULL
-        OR (v."createdAt" AT TIME ZONE 'America/Guayaquil')::TIME
-          >= CAST(:horaRegistroDesde AS TIME)
+        OR control."fechaControlLocal"::TIME >= CAST(:horaRegistroDesde AS TIME)
       )
       AND (
         :agenciaIds IS NULL
@@ -354,21 +486,23 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
   LEFT JOIN ventas_por_cedula ventas_cedula
     ON ventas_cedula."cedulaNormalizada" = venta."cedulaNormalizada"
   LEFT JOIN detalles detalle ON detalle."ventaId" = venta."ventaId"
-  ORDER BY venta."fechaVenta" DESC, venta."ventaId" DESC,
+  ORDER BY venta."fechaControlFinanciero" DESC, venta."ventaId" DESC,
     CASE WHEN relacion."tipoRelacion" = 'DIRECTA' THEN 0 ELSE 1 END,
     relacion."fechaRegistroEntrega" DESC, relacion."entregaId" DESC
 `;
 
 const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
-  WITH ventas_base AS (
+  WITH ${SQL_CONTROL_FINANCIERO_POR_VENTA},
+  ventas_base AS (
     SELECT
       v.id AS "ventaId",
-      v."createdAt" AS "fechaRegistroVenta",
+      control."fechaControlLocal",
       REGEXP_REPLACE(COALESCE(cliente_venta.cedula, ''), '[^0-9]', '', 'g')
         AS "cedulaNormalizada"
     FROM ventas v
     INNER JOIN clientes cliente_venta ON cliente_venta.id = v."clienteId"
     INNER JOIN usuario_agencia ua ON ua.id = v."usuarioAgenciaId"
+    INNER JOIN control_por_venta control ON control."ventaId" = v.id
     LEFT JOIN origenes origen ON origen.id = v."origenId"
     WHERE v.activo IS TRUE
       AND (
@@ -392,7 +526,7 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
   relaciones_dashboard AS (
     SELECT
       venta."ventaId",
-      venta."fechaRegistroVenta",
+      venta."fechaControlLocal",
       entrega.id AS "entregaId",
       entrega."createdAt" AS "fechaRegistroEntrega"
     FROM ventas_base venta
@@ -405,7 +539,7 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
 
     SELECT
       venta."ventaId",
-      venta."fechaRegistroVenta",
+      venta."fechaControlLocal",
       entrega.id AS "entregaId",
       entrega."createdAt" AS "fechaRegistroEntrega"
     FROM ventas_base venta
@@ -446,26 +580,23 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
   ventas_desde_hora_por_mes AS (
     SELECT
       TO_CHAR(
-        relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil',
+        relacion."fechaControlLocal",
         'YYYY-MM'
       ) AS mes,
       COUNT(DISTINCT relacion."ventaId")::INTEGER AS cantidad
     FROM relaciones_dashboard relacion
-    WHERE relacion."fechaRegistroVenta" IS NOT NULL
+    WHERE relacion."fechaControlLocal" IS NOT NULL
       AND (
         :fechaInicio IS NULL
-        OR (relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil')::DATE
-          >= CAST(:fechaInicio AS DATE)
+        OR relacion."fechaControlLocal"::DATE >= CAST(:fechaInicio AS DATE)
       )
       AND (
         :fechaFin IS NULL
-        OR (relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil')::DATE
-          <= CAST(:fechaFin AS DATE)
+        OR relacion."fechaControlLocal"::DATE <= CAST(:fechaFin AS DATE)
       )
       AND (
         :horaRegistroDesde IS NULL
-        OR (relacion."fechaRegistroVenta" AT TIME ZONE 'America/Guayaquil')::TIME
-          >= CAST(:horaRegistroDesde AS TIME)
+        OR relacion."fechaControlLocal"::TIME >= CAST(:horaRegistroDesde AS TIME)
       )
     GROUP BY mes
   )

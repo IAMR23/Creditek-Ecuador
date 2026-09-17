@@ -22,8 +22,8 @@ describe("inventarioSistemasService", () => {
 
   test("cuenta los activos por tipo de dispositivo", () => {
     const resumen = obtenerResumenInventario([
-      { nombre: "Laptop", estado: "OPERATIVO", responsableId: 3 },
-      { nombre: "LAPTOP", estado: "EN_MANTENIMIENTO", responsableId: 3 },
+      { nombre: "Laptop", cantidad: 3, estado: "OPERATIVO", responsableId: 3 },
+      { nombre: "LAPTOP", cantidad: 2, estado: "EN_MANTENIMIENTO", responsableId: 3 },
       { nombre: "Impresora", estado: "OPERATIVO", responsableId: 5 },
       {
         nombre: "Regulador de voltaje",
@@ -33,16 +33,16 @@ describe("inventarioSistemasService", () => {
     ]);
 
     expect(resumen).toMatchObject({
-      items: 4,
-      operativos: 2,
-      mantenimiento: 1,
+      items: 7,
+      operativos: 4,
+      mantenimiento: 2,
       fueraServicio: 1,
       responsables: 2,
     });
     expect(resumen.porDispositivo).toHaveLength(8);
     expect(
       resumen.porDispositivo.find((item) => item.value === "LAPTOP"),
-    ).toMatchObject({ label: "Laptop", cantidad: 2 });
+    ).toMatchObject({ label: "Laptop", cantidad: 5 });
     expect(
       resumen.porDispositivo.find((item) => item.value === "IMPRESORA"),
     ).toMatchObject({ label: "Impresora", cantidad: 1 });
@@ -61,6 +61,7 @@ describe("inventarioSistemasService", () => {
       responsableId: "9",
       marca: " Dell ",
       modelo: " OptiPlex 7090 ",
+      cantidad: "4",
       precio: "750.50",
       observacion: " Equipo de recepción ",
     });
@@ -70,6 +71,7 @@ describe("inventarioSistemasService", () => {
       nombre: "Computador de escritorio",
       marca: "Dell",
       modelo: "OptiPlex 7090",
+      cantidad: 4,
       precio: 750.5,
       estado: "OPERATIVO",
       observacion: "Equipo de recepción",
@@ -111,12 +113,33 @@ describe("inventarioSistemasService", () => {
     );
   });
 
+  test("usa cantidad uno para historicos y rechaza cantidades invalidas", () => {
+    const historico = validarInventario({
+      dispositivo: "Laptop",
+      agenciaId: 2,
+      responsableId: 9,
+    });
+    const invalido = validarInventario({
+      dispositivo: "Laptop",
+      agenciaId: 2,
+      responsableId: 9,
+      cantidad: 1.5,
+    });
+
+    expect(historico.errores).toEqual([]);
+    expect(historico.data.cantidad).toBe(1);
+    expect(invalido.errores).toContain(
+      "La cantidad debe ser un número entero mayor o igual a uno",
+    );
+  });
+
   test("serializa el nombre interno como dispositivo para el frontend", () => {
     expect(resolverDispositivo("CARGADOR_LAPTOP")?.label).toBe("Cargador de laptop");
     expect(
       serializarInventario({
         id: 1,
         precio: "49.90",
+        cantidad: "3",
         nombre: "Audífonos",
         estado: "OPERATIVO",
         activo: true,
@@ -124,6 +147,7 @@ describe("inventarioSistemasService", () => {
     ).toMatchObject({
       dispositivo: "Audífonos",
       dispositivoValor: "AUDIFONOS",
+      cantidad: 3,
       precio: 49.9,
     });
   });

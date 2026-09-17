@@ -13,6 +13,9 @@ const esAdministrador = (req) =>
     (permiso) => String(permiso).trim().toLowerCase() === "administracion",
   );
 
+const esRepartidor = (req) =>
+  String(req.user?.rol || "").trim().toLowerCase() === "repartidor";
+
 const CAMPOS_EDICION_GENERICA = Object.freeze([
   "errores",
   "observacionLogistica",
@@ -44,11 +47,11 @@ const cambiarEstado = async (req, res) => {
       observacionLogistica: req.body.observacionLogistica,
       idempotencyKey:
         req.body.idempotencyKey || req.get("Idempotency-Key") || null,
-      responsableRequeridoId:
-        String(req.user.rol || "").trim().toLowerCase() === "repartidor"
-          ? req.user.usuarioAgenciaId
-          : null,
-      scopeAgenciaId: esAdministrador(req) ? null : req.user.agenciaId,
+      responsableRequeridoUsuarioId: esRepartidor(req) ? req.user.id : null,
+      // El repartidor se autoriza por su identidad estable. Su agencia actual
+      // no debe bloquear una entrega asignada desde una relacion anterior.
+      scopeAgenciaId:
+        esAdministrador(req) || esRepartidor(req) ? null : req.user.agenciaId,
     });
     return res.json({ ok: true, ...resultado, version: resultado.entrega.version });
   } catch (error) {

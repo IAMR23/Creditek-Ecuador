@@ -49,6 +49,15 @@ const normalizarPrecio = (value) => {
   return { valido: true, valor: Number(numero.toFixed(2)) };
 };
 
+const normalizarCantidad = (value) => {
+  const numero = Number(value ?? 1);
+  if (!Number.isInteger(numero) || numero < 1 || numero > 2147483647) {
+    return { valido: false, valor: null };
+  }
+
+  return { valido: true, valor: numero };
+};
+
 const resolverDispositivo = (value) => {
   const opcion = normalizarOpcion(value);
   return (
@@ -79,17 +88,19 @@ const obtenerResumenInventario = (registros = []) => {
       : registro;
     if (!item) return;
 
-    resumen.items += 1;
-    if (item.estado === "OPERATIVO") resumen.operativos += 1;
-    if (item.estado === "EN_MANTENIMIENTO") resumen.mantenimiento += 1;
-    if (item.estado === "FUERA_DE_SERVICIO") resumen.fueraServicio += 1;
+    const cantidad = normalizarCantidad(item.cantidad).valor || 1;
+
+    resumen.items += cantidad;
+    if (item.estado === "OPERATIVO") resumen.operativos += cantidad;
+    if (item.estado === "EN_MANTENIMIENTO") resumen.mantenimiento += cantidad;
+    if (item.estado === "FUERA_DE_SERVICIO") resumen.fueraServicio += cantidad;
     if (item.responsableId) responsables.add(Number(item.responsableId));
 
     const dispositivo = resolverDispositivo(item.nombre);
     if (dispositivo) {
       cantidades.set(
         dispositivo.value,
-        (cantidades.get(dispositivo.value) || 0) + 1,
+        (cantidades.get(dispositivo.value) || 0) + cantidad,
       );
     }
   });
@@ -108,6 +119,7 @@ const validarInventario = (payload = {}) => {
   const estado = normalizarOpcion(payload.estado || "OPERATIVO");
   const agenciaId = idPositivo(payload.agenciaId);
   const responsableId = idPositivo(payload.responsableId);
+  const cantidad = normalizarCantidad(payload.cantidad);
   const precio = normalizarPrecio(payload.precio);
   const errores = [];
 
@@ -115,6 +127,9 @@ const validarInventario = (payload = {}) => {
   if (!ESTADOS_VALIDOS.has(estado)) errores.push("El estado no es válido");
   if (!agenciaId) errores.push("La agencia es obligatoria");
   if (!responsableId) errores.push("La persona responsable es obligatoria");
+  if (!cantidad.valido) {
+    errores.push("La cantidad debe ser un número entero mayor o igual a uno");
+  }
   if (!precio.valido) {
     errores.push("El precio debe ser un valor valido mayor o igual a cero");
   }
@@ -125,6 +140,7 @@ const validarInventario = (payload = {}) => {
       nombre: dispositivo?.label || null,
       marca: limpiarTexto(payload.marca, 80),
       modelo: limpiarTexto(payload.modelo, 120),
+      cantidad: cantidad.valor,
       precio: precio.valor,
       estado,
       observacion: limpiarTexto(payload.observacion, 3000),
@@ -146,6 +162,7 @@ const serializarInventario = (registro) => {
     dispositivoValor: dispositivo?.value || normalizarOpcion(item.nombre),
     marca: item.marca || "",
     modelo: item.modelo || "",
+    cantidad: normalizarCantidad(item.cantidad).valor || 1,
     precio:
       item.precio === null || item.precio === undefined
         ? null

@@ -58,8 +58,8 @@ const ESTILOS_SELECTOR_MULTIPLE = {
 const COLUMNAS = [
   { key: "ventaId", label: "ID venta" },
   {
-    key: "fechaRegistroVenta",
-    label: "Fecha y hora venta",
+    key: "fechaControlFinanciero",
+    label: "Fecha y hora",
     className: "min-w-[170px]",
   },
   { key: "entregaId", label: "ID entrega" },
@@ -81,8 +81,6 @@ const COLUMNAS = [
   { key: "modelo", label: "Modelo", className: "min-w-[170px]" },
   { key: "formaPago", label: "Forma de pago" },
   { key: "precioVenta", label: "Precio de venta" },
-  { key: "relacion", label: "Relación", className: "min-w-[145px]" },
-  { key: "cantidadEntregas", label: "Entregas" },
 ];
 
 const formatoMoneda = new Intl.NumberFormat("es-EC", {
@@ -106,13 +104,6 @@ const mostrarFechaHora = (valor) => {
 const etiquetaRelacion = (fila) => {
   if (fila.relacionAmbigua) return "Ambigua";
   return fila.tipoRelacion === "DIRECTA" ? "Relación directa" : "Por cédula";
-};
-
-const clasesRelacion = (fila) => {
-  if (fila.relacionAmbigua) return "bg-amber-100 text-amber-800";
-  return fila.tipoRelacion === "DIRECTA"
-    ? "bg-emerald-100 text-emerald-800"
-    : "bg-blue-100 text-blue-800";
 };
 
 const formatoMes = new Intl.DateTimeFormat("es-EC", {
@@ -383,7 +374,9 @@ export default function VentasConEntrega() {
 
     const filasExcel = ventasFiltradas.map((venta) => ({
       "ID venta": venta.ventaId,
-      "Fecha y hora venta": mostrarFechaHora(venta.fechaRegistroVenta),
+      "Fecha y hora": mostrarFechaHora(
+        venta.fechaControlFinanciero,
+      ),
       "ID entrega relacionada": venta.entregaId,
       "Fecha y hora entrega": mostrarFechaHora(venta.fechaRegistroEntrega),
       "Estado entrega": venta.estadoEntrega,
@@ -454,8 +447,8 @@ export default function VentasConEntrega() {
             Ventas relacionadas con entregas
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Una fila por venta, con relaciones directas e históricas claramente
-            identificadas.
+            Una fila por venta. La fecha y la hora provienen del registro de
+            Control Financiero relacionado por contrato o IMEI.
           </p>
         </header>
 
@@ -521,7 +514,7 @@ export default function VentasConEntrega() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             <label>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <CalendarDays size={14} /> Registro inicial
+                <CalendarDays size={14} /> Fecha inicial
               </span>
               <input
                 type="date"
@@ -532,7 +525,7 @@ export default function VentasConEntrega() {
             </label>
             <label>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <Clock3 size={14} /> Hora diaria desde
+                <Clock3 size={14} /> Hora
               </span>
               <input
                 type="time"
@@ -543,7 +536,7 @@ export default function VentasConEntrega() {
             </label>
             <label>
               <span className="mb-2 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
-                <CalendarDays size={14} /> Registro final
+                <CalendarDays size={14} /> Fecha final
               </span>
               <input
                 type="date"
@@ -721,11 +714,11 @@ export default function VentasConEntrega() {
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-bold text-slate-950">
-                  Ventas registradas por mes
+                  Ventas
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
                   {horaRegistroDesde
-                    ? `Creadas diariamente desde las ${horaRegistroDesde} (hora Ecuador).`
+                    ? `Registradas en el reporte desde las ${horaRegistroDesde} (hora Ecuador).`
                     : "Todas las horas; selecciona una hora diaria para aplicar el corte."}
                 </p>
               </div>
@@ -842,15 +835,9 @@ export default function VentasConEntrega() {
                           >
                             {columna.key === "precioVenta" ? (
                               formatoMoneda.format(Number(venta.precioVenta || 0))
-                            ) : columna.key === "fechaRegistroVenta" ||
+                            ) : columna.key === "fechaControlFinanciero" ||
                               columna.key === "fechaRegistroEntrega" ? (
                               mostrarFechaHora(venta[columna.key])
-                            ) : columna.key === "relacion" ? (
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${clasesRelacion(venta)}`}
-                              >
-                                {etiquetaRelacion(venta)}
-                              </span>
                             ) : (
                               venta[columna.key] ?? "—"
                             )}

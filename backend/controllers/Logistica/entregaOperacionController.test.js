@@ -19,8 +19,14 @@ jest.mock("../../services/entregaOperacionService", () => ({
 const { sequelize } = require("../../config/db");
 const Entrega = require("../../models/Entrega");
 const EntregaEvento = require("../../models/EntregaEvento");
-const { validarVersion } = require("../../services/entregaOperacionService");
-const { actualizarCamposGenerales } = require("./entregaOperacionController");
+const {
+  actualizarEstado,
+  validarVersion,
+} = require("../../services/entregaOperacionService");
+const {
+  actualizarCamposGenerales,
+  cambiarEstado,
+} = require("./entregaOperacionController");
 
 const respuesta = () => {
   const res = { status: jest.fn(), json: jest.fn() };
@@ -80,5 +86,46 @@ describe("edicion general de entrega", () => {
       { transaction: mockTransaction },
     );
     expect(mockTransaction.commit).toHaveBeenCalled();
+  });
+});
+
+describe("cambio de estado por repartidor", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test("autoriza por usuario estable y no por la agencia actual", async () => {
+    actualizarEstado.mockResolvedValue({
+      entrega: { id: 9, version: 5 },
+      idempotente: false,
+    });
+    const req = {
+      body: {
+        estado: "Entregado",
+        expectedVersion: 4,
+        motivo: "Cliente recibio",
+      },
+      params: { id: "9" },
+      user: {
+        id: 13,
+        usuarioAgenciaId: 118,
+        agenciaId: 9,
+        rol: "Repartidor",
+        permisos: ["Logistica"],
+      },
+      get: jest.fn(),
+    };
+    const res = respuesta();
+
+    await cambiarEstado(req, res);
+
+    expect(actualizarEstado).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entregaId: "9",
+        responsableRequeridoUsuarioId: 13,
+        scopeAgenciaId: null,
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, version: 5 }),
+    );
   });
 });

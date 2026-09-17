@@ -92,7 +92,7 @@ exports.listar = async (req, res) => {
       }),
       InventarioSistema.findAll({
         where,
-        attributes: ["nombre", "estado", "responsableId"],
+        attributes: ["nombre", "estado", "responsableId", "cantidad"],
       }),
     ]);
 

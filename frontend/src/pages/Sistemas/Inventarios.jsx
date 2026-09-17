@@ -35,6 +35,7 @@ const crearItemFormulario = (data = {}) => ({
   dispositivo: data.dispositivo || "LAPTOP",
   marca: data.marca || "",
   modelo: data.modelo || "",
+  cantidad: data.cantidad ?? 1,
   precio: data.precio ?? "",
   estado: data.estado || "OPERATIVO",
   observacion: data.observacion || "",
@@ -312,6 +313,7 @@ export default function Inventarios() {
           dispositivo: item.dispositivoValor || "LAPTOP",
           marca: item.marca,
           modelo: item.modelo,
+          cantidad: item.cantidad,
           precio: item.precio,
           estado: item.estado,
           observacion: item.observacion,
@@ -363,10 +365,18 @@ export default function Inventarios() {
       return;
     }
 
-    if (form.items.length === 0 || form.items.some((item) => !item.dispositivo)) {
+    if (
+      form.items.length === 0 ||
+      form.items.some(
+        (item) =>
+          !item.dispositivo ||
+          !Number.isInteger(Number(item.cantidad)) ||
+          Number(item.cantidad) < 1,
+      )
+    ) {
       Swal.fire(
         "Dispositivos requeridos",
-        "Agrega al menos un dispositivo válido a la asignación.",
+        "Agrega dispositivos válidos con una cantidad entera mayor o igual a uno.",
         "warning",
       );
       return;
@@ -382,6 +392,7 @@ export default function Inventarios() {
           dispositivo: item.dispositivo,
           marca: item.marca,
           modelo: item.modelo,
+          cantidad: Number(item.cantidad),
           precio: item.precio === "" ? null : Number(item.precio),
           estado: item.estado,
           observacion: item.observacion,
@@ -396,7 +407,13 @@ export default function Inventarios() {
       await cargarInventarios();
       Swal.fire(
         editando ? "Asignación actualizada" : "Dispositivos asignados",
-        `${payload.items.length} ${payload.items.length === 1 ? "ítem fue guardado" : "ítems fueron guardados"} correctamente.`,
+        (() => {
+          const total = payload.items.reduce(
+            (acumulado, item) => acumulado + item.cantidad,
+            0,
+          );
+          return `${total} ${total === 1 ? "dispositivo fue guardado" : "dispositivos fueron guardados"} correctamente.`;
+        })(),
         "success",
       );
     } catch (error) {
@@ -456,7 +473,7 @@ export default function Inventarios() {
                 Inventario por responsable
               </h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-500">
-                Registra cada equipo como un ítem individual y asígnalo a la persona que lo tiene bajo su responsabilidad.
+                Registra el tipo de equipo, su cantidad y la persona que lo tiene bajo su responsabilidad.
               </p>
             </div>
             <button
@@ -470,7 +487,7 @@ export default function Inventarios() {
         </header>
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard label="Ítems registrados" value={resumen.items} icon={<Boxes size={22} />} />
+          <StatCard label="Dispositivos registrados" value={resumen.items} icon={<Boxes size={22} />} />
           <StatCard label="Responsables" value={resumen.responsables} icon={<UserRound size={22} />} tone="gray" />
           <StatCard label="Operativos" value={resumen.operativos} icon={<PackageCheck size={22} />} />
           <StatCard label="Mantenimiento" value={resumen.mantenimiento} icon={<Wrench size={22} />} tone="amber" />
@@ -483,7 +500,7 @@ export default function Inventarios() {
               Activos por tipo de dispositivo
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Conteo de registros activos según los filtros aplicados.
+              Conteo de dispositivos activos según los filtros aplicados.
             </p>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -578,15 +595,16 @@ export default function Inventarios() {
                 {inventariosAgrupados.length}{" "}
                 {inventariosAgrupados.length === 1 ? "asignación" : "asignaciones"}
                 {" · "}
-                {inventarios.length} {inventarios.length === 1 ? "ítem" : "ítems"}
+                {inventarios.reduce((total, item) => total + (Number(item.cantidad) || 1), 0)} dispositivos
               </p>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1140px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1220px] border-collapse text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                   <tr>
                     <th className="border-b border-slate-200 px-4 py-3">Dispositivo</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-center">Cantidad</th>
                     <th className="border-b border-slate-200 px-4 py-3">Marca y modelo</th>
                     <th className="border-b border-slate-200 px-4 py-3">Precio</th>
                     <th className="border-b border-slate-200 px-4 py-3">Estado técnico</th>
@@ -599,7 +617,7 @@ export default function Inventarios() {
                 {inventariosAgrupados.map((grupo) => (
                   <tbody key={grupo.clave} className="divide-y divide-slate-100">
                     <tr className="border-t border-slate-200 bg-emerald-50/60 first:border-t-0">
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={8} className="px-4 py-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
                             <span className="inline-flex items-center gap-2 font-bold text-slate-800">
@@ -613,7 +631,13 @@ export default function Inventarios() {
                             </span>
                           </div>
                           <span className="w-fit rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700">
-                            {grupo.items.length} {grupo.items.length === 1 ? "equipo" : "equipos"}
+                            {(() => {
+                              const total = grupo.items.reduce(
+                                (acumulado, item) => acumulado + (Number(item.cantidad) || 1),
+                                0,
+                              );
+                              return `${total} ${total === 1 ? "equipo" : "equipos"}`;
+                            })()}
                           </span>
                         </div>
                       </td>
@@ -633,6 +657,11 @@ export default function Inventarios() {
                                 {item.dispositivo}
                               </span>
                             </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex min-w-10 justify-center rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
+                              {item.cantidad}
+                            </span>
                           </td>
                           <td className="px-4 py-3">
                             <p className="font-medium text-slate-700">
@@ -775,13 +804,14 @@ export default function Inventarios() {
 
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1255px] table-fixed text-left">
+                    <table className="w-full min-w-[1360px] table-fixed text-left">
                       <colgroup>
                         <col className="w-[64px]" />
                         <col className="w-[210px]" />
                         <col className="w-[175px]" />
                         <col className="w-[155px]" />
                         <col className="w-[175px]" />
+                        <col className="w-[105px]" />
                         <col className="w-[135px]" />
                         <col className="w-[270px]" />
                         <col className="w-[72px]" />
@@ -793,6 +823,7 @@ export default function Inventarios() {
                           <th className="px-3 py-3">Estado técnico</th>
                           <th className="px-3 py-3">Marca</th>
                           <th className="px-3 py-3">Modelo</th>
+                          <th className="px-3 py-3">Cantidad</th>
                           <th className="px-3 py-3">Precio</th>
                           <th className="px-3 py-3">Observación</th>
                           <th className="px-3 py-3 text-center">Acción</th>
@@ -852,6 +883,20 @@ export default function Inventarios() {
                                 placeholder="Ej. Latitude 5420"
                                 className={tableInputClass}
                                 aria-label={`Modelo del ítem ${index + 1}`}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <input
+                                type="number"
+                                min="1"
+                                max="2147483647"
+                                step="1"
+                                inputMode="numeric"
+                                value={item.cantidad}
+                                onChange={(event) => actualizarItem(index, "cantidad", event.target.value)}
+                                className={tableInputClass}
+                                aria-label={`Cantidad del ítem ${index + 1}`}
+                                required
                               />
                             </td>
                             <td className="px-3 py-3">

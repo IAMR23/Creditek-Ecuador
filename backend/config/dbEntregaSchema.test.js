@@ -1,5 +1,6 @@
 const {
   sequelize,
+  ensureEntregaOperacionSchema,
   ensureEntregaTipoSchema,
 } = require("./db");
 
@@ -58,5 +59,48 @@ describe("esquema previo al arranque para entregas", () => {
     expect(queryInterface.describeTable).not.toHaveBeenCalled();
     expect(queryInterface.addColumn).not.toHaveBeenCalled();
     expect(query).not.toHaveBeenCalled();
+  });
+
+  test("completa las columnas operativas antes de sincronizar modelos", async () => {
+    const queryInterface = {
+      showAllTables: jest
+        .fn()
+        .mockResolvedValue(["entregas", "usuario_agencia_entrega"]),
+      describeTable: jest
+        .fn()
+        .mockResolvedValueOnce({ id: {} })
+        .mockResolvedValueOnce({ id: {}, fecha_asignacion: {} }),
+      addColumn: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await ensureEntregaOperacionSchema(queryInterface);
+
+    expect(queryInterface.addColumn).toHaveBeenCalledWith(
+      "entregas",
+      "version",
+      expect.objectContaining({ allowNull: false, defaultValue: 0 }),
+    );
+    expect(queryInterface.addColumn).toHaveBeenCalledWith(
+      "usuario_agencia_entrega",
+      "fecha_desasignacion",
+      expect.objectContaining({ allowNull: true }),
+    );
+  });
+
+  test("no altera columnas operativas que ya existen", async () => {
+    const queryInterface = {
+      showAllTables: jest
+        .fn()
+        .mockResolvedValue(["entregas", "usuario_agencia_entrega"]),
+      describeTable: jest
+        .fn()
+        .mockResolvedValueOnce({ id: {}, version: {} })
+        .mockResolvedValueOnce({ id: {}, fecha_desasignacion: {} }),
+      addColumn: jest.fn(),
+    };
+
+    await ensureEntregaOperacionSchema(queryInterface);
+
+    expect(queryInterface.addColumn).not.toHaveBeenCalled();
   });
 });
