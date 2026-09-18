@@ -26,10 +26,44 @@ const {
 const {
   obtenerDashboardVentasConEntrega,
   obtenerInformeVentasConEntrega,
+  obtenerPaginaInformeVentasConEntrega,
 } = require("../../services/ventaEntregaRelacionService");
 
 exports.obtenerVentasConEntrega = async (req, res) => {
   try {
+    const seccion = String(req.query.seccion || "").trim().toLowerCase();
+    const exportar = ["true", "1", "si", "sí"].includes(
+      String(req.query.exportar || "").trim().toLowerCase(),
+    );
+
+    if (seccion === "dashboard") {
+      const dashboard = await obtenerDashboardVentasConEntrega(req.query);
+      return res.json({ ok: true, dashboard });
+    }
+
+    if (seccion === "listado" && !exportar) {
+      const resultado = await obtenerPaginaInformeVentasConEntrega(req.query);
+      return res.json({
+        ok: true,
+        ...resultado,
+        totalVentas: resultado.total,
+      });
+    }
+
+    if (exportar) {
+      const ventas = await obtenerInformeVentasConEntrega(req.query);
+      return res.json({
+        ok: true,
+        ventas,
+        totalVentas: ventas.length,
+        total: ventas.length,
+        page: 1,
+        limit: ventas.length,
+        totalPages: 1,
+      });
+    }
+
+    // Compatibilidad: sin seccion conserva el contrato historico completo.
     const [ventasResultado, dashboardResultado] = await Promise.allSettled([
       obtenerInformeVentasConEntrega(req.query),
       obtenerDashboardVentasConEntrega(req.query),
@@ -53,6 +87,10 @@ exports.obtenerVentasConEntrega = async (req, res) => {
       ok: true,
       ventas,
       totalVentas: ventas.length,
+      total: ventas.length,
+      page: 1,
+      limit: ventas.length,
+      totalPages: 1,
       dashboard,
     });
   } catch (error) {

@@ -1825,6 +1825,131 @@ const ensureConsejoEjecutivoSchema = async (tables) => {
   `);
 };
 
+const ensureTicketsTiPreSyncSchema = async (queryInterface) => {
+  // La secuencia es independiente de sequelize.sync y garantiza códigos
+  // concurrentes aun cuando la tabla todavía no haya sido creada.
+  await sequelize.query(`
+    CREATE SEQUENCE IF NOT EXISTS sistemas_tickets_codigo_seq
+      START WITH 1 INCREMENT BY 1;
+  `);
+
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("sistemas_tickets")) return;
+
+  await addColumnIfMissing(queryInterface, "sistemas_tickets", "fechaInicio", {
+    type: Sequelize.DATEONLY,
+    allowNull: true,
+  });
+  await addColumnIfMissing(queryInterface, "sistemas_tickets", "fechaEstimada", {
+    type: Sequelize.DATEONLY,
+    allowNull: true,
+  });
+
+  await sequelize.query(`
+    UPDATE sistemas_tickets
+    SET "fechaInicio" = LEAST(
+      ("createdAt" AT TIME ZONE 'America/Guayaquil')::date,
+      COALESCE(
+        "fechaEstimada",
+        ("createdAt" AT TIME ZONE 'America/Guayaquil')::date
+      )
+    )
+    WHERE "fechaInicio" IS NULL;
+
+    UPDATE sistemas_tickets
+    SET "fechaEstimada" = "fechaInicio"
+    WHERE "fechaEstimada" IS NULL;
+
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'sistemas_tickets_estado_chk'
+          AND conrelid = 'sistemas_tickets'::regclass
+          AND pg_get_constraintdef(oid) NOT LIKE '%Construcción%'
+      ) THEN
+        ALTER TABLE sistemas_tickets
+          DROP CONSTRAINT sistemas_tickets_estado_chk;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'sistemas_tickets_motivo_terminal_chk'
+          AND conrelid = 'sistemas_tickets'::regclass
+      ) THEN
+        ALTER TABLE sistemas_tickets
+          DROP CONSTRAINT sistemas_tickets_motivo_terminal_chk;
+      END IF;
+    END $$;
+
+    UPDATE sistemas_tickets
+    SET
+      estado = CASE
+        WHEN estado IN ('En análisis', 'Aprobado', 'En construcción', 'Construcción')
+          THEN 'Construcción'
+        WHEN estado IN ('En pruebas', 'Pruebas') THEN 'Pruebas'
+        WHEN estado IN ('En producción', 'Cerrado', 'Producción') THEN 'Producción'
+        WHEN estado IN ('Rechazado', 'Cancelado') THEN 'Solicitado'
+        ELSE estado
+      END,
+      "fechaFinalizacion" = CASE
+        WHEN estado IN ('En producción', 'Cerrado', 'Producción')
+          THEN COALESCE("fechaFinalizacion", "updatedAt", NOW())
+        ELSE NULL
+      END
+    WHERE estado NOT IN ('Solicitado', 'Construcción', 'Pruebas', 'Producción')
+       OR (estado = 'Producción' AND "fechaFinalizacion" IS NULL);
+
+    ALTER TABLE sistemas_tickets
+      ALTER COLUMN "fechaInicio" SET NOT NULL,
+      ALTER COLUMN "fechaEstimada" SET NOT NULL;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'sistemas_tickets_estado_chk'
+          AND conrelid = 'sistemas_tickets'::regclass
+      ) THEN
+        ALTER TABLE sistemas_tickets
+          ADD CONSTRAINT sistemas_tickets_estado_chk
+          CHECK (estado IN ('Solicitado', 'Construcción', 'Pruebas', 'Producción'));
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'sistemas_tickets_fechas_chk'
+          AND conrelid = 'sistemas_tickets'::regclass
+      ) THEN
+        ALTER TABLE sistemas_tickets
+          ADD CONSTRAINT sistemas_tickets_fechas_chk
+          CHECK ("fechaEstimada" >= "fechaInicio");
+      END IF;
+    END $$;
+
+    DO $$
+    DECLARE
+      ultimo_codigo BIGINT;
+      valor_secuencia BIGINT;
+    BEGIN
+      SELECT MAX(NULLIF(REGEXP_REPLACE(codigo, '\\D', '', 'g'), '')::BIGINT)
+      INTO ultimo_codigo
+      FROM sistemas_tickets;
+
+      IF ultimo_codigo IS NOT NULL THEN
+        SELECT last_value INTO valor_secuencia FROM sistemas_tickets_codigo_seq;
+        PERFORM setval(
+          'sistemas_tickets_codigo_seq',
+          GREATEST(ultimo_codigo, valor_secuencia),
+          TRUE
+        );
+      END IF;
+    END $$;
+  `);
+};
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
@@ -1841,6 +1966,7 @@ const connectDB = async () => {
     await ensureEgresosCreditekEntradasPreSyncSchema(queryInterface);
     await ensureEntregaOperacionSchema(queryInterface);
     await ensureEntregaTipoSchema(queryInterface);
+    await ensureTicketsTiPreSyncSchema(queryInterface);
     await sequelize.sync({});
     await sequelize.query(require("fs").readFileSync(
       require("path").join(__dirname, "../migrations/202609050004-create-egresos-creditek-tipos.sql"), "utf8",
@@ -2072,4 +2198,5 @@ module.exports = {
   ensureGhlAdvisorAvailabilitySchema,
   ensureGhlRepartoCapacitySchema,
   ensureGhlRepartoExecutionControlSchema,
+  ensureTicketsTiPreSyncSchema,
 };

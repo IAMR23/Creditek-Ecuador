@@ -7,6 +7,7 @@ import { jwtDecode } from "jwt-decode";
 import Swal from "sweetalert2";
 import DashboardGraficas2 from "./DashboardGraficas2";
 import PowerBiGraficasSupervisores from "./PowerBiGraficasSupervisores";
+import PowerBiMetricasOrigen from "./PowerBiMetricasOrigen";
 import { api } from "../../api/client";
 
 const STORAGE_KEY = "powerbi_filtros";
@@ -119,7 +120,10 @@ export default function Powerbi({ modoSupervisores = false }) {
   const [usuarios, setUsuarios] = useState([]);
   const [promotores, setPromotores] = useState([]);
   const [promotoresError, setPromotoresError] = useState("");
+  const [origenes, setOrigenes] = useState([]);
+  const [origenesError, setOrigenesError] = useState("");
   const [estadisticas, setEstadisticas] = useState(null);
+  const [seccionActiva, setSeccionActiva] = useState("power-bi");
 
   const [openAgencias, setOpenAgencias] = useState(false);
 
@@ -249,6 +253,22 @@ export default function Powerbi({ modoSupervisores = false }) {
   useEffect(() => {
     cargarAgencias();
     cargarUsuarios();
+  }, []);
+
+  useEffect(() => {
+    const cargarOrigenes = async () => {
+      try {
+        setOrigenesError("");
+        const { data } = await api.get("/origen");
+        setOrigenes(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error cargando orígenes:", error);
+        setOrigenes([]);
+        setOrigenesError("No se pudo cargar el catálogo de orígenes.");
+      }
+    };
+
+    cargarOrigenes();
   }, []);
 
   useEffect(() => {
@@ -406,6 +426,39 @@ export default function Powerbi({ modoSupervisores = false }) {
             ? "POWER BI SUPERVISORES"
             : `BIENVENIDO ${user?.usuario?.nombre || "Admin"}`}
         </h1>
+      </div>
+
+      <div
+        className="mb-5 inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1"
+        role="tablist"
+        aria-label="Secciones de Power BI"
+      >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={seccionActiva === "power-bi"}
+            onClick={() => setSeccionActiva("power-bi")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+              seccionActiva === "power-bi"
+                ? "bg-white text-green-700 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Power BI
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={seccionActiva === "metricas-origen"}
+            onClick={() => setSeccionActiva("metricas-origen")}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+              seccionActiva === "metricas-origen"
+                ? "bg-white text-green-700 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Métricas por origen
+          </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-5 mb-5">
@@ -596,6 +649,13 @@ export default function Powerbi({ modoSupervisores = false }) {
 
       {loading ? (
         <p>Cargando...</p>
+      ) : seccionActiva === "metricas-origen" ? (
+        <PowerBiMetricasOrigen
+          estadisticas={estadisticas}
+          origenes={origenes}
+          fechaInicio={fechaInicio}
+          origenesError={origenesError}
+        />
       ) : modoSupervisores ? (
         <PowerBiGraficasSupervisores
           estadisticas={estadisticas}

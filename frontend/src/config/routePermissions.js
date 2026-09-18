@@ -62,6 +62,9 @@ export const ROUTE_PERMISSIONS = {
   "/revision-gestiones-comercial": "Gerencia",
   "/bdd-ventas": "Gerencia",
   "/ventas-con-entrega": "Gerencia",
+  "/gestion-tickets": "Gerencia",
+  "/tickets-sistemas": "Gerencia",
+  "/seguimiento-tickets": "Gerencia",
   "/conciliacion-facturas": "Gerencia",
   "/bonos": "Gerencia",
   "/secretarios-ejecutivos": "Gerencia",
@@ -110,6 +113,9 @@ export const ROUTE_PERMISSIONS = {
   "/postulaciones": "Desarrollo Organizacional",
 
   "/sistemas/tareas": ["Sistemas", "Administracion"],
+  // Todo usuario autenticado puede crear y consultar sus propios tickets.
+  "/sistemas/tickets": [],
+  "/sistemas/capacitacion": ["Sistemas", "Administracion"],
   "/sistemas/mapa-comercial": ["Sistemas", "Administracion"],
   "/sistemas/inventarios": ["Sistemas", "Administracion"],
   "/sistemas/personas": ["Sistemas", "Administracion"],
@@ -136,6 +142,7 @@ export const ROUTE_PERMISSIONS = {
   "/estado-entrega": "Catalogos",
 
   "/vendedor-panel": VENDEDOR_PERMISSION,
+  "/capacitacion": VENDEDOR_PERMISSION,
   "/mis-ventas": VENDEDOR_PERMISSION,
   "/registrar-clientes-venta": VENDEDOR_PERMISSION,
   "/crear-venta": VENDEDOR_PERMISSION,

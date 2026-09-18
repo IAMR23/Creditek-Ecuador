@@ -27,6 +27,66 @@ const normalizarHash = (value) => {
   return /^[a-f0-9]{64}$/.test(hash) ? hash : null;
 };
 
+const normalizarContratoControl = (value) =>
+  String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "") || null;
+
+const normalizarImeiControl = (value) => String(value ?? "").trim() || null;
+
+const normalizarFechaControl = (value) => {
+  const match = String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .match(
+      /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4}) (\d{1,2}):(\d{2})(?::(\d{2}))? (AM|PM)$/,
+    );
+  if (!match) return null;
+
+  const [, mesTexto, diaTexto, anioTexto, horaTexto, minutoTexto, segundoTexto, periodo] =
+    match;
+  const mes = Number(mesTexto);
+  const dia = Number(diaTexto);
+  const anioCorto = Number(anioTexto);
+  const anio =
+    anioTexto.length === 2
+      ? anioCorto < 70
+        ? 2000 + anioCorto
+        : 1900 + anioCorto
+      : anioCorto;
+  const hora12 = Number(horaTexto);
+  const minuto = Number(minutoTexto);
+  const segundo = Number(segundoTexto || 0);
+
+  if (
+    mes < 1 ||
+    mes > 12 ||
+    hora12 < 1 ||
+    hora12 > 12 ||
+    minuto > 59 ||
+    segundo > 59
+  ) {
+    return null;
+  }
+
+  const hora = (hora12 % 12) + (periodo === "PM" ? 12 : 0);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia, hora, minuto, segundo));
+  if (
+    fecha.getUTCFullYear() !== anio ||
+    fecha.getUTCMonth() !== mes - 1 ||
+    fecha.getUTCDate() !== dia
+  ) {
+    return null;
+  }
+
+  return `${String(anio).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(
+    dia,
+  ).padStart(2, "0")} ${String(hora).padStart(2, "0")}:${String(minuto).padStart(
+    2,
+    "0",
+  )}:${String(segundo).padStart(2, "0")}`;
+};
+
 const textoClave = (value) =>
   String(value ?? "")
     .normalize("NFD")
@@ -178,12 +238,15 @@ const construirCoberturaReportes = ({ cargas = [], fechaInicio, fechaFin }) => {
 const normalizarCaja = (registro) => ({
   tipoRegistro: "CAJA",
   contrato: texto(registro.CONTRATO, 80),
+  contratoNormalizado: normalizarContratoControl(registro.CONTRATO),
   fecha: texto(registro.FECHA, 80),
+  fechaNormalizada: normalizarFechaControl(registro.FECHA),
   vendedor: texto(registro.VENDEDOR, 160),
   usuarioCobrador: texto(registro["USUARIO COBRADOR"], 120),
   cliente: texto(registro.CLIENTE, 255),
   modelo: null,
   imei: null,
+  imeiNormalizado: null,
   pagosCuotas: numero(registro["PAGOS CUOTAS"]),
   numeroCuotas: texto(registro["Nro CUOTAS"], 100),
   ventas: 0,
@@ -197,13 +260,19 @@ const normalizarCaja = (registro) => ({
 const normalizarVenta = (registro, tipoRegistro) => ({
   tipoRegistro,
   contrato: texto(registro.CONTRATO, 80),
+  contratoNormalizado: normalizarContratoControl(registro.CONTRATO),
   fecha: texto(registro.FECHA, 80),
+  fechaNormalizada: normalizarFechaControl(registro.FECHA),
   vendedor: texto(registro.VENDEDOR, 160),
   usuarioCobrador: null,
   cliente: texto(registro.CLIENTE, 255),
   modelo: texto(registro.MODELO, 255),
   imei:
     tipoRegistro === "VENTA_CELULAR" ? texto(registro.IMEI, 80) : null,
+  imeiNormalizado:
+    tipoRegistro === "VENTA_CELULAR"
+      ? normalizarImeiControl(registro.IMEI)
+      : null,
   pagosCuotas: 0,
   numeroCuotas: null,
   ventas: numero(registro.VENTAS),
@@ -578,6 +647,9 @@ module.exports = {
   filtrarArchivosNuevos,
   guardarCargaControlFinanciero,
   normalizarCaja,
+  normalizarContratoControl,
+  normalizarFechaControl,
+  normalizarImeiControl,
   normalizarVenta,
   obtenerFechaActualEcuadorIso,
   obtenerFechaReporte,

@@ -234,6 +234,8 @@ connectDB()
     app.use("/api/gerencia/consejo-ejecutivo/planes", require("./routes/Gerencia/consejoEjecutivoPlanesRoutes"));
     app.use("/api/conciliacion", require("./routes/conciliacionRoutes"));
     app.use("/api/tareas", require("./routes/Sistemas/tareasRoutes"));
+    app.use("/api/sistemas/tickets", require("./routes/Sistemas/ticketsTiRoutes"));
+    app.use("/api/sistemas/capacitacion", require("./routes/Sistemas/capacitacionRoutes"));
     app.use("/api/sistemas/mapa-comercial", require("./routes/Sistemas/mapaComercialRoutes"));
     app.use("/api/sistemas/inventarios", require("./routes/Sistemas/inventariosRoutes"));
     app.use("/api/sistemas/personas", require("./routes/Sistemas/personasRoutes"));

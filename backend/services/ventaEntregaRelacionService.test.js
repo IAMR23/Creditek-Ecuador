@@ -19,6 +19,7 @@ const {
   normalizarCedula,
   obtenerDashboardVentasConEntrega,
   obtenerInformeVentasConEntrega,
+  obtenerPaginaInformeVentasConEntrega,
   resolverVentaParaEntrega,
   seleccionarVentaInequivoca,
 } = require("./ventaEntregaRelacionService");
@@ -213,6 +214,10 @@ describe("relacion entre ventas y entregas", () => {
     expect(fila.relacionAmbigua).toBe(false);
   });
 
+  test("una venta sin entrega no genera filas en el informe", () => {
+    expect(consolidarFilasInforme([])).toEqual([]);
+  });
+
   test("aplica todos los filtros solicitados al informe", async () => {
     sequelize.query.mockResolvedValue([]);
 
@@ -230,10 +235,10 @@ describe("relacion entre ventas y entregas", () => {
 
     expect(sequelize.query).toHaveBeenCalledWith(
       expect.stringMatching(
-        /control_financiero_registros[\s\S]+fechaControlLocal[\s\S]+::DATE[\s\S]+fechaControlLocal[\s\S]+::TIME[\s\S]+LOWER\(TRIM[\s\S]+INNER JOIN relaciones/,
+        /control_financiero_registros[\s\S]+fechaControlLocal[\s\S]+CAST\(:fechaInicio AS DATE\)[\s\S]+fechaControlLocal[\s\S]+::TIME[\s\S]+LOWER\(TRIM[\s\S]+INNER JOIN relaciones/,
       ),
       expect.objectContaining({
-        replacements: {
+        replacements: expect.objectContaining({
           fechaInicio: "2026-09-01",
           fechaFin: "2026-09-14",
           horaRegistroDesde: "13:30",
@@ -243,7 +248,9 @@ describe("relacion entre ventas y entregas", () => {
           soloOrigenEntrega: true,
           estadoEntrega: "Entregado",
           tipoEntrega: "Envio",
-        },
+          limite: null,
+          offset: 0,
+        }),
       }),
     );
   });
@@ -260,17 +267,18 @@ describe("relacion entre ventas y entregas", () => {
     const [sql] = sequelize.query.mock.calls[0];
 
     expect(sql).toMatch(
-      /control\."fechaControlLocal"::DATE\s+>= CAST\(:fechaInicio AS DATE\)/,
+      /control\."fechaControlLocal"\s+>= CAST\(:fechaInicio AS DATE\)/,
     );
     expect(sql).toMatch(
-      /control\."fechaControlLocal"::DATE\s+<= CAST\(:fechaFin AS DATE\)/,
+      /control\."fechaControlLocal"\s+< CAST\(:fechaFin AS DATE\) \+ INTERVAL '1 day'/,
     );
     expect(sql).toMatch(
       /control\."fechaControlLocal"::TIME\s+>= CAST\(:horaRegistroDesde AS TIME\)/,
     );
     expect(sql).toMatch(/control_financiero_registros registro/);
-    expect(sql).toMatch(/registro\.imei[\s\S]+detalle\."referenciaPdf"/);
-    expect(sql).toMatch(/registro\.contrato[\s\S]+detalle\.contrato/);
+    expect(sql).toMatch(/registro\.imei_normalizado[\s\S]+detalle\.referencia_pdf_normalizada/);
+    expect(sql).toMatch(/registro\.contrato_normalizado[\s\S]+detalle\.contrato_normalizado/);
+    expect(sql).not.toMatch(/TO_TIMESTAMP/);
     expect(sql).not.toMatch(/v\."createdAt" AT TIME ZONE/);
     expect(sql).not.toMatch(/v\.fecha\s+[<>]= CAST\(:fecha(?:Inicio|Fin) AS DATE\)/);
   });
@@ -332,6 +340,86 @@ describe("relacion entre ventas y entregas", () => {
           tipoEntrega: null,
         }),
       }),
+    );
+  });
+
+  test("pagina en SQL y conserva los totales del conjunto completo", async () => {
+    sequelize.query.mockResolvedValue([
+      {
+        ventaId: 301,
+        entregaId: 401,
+        tipoRelacion: "DIRECTA",
+        cantidadVentasCedula: 1,
+        _total: 52,
+        _totalDirectas: 30,
+        _totalPorCedula: 18,
+        _totalAmbiguas: 4,
+      },
+    ]);
+
+    const resultado = await obtenerPaginaInformeVentasConEntrega({
+      page: "2",
+      limit: "25",
+    });
+
+    expect(resultado).toEqual(
+      expect.objectContaining({
+        page: 2,
+        limit: 25,
+        total: 52,
+        totalPages: 3,
+        resumen: { directas: 30, porCedula: 18, ambiguas: 4 },
+      }),
+    );
+    expect(resultado.ventas).toHaveLength(1);
+    expect(sequelize.query.mock.calls[0][1].replacements).toEqual(
+      expect.objectContaining({ limite: 25, offset: 25 }),
+    );
+  });
+
+  test("la consulta de exportacion no aplica limite", async () => {
+    sequelize.query.mockResolvedValue([
+      { ventaId: 501, entregaId: 601, tipoRelacion: "DIRECTA" },
+      { ventaId: 502, entregaId: 602, tipoRelacion: "POR_CEDULA" },
+    ]);
+
+    const ventas = await obtenerInformeVentasConEntrega({ limit: 1 });
+
+    expect(ventas).toHaveLength(2);
+    expect(sequelize.query.mock.calls[0][1].replacements).toEqual(
+      expect.objectContaining({ limite: null, offset: 0 }),
+    );
+  });
+
+  test("conserva el total si se solicita una pagina fuera de rango", async () => {
+    sequelize.query
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ _total: 12, _totalDirectas: 7 }]);
+
+    const resultado = await obtenerPaginaInformeVentasConEntrega({
+      page: 9,
+      limit: 25,
+    });
+
+    expect(resultado.ventas).toEqual([]);
+    expect(resultado.total).toBe(12);
+    expect(resultado.totalPages).toBe(1);
+    expect(sequelize.query).toHaveBeenCalledTimes(2);
+    expect(sequelize.query.mock.calls[1][1].replacements).toEqual(
+      expect.objectContaining({ limite: 1, offset: 0 }),
+    );
+  });
+
+  test("prioriza IMEI y luego contrato al seleccionar Control Financiero", async () => {
+    sequelize.query.mockResolvedValue([]);
+
+    await obtenerInformeVentasConEntrega({});
+    const [sql] = sequelize.query.mock.calls[0];
+
+    expect(sql).toMatch(/0 AS prioridad[\s\S]+imei_normalizado/);
+    expect(sql).toMatch(/1 AS prioridad[\s\S]+contrato_normalizado/);
+    expect(sql).toMatch(
+      /ORDER BY[\s\S]+candidato\.prioridad[\s\S]+fecha_normalizada DESC[\s\S]+id DESC/,
     );
   });
 

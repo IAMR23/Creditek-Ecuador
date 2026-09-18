@@ -79,6 +79,7 @@ import MisCierresCaja from "./pages/Vendedores/MisCierresCaja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 import BDDVentas from "./pages/Admin/BDDVentas";
 import VentasConEntrega from "./pages/Gerencia/VentasConEntrega";
+import GestionTickets from "./pages/Gerencia/GestionTickets";
 import Bonos from "./pages/Admin/Bonos";
 import TasksPage from "./pages/Tareas/TaskPage";
 import GestionTareasSistemas from "./pages/Sistemas/GestionTareas";
@@ -86,6 +87,8 @@ import MapaComercial from "./pages/Sistemas/MapaComercial";
 import Inventarios from "./pages/Sistemas/Inventarios";
 import Personas from "./pages/Sistemas/Personas";
 import ConfiguracionReportesCaja from "./pages/Sistemas/ConfiguracionReportesCaja";
+import TicketsTI from "./pages/Sistemas/TicketsTI";
+import CapacitacionSistemas from "./pages/Sistemas/Capacitacion";
 import { registerSW } from "./utils/serviceWorker";
 import { initAppVersionWatcher } from "./utils/appVersion";
 
@@ -94,6 +97,7 @@ import CierresCajaTabla from "./pages/Vendedores/CierresCajaTabla";
 import CrearGestionComercial from "./pages/Vendedores/CrearGestionComercial";
 import PlanesBatalla from "./pages/Vendedores/PlanesBatalla";
 import MisPlanesBatalla from "./pages/Vendedores/MisPlanesBatalla";
+import CapacitacionVendedores from "./pages/Vendedores/Capacitacion";
 import Powerbi from "./pages/Admin/PowerBi";
 import VerPlanesBatalla from "./pages/Admin/VerPlanesBatalla";
 import SecretariosEjecutivos from "./pages/Admin/SecretariosEjecutivos";
@@ -403,6 +407,18 @@ function App() {
                     "/ventas-con-entrega",
                   )}
                 />
+                <Route
+                  path="gestion-tickets"
+                  element={protect(<GestionTickets />, "/gestion-tickets")}
+                />
+                <Route
+                  path="tickets-sistemas"
+                  element={<Navigate to="/gestion-tickets?tab=ingresar" replace />}
+                />
+                <Route
+                  path="seguimiento-tickets"
+                  element={<Navigate to="/gestion-tickets?tab=seguimiento" replace />}
+                />
                 <Route path="conciliacion-facturas" element={protect(<ConciliacionFacturas />, "/conciliacion-facturas")} />
                 <Route path="bonos" element={protect(<Bonos />, "/bonos")} />
                 <Route path="secretarios-ejecutivos" element={protect(<SecretariosEjecutivos />, "/secretarios-ejecutivos")} />
@@ -571,6 +587,17 @@ function App() {
                   element={protect(<GestionTareasSistemas />, "/sistemas/tareas")}
                 />
                 <Route
+                  path="sistemas/tickets"
+                  element={protect(<TicketsTI />, "/sistemas/tickets")}
+                />
+                <Route
+                  path="sistemas/capacitacion"
+                  element={protect(
+                    <CapacitacionSistemas />,
+                    "/sistemas/capacitacion",
+                  )}
+                />
+                <Route
                   path="sistemas/mapa-comercial"
                   element={protect(<MapaComercial />, "/sistemas/mapa-comercial")}
                 />
@@ -620,6 +647,10 @@ function App() {
 
               <Route path="logistica-panel" element={protect(<LogisticaPanel />, "/logistica-panel")} />
               <Route path="vendedor-panel" element={protect(<VendedorPanel />, "/vendedor-panel")} />
+              <Route
+                path="capacitacion"
+                element={protect(<CapacitacionVendedores />, "/capacitacion")}
+              />
 
               <Route path="mis-ventas" element={protect(<MisVentas />, "/mis-ventas")} />
               <Route

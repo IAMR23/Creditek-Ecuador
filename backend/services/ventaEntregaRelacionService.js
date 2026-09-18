@@ -201,122 +201,85 @@ const resolverVentaParaEntrega = async ({
 };
 
 const SQL_CONTROL_FINANCIERO_POR_VENTA = `
-  control_candidatos AS (
+  detalle_control AS (
     SELECT
       detalle."ventaId",
-      registro.id AS "controlFinancieroRegistroId",
-      registro.fecha AS "fechaControlOriginal",
-      fecha_control."fechaControlLocal",
-      ROW_NUMBER() OVER (
-        PARTITION BY detalle."ventaId"
-        ORDER BY
-          CASE
-            WHEN registro."tipoRegistro" = 'VENTA_CELULAR'
-              AND NULLIF(TRIM(registro.imei), '') =
-                NULLIF(TRIM(detalle."referenciaPdf"), '')
-            THEN 0
-            ELSE 1
-          END,
-          fecha_control."fechaControlLocal" DESC NULLS LAST,
-          registro.id DESC
-      ) AS orden
+      detalle.referencia_pdf_normalizada,
+      detalle.contrato_normalizado,
+      (
+        LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%celular%'
+        OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%telefono%'
+        OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%smartphone%'
+      ) AS es_celular,
+      (
+        LOWER(TRIM(COALESCE(dispositivo.nombre, ''))) = 'tv'
+        OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%televisor%'
+        OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%television%'
+      ) AS es_tv
     FROM detalle_ventas detalle
+    INNER JOIN ventas venta
+      ON venta.id = detalle."ventaId"
+      AND venta.activo IS TRUE
     LEFT JOIN "DispositivoMarcas" dispositivo_marca
       ON dispositivo_marca.id = detalle."dispositivoMarcaId"
     LEFT JOIN dispositivos dispositivo
       ON dispositivo.id = dispositivo_marca.dispositivo_id
-    INNER JOIN control_financiero_registros registro
-      ON (
-        registro."tipoRegistro" = 'VENTA_CELULAR'
-        AND (
-          (
-            NULLIF(TRIM(registro.imei), '') IS NOT NULL
-            AND NULLIF(TRIM(registro.imei), '') =
-              NULLIF(TRIM(detalle."referenciaPdf"), '')
-          )
-          OR (
-            (
-              LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%celular%'
-              OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%telefono%'
-              OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%smartphone%'
-            )
-            AND NULLIF(
-              REGEXP_REPLACE(
-                UPPER(COALESCE(registro.contrato, '')),
-                '[^A-Z0-9]',
-                '',
-                'g'
-              ),
-              ''
-            ) = NULLIF(
-              REGEXP_REPLACE(
-                UPPER(COALESCE(detalle.contrato, '')),
-                '[^A-Z0-9]',
-                '',
-                'g'
-              ),
-              ''
-            )
-          )
-        )
-      )
-      OR (
-        registro."tipoRegistro" = 'VENTA_TV'
-        AND (
-          LOWER(TRIM(COALESCE(dispositivo.nombre, ''))) = 'tv'
-          OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%televisor%'
-          OR LOWER(COALESCE(dispositivo.nombre, '')) LIKE '%television%'
-        )
-        AND NULLIF(
-          REGEXP_REPLACE(
-            UPPER(COALESCE(registro.contrato, '')),
-            '[^A-Z0-9]',
-            '',
-            'g'
-          ),
-          ''
-        ) = NULLIF(
-          REGEXP_REPLACE(
-            UPPER(COALESCE(detalle.contrato, '')),
-            '[^A-Z0-9]',
-            '',
-            'g'
-          ),
-          ''
-        )
-      )
-    INNER JOIN control_financiero_cargas carga
-      ON carga.id = registro."cargaId"
-      AND carga.estado = 'ACTIVA'
+  ),
+  control_candidatos AS (
+    SELECT
+      detalle."ventaId",
+      elegido.id AS "controlFinancieroRegistroId",
+      elegido.fecha AS "fechaControlOriginal",
+      elegido.fecha_normalizada AS "fechaControlLocal",
+      elegido.prioridad
+    FROM detalle_control detalle
     CROSS JOIN LATERAL (
-      SELECT CASE
-        WHEN TRIM(registro.fecha) ~
-          '^\\d{1,2}/\\d{1,2}/\\d{2} \\d{1,2}:\\d{2}:\\d{2} (AM|PM)$'
-        THEN TO_TIMESTAMP(
-          UPPER(TRIM(registro.fecha)),
-          'MM/DD/YY HH12:MI:SS AM'
-        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
-        WHEN TRIM(registro.fecha) ~
-          '^\\d{1,2}/\\d{1,2}/\\d{2} \\d{1,2}:\\d{2} (AM|PM)$'
-        THEN TO_TIMESTAMP(
-          UPPER(TRIM(registro.fecha)),
-          'MM/DD/YY HH12:MI AM'
-        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
-        WHEN TRIM(registro.fecha) ~
-          '^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{2}:\\d{2} (AM|PM)$'
-        THEN TO_TIMESTAMP(
-          UPPER(TRIM(registro.fecha)),
-          'MM/DD/YYYY HH12:MI:SS AM'
-        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
-        WHEN TRIM(registro.fecha) ~
-          '^\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{2} (AM|PM)$'
-        THEN TO_TIMESTAMP(
-          UPPER(TRIM(registro.fecha)),
-          'MM/DD/YYYY HH12:MI AM'
-        ) AT TIME ZONE CURRENT_SETTING('TimeZone')
-        ELSE NULL
-      END AS "fechaControlLocal"
-    ) fecha_control
+      SELECT candidato.*
+      FROM (
+        SELECT
+          registro.id,
+          registro.fecha,
+          registro.fecha_normalizada,
+          0 AS prioridad
+        FROM control_financiero_registros registro
+        INNER JOIN control_financiero_cargas carga
+          ON carga.id = registro."cargaId"
+          AND carga.estado = 'ACTIVA'
+        WHERE detalle.referencia_pdf_normalizada IS NOT NULL
+          AND registro."tipoRegistro" = 'VENTA_CELULAR'
+          AND registro.imei_normalizado = detalle.referencia_pdf_normalizada
+          AND registro.fecha_normalizada IS NOT NULL
+
+        UNION ALL
+
+        SELECT
+          registro.id,
+          registro.fecha,
+          registro.fecha_normalizada,
+          1 AS prioridad
+        FROM control_financiero_registros registro
+        INNER JOIN control_financiero_cargas carga
+          ON carga.id = registro."cargaId"
+          AND carga.estado = 'ACTIVA'
+        WHERE detalle.contrato_normalizado IS NOT NULL
+          AND registro.contrato_normalizado = detalle.contrato_normalizado
+          AND registro.fecha_normalizada IS NOT NULL
+          AND (
+            (registro."tipoRegistro" = 'VENTA_CELULAR' AND detalle.es_celular)
+            OR (registro."tipoRegistro" = 'VENTA_TV' AND detalle.es_tv)
+          )
+          AND NOT (
+            registro."tipoRegistro" = 'VENTA_CELULAR'
+            AND detalle.referencia_pdf_normalizada IS NOT NULL
+            AND registro.imei_normalizado = detalle.referencia_pdf_normalizada
+          )
+      ) candidato
+      ORDER BY
+        candidato.prioridad,
+        candidato.fecha_normalizada DESC,
+        candidato.id DESC
+      LIMIT 1
+    ) elegido
   ),
   control_por_venta AS (
     SELECT
@@ -324,9 +287,19 @@ const SQL_CONTROL_FINANCIERO_POR_VENTA = `
       "controlFinancieroRegistroId",
       "fechaControlOriginal",
       "fechaControlLocal"
-    FROM control_candidatos
+    FROM (
+      SELECT
+        candidato.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY candidato."ventaId"
+          ORDER BY
+            candidato.prioridad,
+            candidato."fechaControlLocal" DESC,
+            candidato."controlFinancieroRegistroId" DESC
+        ) AS orden
+      FROM control_candidatos candidato
+    ) ordenados
     WHERE orden = 1
-      AND "fechaControlLocal" IS NOT NULL
   )
 `;
 
@@ -350,23 +323,28 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
       usuario.nombre AS vendedor,
       v."origenId",
       origen.nombre AS origen,
-      REGEXP_REPLACE(COALESCE(cliente_venta.cedula, ''), '[^0-9]', '', 'g')
-        AS "cedulaNormalizada"
-    FROM ventas v
+      cliente_venta.cedula_normalizada AS "cedulaNormalizada"
+    FROM control_por_venta control
+    CROSS JOIN LATERAL (
+      SELECT venta.*
+      FROM ventas venta
+      WHERE venta.id = control."ventaId"
+        AND venta.activo IS TRUE
+      OFFSET 0
+    ) v
     INNER JOIN clientes cliente_venta ON cliente_venta.id = v."clienteId"
     INNER JOIN usuario_agencia ua ON ua.id = v."usuarioAgenciaId"
-    INNER JOIN control_por_venta control ON control."ventaId" = v.id
     LEFT JOIN agencias agencia ON agencia.id = ua."agenciaId"
     LEFT JOIN usuarios usuario ON usuario.id = ua."usuarioId"
     LEFT JOIN origenes origen ON origen.id = v."origenId"
     WHERE v.activo IS TRUE
       AND (
         :fechaInicio IS NULL
-        OR control."fechaControlLocal"::DATE >= CAST(:fechaInicio AS DATE)
+        OR control."fechaControlLocal" >= CAST(:fechaInicio AS DATE)
       )
       AND (
         :fechaFin IS NULL
-        OR control."fechaControlLocal"::DATE <= CAST(:fechaFin AS DATE)
+        OR control."fechaControlLocal" < CAST(:fechaFin AS DATE) + INTERVAL '1 day'
       )
       AND (
         :horaRegistroDesde IS NULL
@@ -389,44 +367,21 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
         :soloOrigenEntrega IS FALSE
         OR LOWER(TRIM(COALESCE(origen.nombre, ''))) = 'entrega'
       )
+      AND (
+        :busqueda IS NULL
+        OR cliente_venta.cliente ILIKE '%' || :busqueda || '%'
+        OR cliente_venta.cedula ILIKE '%' || :busqueda || '%'
+      )
   ),
   ventas_por_cedula AS (
     SELECT
-      REGEXP_REPLACE(COALESCE(cliente.cedula, ''), '[^0-9]', '', 'g')
-        AS "cedulaNormalizada",
+      cliente.cedula_normalizada AS "cedulaNormalizada",
       COUNT(DISTINCT venta.id)::INTEGER AS "cantidadVentas"
-    FROM ventas venta
-    INNER JOIN clientes cliente ON cliente.id = venta."clienteId"
+    FROM clientes cliente
+    INNER JOIN ventas venta ON venta."clienteId" = cliente.id
     WHERE venta.activo IS TRUE
-      AND LENGTH(
-        REGEXP_REPLACE(COALESCE(cliente.cedula, ''), '[^0-9]', '', 'g')
-      ) IN (10, 13)
-    GROUP BY REGEXP_REPLACE(COALESCE(cliente.cedula, ''), '[^0-9]', '', 'g')
-  ),
-  detalles AS (
-    SELECT
-      detalle."ventaId",
-      STRING_AGG(DISTINCT dispositivo.nombre, ', ') AS dispositivo,
-      STRING_AGG(DISTINCT marca.nombre, ', ') AS marca,
-      STRING_AGG(DISTINCT modelo.nombre, ', ') AS modelo,
-      STRING_AGG(DISTINCT forma_pago.nombre, ', ') AS "formaPago",
-      SUM(
-        COALESCE(
-          detalle."precioVenta",
-          detalle."precioVendedor",
-          detalle."precioUnitario",
-          0
-        )
-      ) AS "precioVenta"
-    FROM detalle_ventas detalle
-    LEFT JOIN "DispositivoMarcas" dispositivo_marca
-      ON dispositivo_marca.id = detalle."dispositivoMarcaId"
-    LEFT JOIN dispositivos dispositivo
-      ON dispositivo.id = dispositivo_marca.dispositivo_id
-    LEFT JOIN marcas marca ON marca.id = dispositivo_marca.marca_id
-    LEFT JOIN modelos modelo ON modelo.id = detalle."modeloId"
-    LEFT JOIN formas_pago forma_pago ON forma_pago.id = detalle."formaPagoId"
-    GROUP BY detalle."ventaId"
+      AND LENGTH(cliente.cedula_normalizada) IN (10, 13)
+    GROUP BY cliente.cedula_normalizada
   ),
   relaciones AS (
     SELECT
@@ -458,14 +413,84 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
     INNER JOIN clientes cliente_entrega ON cliente_entrega.id = entrega."clienteId"
     WHERE COALESCE(entrega.activo, TRUE) IS TRUE
       AND LENGTH(venta."cedulaNormalizada") IN (10, 13)
-      AND REGEXP_REPLACE(
-        COALESCE(cliente_entrega.cedula, ''),
-        '[^0-9]',
-        '',
-        'g'
-      ) = venta."cedulaNormalizada"
+      AND cliente_entrega.cedula_normalizada = venta."cedulaNormalizada"
       AND (:estadoEntrega IS NULL OR entrega.estado = :estadoEntrega)
       AND (:tipoEntrega IS NULL OR entrega."tipoEntrega" = :tipoEntrega)
+  ),
+  relaciones_resumen AS (
+    SELECT
+      relacion."ventaId",
+      COUNT(DISTINCT relacion."entregaId")::INTEGER AS "cantidadEntregas",
+      BOOL_OR(relacion."tipoRelacion" = 'DIRECTA') AS "tieneDirecta",
+      COUNT(DISTINCT relacion."entregaId") FILTER (
+        WHERE relacion."tipoRelacion" = 'POR_CEDULA'
+      )::INTEGER AS "cantidadEntregasCedula"
+    FROM relaciones relacion
+    GROUP BY relacion."ventaId"
+  ),
+  ventas_con_relacion AS (
+    SELECT
+      venta.*,
+      COALESCE(ventas_cedula."cantidadVentas", 0) AS "cantidadVentasCedula",
+      resumen."cantidadEntregas",
+      CASE WHEN resumen."tieneDirecta" THEN 'DIRECTA' ELSE 'POR_CEDULA' END
+        AS "tipoRelacionConsolidada",
+      (
+        NOT resumen."tieneDirecta"
+        AND (
+          resumen."cantidadEntregasCedula" > 1
+          OR COALESCE(ventas_cedula."cantidadVentas", 0) > 1
+        )
+      ) AS "relacionAmbiguaConsolidada"
+    FROM ventas_filtradas venta
+    INNER JOIN relaciones_resumen resumen
+      ON resumen."ventaId" = venta."ventaId"
+    LEFT JOIN ventas_por_cedula ventas_cedula
+      ON ventas_cedula."cedulaNormalizada" = venta."cedulaNormalizada"
+  ),
+  ventas_paginadas AS (
+    SELECT
+      venta.*,
+      COUNT(*) OVER ()::INTEGER AS "_total",
+      COUNT(*) FILTER (
+        WHERE venta."tipoRelacionConsolidada" = 'DIRECTA'
+      ) OVER ()::INTEGER AS "_totalDirectas",
+      COUNT(*) FILTER (
+        WHERE venta."tipoRelacionConsolidada" = 'POR_CEDULA'
+          AND NOT venta."relacionAmbiguaConsolidada"
+      ) OVER ()::INTEGER AS "_totalPorCedula",
+      COUNT(*) FILTER (
+        WHERE venta."relacionAmbiguaConsolidada"
+      ) OVER ()::INTEGER AS "_totalAmbiguas"
+    FROM ventas_con_relacion venta
+    ORDER BY venta."fechaControlFinanciero" DESC, venta."ventaId" DESC
+    LIMIT :limite OFFSET :offset
+  ),
+  detalles AS (
+    SELECT
+      detalle."ventaId",
+      STRING_AGG(DISTINCT dispositivo.nombre, ', ') AS dispositivo,
+      STRING_AGG(DISTINCT marca.nombre, ', ') AS marca,
+      STRING_AGG(DISTINCT modelo.nombre, ', ') AS modelo,
+      STRING_AGG(DISTINCT forma_pago.nombre, ', ') AS "formaPago",
+      SUM(
+        COALESCE(
+          detalle."precioVenta",
+          detalle."precioVendedor",
+          detalle."precioUnitario",
+          0
+        )
+      ) AS "precioVenta"
+    FROM ventas_paginadas venta
+    INNER JOIN detalle_ventas detalle ON detalle."ventaId" = venta."ventaId"
+    LEFT JOIN "DispositivoMarcas" dispositivo_marca
+      ON dispositivo_marca.id = detalle."dispositivoMarcaId"
+    LEFT JOIN dispositivos dispositivo
+      ON dispositivo.id = dispositivo_marca.dispositivo_id
+    LEFT JOIN marcas marca ON marca.id = dispositivo_marca.marca_id
+    LEFT JOIN modelos modelo ON modelo.id = detalle."modeloId"
+    LEFT JOIN formas_pago forma_pago ON forma_pago.id = detalle."formaPagoId"
+    GROUP BY detalle."ventaId"
   )
   SELECT
     venta.*,
@@ -475,16 +500,13 @@ const SQL_INFORME_VENTAS_CON_ENTREGA = `
     relacion."estadoEntrega",
     relacion."tipoEntrega",
     relacion."tipoRelacion",
-    COALESCE(ventas_cedula."cantidadVentas", 0) AS "cantidadVentasCedula",
     detalle.dispositivo,
     detalle.marca,
     detalle.modelo,
     detalle."formaPago",
     detalle."precioVenta"
-  FROM ventas_filtradas venta
+  FROM ventas_paginadas venta
   INNER JOIN relaciones relacion ON relacion."ventaId" = venta."ventaId"
-  LEFT JOIN ventas_por_cedula ventas_cedula
-    ON ventas_cedula."cedulaNormalizada" = venta."cedulaNormalizada"
   LEFT JOIN detalles detalle ON detalle."ventaId" = venta."ventaId"
   ORDER BY venta."fechaControlFinanciero" DESC, venta."ventaId" DESC,
     CASE WHEN relacion."tipoRelacion" = 'DIRECTA' THEN 0 ELSE 1 END,
@@ -497,8 +519,7 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
     SELECT
       v.id AS "ventaId",
       control."fechaControlLocal",
-      REGEXP_REPLACE(COALESCE(cliente_venta.cedula, ''), '[^0-9]', '', 'g')
-        AS "cedulaNormalizada"
+      cliente_venta.cedula_normalizada AS "cedulaNormalizada"
     FROM ventas v
     INNER JOIN clientes cliente_venta ON cliente_venta.id = v."clienteId"
     INNER JOIN usuario_agencia ua ON ua.id = v."usuarioAgenciaId"
@@ -547,12 +568,7 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
     INNER JOIN clientes cliente_entrega ON cliente_entrega.id = entrega."clienteId"
     WHERE COALESCE(entrega.activo, TRUE) IS TRUE
       AND LENGTH(venta."cedulaNormalizada") IN (10, 13)
-      AND REGEXP_REPLACE(
-        COALESCE(cliente_entrega.cedula, ''),
-        '[^0-9]',
-        '',
-        'g'
-      ) = venta."cedulaNormalizada"
+      AND cliente_entrega.cedula_normalizada = venta."cedulaNormalizada"
       AND (:estadoEntrega IS NULL OR entrega.estado = :estadoEntrega)
       AND (:tipoEntrega IS NULL OR entrega."tipoEntrega" = :tipoEntrega)
   ),
@@ -567,13 +583,13 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
     WHERE relacion."fechaRegistroEntrega" IS NOT NULL
       AND (
         :fechaInicio IS NULL
-        OR (relacion."fechaRegistroEntrega" AT TIME ZONE 'America/Guayaquil')::DATE
-          >= CAST(:fechaInicio AS DATE)
+        OR relacion."fechaRegistroEntrega" >=
+          (CAST(:fechaInicio AS DATE)::TIMESTAMP AT TIME ZONE 'America/Guayaquil')
       )
       AND (
         :fechaFin IS NULL
-        OR (relacion."fechaRegistroEntrega" AT TIME ZONE 'America/Guayaquil')::DATE
-          <= CAST(:fechaFin AS DATE)
+        OR relacion."fechaRegistroEntrega" <
+          ((CAST(:fechaFin AS DATE) + 1)::TIMESTAMP AT TIME ZONE 'America/Guayaquil')
       )
     GROUP BY mes
   ),
@@ -588,11 +604,11 @@ const SQL_DASHBOARD_VENTAS_CON_ENTREGA = `
     WHERE relacion."fechaControlLocal" IS NOT NULL
       AND (
         :fechaInicio IS NULL
-        OR relacion."fechaControlLocal"::DATE >= CAST(:fechaInicio AS DATE)
+        OR relacion."fechaControlLocal" >= CAST(:fechaInicio AS DATE)
       )
       AND (
         :fechaFin IS NULL
-        OR relacion."fechaControlLocal"::DATE <= CAST(:fechaFin AS DATE)
+        OR relacion."fechaControlLocal" < CAST(:fechaFin AS DATE) + INTERVAL '1 day'
       )
       AND (
         :horaRegistroDesde IS NULL
@@ -658,7 +674,17 @@ const consolidarFilasInforme = (registros = []) => {
     const relacionAmbigua =
       !tieneDirecta &&
       (porCedula.length > 1 || acumulado.cantidadVentasCedula > 1);
-    const { cedulaNormalizada, cantidadVentasCedula, ...base } = acumulado.base;
+    const {
+      cedulaNormalizada,
+      cantidadVentasCedula,
+      tipoRelacionConsolidada,
+      relacionAmbiguaConsolidada,
+      _total,
+      _totalDirectas,
+      _totalPorCedula,
+      _totalAmbiguas,
+      ...base
+    } = acumulado.base;
 
     return {
       ...base,
@@ -720,7 +746,7 @@ const booleanoFiltro = (valor) =>
     String(valor || "").trim().toLowerCase(),
   );
 
-const obtenerInformeVentasConEntrega = async (filtros = {}) => {
+const construirFiltrosSql = (filtros = {}) => {
   const replacements = {
     fechaInicio: fechaFiltro(filtros.fechaInicio),
     fechaFin: fechaFiltro(filtros.fechaFin),
@@ -742,37 +768,76 @@ const obtenerInformeVentasConEntrega = async (filtros = {}) => {
     error.status = 400;
     throw error;
   }
+
+  return replacements;
+};
+
+const paginaFiltro = (valor) => {
+  const pagina = Number(valor);
+  return Number.isInteger(pagina) && pagina > 0 ? pagina : 1;
+};
+
+const limiteFiltro = (valor) => {
+  const limite = Number(valor);
+  return Number.isInteger(limite) && limite > 0
+    ? Math.min(limite, 100)
+    : 25;
+};
+
+const consultarInformeVentasConEntrega = async (
+  filtros = {},
+  { paginar = true } = {},
+) => {
+  const page = paginaFiltro(filtros.page);
+  const limit = limiteFiltro(filtros.limit);
+  const replacements = {
+    ...construirFiltrosSql(filtros),
+    busqueda: String(filtros.busqueda || "").trim() || null,
+    limite: paginar ? limit : null,
+    offset: paginar ? (page - 1) * limit : 0,
+  };
 
   const registros = await sequelize.query(SQL_INFORME_VENTAS_CON_ENTREGA, {
     replacements,
     type: QueryTypes.SELECT,
   });
 
-  return consolidarFilasInforme(registros);
+  let metadatos = registros[0] || {};
+  if (paginar && page > 1 && registros.length === 0) {
+    const [filaMetadatos] = await sequelize.query(
+      SQL_INFORME_VENTAS_CON_ENTREGA,
+      {
+        replacements: { ...replacements, limite: 1, offset: 0 },
+        type: QueryTypes.SELECT,
+      },
+    );
+    metadatos = filaMetadatos || {};
+  }
+  const ventas = consolidarFilasInforme(registros);
+  const total = Number(metadatos._total ?? ventas.length);
+
+  return {
+    ventas,
+    page: paginar ? page : 1,
+    limit: paginar ? limit : total,
+    total,
+    totalPages: paginar ? Math.max(1, Math.ceil(total / limit)) : 1,
+    resumen: {
+      directas: Number(metadatos._totalDirectas || 0),
+      porCedula: Number(metadatos._totalPorCedula || 0),
+      ambiguas: Number(metadatos._totalAmbiguas || 0),
+    },
+  };
 };
 
-const obtenerDashboardVentasConEntrega = async (filtros = {}) => {
-  const replacements = {
-    fechaInicio: fechaFiltro(filtros.fechaInicio),
-    fechaFin: fechaFiltro(filtros.fechaFin),
-    horaRegistroDesde: horaFiltro(filtros.horaRegistroDesde),
-    agenciaIds: idsFiltro(filtros.agenciaIds ?? filtros.agenciaId),
-    vendedorIds: idsFiltro(filtros.vendedorIds ?? filtros.vendedorId),
-    origenId: idFiltro(filtros.origenId),
-    soloOrigenEntrega: booleanoFiltro(filtros.soloOrigenEntrega),
-    estadoEntrega: String(filtros.estadoEntrega || "").trim() || null,
-    tipoEntrega: tipoEntregaFiltro(filtros.tipoEntrega),
-  };
+const obtenerInformeVentasConEntrega = async (filtros = {}) =>
+  (await consultarInformeVentasConEntrega(filtros, { paginar: false })).ventas;
 
-  if (
-    replacements.fechaInicio &&
-    replacements.fechaFin &&
-    replacements.fechaInicio > replacements.fechaFin
-  ) {
-    const error = new Error("La fecha inicial no puede ser mayor que la fecha final.");
-    error.status = 400;
-    throw error;
-  }
+const obtenerPaginaInformeVentasConEntrega = (filtros = {}) =>
+  consultarInformeVentasConEntrega(filtros, { paginar: true });
+
+const obtenerDashboardVentasConEntrega = async (filtros = {}) => {
+  const replacements = construirFiltrosSql(filtros);
 
   const registros = await sequelize.query(SQL_DASHBOARD_VENTAS_CON_ENTREGA, {
     replacements,
@@ -803,6 +868,7 @@ module.exports = {
   normalizarCedula,
   obtenerDashboardVentasConEntrega,
   obtenerInformeVentasConEntrega,
+  obtenerPaginaInformeVentasConEntrega,
   resolverVentaParaEntrega,
   seleccionarVentaInequivoca,
 };

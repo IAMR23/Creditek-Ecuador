@@ -1,6 +1,9 @@
 
 
 const { enviarAGHL } = require("../../services/ghlService");
+const {
+  actualizarCedulaContactoDesdeMensaje,
+} = require("../../services/ghlCedulaService");
 const opportunityWebhookService = require("../../services/ghlOpportunityWebhookService");
 const { findValueDeep, limpiarTelefono, decodeBase64, detectarCampania } = require("../../utils/stevoUtils");
 
@@ -144,6 +147,23 @@ async function recibirWebhookStevo(req, res) {
         code: ghlError.code || null,
         status: ghlError.response?.status || null,
         message: opportunityWebhookService.logWebhookMessage(ghlError.message),
+      });
+    }
+
+    try {
+      await actualizarCedulaContactoDesdeMensaje({
+        phone,
+        message,
+        isFromMe,
+      });
+    } catch (cedulaError) {
+      console.error("Error al actualizar el contacto en GHL.", {
+        code: cedulaError.code || null,
+        status:
+          cedulaError.upstreamStatus ||
+          cedulaError.statusCode ||
+          cedulaError.response?.status ||
+          null,
       });
     }
 

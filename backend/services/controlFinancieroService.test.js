@@ -22,6 +22,9 @@ const {
   construirCoberturaReportes,
   extraerFechaIso,
   guardarCargaControlFinanciero,
+  normalizarContratoControl,
+  normalizarFechaControl,
+  normalizarImeiControl,
   obtenerFechaReporte,
 } = require("./controlFinancieroService");
 
@@ -130,9 +133,26 @@ describe("controlFinancieroService", () => {
         cargaId: 19,
         archivoHash: "c".repeat(64),
         imei: "123456789012345",
+        imeiNormalizado: "123456789012345",
+        contratoNormalizado: "300",
+        fechaNormalizada: "2026-07-22 12:00:00",
         producto: "UPHONE",
       }),
     );
+  });
+
+  test.each([
+    ["7/22/26 1:05 PM", "2026-07-22 13:05:00"],
+    ["7/22/26 1:05:09 PM", "2026-07-22 13:05:09"],
+    ["07/22/2026 12:05 AM", "2026-07-22 00:05:00"],
+    ["07/22/2026 12:05:09 PM", "2026-07-22 12:05:09"],
+  ])("normaliza la fecha historica %s", (entrada, esperado) => {
+    expect(normalizarFechaControl(entrada)).toBe(esperado);
+  });
+
+  test("normaliza contrato e IMEI con la misma regla persistida", () => {
+    expect(normalizarContratoControl(" ab-12 / c ")).toBe("AB12C");
+    expect(normalizarImeiControl(" 123456789012345 ")).toBe("123456789012345");
   });
 
   test("guarda una carga que contiene solamente ventas TV", async () => {

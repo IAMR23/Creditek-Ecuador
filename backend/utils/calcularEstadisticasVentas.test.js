@@ -151,4 +151,22 @@ describe("calcularEstadisticasVentas", () => {
     expect(estadisticas.porHoraCreacion["09:00"]).toBe(2);
     expect(estadisticas.porHoraCreacion["23:00"]).toBe(1);
   });
+
+  test("agrupa las ventas por origen y semana comercial", () => {
+    const estadisticas = calcularEstadisticasVentas(
+      [
+        { fecha: "2026-09-03", origen: "Facebook" },
+        { fecha: "2026-09-09", origen: "Facebook" },
+        { fecha: "2026-09-10", origen: "Referido" },
+        { fecha: "2026-09-11", origen: "" },
+      ],
+      "2026-09-03",
+    );
+
+    expect(estadisticas.porOrigenPorSemana).toEqual({
+      Facebook: { "Semana 1": 2 },
+      Referido: { "Semana 2": 1 },
+      "Sin origen": { "Semana 2": 1 },
+    });
+  });
 });

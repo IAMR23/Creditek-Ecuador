@@ -35,6 +35,11 @@ const RetiroCaja = require('./CierreCaja/RetiroCaja');
 const ReaperturaCierreCaja = require('./CierreCaja/ReaperturaCierreCaja');
 const Task = require('./Task');
 const SistemaTarea = require('./SistemaTarea');
+const SistemaTicket = require('./SistemaTicket');
+const SistemaTicketComentario = require('./SistemaTicketComentario');
+const SistemaTicketArchivo = require('./SistemaTicketArchivo');
+const SistemaTicketHistorial = require('./SistemaTicketHistorial');
+const SistemaCapacitacionVideo = require('./SistemaCapacitacionVideo');
 const PlanBatalla = require('./PlanBatalla');
 const SecretarioEjecutivoPlan = require('./SecretarioEjecutivoPlan');
 const ConsejoEjecutivoPlan = require('./ConsejoEjecutivoPlan');
@@ -665,6 +670,45 @@ Usuario.hasMany(SistemaTarea, {
 SistemaTarea.belongsTo(Usuario, {
   foreignKey: "creadoPorId",
   as: "creadoPor",
+});
+
+/* TICKETS DE TI */
+SistemaTicket.belongsTo(Usuario, { foreignKey: "solicitanteId", as: "solicitante" });
+SistemaTicket.belongsTo(Usuario, { foreignKey: "responsableId", as: "responsable" });
+SistemaTicket.belongsTo(Usuario, {
+  foreignKey: "ultimaModificacionUsuarioId",
+  as: "ultimaModificacionUsuario",
+});
+Usuario.hasMany(SistemaTicket, { foreignKey: "solicitanteId", as: "ticketsSolicitados" });
+Usuario.hasMany(SistemaTicket, { foreignKey: "responsableId", as: "ticketsAsignados" });
+
+SistemaTicket.hasMany(SistemaTicketComentario, {
+  foreignKey: "ticketId",
+  as: "comentarios",
+});
+SistemaTicketComentario.belongsTo(SistemaTicket, { foreignKey: "ticketId", as: "ticket" });
+SistemaTicketComentario.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
+
+SistemaTicket.hasMany(SistemaTicketArchivo, { foreignKey: "ticketId", as: "archivos" });
+SistemaTicketArchivo.belongsTo(SistemaTicket, { foreignKey: "ticketId", as: "ticket" });
+SistemaTicketArchivo.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
+
+SistemaTicket.hasMany(SistemaTicketHistorial, { foreignKey: "ticketId", as: "historial" });
+SistemaTicketHistorial.belongsTo(SistemaTicket, { foreignKey: "ticketId", as: "ticket" });
+SistemaTicketHistorial.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
+
+/* CAPACITACION DE SISTEMAS */
+SistemaCapacitacionVideo.belongsTo(Usuario, {
+  foreignKey: "creadoPorId",
+  as: "creadoPor",
+});
+SistemaCapacitacionVideo.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
+});
+Usuario.hasMany(SistemaCapacitacionVideo, {
+  foreignKey: "creadoPorId",
+  as: "videosCapacitacionCreados",
 });
 
 UsuarioAgencia.hasMany(PlanBatalla, {

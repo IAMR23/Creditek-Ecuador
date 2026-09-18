@@ -35,6 +35,7 @@ export default function EntregasRepartidoresTabla() {
   const [fechaInicio, setFechaInicio] = useState(getHoyLocal());
   const [fechaFin, setFechaFin] = useState(getHoyLocal());
   const [estado, setEstado] = useState("");
+  const [clasificacion, setClasificacion] = useState("");
   const [busqueda, setBusqueda] = useState("");
 
   // control UI errores
@@ -77,6 +78,7 @@ export default function EntregasRepartidoresTabla() {
       if (fechaInicio) params.fechaInicio = fechaInicio;
       if (fechaFin) params.fechaFin = fechaFin;
       if (estado) params.estado = estado;
+      if (clasificacion) params.clasificacion = clasificacion;
 
       const response = await api.get("/entregas/entregas", {
         params,
@@ -100,7 +102,7 @@ export default function EntregasRepartidoresTabla() {
     } finally {
       setLoading(false);
     }
-  }, [repartidorSeleccionado, fechaInicio, fechaFin, estado]);
+  }, [repartidorSeleccionado, fechaInicio, fechaFin, estado, clasificacion]);
 
   useEffect(() => {
     fetchEntregas();
@@ -447,7 +449,7 @@ export default function EntregasRepartidoresTabla() {
         </p>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-6">
+      <div className="bg-white p-4 rounded-2xl shadow-sm border grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 mb-6">
         <div>
           <label className="text-sm font-medium text-gray-700">Buscar</label>
           <input
@@ -517,6 +519,22 @@ export default function EntregasRepartidoresTabla() {
             <option value="Pendiente">Pendiente</option>
             <option value="No Entregado">No Entregado</option>
             <option value="Transito">En tránsito</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-gray-700">
+            Tipo / proceso
+          </label>
+          <select
+            value={clasificacion}
+            onChange={(e) => setClasificacion(e.target.value)}
+            className="w-full mt-1 rounded-xl border-gray-300"
+          >
+            <option value="">Todos</option>
+            <option value="Envio">Envío</option>
+            <option value="Entrega">Entrega</option>
+            <option value="ProcesoCompleto">Proceso completo</option>
           </select>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   MdSupportAgent,
   MdFlag,
   MdFactCheck,
+  MdSchool,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
 import AsesorDisponibilidadCard from "../../components/GHL/AsesorDisponibilidadCard";
@@ -57,12 +58,6 @@ function VendedorPanel() {
           desc: "Revisa tus ventas registradas",
           icon: <MdAnalytics />,
           path: "/mis-ventas",
-        },
-        {
-          title: "Lista de precios",
-          desc: "Consulta los precios vigentes",
-          icon: <MdPointOfSale />,
-          path: "/lista-precios",
         },
         {
           title: "Registrar Prospectos",
@@ -135,6 +130,18 @@ function VendedorPanel() {
           desc: "Consulta tus cierres realizados",
           icon: <MdReceiptLong />,
           path: "/mis-cierres-caja",
+        },
+      ],
+    },
+    {
+      category: "Capacitación",
+      color: "purple",
+      items: [
+        {
+          title: "Capacitación",
+          desc: "Consulta los videos disponibles",
+          icon: <MdSchool />,
+          path: "/capacitacion",
         },
       ],
     },

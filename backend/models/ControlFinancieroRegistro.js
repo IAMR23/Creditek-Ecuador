@@ -33,9 +33,19 @@ const ControlFinancieroRegistro = sequelize.define(
       type: DataTypes.STRING(80),
       allowNull: true,
     },
+    contratoNormalizado: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "contrato_normalizado",
+    },
     fecha: {
       type: DataTypes.STRING(80),
       allowNull: true,
+    },
+    fechaNormalizada: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "fecha_normalizada",
     },
     vendedor: {
       type: DataTypes.STRING(160),
@@ -56,6 +66,11 @@ const ControlFinancieroRegistro = sequelize.define(
     imei: {
       type: DataTypes.STRING(80),
       allowNull: true,
+    },
+    imeiNormalizado: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "imei_normalizado",
     },
     pagosCuotas: {
       type: DataTypes.DECIMAL(14, 2),

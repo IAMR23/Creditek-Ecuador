@@ -4,6 +4,9 @@
   "main": "index.js",
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "migrate:tickets-ti": "node scripts/migrateTicketsTi.js",
+    "migrate:capacitacion": "node scripts/migrateCapacitacionVideos.js",
+    "migrate:ventas-con-entrega": "node scripts/migrateVentasConEntrega.js",
     "migrate:ghl-reviews": "node scripts/migrateGhlPendingReviews.js",
     "entregas:reconciliar": "node scripts/reconciliarEntregas.js",
     "dev": "nodemon --config nodemon.json index.js",

@@ -1,6 +1,8 @@
 const { Op } = require("sequelize");
 const {
+  CLASIFICACIONES_INFORME_ENTREGA,
   criteriosAsignacionVigente,
+  criteriosClasificacionInformeEntrega,
   criteriosEntregaPendiente,
   criteriosEntregaVisible,
   responsableRequiereRevision,
@@ -29,5 +31,38 @@ describe("criterios compartidos de entregas", () => {
         { activo: true, usuario: { activo: true } },
       ),
     ).toBe(false);
+  });
+
+  test.each(["Entrega", "Envio"])(
+    "filtra el informe por tipo %s",
+    (clasificacion) => {
+      expect(criteriosClasificacionInformeEntrega(clasificacion)).toEqual({
+        tipoEntrega: clasificacion,
+      });
+    },
+  );
+
+  test("filtra procesos completos con la misma regla de llamada del dashboard", () => {
+    expect(criteriosClasificacionInformeEntrega("ProcesoCompleto")).toEqual({
+      [Op.and]: [
+        { FechaHoraLlamada: null },
+        {
+          [Op.or]: [{ fotoFechaLlamada: null }, { fotoFechaLlamada: "" }],
+        },
+      ],
+    });
+  });
+
+  test("acepta todos y rechaza clasificaciones desconocidas", () => {
+    expect(criteriosClasificacionInformeEntrega("")).toEqual({});
+    expect(criteriosClasificacionInformeEntrega("todos")).toEqual({});
+    expect(CLASIFICACIONES_INFORME_ENTREGA).toEqual([
+      "Entrega",
+      "Envio",
+      "ProcesoCompleto",
+    ]);
+    expect(() => criteriosClasificacionInformeEntrega("Retiro")).toThrow(
+      RangeError,
+    );
   });
 });

@@ -30,6 +30,8 @@ import {
   Settings2,
   RefreshCcw,
   Link2,
+  TicketCheck,
+  GraduationCap,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -105,6 +107,11 @@ export default function Sidebar({ auth }) {
             label: "Reporte de Entregas 2",
             icon: <Link2 size={20} />,
             path: "/ventas-con-entrega",
+          },
+          {
+            label: "Gestión Tickets",
+            icon: <TicketCheck size={20} />,
+            path: "/gestion-tickets",
           },
           {
             label: "Revisar Gestiones",
@@ -330,8 +337,19 @@ export default function Sidebar({ auth }) {
 
       Sistemas: {
         title: "Sistemas",
-        permission: "Sistemas",
+        // La sección también contiene Tickets de TI, disponible para todo usuario autenticado.
+        permission: [],
         items: [
+          {
+            label: "Tickets de TI",
+            icon: <TicketCheck size={20} />,
+            path: "/sistemas/tickets",
+          },
+          {
+            label: "Capacitación",
+            icon: <GraduationCap size={20} />,
+            path: "/sistemas/capacitacion",
+          },
           {
             label: "Gestion de Tareas",
             icon: <MonitorCog size={20} />,

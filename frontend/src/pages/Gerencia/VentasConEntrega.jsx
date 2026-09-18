@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -157,8 +157,28 @@ export default function VentasConEntrega() {
   const [estadoEntrega, setEstadoEntrega] = useState("");
   const [tipoEntrega, setTipoEntrega] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = useState("");
+  const [filtrosAplicados, setFiltrosAplicados] = useState(() => ({
+    fechaInicio: inicioMes,
+    fechaFin: hoy,
+    horaRegistroDesde: "",
+    agenciaIds: [],
+    vendedorIds: [],
+    origenId: "",
+    estadoEntrega: "",
+    tipoEntrega: "",
+  }));
   const [pagina, setPagina] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [resumen, setResumen] = useState({
+    directas: 0,
+    porCedula: 0,
+    ambiguas: 0,
+  });
+  const [loadingListado, setLoadingListado] = useState(false);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -196,110 +216,120 @@ export default function VentasConEntrega() {
     };
   }, []);
 
-  const cargarInforme = useCallback(async () => {
-    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
-      setVentas([]);
-      setDashboard({ entregasPorMes: [], ventasDesdeHoraPorMes: [] });
-      setError("La fecha inicial no puede ser mayor que la fecha final.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const params = {
-        fechaInicio: fechaInicio || undefined,
-        fechaFin: fechaFin || undefined,
-        horaRegistroDesde: horaRegistroDesde || undefined,
-        agenciaIds: agenciaIds.length ? agenciaIds.join(",") : undefined,
-        vendedorIds: vendedorIds.length ? vendedorIds.join(",") : undefined,
-        origenId: origenId || undefined,
-        estadoEntrega: estadoEntrega || undefined,
-        tipoEntrega: tipoEntrega || undefined,
-      };
-      const { data } = await api.get(
-        "/api/gerencia/informe-ventas-con-entrega",
-        { params },
-      );
-
-      if (!data.ok) throw new Error("Respuesta inválida del informe.");
-      setVentas(Array.isArray(data.ventas) ? data.ventas : []);
-      setDashboard({
-        entregasPorMes: Array.isArray(data.dashboard?.entregasPorMes)
-          ? data.dashboard.entregasPorMes
-          : [],
-        ventasDesdeHoraPorMes: Array.isArray(
-          data.dashboard?.ventasDesdeHoraPorMes,
-        )
-          ? data.dashboard.ventasDesdeHoraPorMes
-          : [],
-      });
-    } catch (requestError) {
-      console.error(requestError);
-      setVentas([]);
-      setDashboard({ entregasPorMes: [], ventasDesdeHoraPorMes: [] });
-      setError(
-        requestError.response?.data?.message ||
-          requestError.message ||
-          "No se pudo cargar el informe.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    agenciaIds,
-    estadoEntrega,
-    fechaFin,
-    fechaInicio,
-    horaRegistroDesde,
-    origenId,
-    tipoEntrega,
-    vendedorIds,
-  ]);
+  useEffect(() => {
+    const temporizador = window.setTimeout(() => {
+      setPagina(1);
+      setBusquedaAplicada(busqueda.trim());
+    }, 350);
+    return () => window.clearTimeout(temporizador);
+  }, [busqueda]);
 
   useEffect(() => {
-    cargarInforme();
-  }, [cargarInforme]);
+    const controller = new AbortController();
+    const cargarListado = async () => {
+      setLoadingListado(true);
+      setError("");
+      try {
+        const { data } = await api.get(
+          "/api/gerencia/informe-ventas-con-entrega",
+          {
+            signal: controller.signal,
+            params: {
+              ...filtrosAplicados,
+              agenciaIds: filtrosAplicados.agenciaIds.length
+                ? filtrosAplicados.agenciaIds.join(",")
+                : undefined,
+              vendedorIds: filtrosAplicados.vendedorIds.length
+                ? filtrosAplicados.vendedorIds.join(",")
+                : undefined,
+              busqueda: busquedaAplicada || undefined,
+              seccion: "listado",
+              page: pagina,
+              limit: REGISTROS_POR_PAGINA,
+            },
+          },
+        );
 
-  const ventasFiltradas = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase();
-    if (!termino) return ventas;
+        if (!data.ok) throw new Error("Respuesta inválida del informe.");
+        setVentas(Array.isArray(data.ventas) ? data.ventas : []);
+        setTotal(Number(data.total || 0));
+        setTotalPaginas(Math.max(1, Number(data.totalPages || 1)));
+        setResumen({
+          directas: Number(data.resumen?.directas || 0),
+          porCedula: Number(data.resumen?.porCedula || 0),
+          ambiguas: Number(data.resumen?.ambiguas || 0),
+        });
+      } catch (requestError) {
+        if (requestError.code === "ERR_CANCELED") return;
+        console.error(requestError);
+        setVentas([]);
+        setTotal(0);
+        setTotalPaginas(1);
+        setResumen({ directas: 0, porCedula: 0, ambiguas: 0 });
+        setError(
+          requestError.response?.data?.message ||
+            requestError.message ||
+            "No se pudo cargar el informe.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setLoadingListado(false);
+      }
+    };
 
-    return ventas.filter((venta) =>
-      [venta.cliente, venta.cedula].some((valor) =>
-        String(valor || "").toLowerCase().includes(termino),
-      ),
-    );
-  }, [busqueda, ventas]);
+    cargarListado();
+    return () => controller.abort();
+  }, [busquedaAplicada, filtrosAplicados, pagina]);
 
   useEffect(() => {
-    setPagina(1);
-  }, [busqueda, ventas]);
+    const controller = new AbortController();
+    const temporizador = window.setTimeout(async () => {
+      setLoadingDashboard(true);
+      try {
+        const { data } = await api.get(
+          "/api/gerencia/informe-ventas-con-entrega",
+          {
+            signal: controller.signal,
+            params: {
+              ...filtrosAplicados,
+              agenciaIds: filtrosAplicados.agenciaIds.length
+                ? filtrosAplicados.agenciaIds.join(",")
+                : undefined,
+              vendedorIds: filtrosAplicados.vendedorIds.length
+                ? filtrosAplicados.vendedorIds.join(",")
+                : undefined,
+              seccion: "dashboard",
+            },
+          },
+        );
+        if (!data.ok) throw new Error("Respuesta inválida del dashboard.");
+        setDashboard({
+          entregasPorMes: Array.isArray(data.dashboard?.entregasPorMes)
+            ? data.dashboard.entregasPorMes
+            : [],
+          ventasDesdeHoraPorMes: Array.isArray(
+            data.dashboard?.ventasDesdeHoraPorMes,
+          )
+            ? data.dashboard.ventasDesdeHoraPorMes
+            : [],
+        });
+      } catch (requestError) {
+        if (requestError.code !== "ERR_CANCELED") {
+          console.error(requestError);
+          setDashboard({ entregasPorMes: [], ventasDesdeHoraPorMes: [] });
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoadingDashboard(false);
+      }
+    }, 150);
 
-  const totalPaginas = Math.max(
-    1,
-    Math.ceil(ventasFiltradas.length / REGISTROS_POR_PAGINA),
-  );
+    return () => {
+      window.clearTimeout(temporizador);
+      controller.abort();
+    };
+  }, [filtrosAplicados]);
+
   const inicioPagina = (pagina - 1) * REGISTROS_POR_PAGINA;
-  const ventasPagina = ventasFiltradas.slice(
-    inicioPagina,
-    inicioPagina + REGISTROS_POR_PAGINA,
-  );
-
-  const resumen = useMemo(
-    () => ({
-      directas: ventasFiltradas.filter(
-        (venta) => venta.tipoRelacion === "DIRECTA",
-      ).length,
-      porCedula: ventasFiltradas.filter(
-        (venta) =>
-          venta.tipoRelacion === "POR_CEDULA" && !venta.relacionAmbigua,
-      ).length,
-      ambiguas: ventasFiltradas.filter((venta) => venta.relacionAmbigua).length,
-    }),
-    [ventasFiltradas],
-  );
+  const ventasPagina = ventas;
 
   const opcionesAgencias = useMemo(
     () =>
@@ -335,7 +365,10 @@ export default function VentasConEntrega() {
       ...entregas.keys(),
       ...ventasDesdeHora.keys(),
     ]);
-    const meses = mesesDelPeriodo(fechaInicio, fechaFin);
+    const meses = mesesDelPeriodo(
+      filtrosAplicados.fechaInicio,
+      filtrosAplicados.fechaFin,
+    );
 
     return (meses.length ? meses : [...mesesConDatos].sort()).map((mes) => ({
       mes,
@@ -343,7 +376,7 @@ export default function VentasConEntrega() {
       entregas: entregas.get(mes) || 0,
       ventasDesdeHora: ventasDesdeHora.get(mes) || 0,
     }));
-  }, [dashboard, fechaFin, fechaInicio]);
+  }, [dashboard, filtrosAplicados]);
 
   const totalEntregasDashboard = datosDashboard.reduce(
     (total, registro) => total + registro.entregas,
@@ -353,6 +386,25 @@ export default function VentasConEntrega() {
     (total, registro) => total + registro.ventasDesdeHora,
     0,
   );
+
+  const aplicarFiltros = () => {
+    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+      setError("La fecha inicial no puede ser mayor que la fecha final.");
+      return;
+    }
+
+    setPagina(1);
+    setFiltrosAplicados({
+      fechaInicio,
+      fechaFin,
+      horaRegistroDesde,
+      agenciaIds: [...agenciaIds],
+      vendedorIds: [...vendedorIds],
+      origenId,
+      estadoEntrega,
+      tipoEntrega,
+    });
+  };
 
   const limpiarFiltros = () => {
     setFechaInicio(inicioMes);
@@ -364,15 +416,47 @@ export default function VentasConEntrega() {
     setEstadoEntrega("");
     setTipoEntrega("");
     setBusqueda("");
+    setBusquedaAplicada("");
+    setPagina(1);
+    setFiltrosAplicados({
+      fechaInicio: inicioMes,
+      fechaFin: hoy,
+      horaRegistroDesde: "",
+      agenciaIds: [],
+      vendedorIds: [],
+      origenId: "",
+      estadoEntrega: "",
+      tipoEntrega: "",
+    });
   };
 
-  const exportarExcel = () => {
-    if (!ventasFiltradas.length) {
+  const exportarExcel = async () => {
+    if (!total) {
       Swal.fire("Atención", "No hay datos para exportar.", "warning");
       return;
     }
 
-    const filasExcel = ventasFiltradas.map((venta) => ({
+    setExportando(true);
+    try {
+      const { data } = await api.get(
+        "/api/gerencia/informe-ventas-con-entrega",
+        {
+          params: {
+            ...filtrosAplicados,
+            agenciaIds: filtrosAplicados.agenciaIds.length
+              ? filtrosAplicados.agenciaIds.join(",")
+              : undefined,
+            vendedorIds: filtrosAplicados.vendedorIds.length
+              ? filtrosAplicados.vendedorIds.join(",")
+              : undefined,
+            busqueda: busquedaAplicada || undefined,
+            seccion: "listado",
+            exportar: true,
+          },
+        },
+      );
+      const ventasExportar = Array.isArray(data.ventas) ? data.ventas : [];
+      const filasExcel = ventasExportar.map((venta) => ({
       "ID venta": venta.ventaId,
       "Fecha y hora": mostrarFechaHora(
         venta.fechaControlFinanciero,
@@ -395,45 +479,39 @@ export default function VentasConEntrega() {
       "Tipo de relación": etiquetaRelacion(venta),
       "Cantidad de entregas": venta.cantidadEntregas,
       "Relación ambigua": venta.relacionAmbigua ? "Sí" : "No",
-    }));
-    const hoja = XLSX.utils.json_to_sheet(filasExcel);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, "Ventas con entrega");
-    XLSX.writeFile(
-      libro,
-      `Ventas_con_entrega_${fechaInicio || "inicio"}_${fechaFin || "fin"}.xlsx`,
-    );
+      }));
+      const hoja = XLSX.utils.json_to_sheet(filasExcel);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Ventas con entrega");
+      XLSX.writeFile(
+        libro,
+        `Ventas_con_entrega_${filtrosAplicados.fechaInicio || "inicio"}_${
+          filtrosAplicados.fechaFin || "fin"
+        }.xlsx`,
+      );
+    } catch (requestError) {
+      console.error(requestError);
+      Swal.fire(
+        "No se pudo exportar",
+        requestError.response?.data?.message || "Intenta nuevamente.",
+        "error",
+      );
+    } finally {
+      setExportando(false);
+    }
   };
 
   const metricas = [
     {
-      label: "Ventas relacionadas",
-      valor: ventasFiltradas.length,
-      detalle: "Ventas únicas visibles",
+      label: "Ventas ",
+      valor: total,
+      detalle: "Ventas",
       icono: Link2,
       color: "bg-slate-100 text-slate-700",
     },
-    {
-      label: "Relación directa",
-      valor: resumen.directas,
-      detalle: "Vinculadas mediante ventaId",
-      icono: Truck,
-      color: "bg-emerald-100 text-emerald-700",
-    },
-    {
-      label: "Por cédula",
-      valor: resumen.porCedula,
-      detalle: "Coincidencias históricas únicas",
-      icono: FileSpreadsheet,
-      color: "bg-blue-100 text-blue-700",
-    },
-    {
-      label: "Ambiguas",
-      valor: resumen.ambiguas,
-      detalle: "Requieren revisión manual",
-      icono: AlertTriangle,
-      color: "bg-amber-100 text-amber-700",
-    },
+
+  
+   
   ];
 
   return (
@@ -488,11 +566,11 @@ export default function VentasConEntrega() {
               <div>
                 <h2 className="font-bold text-slate-950">Filtros</h2>
                 <p className="text-xs text-slate-500">
-                  El informe se actualiza automáticamente.
+                  Los cambios se consultan al aplicar los filtros.
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={limpiarFiltros}
@@ -502,11 +580,19 @@ export default function VentasConEntrega() {
               </button>
               <button
                 type="button"
-                onClick={exportarExcel}
-                disabled={loading || !ventasFiltradas.length}
+                onClick={aplicarFiltros}
+                disabled={loadingListado}
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
               >
-                <Download size={17} /> Exportar Excel
+                <Filter size={16} /> Aplicar filtros
+              </button>
+              <button
+                type="button"
+                onClick={exportarExcel}
+                disabled={exportando || !total}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50"
+              >
+                <Download size={17} /> {exportando ? "Exportando…" : "Exportar Excel"}
               </button>
             </div>
           </div>
@@ -648,7 +734,7 @@ export default function VentasConEntrega() {
             <span>{error}</span>
             <button
               type="button"
-              onClick={cargarInforme}
+              onClick={() => setFiltrosAplicados((actual) => ({ ...actual }))}
               className="inline-flex items-center gap-2 rounded-xl bg-red-700 px-3 py-2 text-sm font-bold text-white"
             >
               <RefreshCw size={16} /> Reintentar
@@ -672,7 +758,7 @@ export default function VentasConEntrega() {
               </span>
             </div>
             <div className="h-72">
-              {loading ? (
+              {loadingDashboard ? (
                 <div className="h-full animate-pulse rounded-xl bg-slate-100" />
               ) : datosDashboard.some((registro) => registro.entregas > 0) ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -717,8 +803,8 @@ export default function VentasConEntrega() {
                   Ventas
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  {horaRegistroDesde
-                    ? `Registradas en el reporte desde las ${horaRegistroDesde} (hora Ecuador).`
+                  {filtrosAplicados.horaRegistroDesde
+                    ? `Registradas en el reporte desde las ${filtrosAplicados.horaRegistroDesde} (hora Ecuador).`
                     : "Todas las horas; selecciona una hora diaria para aplicar el corte."}
                 </p>
               </div>
@@ -727,7 +813,7 @@ export default function VentasConEntrega() {
               </span>
             </div>
             <div className="h-72">
-              {loading ? (
+              {loadingDashboard ? (
                 <div className="h-full animate-pulse rounded-xl bg-slate-100" />
               ) : datosDashboard.some(
                   (registro) => registro.ventasDesdeHora > 0,
@@ -773,7 +859,7 @@ export default function VentasConEntrega() {
             <div>
               <h2 className="font-bold text-slate-950">Resultados</h2>
               <p className="text-xs text-slate-500">
-                {ventasFiltradas.length.toLocaleString("es-EC")} ventas únicas
+                {total.toLocaleString("es-EC")} ventas únicas
               </p>
             </div>
             <label className="relative w-full sm:max-w-sm">
@@ -791,7 +877,7 @@ export default function VentasConEntrega() {
             </label>
           </div>
 
-          {loading ? (
+          {loadingListado ? (
             <div className="space-y-3 p-5" aria-label="Cargando informe">
               {Array.from({ length: 7 }).map((_, index) => (
                 <div
@@ -853,8 +939,8 @@ export default function VentasConEntrega() {
                   Mostrando {inicioPagina + 1}–
                   {Math.min(
                     inicioPagina + REGISTROS_POR_PAGINA,
-                    ventasFiltradas.length,
-                  )} de {ventasFiltradas.length}
+                    total,
+                  )} de {total}
                 </span>
                 <div className="flex items-center gap-2">
                   <button

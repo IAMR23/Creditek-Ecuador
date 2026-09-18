@@ -115,6 +115,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     indicadorEngancheJavierPorSemana: {},
     porAgencia: {},
     porOrigen: {},
+    porOrigenPorSemana: {},
     porFecha: {},
     porDia: {},
     porHoraCreacion: crearHorasVacias(),
@@ -236,11 +237,14 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     stats.costoTotal += costo;
 
     // Semana comercial jueves-miercoles calculada desde la fecha real.
+    let semanaKey = null;
+
     if (v.fecha) {
       const semanaCalculada = getSemanaComercial(v.fecha);
 
       if (semanaCalculada) {
         const key = `Semana ${semanaCalculada}`;
+        semanaKey = key;
         stats.porSemana[key] = (stats.porSemana[key] || 0) + 1;
         stats.indicadorGerenciaPorSemana[key] =
           (stats.indicadorGerenciaPorSemana[key] || 0) + margen;
@@ -280,6 +284,13 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     const origen = normalizarTexto(v.origen);
     if (origen) {
       stats.porOrigen[origen] = (stats.porOrigen[origen] || 0) + 1;
+    }
+
+    if (semanaKey) {
+      const origenSerie = origen || "Sin origen";
+      stats.porOrigenPorSemana[origenSerie] ??= {};
+      stats.porOrigenPorSemana[origenSerie][semanaKey] =
+        (stats.porOrigenPorSemana[origenSerie][semanaKey] || 0) + 1;
     }
 
     if (v.fecha) {

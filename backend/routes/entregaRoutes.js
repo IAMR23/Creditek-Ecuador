@@ -42,7 +42,9 @@ const {
   cambiarEstado,
 } = require("../controllers/Logistica/entregaOperacionController");
 const {
+  CLASIFICACIONES_INFORME_ENTREGA,
   criteriosAsignacionVigente,
+  criteriosClasificacionInformeEntrega,
   criteriosEntregaPendiente,
   criteriosEntregaVisible,
   responsableRequiereRevision,
@@ -212,12 +214,30 @@ router.get("/mis-entregas-realizadas/:userId", authenticate, async (req, res) =>
 });
 
 router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
-  const { userId, fechaInicio, fechaFin, estado, agenciaId } = req.query;
+  const {
+    userId,
+    fechaInicio,
+    fechaFin,
+    estado,
+    agenciaId,
+    clasificacion,
+  } = req.query;
   const agenciaEfectiva = tienePermiso(req, "Administracion")
     ? agenciaId
     : req.user.agenciaId;
 
   try {
+    if (
+      clasificacion &&
+      clasificacion !== "todos" &&
+      !CLASIFICACIONES_INFORME_ENTREGA.includes(clasificacion)
+    ) {
+      return res.status(400).json({
+        code: "CLASIFICACION_ENTREGA_INVALIDA",
+        message: "La clasificacion debe ser Entrega, Envio o ProcesoCompleto.",
+      });
+    }
+
     if (
       userId &&
       userId !== "todos" &&
@@ -238,7 +258,9 @@ router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
         });
       }
     }
-    const whereEntrega = criteriosEntregaVisible();
+    const whereEntrega = criteriosEntregaVisible(
+      criteriosClasificacionInformeEntrega(clasificacion),
+    );
 
     // 📅 Filtro por fechas
     if (fechaInicio && fechaFin) {
