@@ -12,12 +12,25 @@ const distribution = require("./ghlOpportunityDistributionService");
 const service = require("./ghlOpportunityWebhookService");
 
 describe("webhook de reparto GHL", () => {
+  const previousSecret = process.env.GHL_REPARTO_WEBHOOK_SECRET;
+
   beforeEach(() => jest.clearAllMocks());
+
+  afterEach(() => {
+    if (previousSecret === undefined) delete process.env.GHL_REPARTO_WEBHOOK_SECRET;
+    else process.env.GHL_REPARTO_WEBHOOK_SECRET = previousSecret;
+  });
 
   test("valida el secreto con comparacion segura y rechaza ausentes o incorrectos", () => {
     expect(service.isValidWebhookSecret(null, "correcto")).toBe(false);
     expect(service.isValidWebhookSecret("incorrecto", "correcto")).toBe(false);
     expect(service.isValidWebhookSecret("correcto", "correcto")).toBe(true);
+  });
+
+  test("usa GHL_REPARTO_WEBHOOK_SECRET cuando no se pasa un esperado explicito", () => {
+    process.env.GHL_REPARTO_WEBHOOK_SECRET = "secreto-configurado";
+    expect(service.isValidWebhookSecret("secreto-configurado")).toBe(true);
+    expect(service.isValidWebhookSecret("secreto-distinto")).toBe(false);
   });
 
   test("acepta campos estandar y personalizados anidados sin persistir el telefono", async () => {

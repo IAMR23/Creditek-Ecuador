@@ -22,11 +22,17 @@ function shouldRunConfiguration(row, local) {
 
 async function tick(now = new Date()) {
   await service.recoverStaleRuns();
+  await service.recoverPendingRealtimeQueueReviews();
   let queueResult;
   try {
     queueResult = await service.executeRealtimeQueue({ trigger: "scheduler" });
   } catch {}
-  if (queueResult?.code === "PREVIOUS_EXECUTION_RUNNING") return queueResult;
+  if ([
+    "PREVIOUS_EXECUTION_RUNNING",
+    "GHL_REPARTO_SUSPENDED",
+    "QUEUE_FAILED",
+    "QUEUE_PARTIAL",
+  ].includes(queueResult?.code)) return queueResult;
   const local = service.localScheduleParts(now);
   const rows = await Configuracion.findAll({ where: { activo: true } });
   for (const row of rows.filter((item) => shouldRunConfiguration(item, local))) {
@@ -41,6 +47,7 @@ async function tick(now = new Date()) {
 async function start() {
   if (task) return task;
   await service.recoverStaleRuns();
+  await service.recoverPendingRealtimeQueueReviews();
   task = cron.schedule("* * * * *", () => tick().catch((error) => console.error("Fallo scheduler GHL", { message: service.sanitize(error.message) })), { timezone: service.TIME_ZONE });
   console.log("Scheduler de reparto GHL iniciado", { timezone: service.TIME_ZONE });
   return task;

@@ -183,6 +183,11 @@ const requestGhl = async (client, options) => {
       const response = await client.request(requestOptions);
       return response.data || {};
     } catch (rawError) {
+      if (signal?.aborted) {
+        throw signal.reason || Object.assign(new Error("Solicitud GHL cancelada"), {
+          code: "GHL_REQUEST_ABORTED",
+        });
+      }
       const error = normalizeGhlError(rawError);
       if (error.upstreamStatus !== 429 || attempt >= maxRetries) throw error;
       if (typeof beforeRetry === "function") await beforeRetry();
@@ -354,14 +359,14 @@ const getNextPaginationCursor = (payload, currentPageItems, limit) => {
   const meta = getPaginationMeta(payload);
   const urlCursor = extractPaginationCursorFromUrl(meta.nextPageUrl || payload?.nextPageUrl);
   const startAfterId = toId(
-    meta.startAfterId ||
-      payload?.startAfterId ||
-      meta.nextStartAfterId ||
+    meta.nextStartAfterId ||
       payload?.nextStartAfterId ||
       urlCursor.startAfterId ||
+      meta.startAfterId ||
+      payload?.startAfterId ||
       (currentPageItems.length >= limit ? currentPageItems[currentPageItems.length - 1]?.id : "")
   );
-  const startAfter = toId(meta.startAfter || payload?.startAfter || urlCursor.startAfter);
+  const startAfter = toId(urlCursor.startAfter || meta.startAfter || payload?.startAfter);
 
   if (!startAfterId) return null;
 
@@ -1201,23 +1206,31 @@ const fetchOpportunitiesByStatus = async (
   config,
   status,
   dateFilters = {},
+  { onPage = null } = {},
 ) => {
   const opportunities = [];
   const seenOpportunityIds = new Set();
   const seenCursors = new Set();
   const limit = DEFAULT_LIMIT;
   let cursor = null;
+  // Camel case es el contrato vigente de GHL. Si una instalacion antigua
+  // exige snake_case, se detecta una vez y se conserva para las demas paginas.
+  let parameterStyle = "camel";
 
   for (let page = 0; page < MAX_OPPORTUNITY_PAGES; page += 1) {
     const camelCaseParams = {
       locationId: config.locationId,
       pipelineId: config.pipelineId,
+      ...(config.pipelineStageId ? { pipelineStageId: config.pipelineStageId } : {}),
       limit,
+      order: "added_asc",
     };
     const snakeCaseParams = {
       location_id: config.locationId,
       pipeline_id: config.pipelineId,
+      ...(config.pipelineStageId ? { pipeline_stage_id: config.pipelineStageId } : {}),
       limit,
+      order: "added_asc",
     };
     if (status) {
       camelCaseParams.status = status;
@@ -1234,28 +1247,49 @@ const fetchOpportunitiesByStatus = async (
       snakeCaseParams.startAfter = cursor.startAfter;
     }
 
-    const payload = await requestGhlWithFallback(
-      client,
-      {
-        method: "GET",
-        url: "/opportunities/search",
-        params: camelCaseParams,
-      },
-      {
+    let payload;
+    if (parameterStyle === "snake") {
+      payload = await requestGhl(client, {
         method: "GET",
         url: "/opportunities/search",
         params: snakeCaseParams,
-      },
-      (error) =>
-        errorHasAnyMessage(error, [
-          "property locationId should not exist",
-          "property pipelineId should not exist",
-          "location_id must be a string",
-          "location_id should not be empty",
-        ]),
-    );
+      });
+    } else {
+      payload = await requestGhlWithFallback(
+        client,
+        {
+          method: "GET",
+          url: "/opportunities/search",
+          params: camelCaseParams,
+        },
+        {
+          method: "GET",
+          url: "/opportunities/search",
+          params: snakeCaseParams,
+        },
+        (error) => {
+          const shouldFallback = errorHasAnyMessage(error, [
+            "property locationId should not exist",
+            "property pipelineId should not exist",
+            "property pipelineStageId should not exist",
+            "location_id must be a string",
+            "location_id should not be empty",
+          ]);
+          if (shouldFallback) parameterStyle = "snake";
+          return shouldFallback;
+        },
+      );
+    }
 
     const pageItems = extractOpportunities(payload).filter(Boolean);
+    if (typeof onPage === "function") {
+      onPage({
+        page: page + 1,
+        examined: pageItems.length,
+        pipelineStageId: config.pipelineStageId || null,
+        parameterStyle,
+      });
+    }
     const pageItemsInRange = filterOpportunitiesByDateRange(
       pageItems,
       dateFilters,

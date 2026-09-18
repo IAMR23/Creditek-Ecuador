@@ -13,6 +13,7 @@ const { sequelize } = require("../config/db");
 const Ejecucion = require("../models/GhlRepartoEjecucion");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
+const realtimeReviewCoordinator = require("./ghlRealtimeReviewCoordinator");
 
 const makeRun = (overrides = {}) => {
   const run = {
@@ -39,6 +40,9 @@ describe("control de ejecuciones GHL", () => {
     jest.spyOn(Detalle, "findAll").mockImplementation(async (options) => options.attributes ? [] : []);
     jest.spyOn(Detalle, "bulkCreate").mockResolvedValue([]);
     jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(realtimeReviewCoordinator, "getRetryState").mockResolvedValue({ suspended: false });
+    jest.spyOn(realtimeReviewCoordinator, "recordFailure").mockResolvedValue({});
+    jest.spyOn(realtimeReviewCoordinator, "clearFailures").mockResolvedValue();
     jest.spyOn(ghl, "createGhlClient").mockReturnValue({ request: jest.fn() });
     jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue([{ id: "u1" }, { id: "u2" }]);
     jest.spyOn(ghl, "fetchOpportunitiesByStatus")[opportunityResult instanceof Error ? "mockRejectedValue" : "mockResolvedValue"](opportunityResult);

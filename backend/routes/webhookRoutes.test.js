@@ -1,6 +1,7 @@
 jest.mock("../services/ghlOpportunityWebhookService", () => ({
   isValidWebhookSecret: jest.fn(),
   enqueueWebhookEvent: jest.fn(),
+  logWebhookResult: jest.fn(),
 }));
 
 const express = require("express");
@@ -27,6 +28,7 @@ describe("POST /api/webhooks/ghl/reparto", () => {
     webhookService.isValidWebhookSecret.mockReturnValue(false);
     const response = await request(app).post("/api/webhooks/ghl/reparto").set("X-GHL-Webhook-Secret", "incorrecto").send({});
     expect(response.status).toBe(401);
+    expect(webhookService.isValidWebhookSecret).toHaveBeenCalledWith("incorrecto");
   });
 
   test("acepta rapidamente un evento valido sin autenticacion RVE", async () => {
@@ -34,6 +36,7 @@ describe("POST /api/webhooks/ghl/reparto", () => {
     webhookService.enqueueWebhookEvent.mockResolvedValue({ accepted: true, duplicate: false, eventId: 12 });
     const response = await request(app).post("/api/webhooks/ghl/reparto").set("X-GHL-Webhook-Secret", "correcto").send({ opportunityId: "opp-1" });
     expect(response.status).toBe(202);
+    expect(webhookService.isValidWebhookSecret).toHaveBeenCalledWith("correcto");
     expect(response.body).toMatchObject({ ok: true, accepted: true, duplicate: false, eventId: 12 });
   });
 

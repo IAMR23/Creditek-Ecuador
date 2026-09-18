@@ -239,4 +239,59 @@ describe("ghlService para reparto", () => {
     expect(result).toHaveLength(101);
     expect(client.request).toHaveBeenCalledTimes(2);
   });
+
+  test("deduplica oportunidades entre paginas sin subestimar la carga completa", async () => {
+    const first = Array.from({ length: 100 }, (_, i) => ({ id: `o${i}` }));
+    const client = { request: jest.fn()
+      .mockResolvedValueOnce({ data: { opportunities: first } })
+      .mockResolvedValueOnce({ data: { opportunities: [{ id: "o99" }, { id: "o100" }] } }) };
+
+    const onPage = jest.fn();
+    const result = await fetchOpportunitiesByStatus(
+      client,
+      { locationId: "location", pipelineId: "pipeline", pipelineStageId: "whatsapp" },
+      "open",
+      {},
+      { onPage },
+    );
+
+    expect(result).toHaveLength(101);
+    expect(new Set(result.map((item) => item.id)).size).toBe(101);
+    expect(client.request).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      params: expect.objectContaining({ pipelineStageId: "whatsapp" }),
+    }));
+    expect(onPage).toHaveBeenNthCalledWith(1, expect.objectContaining({ page: 1, examined: 100 }));
+    expect(onPage).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 2, examined: 2 }));
+  });
+
+  test("recuerda el fallback snake_case y no repite un rechazo por cada pagina", async () => {
+    const first = Array.from({ length: 100 }, (_, i) => ({ id: `o${i}` }));
+    const invalidCamelCase = {
+      response: {
+        status: 400,
+        data: { message: "property locationId should not exist" },
+        headers: {},
+      },
+    };
+    const client = { request: jest.fn()
+      .mockRejectedValueOnce(invalidCamelCase)
+      .mockResolvedValueOnce({ data: { opportunities: first } })
+      .mockResolvedValueOnce({ data: { opportunities: [{ id: "o100" }] } }) };
+
+    const result = await fetchOpportunitiesByStatus(
+      client,
+      { locationId: "location", pipelineId: "pipeline", pipelineStageId: "facebook" },
+      "open",
+    );
+
+    expect(result).toHaveLength(101);
+    expect(client.request).toHaveBeenCalledTimes(3);
+    expect(client.request.mock.calls[1][0].params).toMatchObject({
+      location_id: "location",
+      pipeline_id: "pipeline",
+      pipeline_stage_id: "facebook",
+    });
+    expect(client.request.mock.calls[2][0].params).toHaveProperty("location_id", "location");
+    expect(client.request.mock.calls[2][0].params).not.toHaveProperty("locationId");
+  });
 });
