@@ -3,6 +3,7 @@
 const { enviarAGHL } = require("../../services/ghlService");
 const opportunityWebhookService = require("../../services/ghlOpportunityWebhookService");
 const { findValueDeep, limpiarTelefono, decodeBase64, detectarCampania } = require("../../utils/stevoUtils");
+const { detectarCedulaEcuatoriana } = require("../../utils/cedulaEcuatoriana");
 
 async function recibirWebhookStevo(req, res) {
   try {
@@ -75,6 +76,10 @@ async function recibirWebhookStevo(req, res) {
         ? JSON.stringify(rawMessage)
         : rawMessage;
 
+    const cedula = !isFromMe
+      ? detectarCedulaEcuatoriana(message)
+      : null;
+
     const decoded = decodeBase64(ctwaPayload);
 
     const campaniaInfo = detectarCampania({
@@ -137,7 +142,15 @@ async function recibirWebhookStevo(req, res) {
         sourceUrl,
         ctwaClid,
         isFromMe,
+        cedula,
       });
+
+      if (cedula) {
+        console.info("Cedula de cliente guardada en GHL", {
+          phone: phone ? `***${phone.slice(-4)}` : null,
+          cedula: `******${cedula.slice(-4)}`,
+        });
+      }
 
     } catch (ghlError) {
       console.error("Error GHL", {
@@ -161,6 +174,7 @@ async function recibirWebhookStevo(req, res) {
       instanciaPauta,
       vieneDeAnuncio,
       isFromMe,
+      cedulaDetectada: Boolean(cedula),
       ghl: ghlResponse,
     });
   } catch (error) {
