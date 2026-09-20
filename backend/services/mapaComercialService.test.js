@@ -112,6 +112,19 @@ describe("mapaComercialService", () => {
     expect(extraerCoordenadasGooglePermitidas("Puente 7")).toBeNull();
     expect(
       extraerCoordenadasGooglePermitidas("https://www.google.com/maps/search/?api=1&query=-0.305,-78.45"),
+    ).toEqual({ latitud: -0.305, longitud: -78.45 });
+  });
+
+  test("reconoce un enlace permitido dentro de texto y limpia puntuacion final", () => {
+    expect(
+      extraerCoordenadasGooglePermitidas(
+        "Ubicacion: https://www.google.com/maps?q=-0.30,-78.45).\nGracias",
+      ),
+    ).toEqual({ latitud: -0.3, longitud: -78.45 });
+    expect(
+      extraerCoordenadasGooglePermitidas(
+        "No abrir https://example.com/?next=https://www.google.com/maps?q=-0.30,-78.45",
+      ),
     ).toBeNull();
   });
 
@@ -128,6 +141,14 @@ describe("mapaComercialService", () => {
     expect(clasificarUbicacionPermitida("Puente 7")).toBe("formato_no_permitido");
     expect(clasificarUbicacionPermitida("-0.7588503,-78.6146328")).toBe("formato_no_permitido");
     expect(clasificarUbicacionPermitida("https://www.google.com/maps/place/Sector")).toBe("google_sin_coordenadas");
+    expect(
+      clasificarUbicacionPermitida(
+        "Mi ubicacion es https://maps.app.goo.gl/abc123,",
+      ),
+    ).toBe("enlace_corto_google");
+    expect(
+      clasificarUbicacionPermitida("https://goo.gl/maps/gKbDQtT2difrU4RB8"),
+    ).toBe("enlace_corto_google");
   });
 
   test("calcula pendientes sin crear registros ni normalizar ventas", () => {

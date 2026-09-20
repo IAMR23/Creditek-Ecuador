@@ -209,6 +209,32 @@ describe("entregaOperacionService", () => {
     );
   });
 
+  test("permite marcar como No Entregado cuando nunca se coordino desde Pendiente", async () => {
+    const entrega = instancia({ id: 10, estado: "Pendiente", version: 2 });
+    Entrega.findByPk.mockResolvedValue(entrega);
+    UsuarioAgenciaEntrega.findOne.mockResolvedValue(null);
+
+    await actualizarEstado({
+      entregaId: 10,
+      nuevoEstado: "No Entregado",
+      expectedVersion: 2,
+      actorUsuarioId: 7,
+      motivo: "No se pudo coordinar la entrega",
+    });
+
+    expect(entrega).toMatchObject({ estado: "No Entregado", version: 3 });
+    expect(EntregaEvento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: "ESTADO_CAMBIADO",
+        estadoAnterior: "Pendiente",
+        estadoNuevo: "No Entregado",
+        motivo: "No se pudo coordinar la entrega",
+      }),
+      { transaction: mockTransaction },
+    );
+    expect(mockTransaction.commit).toHaveBeenCalledTimes(1);
+  });
+
   test("autoriza al mismo usuario aunque la asignacion pertenezca a una agencia anterior", async () => {
     const entrega = instancia({ id: 10, estado: "Transito", version: 2 });
     const asignacion = instancia({ id: 31, usuario_agencia_id: 12, activo: true });

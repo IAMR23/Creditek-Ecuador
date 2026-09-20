@@ -14,6 +14,66 @@ const ESTADOS_UBICACION_PENDIENTE = new Set([
   "ambigua",
 ]);
 
+const obtenerDiagnosticoUbicacion = (ubicacion, sinRegistroNormalizado = false) => {
+  if (sinRegistroNormalizado) {
+    return {
+      diagnosticoTipo: "nuevo",
+      mensajeDiagnostico: "Enlace nuevo pendiente de normalización.",
+    };
+  }
+
+  const estado = normalizarTexto(ubicacion.estadoGeocodificacion);
+  const tipo = normalizarTexto(ubicacion.tipoUbicacion);
+  const detalle = normalizarTexto(ubicacion.errorDetalle);
+
+  if (detalle.includes("tiempo de espera") || detalle.includes("timeout")) {
+    return {
+      diagnosticoTipo: "timeout",
+      mensajeDiagnostico: "Google Maps tardó demasiado en responder. Puedes reintentar.",
+    };
+  }
+
+  if (
+    detalle.includes("captcha") ||
+    detalle.includes("429") ||
+    detalle.includes("limito temporalmente") ||
+    detalle.includes("limitó temporalmente")
+  ) {
+    return {
+      diagnosticoTipo: "captcha",
+      mensajeDiagnostico: "Google Maps limitó temporalmente la consulta. Intenta más tarde.",
+    };
+  }
+
+  if (tipo === "formato_no_permitido") {
+    return {
+      diagnosticoTipo: "formato_invalido",
+      mensajeDiagnostico: "El texto no contiene un enlace permitido de Google Maps.",
+    };
+  }
+
+  if (tipo === "google_sin_coordenadas") {
+    return {
+      diagnosticoTipo: "url_sin_coordenadas",
+      mensajeDiagnostico: "El enlace de Google Maps no contiene coordenadas válidas.",
+    };
+  }
+
+  if (["error", "omitido", "ambiguo", "ambigua"].includes(estado)) {
+    return {
+      diagnosticoTipo: "reintento",
+      mensajeDiagnostico: "La ubicación no pudo normalizarse y está disponible para reintento.",
+    };
+  }
+
+  return {
+    diagnosticoTipo: estado || "pendiente",
+    mensajeDiagnostico: estado === "procesando"
+      ? "La ubicación se está normalizando."
+      : "La ubicación está pendiente de normalización.",
+  };
+};
+
 const toNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -68,6 +128,39 @@ const getUrl = (value) => {
   }
 };
 
+const limpiarUrlEncontrada = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/[\s.,;:!?'”]+$/g, "")
+    .replace(/[)\]}]+$/g, "");
+
+const esUrlGoogleMapsPermitida = (url) => {
+  if (!url || !["http:", "https:"].includes(url.protocol)) return false;
+
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === "maps.app.goo.gl") return true;
+  if (hostname === "goo.gl" && (url.pathname || "").startsWith("/maps")) {
+    return true;
+  }
+
+  return (
+    ["www.google.com", "google.com"].includes(hostname) &&
+    (url.pathname || "").startsWith("/maps")
+  );
+};
+
+const extraerUrlGoogleMapsPermitida = (value) => {
+  const candidatos = String(value || "").match(/https?:\/\/[^\s<>"]+/gi) || [];
+
+  for (const candidato of candidatos) {
+    const texto = limpiarUrlEncontrada(candidato);
+    const url = getUrl(texto);
+    if (esUrlGoogleMapsPermitida(url)) return url.href;
+  }
+
+  return null;
+};
+
 const extraerCoordenadas3d4d = (texto) => {
   const match = decodeLocation(texto).match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i);
   return match ? parseCoordinatePair(match[1], match[2]) : null;
@@ -79,7 +172,7 @@ const extraerCoordenadasAt = (texto) => {
 };
 
 const extraerCoordenadasQueryQ = (url) => {
-  const q = url.searchParams.get("q");
+  const q = url.searchParams.get("q") || url.searchParams.get("query");
   if (!q) return null;
 
   const match = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
@@ -90,7 +183,7 @@ const esHostGoogleMapsPermitido = (hostname) =>
   ["www.google.com", "google.com"].includes(String(hostname || "").toLowerCase());
 
 const extraerCoordenadasGooglePermitidas = (value) => {
-  const url = getUrl(value);
+  const url = getUrl(extraerUrlGoogleMapsPermitida(value));
   if (!url) return null;
 
   const hostname = url.hostname.toLowerCase();
@@ -98,22 +191,33 @@ const extraerCoordenadasGooglePermitidas = (value) => {
 
   if (!esHostGoogleMapsPermitido(hostname)) return null;
 
-  if (pathname.startsWith("/maps/place/")) {
+  if (
+    pathname === "/maps" &&
+    url.searchParams.has("q")
+  ) {
+    return extraerCoordenadasQueryQ(url);
+  }
+
+  if (
+    pathname.startsWith("/maps/search") &&
+    url.searchParams.get("api") === "1" &&
+    url.searchParams.has("query")
+  ) {
+    return extraerCoordenadasQueryQ(url);
+  }
+
+  if (pathname.startsWith("/maps")) {
     return (
       extraerCoordenadas3d4d(url.href) ||
       extraerCoordenadasAt(url.href)
     );
   }
 
-  if (pathname === "/maps" && url.searchParams.has("q")) {
-    return extraerCoordenadasQueryQ(url);
-  }
-
   return null;
 };
 
 const extraerCoordenadasGoogleRedireccion = (value) => {
-  const url = getUrl(value);
+  const url = getUrl(extraerUrlGoogleMapsPermitida(value));
   if (!url) return null;
 
   const hostname = url.hostname.toLowerCase();
@@ -134,26 +238,30 @@ const clasificarUbicacionPermitida = (value) => {
   const texto = String(value || "").trim();
   if (!texto) return "formato_no_permitido";
 
-  const url = getUrl(texto);
+  const url = getUrl(extraerUrlGoogleMapsPermitida(texto));
   if (!url) return "formato_no_permitido";
 
   const hostname = url.hostname.toLowerCase();
   const pathname = url.pathname || "";
 
-  if (hostname === "maps.app.goo.gl") return "enlace_corto_google";
+  if (
+    hostname === "maps.app.goo.gl" ||
+    (hostname === "goo.gl" && pathname.startsWith("/maps"))
+  ) {
+    return "enlace_corto_google";
+  }
 
   if (!esHostGoogleMapsPermitido(hostname)) return "formato_no_permitido";
 
-  if (pathname.startsWith("/maps/place/")) {
-    return extraerCoordenadasGooglePermitidas(texto)
-      ? "google_maps_place"
-      : "google_sin_coordenadas";
-  }
+  if (pathname.startsWith("/maps")) {
+    if (!extraerCoordenadasGooglePermitidas(texto)) {
+      return "google_sin_coordenadas";
+    }
 
-  if (pathname === "/maps" && url.searchParams.has("q")) {
-    return extraerCoordenadasGooglePermitidas(texto)
-      ? "google_maps_q"
-      : "google_sin_coordenadas";
+    if (pathname.startsWith("/maps/place/")) return "google_maps_place";
+    if (pathname === "/maps" && url.searchParams.has("q")) return "google_maps_q";
+    if (pathname.startsWith("/maps/search")) return "google_maps_busqueda";
+    return "google_maps_url";
   }
 
   return "formato_no_permitido";
@@ -179,6 +287,7 @@ const calcularUbicacionesPendientesSinProcesar = ({
     .map((ubicacion) => ({
       ...ubicacion,
       sinRegistroNormalizado: false,
+      ...obtenerDiagnosticoUbicacion(ubicacion),
     }));
   const ventasSinRegistro = ventas
     .filter((venta) => {
@@ -193,13 +302,14 @@ const calcularUbicacionesPendientesSinProcesar = ({
       entidadTipo: "entrega",
       entidadId: venta.ventaId,
       ubicacionOriginal: String(venta.ubicacionOriginal || "").trim(),
-      tipoUbicacion: null,
+      tipoUbicacion: clasificarUbicacionPermitida(venta.ubicacionOriginal),
       estadoGeocodificacion: "pendiente",
       precision: null,
       procesadoEn: null,
       errorDetalle: null,
       fecha: venta.fecha || null,
       sinRegistroNormalizado: true,
+      ...obtenerDiagnosticoUbicacion({}, true),
     }));
   const pendientes = [...normalizadasPendientes, ...ventasSinRegistro].sort(
     (a, b) => {
@@ -540,6 +650,7 @@ module.exports = {
   extraerCoordenadasDeTexto,
   extraerCoordenadasGooglePermitidas,
   extraerCoordenadasGoogleRedireccion,
+  extraerUrlGoogleMapsPermitida,
   getRankingDispositivos,
   getRankingZonas,
   isCoordinateInsideEcuador,

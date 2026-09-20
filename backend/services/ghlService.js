@@ -442,6 +442,17 @@ const resolveDateFilters = ({ fechaInicio, fechaFin } = {}) => {
   };
 };
 
+const formatGhlOpportunityDate = (value) => {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[2]}-${match[3]}-${match[1]}` : value;
+};
+
+const addOpportunityDateParams = (params, { fechaInicio, fechaFin } = {}) => ({
+  ...params,
+  ...(fechaInicio ? { date: formatGhlOpportunityDate(fechaInicio) } : {}),
+  ...(fechaFin ? { endDate: formatGhlOpportunityDate(fechaFin) } : {}),
+});
+
 const parseDateBoundary = (value, endOfDay = false) => {
   if (!value) return null;
   const normalized = String(value).trim();
@@ -491,6 +502,11 @@ const getSelectedPipeline = (pipelines = [], pipelineId) => {
     null;
 
   return selected;
+};
+
+const getEffectivePipelineId = (pipelines = [], pipelineId = "") => {
+  const selectedPipeline = getSelectedPipeline(pipelines, pipelineId);
+  return toId(pipelineId) || toId(selectedPipeline?.id || selectedPipeline?._id);
 };
 
 const getStageColumns = (pipelines = [], pipelineId) => {
@@ -1123,18 +1139,20 @@ const fetchAllOpenOpportunities = async (client, config, dateFilters = {}) => {
   let cursor = null;
 
   for (let page = 0; page < MAX_OPPORTUNITY_PAGES; page += 1) {
-    const camelCaseParams = {
+    const camelCaseParams = addOpportunityDateParams({
       locationId: config.locationId,
       pipelineId: config.pipelineId,
       status: "open",
       limit,
-    };
-    const snakeCaseParams = {
+      order: "added_desc",
+    }, dateFilters);
+    const snakeCaseParams = addOpportunityDateParams({
       location_id: config.locationId,
       pipeline_id: config.pipelineId,
       status: "open",
       limit,
-    };
+      order: "added_desc",
+    }, dateFilters);
 
     if (cursor?.startAfterId) {
       camelCaseParams.startAfterId = cursor.startAfterId;
@@ -1218,20 +1236,20 @@ const fetchOpportunitiesByStatus = async (
   let parameterStyle = "camel";
 
   for (let page = 0; page < MAX_OPPORTUNITY_PAGES; page += 1) {
-    const camelCaseParams = {
+    const camelCaseParams = addOpportunityDateParams({
       locationId: config.locationId,
       pipelineId: config.pipelineId,
       ...(config.pipelineStageId ? { pipelineStageId: config.pipelineStageId } : {}),
       limit,
-      order: "added_asc",
-    };
-    const snakeCaseParams = {
+      order: "added_desc",
+    }, dateFilters);
+    const snakeCaseParams = addOpportunityDateParams({
       location_id: config.locationId,
       pipeline_id: config.pipelineId,
       ...(config.pipelineStageId ? { pipeline_stage_id: config.pipelineStageId } : {}),
       limit,
-      order: "added_asc",
-    };
+      order: "added_desc",
+    }, dateFilters);
     if (status) {
       camelCaseParams.status = status;
       snakeCaseParams.status = status;
@@ -1984,9 +2002,14 @@ const getOrLoadPautasData = async ({ cacheKey, loader }) => {
 };
 
 const loadPautasBaseData = async ({ client, config, dateFilters }) => {
-  const [opportunities, pipelines, customFieldDefinitions] = await Promise.all([
-    fetchAllOpportunityStatuses(client, config, dateFilters),
-    fetchPipelines(client, config),
+  const pipelines = await fetchPipelines(client, config);
+  const pipelineId = getEffectivePipelineId(pipelines, config.pipelineId);
+  const [opportunities, customFieldDefinitions] = await Promise.all([
+    fetchAllOpportunityStatuses(
+      client,
+      { ...config, pipelineId },
+      dateFilters,
+    ),
     fetchContactCustomFieldDefinitions(client, config),
   ]);
   const sourceIdsByContact = await resolveSourceIdsForOpportunities({
@@ -1999,6 +2022,7 @@ const loadPautasBaseData = async ({ client, config, dateFilters }) => {
   return {
     opportunities,
     pipelines,
+    pipelineId,
     customFieldDefinitions,
     sourceIdsByContact,
   };
@@ -2011,13 +2035,14 @@ const clearPautasCaches = () => {
 };
 
 async function obtenerMatrizOportunidadesDashboard({ fechaInicio, fechaFin } = {}) {
-  const config = getGhlConfig();
+  const config = getGhlConfig({ requirePipelineId: false });
   const client = createGhlClient(config);
   const dateFilters = resolveDateFilters({ fechaInicio, fechaFin });
+  const pipelines = await fetchPipelines(client, config);
+  const pipelineId = getEffectivePipelineId(pipelines, config.pipelineId);
 
-  const [opportunities, pipelines, users] = await Promise.all([
-    fetchAllOpenOpportunities(client, config, dateFilters),
-    fetchPipelines(client, config),
+  const [opportunities, users] = await Promise.all([
+    fetchAllOpenOpportunities(client, { ...config, pipelineId }, dateFilters),
     fetchUsers(client, config),
   ]);
 
@@ -2025,7 +2050,7 @@ async function obtenerMatrizOportunidadesDashboard({ fechaInicio, fechaFin } = {
     opportunities,
     pipelines,
     users,
-    pipelineId: config.pipelineId,
+    pipelineId,
   });
 }
 
@@ -2036,7 +2061,7 @@ async function obtenerRendimientoPautasPorSourceId({
   status,
   sourceId,
 } = {}) {
-  const config = getGhlConfig();
+  const config = getGhlConfig({ requirePipelineId: false });
   const client = createGhlClient(config);
   const dateFilters = resolvePautasDateFilters({ fechaInicio, fechaFin });
   const cacheKey = [
@@ -2058,7 +2083,7 @@ async function obtenerRendimientoPautasPorSourceId({
   const report = buildPautasPerformance({
     opportunities: data.opportunities,
     pipelines: data.pipelines,
-    pipelineId: config.pipelineId,
+    pipelineId: data.pipelineId,
     customFieldDefinitions: data.customFieldDefinitions,
     sourceIdsByContact: data.sourceIdsByContact,
     etapa,
@@ -2216,6 +2241,7 @@ module.exports = {
   obtenerRendimientoPautasPorSourceId,
   buildOpportunitiesMatrix,
   buildPautasPerformance,
+  getEffectivePipelineId,
   buildCustomFieldDefinitionMap,
   dedupeOpportunitiesById,
   extractSourceIdFromContact,
@@ -2228,6 +2254,7 @@ module.exports = {
   resolveSourceIdsForOpportunities,
   resolvePautasDateFilters,
   getOrLoadPautasData,
+  loadPautasBaseData,
   clearPautasCaches,
   extractOpportunities,
   extractPipelines,

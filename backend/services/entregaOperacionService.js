@@ -9,7 +9,7 @@ const Rol = require("../models/Rol");
 
 const ESTADOS_FINALES = Object.freeze(["Entregado", "No Entregado"]);
 const TRANSICIONES = Object.freeze({
-  Pendiente: ["Transito", "Revisar"],
+  Pendiente: ["Transito", "Revisar", "No Entregado"],
   Revisar: ["Pendiente", "Transito"],
   Transito: ["Entregado", "No Entregado", "Revisar"],
 });

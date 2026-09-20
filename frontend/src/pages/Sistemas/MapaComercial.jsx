@@ -43,6 +43,34 @@ const DEFAULT_FILTROS = {
 const numberFormatter = new Intl.NumberFormat("es-EC");
 const NORMALIZACION_POLL_MS = 2500;
 
+const ESTADO_NORMALIZACION_LABELS = {
+  pendiente: "Pendiente",
+  procesando: "En proceso",
+  error: "Error",
+  omitido: "Omitido",
+  ambiguo: "Requiere revisión",
+  ambigua: "Requiere revisión",
+};
+
+const TIPO_UBICACION_LABELS = {
+  enlace_corto_google: "Enlace corto de Google Maps",
+  google_maps_place: "Lugar de Google Maps",
+  google_maps_q: "Coordenadas de Google Maps",
+  google_maps_busqueda: "Búsqueda de Google Maps",
+  google_maps_url: "Enlace de Google Maps",
+  google_sin_coordenadas: "URL sin coordenadas",
+  formato_no_permitido: "Formato inválido",
+};
+
+const DIAGNOSTICO_LABELS = {
+  nuevo: "Enlace nuevo",
+  reintento: "Reintento",
+  timeout: "Tiempo de espera agotado",
+  captcha: "Bloqueo temporal / CAPTCHA",
+  formato_invalido: "Formato inválido",
+  url_sin_coordenadas: "URL sin coordenadas",
+};
+
 const normalizarTexto = (value) =>
   String(value || "")
     .trim()
@@ -133,6 +161,7 @@ export default function MapaComercial() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [normalizando, setNormalizando] = useState(false);
+  const [reintentandoId, setReintentandoId] = useState(null);
   const [seguimientoNormalizacion, setSeguimientoNormalizacion] = useState(false);
   const [estadoNormalizacion, setEstadoNormalizacion] = useState({
     pendientes: 0,
@@ -368,11 +397,13 @@ export default function MapaComercial() {
       }
 
       const encolados = Number(response.resumen?.encolados || 0);
+      const nuevos = Number(response.resumen?.nuevosEncolados || 0);
+      const reintentos = Number(response.resumen?.reintentosEncolados || 0);
       const yaEnCola = Number(response.resumen?.yaEnCola || 0);
 
       if (encolados || yaEnCola) {
         setMensajeNormalizacion(
-          `${numberFormatter.format(encolados)} ubicaciones encoladas. El mapa permanece disponible mientras se procesan.`,
+          `${numberFormatter.format(nuevos)} nuevas y ${numberFormatter.format(reintentos)} reintentos encolados. El mapa permanece disponible mientras se procesan.`,
         );
         setSeguimientoNormalizacion(true);
       } else {
@@ -384,6 +415,39 @@ export default function MapaComercial() {
       setError(error.response?.data?.message || "No se pudieron normalizar las ubicaciones");
     } finally {
       setNormalizando(false);
+    }
+  };
+
+  const reintentarUbicacion = async (item) => {
+    setReintentandoId(item.id);
+    setError("");
+
+    try {
+      const { data: response } = await api.post(
+        `/api/sistemas/mapa-comercial/normalizar?${params.toString()}`,
+        {
+          entidadIds: [item.entidadId],
+          force: true,
+          limit: 1,
+        },
+      );
+
+      if (!response.ok || !response.resumen?.encolados) {
+        throw new Error(response.message || "No se pudo reintentar la ubicación");
+      }
+
+      setMensajeNormalizacion("La ubicación fue encolada nuevamente.");
+      setSeguimientoNormalizacion(true);
+      await cargarMapa();
+    } catch (error) {
+      console.error("Error reintentando ubicacion:", error);
+      setError(
+        error.response?.data?.message ||
+        error.message ||
+        "No se pudo reintentar la ubicación",
+      );
+    } finally {
+      setReintentandoId(null);
     }
   };
 
@@ -629,22 +693,17 @@ export default function MapaComercial() {
         <div className="mt-3 max-h-72 overflow-auto rounded border border-slate-200">
           {pendientesUbicacion.length ? (
             pendientesUbicacion.slice(0, 50).map((item) => {
-              const enProceso = ["pendiente", "procesando"].includes(
-                normalizarTexto(item.estadoGeocodificacion),
-              );
+              const estado = normalizarTexto(item.estadoGeocodificacion);
+              const enProceso = ["pendiente", "procesando"].includes(estado);
               const puedeCorregir = Boolean(item.id) && !enProceso;
+              const puedeReintentar = Boolean(item.id) && ["error", "omitido"].includes(estado);
+              const tipo = normalizarTexto(item.tipoUbicacion);
+              const diagnostico = normalizarTexto(item.diagnosticoTipo);
 
               return (
-                <button
+                <div
                   key={item.id || `pendiente-${item.entidadId}`}
-                  type="button"
-                  disabled={!puedeCorregir}
-                  onClick={() => {
-                    if (!puedeCorregir) return;
-                    setUbicacionManual(item);
-                    setVistaMapa("puntos");
-                  }}
-                  className={`flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm enabled:hover:bg-amber-50 disabled:cursor-default disabled:bg-slate-50 ${
+                  className={`flex w-full flex-col gap-3 border-b border-slate-100 px-3 py-3 text-left text-sm sm:flex-row sm:items-center sm:justify-between ${
                     ubicacionManual?.id === item.id ? "bg-amber-50 text-amber-800" : ""
                   }`}
                 >
@@ -652,21 +711,51 @@ export default function MapaComercial() {
                     <strong className="block truncate">
                       {item.ubicacionOriginal || `Venta ${item.entidadId}`}
                     </strong>
-                    <span className="text-xs text-slate-500">
-                      {item.sinRegistroNormalizado
-                        ? "sin registro normalizado"
-                        : item.tipoUbicacion || "-"}{" "}
-                      · {item.estadoGeocodificacion || "-"}
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Estado: {ESTADO_NORMALIZACION_LABELS[estado] || item.estadoGeocodificacion || "Pendiente"}
+                      {" · "}
+                      Tipo: {TIPO_UBICACION_LABELS[tipo] || (item.sinRegistroNormalizado ? "Por identificar" : "No identificado")}
                     </span>
+                    <span className="mt-1 block text-xs font-semibold text-slate-600">
+                      {DIAGNOSTICO_LABELS[diagnostico] || "Pendiente de normalización"}
+                    </span>
+                    {(item.errorDetalle || item.mensajeDiagnostico) && (
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {item.mensajeDiagnostico || item.errorDetalle}
+                      </span>
+                    )}
                   </span>
-                  <span className="shrink-0 text-xs font-bold uppercase">
-                    {puedeCorregir
-                      ? "Corregir"
-                      : enProceso
-                        ? "En proceso"
-                        : "Sin normalizar"}
+                  <span className="flex shrink-0 flex-wrap gap-2">
+                    {puedeReintentar && (
+                      <button
+                        type="button"
+                        disabled={reintentandoId === item.id}
+                        onClick={() => reintentarUbicacion(item)}
+                        className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                      >
+                        <RefreshCw size={13} className={reintentandoId === item.id ? "animate-spin" : ""} />
+                        Reintentar
+                      </button>
+                    )}
+                    {puedeCorregir && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUbicacionManual(item);
+                          setVistaMapa("puntos");
+                        }}
+                        className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                      >
+                        Corregir en mapa
+                      </button>
+                    )}
+                    {enProceso && (
+                      <span className="px-2 py-1 text-xs font-bold uppercase text-slate-500">
+                        En proceso
+                      </span>
+                    )}
                   </span>
-                </button>
+                </div>
               );
             })
           ) : (

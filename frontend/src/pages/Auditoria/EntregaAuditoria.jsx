@@ -69,6 +69,7 @@ export default function EntregaAuditoria() {
     direccion: "",
   });
   const [entrega, setEntrega] = useState({
+    expectedVersion: null,
     usuarioAgenciaId: null,
     origenId: "",
     observacion: "",
@@ -160,6 +161,7 @@ export default function EntregaAuditoria() {
         direccion: data.cliente?.direccion || "",
       });
       setEntrega({
+        expectedVersion: entregaDB.version,
         usuarioAgenciaId: entregaDB.usuarioAgenciaId ?? null,
         origenId: Number(entregaDB.origenId) || "",
         observacion: entregaDB.observacion || "",

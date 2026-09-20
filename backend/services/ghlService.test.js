@@ -1,3 +1,4 @@
+const axios = require("axios");
 const {
   buildOpportunitiesMatrix,
   errorHasAnyMessage,
@@ -10,9 +11,75 @@ const {
   normalizeGhlError,
   fetchAllAssignableUsers,
   fetchOpportunitiesByStatus,
+  obtenerMatrizOportunidadesDashboard,
 } = require("./ghlService");
 
 describe("ghlService matrix builder", () => {
+  test("consulta el dashboard con el unico pipeline sin exigir GHL_PIPELINE_ID", async () => {
+    const previousEnvironment = {
+      token: process.env.GHL_TOKEN,
+      locationId: process.env.GHL_LOCATION_ID,
+      pipelineId: process.env.GHL_PIPELINE_ID,
+    };
+    process.env.GHL_TOKEN = "token-test";
+    process.env.GHL_LOCATION_ID = "location-1";
+    delete process.env.GHL_PIPELINE_ID;
+
+    const client = {
+      request: jest.fn(({ url }) => {
+        if (url === "/opportunities/pipelines") {
+          return Promise.resolve({
+            data: {
+              pipelines: [
+                {
+                  id: "pipeline-1",
+                  name: "Ventas",
+                  stages: [{ id: "stage-1", name: "Nuevo" }],
+                },
+              ],
+            },
+          });
+        }
+        if (url === "/opportunities/search") {
+          return Promise.resolve({ data: { opportunities: [] } });
+        }
+        if (url === "/locations/location-1") {
+          return Promise.resolve({ data: { location: { companyId: "company-1" } } });
+        }
+        if (url === "/users/search") {
+          return Promise.resolve({ data: { users: [] } });
+        }
+        return Promise.reject(new Error(`Solicitud inesperada: ${url}`));
+      }),
+    };
+    const createClientSpy = jest.spyOn(axios, "create").mockReturnValue(client);
+
+    try {
+      const matrix = await obtenerMatrizOportunidadesDashboard();
+      const opportunityRequest = client.request.mock.calls
+        .map(([request]) => request)
+        .find((request) => request.url === "/opportunities/search");
+
+      expect(opportunityRequest.params.pipelineId).toBe("pipeline-1");
+      expect(opportunityRequest.params.order).toBe("added_desc");
+      expect(matrix.meta.pipelineId).toBe("pipeline-1");
+    } finally {
+      createClientSpy.mockRestore();
+      if (previousEnvironment.token === undefined) delete process.env.GHL_TOKEN;
+      else process.env.GHL_TOKEN = previousEnvironment.token;
+      if (previousEnvironment.locationId === undefined) {
+        delete process.env.GHL_LOCATION_ID;
+      } else {
+        process.env.GHL_LOCATION_ID = previousEnvironment.locationId;
+      }
+      if (previousEnvironment.pipelineId === undefined) {
+        delete process.env.GHL_PIPELINE_ID;
+      } else {
+        process.env.GHL_PIPELINE_ID = previousEnvironment.pipelineId;
+      }
+    }
+  });
+
   test("agrupa oportunidades abiertas por propietario y etapa", () => {
     const matrix = buildOpportunitiesMatrix({
       pipelineId: "pipeline-1",

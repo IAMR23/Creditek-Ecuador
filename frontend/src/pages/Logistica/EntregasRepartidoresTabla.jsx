@@ -359,7 +359,7 @@ export default function EntregasRepartidoresTabla() {
 
   const cambiarEstado = async (entrega) => {
     const opciones = {
-      Pendiente: ["Transito", "Revisar"],
+      Pendiente: ["Transito", "Revisar", "No Entregado"],
       Revisar: ["Pendiente", "Transito"],
       Transito: ["Entregado", "No Entregado", "Revisar"],
     }[entrega.estado] || [];

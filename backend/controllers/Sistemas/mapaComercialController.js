@@ -18,11 +18,13 @@ const {
   clasificarUbicacionPermitida,
   getRankingDispositivos,
   getRankingZonas,
+  isCoordinateInsideEcuador,
   normalizarTexto,
 } = require("../../services/mapaComercialService");
 const {
   encolarVentasParaNormalizar,
   obtenerEstadoNormalizacion,
+  persistirCoordenadasLocales,
   procesarColaNormalizaciones,
 } = require("../../services/mapaComercialNormalizacionService");
 
@@ -522,6 +524,7 @@ exports.filtros = responder(async (req) => {
 
 exports.ubicacionesPendientes = responder(async (req) => {
   const ventas = agruparPorVenta(await consultarVentas(req, true));
+  await persistirCoordenadasLocales({ ventas });
   const entregaIds = ventas
     .map((venta) => Number(venta.ventaId))
     .filter(Boolean);
@@ -594,7 +597,17 @@ exports.normalizarUbicaciones = async (req, res) => {
   try {
     if (!validarFiltros(req, res)) return;
 
-    const ventas = agruparPorVenta(await consultarVentas(req, false));
+    const filtroEntidad = req.body?.entidadIds ?? req.body?.entidadId;
+    const entidadIds = parseIds(filtroEntidad);
+    if (filtroEntidad !== undefined && !entidadIds) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debes indicar una ubicacion valida para reintentar",
+      });
+    }
+    const ventas = agruparPorVenta(await consultarVentas(req, false)).filter(
+      (venta) => !entidadIds || entidadIds.includes(Number(venta.ventaId)),
+    );
     const resultado = await encolarVentasParaNormalizar({
       ventas,
       limit: req.body?.limit || req.query.limit,
@@ -624,6 +637,7 @@ exports.puntosVentas = async (req, res) => {
   try {
     if (!validarFiltros(req, res)) return;
     const ventas = await consultarVentas(req, true);
+    await persistirCoordenadasLocales({ ventas });
     const ventaIds = [...new Set(ventas.map((row) => Number(row.ventaId)).filter(Boolean))];
 
     if (!ventaIds.length) {
@@ -669,6 +683,13 @@ exports.corregirUbicacion = async (req, res) => {
       return res.status(400).json({
         ok: false,
         message: "latitud y longitud son obligatorias",
+      });
+    }
+
+    if (!isCoordinateInsideEcuador(lat, lng)) {
+      return res.status(400).json({
+        ok: false,
+        message: "La ubicacion seleccionada debe estar dentro de Ecuador",
       });
     }
 

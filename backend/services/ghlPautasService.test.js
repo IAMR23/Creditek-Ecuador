@@ -5,10 +5,12 @@ const {
   extractSourceIdFromOpportunity,
   fetchAllOpportunityStatuses,
   fetchContactsByIdsInBatches,
+  getEffectivePipelineId,
   getOrLoadPautasData,
   getOpportunityContactId,
   getOpportunityStatus,
   mapWithConcurrency,
+  loadPautasBaseData,
   resolvePautasDateFilters,
   resolveSourceIdsForOpportunities,
 } = require("./ghlService");
@@ -33,6 +35,37 @@ const pipeline = {
 };
 
 describe("ghlService rendimiento de pautas", () => {
+  test("usa el unico pipeline disponible cuando GHL_PIPELINE_ID no esta configurado", async () => {
+    const client = {
+      request: jest.fn(({ url }) => {
+        if (url === "/opportunities/pipelines") {
+          return Promise.resolve({ data: { pipelines: [pipeline] } });
+        }
+        if (url.endsWith("/customFields")) {
+          return Promise.resolve({ data: { customFields: [] } });
+        }
+        if (url === "/opportunities/search") {
+          return Promise.resolve({ data: { opportunities: [] } });
+        }
+        return Promise.reject(new Error(`Solicitud inesperada: ${url}`));
+      }),
+    };
+
+    const data = await loadPautasBaseData({
+      client,
+      config: { locationId: "location-1" },
+      dateFilters: {},
+    });
+
+    const opportunityRequest = client.request.mock.calls
+      .map(([request]) => request)
+      .find((request) => request.url === "/opportunities/search");
+
+    expect(getEffectivePipelineId([pipeline])).toBe("pipeline-1");
+    expect(opportunityRequest.params.pipelineId).toBe("pipeline-1");
+    expect(data.pipelineId).toBe("pipeline-1");
+  });
+
   test("agrupa por Source ID y calcula etapas, grupos, porcentajes y totales", () => {
     const longSourceId = "120251578589580222";
     const report = buildPautasPerformance({
@@ -544,6 +577,15 @@ describe("ghlService rendimiento de pautas", () => {
     );
 
     expect(client.request).toHaveBeenCalledTimes(1);
+    expect(client.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({
+          date: "07-01-2026",
+          endDate: "07-31-2026",
+          order: "added_desc",
+        }),
+      }),
+    );
     expect(opportunities.map((opportunity) => opportunity.id)).toEqual([
       "opp-open",
       "opp-won",
