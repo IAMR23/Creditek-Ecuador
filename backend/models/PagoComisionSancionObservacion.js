@@ -7,6 +7,7 @@ module.exports = sequelize.define("PagoComisionSancionObservacion", {
   mes: { type: DataTypes.INTEGER, allowNull: false },
   observacion: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
   observacionesVendedores: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  personalNuevoBonoVendedores: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
   actualizadoPorId: {
     type: DataTypes.INTEGER,
     allowNull: true,

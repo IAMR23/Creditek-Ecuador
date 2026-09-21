@@ -10,6 +10,7 @@ import {
   Link2,
   RefreshCw,
   Search,
+  Trash2,
   Truck,
   UserRound,
   X,
@@ -29,6 +30,7 @@ import {
 import { api } from "../../api/client";
 import { getHoyLocal } from "../../utils/dateUtils";
 import { nombreCortoUsuario } from "../../utils/nombres";
+import { FaFileExcel } from "react-icons/fa";
 
 const REGISTROS_POR_PAGINA = 25;
 
@@ -576,7 +578,7 @@ export default function VentasConEntrega() {
                 onClick={limpiarFiltros}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
               >
-                <X size={16} /> Limpiar
+                <Trash2 size={16} /> Limpiar
               </button>
               <button
                 type="button"
@@ -590,9 +592,9 @@ export default function VentasConEntrega() {
                 type="button"
                 onClick={exportarExcel}
                 disabled={exportando || !total}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-green-800 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50"
               >
-                <Download size={17} /> {exportando ? "Exportando…" : "Exportar Excel"}
+                <FaFileExcel size={17} /> {exportando ? "Exportando…" : "Exportar"}
               </button>
             </div>
           </div>

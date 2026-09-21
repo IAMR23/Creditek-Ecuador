@@ -9,11 +9,16 @@ router.get("/reporte-gestiones", requirePermission("Supervisores", "Gerencia", "
 router.patch("/reporte-gestiones/:usuarioId/disponibilidad", requirePermission("Supervisores", "Gerencia", "Administracion", "Sistemas"), controller.setAdvisorManagementAvailability);
 router.use(requirePermission("Gerencia", "Administracion", "Sistemas"));
 router.get("/asesores", controller.advisorAvailability);
+router.get("/asesores/configuracion-pausa", controller.advisorAutoPauseConfiguration);
+router.put("/asesores/configuracion-pausa", controller.saveAdvisorAutoPauseConfiguration);
 router.put("/asesores/:usuarioId/asociacion", controller.saveAdvisorAssociation);
 router.patch("/asesores/:usuarioId/disponibilidad", controller.setAdvisorAvailability);
 router.get("/catalogos/pipelines", controller.pipelines);
 router.get("/catalogos/pipelines/:pipelineId/stages", controller.stages);
 router.get("/catalogos/users", controller.users);
+router.get("/configuracion-tiempo-real", controller.realtimeConfiguration);
+router.put("/configuracion-tiempo-real", controller.saveRealtimeConfiguration);
+router.patch("/configuracion-tiempo-real/estado", controller.realtimeConfigurationState);
 router.get("/configuraciones", controller.list);
 router.get("/configuraciones/:id", controller.get);
 router.post("/vista-previa", controller.previewInput);

@@ -4,6 +4,7 @@ const Vinculo = require("../models/GhlAsesorVinculo");
 const Historial = require("../models/GhlAsesorDisponibilidadHistorial");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
 const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
+const RealtimeConfiguracion = require("../models/GhlRepartoTiempoRealConfiguracion");
 const ghl = require("./ghlService");
 const service = require("./ghlAdvisorAvailabilityService");
 
@@ -27,9 +28,11 @@ const makeLink = (overrides = {}) => {
 };
 
 beforeEach(() => {
+  service.resetAutoPauseCache();
   jest.spyOn(sequelize, "transaction").mockImplementation(async (callback) =>
     callback({ LOCK: { UPDATE: "UPDATE" } }),
   );
+  jest.spyOn(RealtimeConfiguracion, "findByPk").mockResolvedValue(null);
   jest.spyOn(Detalle, "findAll").mockResolvedValue([]);
   jest.spyOn(TiempoRealAsignacion, "findAll").mockResolvedValue([]);
 });
@@ -81,6 +84,80 @@ describe("disponibilidad diaria de asesores GHL", () => {
   test("un Play del dia anterior se considera pausado", () => {
     const row = makeLink({ estadoRecepcion: "ACTIVO", estadoFechaLocal: "2026-09-08" });
     expect(service.effectiveState(row, NOW)).toBe("PAUSADO");
+  });
+
+  test("la hora de pausa automatica usa 18:00 por defecto y valida la configuracion", () => {
+    expect(service.getAutoPauseTime({})).toBe("18:00");
+    expect(service.getAutoPauseTime({ GHL_ADVISOR_AUTO_PAUSE_TIME: "19:30" })).toBe("19:30");
+    expect(service.getAutoPauseTime({ GHL_ADVISOR_AUTO_PAUSE_TIME: "25:00" })).toBe("18:00");
+  });
+
+  test("consulta y conserva la hora de pausa guardada en PostgreSQL", async () => {
+    RealtimeConfiguracion.findByPk.mockResolvedValue({
+      horaPausaAutomatica: "19:15",
+      actualizadoPorId: 99,
+      updatedAt: new Date("2026-09-09T12:00:00.000Z"),
+    });
+
+    await expect(service.getAutoPauseConfiguration({ force: true })).resolves.toMatchObject({
+      horaPausaAutomatica: "19:15",
+      persistida: true,
+      actualizadoPorId: 99,
+    });
+    expect(service.currentAutoPauseTime()).toBe("19:15");
+  });
+
+  test("guarda la hora de pausa sin reemplazar la configuracion del reparto", async () => {
+    const row = {
+      horaPausaAutomatica: "18:00",
+      actualizadoPorId: 1,
+      updatedAt: NOW,
+      update: jest.fn(async (values) => Object.assign(row, values)),
+    };
+    RealtimeConfiguracion.findByPk.mockResolvedValue(row);
+
+    const result = await service.saveAutoPauseConfiguration(
+      { horaPausaAutomatica: "20:30" },
+      99,
+    );
+
+    expect(row.update).toHaveBeenCalledWith({
+      horaPausaAutomatica: "20:30",
+      actualizadoPorId: 99,
+    }, expect.anything());
+    expect(result).toMatchObject({ horaPausaAutomatica: "20:30", persistida: true });
+  });
+
+  test("rechaza una hora de pausa invalida", async () => {
+    await expect(service.saveAutoPauseConfiguration(
+      { horaPausaAutomatica: "25:90" },
+      99,
+    )).rejects.toMatchObject({ code: "INVALID_AUTO_PAUSE_TIME", statusCode: 400 });
+  });
+
+  test("al llegar la hora de cierre un asesor activo deja de ser elegible", () => {
+    const row = makeLink({ estadoRecepcion: "ACTIVO", estadoFechaLocal: "2026-09-09" });
+    const afterCutoff = new Date("2026-09-09T23:00:00.000Z");
+
+    expect(service.localTime(afterCutoff)).toBe("18:00");
+    expect(service.effectiveState(row, afterCutoff)).toBe("PAUSADO");
+    expect(service.serializeAvailability(row, 0, afterCutoff)).toMatchObject({
+      estado: "PAUSADO",
+      recibiendoLeads: false,
+      horaPausaAutomatica: "18:00",
+      bloqueadoPorHorario: true,
+    });
+  });
+
+  test("antes del cierre no realiza escrituras de pausa automatica", async () => {
+    const findAll = jest.spyOn(Vinculo, "findAll");
+
+    await expect(service.pauseAllActiveAdvisors({ now: NOW })).resolves.toMatchObject({
+      executed: false,
+      paused: 0,
+      autoPauseTime: "18:00",
+    });
+    expect(findAll).not.toHaveBeenCalled();
   });
 
   test("el conteo diario combina asignaciones programadas y de tiempo real", async () => {
@@ -170,6 +247,50 @@ describe("disponibilidad diaria de asesores GHL", () => {
     expect(fetchUsers).not.toHaveBeenCalled();
     expect(result.estado).toBe("PAUSADO");
     expect(row.estadoFechaLocal).toBeNull();
+  });
+
+  test("rechaza Play despues de la hora de cierre sin consultar GHL", async () => {
+    const fetchUsers = jest.spyOn(ghl, "fetchAllAssignableUsers");
+
+    await expect(service.changeAvailability({
+      usuarioId: 10,
+      estado: "ACTIVO",
+      actorId: 10,
+      motivoCambio: "asesor",
+      now: new Date("2026-09-09T23:01:00.000Z"),
+    })).rejects.toMatchObject({ code: "GHL_AVAILABILITY_CLOSED", statusCode: 409 });
+    expect(fetchUsers).not.toHaveBeenCalled();
+  });
+
+  test("pausa y audita a todos los asesores activos al cierre", async () => {
+    const first = makeLink({ estadoRecepcion: "ACTIVO", estadoFechaLocal: "2026-09-09" });
+    const second = makeLink({
+      id: 2,
+      usuarioId: 11,
+      ghlUserId: "ghl-11",
+      estadoRecepcion: "ACTIVO",
+      estadoFechaLocal: "2026-09-09",
+    });
+    jest.spyOn(Vinculo, "findAll").mockResolvedValue([first, second]);
+    const historyCreate = jest.spyOn(Historial, "create").mockResolvedValue({});
+    const consoleLog = jest.spyOn(console, "log").mockImplementation(() => {});
+    const now = new Date("2026-09-09T23:00:00.000Z");
+
+    const result = await service.pauseAllActiveAdvisors({ now });
+
+    expect(result).toMatchObject({ executed: true, paused: 2, autoPauseTime: "18:00" });
+    expect(first.estadoRecepcion).toBe("PAUSADO");
+    expect(second.estadoRecepcion).toBe("PAUSADO");
+    expect(historyCreate).toHaveBeenCalledTimes(2);
+    expect(historyCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estadoAnterior: "ACTIVO",
+        estadoNuevo: "PAUSADO",
+        metadata: expect.objectContaining({ origen: "automatico" }),
+      }),
+      expect.anything(),
+    );
+    consoleLog.mockRestore();
   });
 
   test("filtra configurados entre activos, pausados e invalidos", async () => {

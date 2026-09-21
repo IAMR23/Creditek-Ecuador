@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const Configuracion = require("../models/GhlRepartoConfiguracion");
 const service = require("./ghlOpportunityDistributionService");
+const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 
 let task;
 
@@ -21,6 +22,14 @@ function shouldRunConfiguration(row, local) {
 }
 
 async function tick(now = new Date()) {
+  try {
+    await advisorAvailability.pauseAllActiveAdvisors({ now });
+  } catch (error) {
+    console.error("Fallo pausa automatica de asesores GHL", {
+      code: error.code || "GHL_AUTO_PAUSE_ERROR",
+      message: service.sanitize(error.message),
+    });
+  }
   await service.recoverStaleRuns();
   await service.recoverPendingRealtimeQueueReviews();
   let queueResult;

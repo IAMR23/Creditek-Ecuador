@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { limpiarTelefono } = require("../utils/stevoUtils");
 
 const DEFAULT_GHL_BASE_URL = "https://services.leadconnectorhq.com";
 const DEFAULT_GHL_API_VERSION = "2023-02-21";
@@ -175,7 +176,12 @@ const requestGhl = async (client, options) => {
     : Number.isInteger(requestedRetries) && requestedRetries >= 0
       ? Math.min(requestedRetries, 10) : 3;
   const baseDelay = getPositiveEnvNumber("GHL_RETRY_BASE_MS", 500);
-  const { beforeRetry, maxRetries: _maxRetries, ...requestOptions } = options;
+  const {
+    beforeRetry,
+    maxRetries: _maxRetries,
+    retryOn5xx = false,
+    ...requestOptions
+  } = options;
   const signal = requestOptions.signal || client.signal || null;
   for (let attempt = 0; ; attempt += 1) {
     if (signal?.aborted) throw signal.reason || Object.assign(new Error("Solicitud GHL cancelada"), { code: "GHL_REQUEST_ABORTED" });
@@ -189,7 +195,9 @@ const requestGhl = async (client, options) => {
         });
       }
       const error = normalizeGhlError(rawError);
-      if (error.upstreamStatus !== 429 || attempt >= maxRetries) throw error;
+      const retryableStatus = error.upstreamStatus === 429
+        || (retryOn5xx && error.upstreamStatus >= 500 && error.upstreamStatus <= 599);
+      if (!retryableStatus || attempt >= maxRetries) throw error;
       if (typeof beforeRetry === "function") await beforeRetry();
       const delay = error.retryAfterMs ?? baseDelay * (2 ** attempt);
       await waitForRetry(delay, signal);
@@ -388,6 +396,22 @@ const hasExplicitNextPage = (payload) => {
   );
 };
 
+const opportunityParameterStyle = (config = {}) => {
+  const version = String(config.apiVersion || "").trim().toLowerCase();
+  return version && version !== "v3" ? "snake" : "camel";
+};
+
+const opportunityFilterMismatch = (items, config = {}) => {
+  if (!items.length || (!config.pipelineId && !config.pipelineStageId)) return false;
+  const mismatches = items.filter((opportunity) => {
+    const pipelineId = getOpportunityPipelineId(opportunity);
+    const stageId = getOpportunityStageId(opportunity);
+    return (config.pipelineId && pipelineId && pipelineId !== config.pipelineId)
+      || (config.pipelineStageId && stageId && stageId !== config.pipelineStageId);
+  }).length;
+  return mismatches >= 3 && mismatches / items.length >= 0.25;
+};
+
 const getOpportunityPipelineId = (opportunity) =>
   toId(opportunity?.pipelineId || opportunity?.pipeline?.id || opportunity?.pipeline?._id);
 
@@ -399,17 +423,29 @@ const getOpportunityStageId = (opportunity) =>
       opportunity?.pipelineStage?.id
   );
 
-const getOpportunityDateValue = (opportunity) =>
+const getOpportunityCreatedDateValue = (opportunity) =>
   opportunity?.createdAt ||
   opportunity?.created_at ||
   opportunity?.dateAdded ||
   opportunity?.date_added ||
   opportunity?.dateCreated ||
-  opportunity?.date_created ||
+  opportunity?.date_created;
+
+const getOpportunityUpdatedDateValue = (opportunity) =>
   opportunity?.updatedAt ||
   opportunity?.updated_at ||
+  opportunity?.dateUpdated ||
+  opportunity?.date_updated ||
   opportunity?.lastStatusChangeAt ||
-  opportunity?.last_status_change_at;
+  opportunity?.last_status_change_at ||
+  opportunity?.lastStageChangeAt ||
+  opportunity?.last_stage_change_at ||
+  opportunity?.lastActionDate ||
+  opportunity?.last_action_date;
+
+const getOpportunityDateValue = (opportunity) =>
+  getOpportunityCreatedDateValue(opportunity)
+  || getOpportunityUpdatedDateValue(opportunity);
 
 const getTodayDateInTimeZone = (timeZone = "America/Guayaquil") => {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -467,32 +503,55 @@ const parseDateBoundary = (value, endOfDay = false) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getOpportunityParsedDate = (opportunity) =>
-  parseDateBoundary(getOpportunityDateValue(opportunity));
+const getOpportunityParsedDates = (opportunity) => [
+  getOpportunityCreatedDateValue(opportunity),
+  getOpportunityUpdatedDateValue(opportunity),
+]
+  .filter(Boolean)
+  .map((value) => parseDateBoundary(value))
+  .filter(Boolean);
 
-const filterOpportunitiesByDateRange = (opportunities = [], { fechaInicio, fechaFin } = {}) => {
+const isOpportunityWithinDateRange = (opportunity, { fechaInicio, fechaFin } = {}) => {
   const startDate = parseDateBoundary(fechaInicio, false);
   const endDate = parseDateBoundary(fechaFin, true);
+  if (!startDate && !endDate) return true;
 
-  if (!startDate && !endDate) return opportunities;
-
-  return opportunities.filter((opportunity) => {
-    const opportunityDate = getOpportunityParsedDate(opportunity);
-    if (!opportunityDate) return false;
+  return getOpportunityParsedDates(opportunity).some((opportunityDate) => {
     if (startDate && opportunityDate < startDate) return false;
     if (endDate && opportunityDate > endDate) return false;
     return true;
   });
 };
 
+const isOpportunityUpdatedWithinDateRange = (
+  opportunity,
+  { fechaInicio, fechaFin } = {},
+) => {
+  const startDate = parseDateBoundary(fechaInicio, false);
+  const endDate = parseDateBoundary(fechaFin, true);
+  if (!startDate && !endDate) return true;
+
+  const updatedDate = parseDateBoundary(getOpportunityUpdatedDateValue(opportunity));
+  if (!updatedDate) return false;
+  if (startDate && updatedDate < startDate) return false;
+  if (endDate && updatedDate > endDate) return false;
+  return true;
+};
+
+const filterOpportunitiesByDateRange = (opportunities = [], { fechaInicio, fechaFin } = {}) => {
+  if (!fechaInicio && !fechaFin) return opportunities;
+  return opportunities.filter((opportunity) =>
+    isOpportunityWithinDateRange(opportunity, { fechaInicio, fechaFin }));
+};
+
 const shouldStopDatePagination = (opportunities = [], { fechaInicio } = {}) => {
   const startDate = parseDateBoundary(fechaInicio, false);
   if (!startDate || !opportunities.length) return false;
 
-  const parsedDates = opportunities.map(getOpportunityParsedDate);
-  if (parsedDates.some((date) => !date)) return false;
+  const parsedDates = opportunities.map(getOpportunityParsedDates);
+  if (parsedDates.some((dates) => !dates.length)) return false;
 
-  return parsedDates.every((date) => date < startDate);
+  return parsedDates.every((dates) => dates.every((date) => date < startDate));
 };
 
 const getSelectedPipeline = (pipelines = [], pipelineId) => {
@@ -1231,9 +1290,9 @@ const fetchOpportunitiesByStatus = async (
   const seenCursors = new Set();
   const limit = DEFAULT_LIMIT;
   let cursor = null;
-  // Camel case es el contrato vigente de GHL. Si una instalacion antigua
-  // exige snake_case, se detecta una vez y se conserva para las demas paginas.
-  let parameterStyle = "camel";
+  // v3 usa camelCase y las versiones fechadas usan snake_case. Si GHL rechaza
+  // o ignora el formato esperado, se prueba el alternativo una sola vez.
+  let parameterStyle = opportunityParameterStyle(config);
 
   for (let page = 0; page < MAX_OPPORTUNITY_PAGES; page += 1) {
     const camelCaseParams = addOpportunityDateParams({
@@ -1265,13 +1324,24 @@ const fetchOpportunitiesByStatus = async (
       snakeCaseParams.startAfter = cursor.startAfter;
     }
 
-    let payload;
-    if (parameterStyle === "snake") {
-      payload = await requestGhl(client, {
+    const requestPage = async (style) => {
+      if (style === "snake") {
+        return requestGhl(client, {
+          method: "GET",
+          url: "/opportunities/search",
+          params: snakeCaseParams,
+        });
+      }
+      return requestGhl(client, {
         method: "GET",
         url: "/opportunities/search",
-        params: snakeCaseParams,
+        params: camelCaseParams,
       });
+    };
+
+    let payload;
+    if (parameterStyle === "snake") {
+      payload = await requestPage("snake");
     } else {
       payload = await requestGhlWithFallback(
         client,
@@ -1299,7 +1369,21 @@ const fetchOpportunitiesByStatus = async (
       );
     }
 
-    const pageItems = extractOpportunities(payload).filter(Boolean);
+    let pageItems = extractOpportunities(payload).filter(Boolean);
+    if (opportunityFilterMismatch(pageItems, config)) {
+      const alternateStyle = parameterStyle === "snake" ? "camel" : "snake";
+      const alternatePayload = await requestPage(alternateStyle);
+      const alternateItems = extractOpportunities(alternatePayload).filter(Boolean);
+      if (opportunityFilterMismatch(alternateItems, config)) {
+        const error = new Error("HighLevel no aplico el filtro del pipeline o etapa configurada");
+        error.code = "GHL_OPPORTUNITY_FILTER_IGNORED";
+        error.statusCode = 502;
+        throw error;
+      }
+      parameterStyle = alternateStyle;
+      payload = alternatePayload;
+      pageItems = alternateItems;
+    }
     if (typeof onPage === "function") {
       onPage({
         page: page + 1,
@@ -1335,6 +1419,96 @@ const fetchOpportunitiesByStatus = async (
 
     seenCursors.add(nextCursorKey);
     cursor = nextCursor;
+  }
+
+  return opportunities;
+};
+
+const fetchOpportunitiesByUpdatedDate = async (
+  client,
+  config,
+  status,
+  dateFilters = {},
+  { onPage = null } = {},
+) => {
+  const startDate = parseDateBoundary(dateFilters.fechaInicio, false);
+  const endDate = parseDateBoundary(dateFilters.fechaFin, true);
+  if (!startDate || !endDate) {
+    const error = new Error("El rango de actualizacion es obligatorio para consultar oportunidades");
+    error.code = "GHL_UPDATED_DATE_RANGE_REQUIRED";
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const opportunities = [];
+  const seenOpportunityIds = new Set();
+  const limit = DEFAULT_LIMIT;
+
+  for (let page = 0; page < MAX_OPPORTUNITY_PAGES; page += 1) {
+    const pageNumber = page + 1;
+    const payload = await requestGhl(client, {
+      method: "POST",
+      url: "/opportunities/search",
+      headers: { Version: "v3" },
+      data: {
+        locationId: config.locationId,
+        query: "",
+        limit,
+        page: pageNumber,
+        searchAfter: [],
+        additionalDetails: {
+          notes: false,
+          tasks: false,
+          calendarEvents: false,
+          unReadConversations: false,
+        },
+        filters: [
+          { field: "pipeline_id", operator: "eq", value: config.pipelineId },
+          ...(config.pipelineStageId ? [{
+            field: "pipeline_stage_id",
+            operator: "eq",
+            value: config.pipelineStageId,
+          }] : []),
+          ...(status ? [{ field: "status", operator: "eq", value: status }] : []),
+          {
+            field: "date_updated",
+            operator: "range",
+            value: {
+              gte: startDate.toISOString(),
+              lte: endDate.toISOString(),
+            },
+          },
+        ],
+      },
+    });
+
+    const pageItems = extractOpportunities(payload).filter(Boolean);
+    if (typeof onPage === "function") {
+      onPage({
+        page: pageNumber,
+        examined: pageItems.length,
+        pipelineStageId: config.pipelineStageId || null,
+        parameterStyle: "v3-advanced",
+      });
+    }
+
+    pageItems
+      .filter((opportunity) =>
+        (!config.pipelineId || getOpportunityPipelineId(opportunity) === config.pipelineId)
+        && (!config.pipelineStageId
+          || getOpportunityStageId(opportunity) === config.pipelineStageId)
+        && (!status || getOpportunityStatus(opportunity) === status)
+        && isOpportunityUpdatedWithinDateRange(opportunity, dateFilters))
+      .forEach((opportunity) => {
+        const opportunityId = toId(opportunity?.id || opportunity?._id);
+        if (opportunityId && seenOpportunityIds.has(opportunityId)) return;
+        if (opportunityId) seenOpportunityIds.add(opportunityId);
+        opportunities.push(opportunity);
+      });
+
+    const total = Number(payload?.total ?? payload?.data?.total);
+    if (!pageItems.length || pageItems.length < limit) break;
+    if (Number.isFinite(total) && (pageNumber * limit) >= total) break;
   }
 
   return opportunities;
@@ -1420,6 +1594,91 @@ const fetchPipelines = async (client, config) => {
   );
 
   return extractPipelines(payload).filter(Boolean);
+};
+
+const fetchWorkflows = async (client, config) => {
+  try {
+    const payload = await requestGhl(client, {
+      method: "GET",
+      url: "/workflows/",
+      params: { locationId: config.locationId },
+      headers: { Version: "v3" },
+      retryOn5xx: true,
+    });
+    return pickArray(payload, ["workflows", "data", "items"]).filter(Boolean);
+  } catch (error) {
+    if (error?.code === "GHL_FORBIDDEN") {
+      error.code = "GHL_WORKFLOWS_SCOPE_REQUIRED";
+      error.message = "El token de HighLevel requiere el permiso workflows.readonly";
+    }
+    throw error;
+  }
+};
+
+const isWorkflowActive = (workflow = {}) => {
+  const status = String(workflow.status || "").trim().toLowerCase();
+  return status === "active" || status === "published";
+};
+
+const validateWorkflow = async (client, config, workflowId, { requireActive = true } = {}) => {
+  const normalizedId = toId(workflowId);
+  const workflows = await fetchWorkflows(client, config);
+  const workflow = workflows.find((item) => toId(item?.id || item?._id) === normalizedId);
+  if (!workflow) {
+    const error = new Error("El workflow seleccionado no esta disponible en HighLevel");
+    error.code = "GHL_WORKFLOW_NOT_FOUND";
+    error.statusCode = 409;
+    throw error;
+  }
+  if (requireActive && !isWorkflowActive(workflow)) {
+    const error = new Error("El workflow seleccionado no esta activo en HighLevel");
+    error.code = "GHL_WORKFLOW_INACTIVE";
+    error.statusCode = 409;
+    throw error;
+  }
+  return workflow;
+};
+
+const enrollContactInWorkflow = async (
+  client,
+  config,
+  contactId,
+  workflowId,
+  { eventStartTime = new Date().toISOString(), beforeRetry } = {},
+) => {
+  const normalizedContactId = toId(contactId);
+  const normalizedWorkflowId = toId(workflowId);
+  if (!normalizedContactId || !normalizedWorkflowId) {
+    const error = new Error("ContactId y workflowId son obligatorios");
+    error.code = "GHL_WORKFLOW_IDENTIFIERS_REQUIRED";
+    error.statusCode = 400;
+    throw error;
+  }
+  try {
+    const payload = await requestGhl(client, {
+      method: "POST",
+      url: `/contacts/${encodeURIComponent(normalizedContactId)}/workflow/${encodeURIComponent(normalizedWorkflowId)}`,
+      data: { eventStartTime },
+      headers: { Version: "2023-02-21", "Content-Type": "application/json" },
+      maxRetries: 2,
+      beforeRetry,
+      // Un 5xx o timeout puede ser ambiguo: no se repite automaticamente el POST.
+      retryOn5xx: false,
+    });
+    if (payload?.succeeded === false || (payload?.succeeded === undefined && payload?.succeded === false)) {
+      const error = new Error("HighLevel no confirmo la inscripcion al workflow");
+      error.code = "GHL_WORKFLOW_ENROLLMENT_REJECTED";
+      error.statusCode = 502;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error?.code === "GHL_FORBIDDEN") {
+      error.code = "GHL_CONTACTS_WRITE_SCOPE_REQUIRED";
+      error.message = "El token de HighLevel requiere el permiso contacts.write";
+    }
+    throw error;
+  }
 };
 
 const extractCustomFieldDefinitions = (payload) =>
@@ -2109,11 +2368,16 @@ async function enviarAGHL({
   isFromMe,
   vieneDeAnuncio,
 }) {
-  const config = getGhlConfig({ requirePipelineId: false });
+  const normalizedPhone = limpiarTelefono(phone);
 
-  if (!phone) {
-    throw new Error("No se pudo detectar el telefono del cliente");
+  if (!normalizedPhone) {
+    const error = new Error("El evento no contiene un telefono ecuatoriano valido");
+    error.code = "INVALID_CONTACT_PHONE";
+    error.statusCode = 400;
+    throw error;
   }
+
+  const config = getGhlConfig({ requirePipelineId: false });
 
   const hayCampaniaDetectada =
     campania && campania !== "Sin campana detectada" && String(campania).trim() !== "";
@@ -2204,7 +2468,7 @@ async function enviarAGHL({
 
   const payloadGHL = {
     locationId: config.locationId,
-    phone,
+    phone: normalizedPhone,
     source: origenNumero,
     customFields,
   };
@@ -2228,13 +2492,22 @@ module.exports = {
   requestGhl,
   normalizeGhlError,
   fetchPipelines,
+  fetchWorkflows,
+  isWorkflowActive,
+  validateWorkflow,
+  enrollContactInWorkflow,
   fetchUsers,
   fetchAllAssignableUsers,
   fetchOpportunitiesByStatus,
+  fetchOpportunitiesByUpdatedDate,
   fetchOpportunitiesByContact,
   getOpportunityPipelineId,
   getOpportunityStageId,
   getOpportunityDateValue,
+  getOpportunityCreatedDateValue,
+  getOpportunityUpdatedDateValue,
+  isOpportunityWithinDateRange,
+  isOpportunityUpdatedWithinDateRange,
   toId,
   enviarAGHL,
   obtenerMatrizOportunidadesDashboard,

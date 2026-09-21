@@ -48,6 +48,28 @@ const {
 } = require("../../services/controlFinancieroAuditoriaService");
 const controller = require("./auditoriaVentasController");
 
+describe("formatearReporteEntregas", () => {
+  test("incluye la ubicacion del cliente registrada en el detalle", () => {
+    const [fila] = controller.formatearReporteEntregas([
+      {
+        id: 15,
+        fecha: "2026-09-21",
+        activo: true,
+        estado: "Pendiente",
+        cliente: { cedula: "0102030405", cliente: "Cliente prueba" },
+        detalleEntregas: [
+          {
+            id: 30,
+            ubicacion: "https://maps.google.com/?q=-0.18,-78.47",
+          },
+        ],
+      },
+    ]);
+
+    expect(fila.ubicacion).toBe("https://maps.google.com/?q=-0.18,-78.47");
+  });
+});
+
 describe("obtenerEntregasPorVendedorDashboard", () => {
   afterEach(() => {
     jest.restoreAllMocks();

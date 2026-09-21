@@ -6,7 +6,7 @@ Definir un secreto largo y aleatorio en el entorno del backend:
 
 ```env
 GHL_REPARTO_WEBHOOK_SECRET=<secreto-generado-para-esta-integracion>
-GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR=10
+GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR=2
 GHL_REPARTO_MAX_EXECUTION_MS=180000
 GHL_REPARTO_CONNECTION_ACQUIRE_MS=10000
 GHL_REPARTO_LOCK_QUERY_MS=5000
@@ -40,9 +40,9 @@ Payload recomendado:
 }
 ```
 
-`contactId` es el dato principal. `opportunityId` es opcional y acelera la consulta cuando GHL lo incluye. No se requieren `pipelineId` ni `stageId`: RVE usa `GHL_PIPELINE_ID` cuando esta configurado (o el primer pipeline devuelto por GHL como compatibilidad) y reconoce por nombre sus etapas WhatsApp y Facebook. Los valores pueden llegar en el nivel principal o anidados dentro del payload estandar de GHL. El telefono se acepta por compatibilidad, pero no se almacena ni se escribe en logs.
+`contactId` es el dato principal. `opportunityId` es opcional y acelera la consulta cuando GHL lo incluye. No se requieren `pipelineId` ni `stageId` en el webhook: RVE consulta la configuracion administrativa persistida y compara los IDs reales del pipeline y de las etapas seleccionadas. Los valores pueden llegar en el nivel principal o anidados dentro del payload estandar de GHL. El telefono se acepta por compatibilidad, pero no se almacena ni se escribe en logs.
 
-El reparto usa todos los asesores RVE vinculados con GHL que se encuentren en Play. La carga se calcula paginando por completo las oportunidades abiertas de las etapas WhatsApp y Facebook, incluidas las que ya tienen propietario. El limite se define con `GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR`; si falta o es invalido, se usa 10.
+El reparto usa todos los asesores RVE vinculados con GHL que se encuentren en Play. La carga se calcula paginando por completo las oportunidades abiertas de todas las etapas seleccionadas, incluidas las que ya tienen propietario. El limite guardado en `ghl_reparto_tiempo_real_configuraciones` tiene prioridad; `GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR` es el respaldo y, si ambos valores faltan o son invalidos, se usa 2.
 
 Las activaciones Play se registran en `ghl_reparto_revisiones_pendientes`. Las solicitudes concurrentes se agrupan y, si llegan durante una ejecucion, se realiza una revision posterior con el catalogo actualizado. Los logs `REPARTO_PROLONGADO` informan fase, duracion, paginas, oportunidades examinadas y asignaciones con frecuencia limitada; `RESUMEN_REPARTO` se emite una vez al finalizar.
 
@@ -61,7 +61,7 @@ Antes de cada PUT se consulta nuevamente la oportunidad. Si GHL aplico una asign
 - `401 Unauthorized`: falta el encabezado secreto, el valor es incorrecto o la variable de entorno no esta configurada.
 - `500 Internal Server Error`: no fue posible registrar el evento para procesamiento.
 
-El acuse no significa necesariamente que la oportunidad fue asignada. Si aun no existe, tiene propietario, esta fuera de WhatsApp/Facebook, no hay asesores en Play/capacidad o existe otra ejecucion activa, queda intacta. Al pulsar Play se revisa inmediatamente la cola acumulada y el scheduler la vuelve a revisar cada minuto como respaldo, sin depender de una configuracion horaria activa.
+El acuse no significa necesariamente que la oportunidad fue asignada. Si aun no existe, tiene propietario, esta fuera de las etapas seleccionadas, no hay asesores en Play/capacidad, la configuracion esta inactiva o existe otra ejecucion activa, queda intacta. Al pulsar Play se revisa inmediatamente la cola acumulada y el scheduler la vuelve a revisar cada minuto como respaldo, sin depender de una configuracion horaria activa.
 
 ## Seguridad y operacion
 
@@ -96,3 +96,18 @@ La migracion se ejecuta desde la imagen de `backend`, no mediante `psql` con
 suposiciones sobre `POSTGRES_*`, porque el backend tiene su propio juego de
 credenciales `DB_*`. `build backend` no reinicia servicios; el unico servicio
 recreado por `up -d --no-deps backend` es el backend.
+
+## Pausa automatica diaria de asesores
+
+La hora se administra desde la pantalla `Disponibilidad de asesores` y se
+guarda en `ghl_reparto_tiempo_real_configuraciones.horaPausaAutomatica`.
+`GHL_ADVISOR_AUTO_PAUSE_TIME` (por defecto `18:00`) se usa solamente como
+respaldo mientras no exista una configuracion persistida.
+
+El scheduler recarga la configuracion cada minuto usando la hora local de
+`America/Guayaquil`. Al llegar el cierre, todos los asesores que continuen en
+Play pasan a Pausa y el cambio queda auditado con origen automatico. Despues
+del cierre no se permite volver a activar Play hasta el siguiente dia local.
+La validacion tambien se ejecuta antes de cada asignacion, por lo que una
+ejecucion iniciada antes del cierre no continua repartiendo clientes despues
+de la hora configurada.

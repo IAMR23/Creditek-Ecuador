@@ -141,6 +141,25 @@ const validarEntregaEnAgencia = async ({ entrega, scopeAgenciaId, transaction })
   }
 };
 
+const validarPropietarioEntrega = async ({ entrega, usuarioId, transaction }) => {
+  const relacionVendedora = await UsuarioAgencia.findOne({
+    where: {
+      id: entrega.usuarioAgenciaId,
+      usuarioId,
+    },
+    attributes: ["id"],
+    transaction,
+  });
+
+  if (!relacionVendedora) {
+    throw crearError(
+      403,
+      "ENTREGA_NO_AUTORIZADA",
+      "La entrega no pertenece al vendedor autenticado.",
+    );
+  }
+};
+
 const obtenerAsignacionActiva = (entregaId, transaction) =>
   UsuarioAgenciaEntrega.findOne({
     where: { entrega_id: entregaId, activo: true },
@@ -522,6 +541,7 @@ module.exports = {
   crearError,
   desactivarUsuarioAgencia,
   normalizarVersion,
+  validarPropietarioEntrega,
   validarVersion,
   validarEntregaEnAgencia,
 };

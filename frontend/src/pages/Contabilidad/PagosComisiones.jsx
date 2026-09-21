@@ -811,6 +811,7 @@ export default function PagosComisiones() {
   const [guardandoEquipoSemanal, setGuardandoEquipoSemanal] = useState("");
   const [guardandoPromedioJefe, setGuardandoPromedioJefe] = useState("");
   const [guardandoPromedioSupervisor, setGuardandoPromedioSupervisor] = useState("");
+  const [guardandoPersonalNuevoBono, setGuardandoPersonalNuevoBono] = useState("");
   const [juniorSupervisorId, setJuniorSupervisorId] = useState("");
   const [supervisorComercialId, setSupervisorComercialId] = useState("");
   const [guardandoSupervisor, setGuardandoSupervisor] = useState(false);
@@ -1538,6 +1539,27 @@ export default function PagosComisiones() {
     }
   };
 
+  const cambiarPersonalNuevoBono = async ({ vendedor, activo }) => {
+    if (!report || periodoPagado) return;
+    const key = String(vendedor.usuarioId);
+    setGuardandoPersonalNuevoBono(key);
+    try {
+      await api.put(
+        `${ENDPOINT}/vendedores/${vendedor.usuarioId}/personal-nuevo-bono/${report.year}/${report.month}`,
+        { activo },
+      );
+      await fetchReport({ year: report.year, month: report.month });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo actualizar personal nuevo",
+        "error",
+      );
+    } finally {
+      setGuardandoPersonalNuevoBono("");
+    }
+  };
+
   const restaurarValorDescuento = ({ vendedor, week, values }) => {
     const key = `${vendedor.usuarioId}-${week.startDate}`;
     setDescuentosEditados((actuales) => {
@@ -2225,6 +2247,28 @@ export default function PagosComisiones() {
                             <span className="mt-1 inline-block rounded bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white">
                               Salida: {String(vendedor.fechaSalida).slice(0, 10)}
                             </span>
+                          ) : null}
+                          {!vendedor.vistaVentasPersonales ? (
+                            <label className="mt-1 flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-violet-700">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(vendedor.personalNuevoBono)}
+                                disabled={
+                                  periodoPagado ||
+                                  guardandoPersonalNuevoBono === String(vendedor.usuarioId)
+                                }
+                                onChange={(event) =>
+                                  cambiarPersonalNuevoBono({
+                                    vendedor,
+                                    activo: event.target.checked,
+                                  })
+                                }
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+                              />
+                              {guardandoPersonalNuevoBono === String(vendedor.usuarioId)
+                                ? "Guardando..."
+                                : "Nuevo para bono mensual"}
+                            </label>
                           ) : null}
                           {vendedor.esJefeComercial ? (
                             <span className="block text-[11px] font-normal text-emerald-700">
@@ -3204,6 +3248,7 @@ function LeadershipCommissionTables({
     <div className="space-y-5">
       {rows.map((row) => {
         const mensual = getMonthlyValues(row);
+        const usaBonoFijoJefePiso = Boolean(mensual.bonoMensualFijoJefePiso);
         const personalNuevo = isPersonalNuevoEnReporte(row, weeks);
         const fechaIngreso = getFechaIngresoVisible(row);
         const cargosPagoLabel = getCargosPagoLabel(row);
@@ -3256,12 +3301,16 @@ function LeadershipCommissionTables({
                         : vendedor.nombre,
                     )
                     .join(", ")}
-                  {mensual.promedioVentasPorJunior !== null
+                  {!usaBonoFijoJefePiso && mensual.promedioVentasPorJunior !== null
                     ? ` · Promedio por vendedor: ${formatCommission(mensual.promedioVentasPorJunior)}`
                     : ""}
                 </p>
               ) : null}
-              {row.esJefeComercial ? (
+              {usaBonoFijoJefePiso ? (
+                <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs text-emerald-900">
+                  La comisión usa las ventas semanales de los vendedores seleccionados. Si al menos una semana alcanza entre 50 y 199 ventas, se agregan $100 de bono mensual.
+                </div>
+              ) : row.esJefeComercial ? (
                 <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-center text-xs">
                   <p className="font-semibold text-emerald-800">
                     Vendedores en el divisor del promedio:{" "}
@@ -3287,7 +3336,7 @@ function LeadershipCommissionTables({
                 </div>
               ) : null}
             </div>
-            {row.esJefeComercial || row.esSupervisorComercial ? (
+            {(row.esJefeComercial || row.esSupervisorComercial) && !usaBonoFijoJefePiso ? (
               <MonthlyLeaderAverageConfiguration
                 leader={row}
                 leaderType={row.esJefeComercial ? "jefe" : "supervisor"}
@@ -3328,7 +3377,8 @@ function LeadershipCommissionTables({
                     {weeks.map((week, index) => (
                       <th key={week.startDate} className={`border border-slate-950 px-3 py-2 font-black ${blockColors[index % blockColors.length]}`}>
                         {week.label}
-                        {row.esJefeComercial || row.esSupervisorComercial ? (
+                        {row.esSupervisorComercial ||
+                        (row.esJefeComercial && !usaBonoFijoJefePiso) ? (
                           <label className="mt-2 block text-[11px] font-semibold normal-case">
                             Comisión según
                             <select

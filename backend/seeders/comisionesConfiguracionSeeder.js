@@ -1,10 +1,11 @@
 const ComisionConfiguracion = require("../models/ComisionConfiguracion");
 const RolPago = require("../models/RolPago");
+const { Op } = require("sequelize");
 
 const CARGO_POR_GRUPO = {
   "SUPERVISOR CALL CENTER": "SUPERVISOR CALL CENTER",
   "SUPERVISOR PISO": "SUPERVISOR PISO",
-  "JEFE COMERCIAL PISO": "JEFE COMERCIAL PISO",
+  "JEFE COMERCIAL PISO": "JEFE COMERCIAL DE PISO",
   "VENDEDORES DE PISO Y FURGONETA": "VENDEDOR PISO",
   "VENDEDORES DE CALL CENTER": "VENDEDOR CALL CENTER",
 };
@@ -67,13 +68,13 @@ const COMISIONES_INICIALES = [
   ["SUPERVISOR PISO", "3 vendedores", "COMISION_SEMANAL", "42", 2, null, null, null, "84", "14*3"],
   ["SUPERVISOR PISO", "3 vendedores", "COMISION_SEMANAL", "45", 3, null, null, null, "135", "15*3"],
 
-  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "24", 1, null, null, null, "24", null],
-  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "26", 1.5, null, null, null, "39", null],
-  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "28", 2, null, null, null, "56", null],
-  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "32", 3, null, null, null, "96", null],
-  ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "12", 60, null, null],
-  ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "13", 80, null, null],
-  ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", null, null, null, "14.50", 100, null, null],
+  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "50-59", 0.1, null, null, null, "5.00 a 5.90", null],
+  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "60-69", 0.35, null, null, null, "21.00 a 24.15", null],
+  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "70-89", 1, null, null, null, "70.00 a 89.00", null],
+  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "90-109", 1.25, null, null, null, "112.50 a 136.25", null],
+  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "110-149", 1.5, null, null, null, "165.00 a 223.50", null],
+  ["JEFE COMERCIAL PISO", null, "COMISION_SEMANAL", "150-199", 1.75, null, null, null, "262.50 a 348.25", "La tabla termina en 199 ventas"],
+  ["JEFE COMERCIAL PISO", null, "BONO_MENSUAL", "1", null, null, null, 100, "Bono fijo mensual", "Aplica si al menos una semana genero comision"],
 
   ["VENDEDORES DE PISO Y FURGONETA", null, "COMISION_SEMANAL", "12", null, 0.003, null, null, "8 a 10 usd", null],
   ["VENDEDORES DE PISO Y FURGONETA", null, "COMISION_SEMANAL", "13-15", null, 0.01, null, null, "35 a 65 usd", null],
@@ -143,6 +144,28 @@ const seedComisionesConfiguracion = async () => {
   const roles = await RolPago.findAll({ attributes: ["id", "cargo"] });
   const rolesPorCargo = new Map(roles.map((rol) => [rol.cargo.trim().toUpperCase(), rol.id]));
 
+  // Retira solamente la tabla anterior del jefe de piso. Se conserva el
+  // historial y se evita que los escalones antiguos sigan activos junto con
+  // la nueva configuracion.
+  await ComisionConfiguracion.update(
+    { activo: false },
+    {
+      where: {
+        grupo: "JEFE COMERCIAL PISO",
+        [Op.or]: [
+          {
+            periodo: "COMISION_SEMANAL",
+            unidadesVendidas: { [Op.in]: ["24", "26", "28", "32"] },
+          },
+          {
+            periodo: "BONO_MENSUAL",
+            promedioPorVendedor: { [Op.in]: ["12", "13", "14.50"] },
+          },
+        ],
+      },
+    },
+  );
+
   for (const registro of registros) {
     registro.rolPagoId = rolesPorCargo.get(CARGO_POR_GRUPO[registro.grupo]?.toUpperCase()) || null;
     const existente = await ComisionConfiguracion.findOne({
@@ -150,7 +173,6 @@ const seedComisionesConfiguracion = async () => {
         grupo: registro.grupo,
         periodo: registro.periodo,
         subgrupo: registro.subgrupo,
-        unidadesVendidas: registro.unidadesVendidas,
         orden: registro.orden,
       },
     });

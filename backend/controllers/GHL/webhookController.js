@@ -5,13 +5,18 @@ const {
   actualizarCedulaContactoDesdeMensaje,
 } = require("../../services/ghlCedulaService");
 const opportunityWebhookService = require("../../services/ghlOpportunityWebhookService");
-const { findValueDeep, limpiarTelefono, decodeBase64, detectarCampania } = require("../../utils/stevoUtils");
+const {
+  findValueDeep,
+  extraerTelefonoStevo,
+  decodeBase64,
+  detectarCampania,
+} = require("../../utils/stevoUtils");
 
 async function recibirWebhookStevo(req, res) {
   try {
     const payload = req.body;
 
-    const info = payload?.data?.Info;
+    const info = payload?.data?.Info || findValueDeep(payload, ["Info"]);
     const sourceWebMsg = payload?.data?.SourceWebMsg;
 
     const isFromMe = info?.IsFromMe === true;
@@ -47,20 +52,6 @@ async function recibirWebhookStevo(req, res) {
       "ctwa_clid",
     ]);
 
-    const rawPhone = isFromMe
-      ? info?.Chat ||
-        info?.RecipientAlt ||
-        findValueDeep(payload, ["Chat", "RecipientAlt"])
-      : findValueDeep(payload, [
-          "remoteJid",
-          "from",
-          "sender",
-          "Sender",
-          "phone",
-          "number",
-          "Chat",
-        ]);
-
     const rawMessage = findValueDeep(payload, [
       "conversation",
       "text",
@@ -71,7 +62,7 @@ async function recibirWebhookStevo(req, res) {
       "extendedTextMessage",
     ]);
 
-    const phone = limpiarTelefono(rawPhone);
+    const phone = extraerTelefonoStevo(payload, { isFromMe });
 
     const message =
       typeof rawMessage === "object"
@@ -122,32 +113,36 @@ async function recibirWebhookStevo(req, res) {
 
     let ghlResponse = null;
 
-    try {
-      ghlResponse = await enviarAGHL({
-        phone,
-        message,
-        origen: campaniaInfo.origen,
-        campania: campaniaInfo.campania,
+    if (phone) {
+      try {
+        ghlResponse = await enviarAGHL({
+          phone,
+          message,
+          origen: campaniaInfo.origen,
+          campania: campaniaInfo.campania,
 
         // Gestión actual del mensaje
-        instancia: instanciaActual,
+          instancia: instanciaActual,
 
         // Pauta real
-        instanciaPauta,
-        vieneDeAnuncio,
+          instanciaPauta,
+          vieneDeAnuncio,
 
-        sourceId,
-        sourceUrl,
-        ctwaClid,
-        isFromMe,
-      });
-
-    } catch (ghlError) {
-      console.error("Error GHL", {
-        code: ghlError.code || null,
-        status: ghlError.response?.status || null,
-        message: opportunityWebhookService.logWebhookMessage(ghlError.message),
-      });
+          sourceId,
+          sourceUrl,
+          ctwaClid,
+          isFromMe,
+        });
+      } catch (ghlError) {
+        console.error("Error GHL", {
+          code: ghlError.code || null,
+          status: ghlError.response?.status || null,
+          message: opportunityWebhookService.logWebhookMessage(ghlError.message),
+        });
+      }
+    } else {
+      ghlResponse = { skipped: true, reason: "INVALID_OR_MISSING_PHONE" };
+      console.warn("Webhook Stevo omitido: no contiene un telefono ecuatoriano valido.");
     }
 
     try {

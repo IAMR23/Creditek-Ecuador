@@ -1,13 +1,21 @@
 jest.mock("../models/RolDescuentoCreditek", () => ({ findAll: jest.fn(), create: jest.fn(), update: jest.fn() }));
+jest.mock("../models/EgresoCreditekEntrada", () => ({ findAll: jest.fn() }));
 jest.mock("../models/Usuario", () => ({ findAll: jest.fn(), findOne: jest.fn(), findByPk: jest.fn() }));
+jest.mock("./egresosCreditekTiposService", () => ({ listar: jest.fn() }));
 const Model = require("../models/RolDescuentoCreditek");
+const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
 const Usuario = require("../models/Usuario");
+const tiposService = require("./egresosCreditekTiposService");
 const service = require("./rolDescuentosCreditekService");
 const payload = () => ({ usuarioId: 7, motivo: " Lentes ", cuotas: [
   { periodo: "2027-01", valor: "10,50", estado: "PENDIENTE" },
   { periodo: "2026-12", valor: "20.25", estado: "APLICADO" },
 ] });
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  EgresoCreditekEntrada.findAll.mockResolvedValue([]);
+  tiposService.listar.mockResolvedValue([]);
+});
 
 test("normaliza importes y ordena las cuotas al cambiar de año", () => {
   expect(service.normalizarRegistro(payload())).toEqual({ usuarioId: 7, motivo: "Lentes", cuotas: [
@@ -69,4 +77,29 @@ test("archiva y restaura sin borrar cuotas ni aceptar campos adicionales", async
   await service.actualizar(3, { activo: true, version: 2 }, 9, true);
   expect(Model.update).toHaveBeenLastCalledWith({ activo: true, version: 3, actualizadoPorId: 9 }, { where: { id: 3, version: 2 } });
   await expect(service.actualizar(3, { activo: "false", version: 3 }, 9, true)).rejects.toThrow();
+});
+
+test("incluye los prestamos de Egresos como una linea de tiempo mensual de solo lectura", async () => {
+  Model.findAll.mockResolvedValue([]);
+  Usuario.findAll.mockResolvedValue([{ id: 7, nombre: "Ana" }]);
+  tiposService.listar.mockResolvedValue([{ codigo: "MECANICA", nombre: "Mecánica" }]);
+  EgresoCreditekEntrada.findAll.mockResolvedValue([{
+    id: 11, usuarioId: 7, usuario: { id: 7, nombre: "Ana" }, tipo: "MECANICA",
+    observacion: "Reparación", valor: "35.50", fecha: "2026-02-15", fechaFin: "2026-05-02", activo: true,
+  }]);
+
+  const resultado = await service.obtener({ inicio: "2026-03", fin: "2026-06" });
+
+  expect(resultado.registros).toEqual([expect.objectContaining({
+    id: "egreso-prestamo-11", egresoId: 11, motivo: "Mecánica · Reparación",
+    origen: "EGRESOS_CREDITEK", soloLectura: true,
+    cuotas: [
+      { periodo: "2026-03", valor: 35.5, estado: "RECURRENTE" },
+      { periodo: "2026-04", valor: 35.5, estado: "RECURRENTE" },
+      { periodo: "2026-05", valor: 35.5, estado: "RECURRENTE" },
+    ],
+  })]);
+  expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(expect.objectContaining({
+    where: expect.objectContaining({ activo: true, seccion: "PRESTAMOS" }),
+  }));
 });

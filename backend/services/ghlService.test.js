@@ -4,6 +4,8 @@ const {
   errorHasAnyMessage,
   extractCompanyIdFromLocation,
   filterOpportunitiesByDateRange,
+  isOpportunityWithinDateRange,
+  isOpportunityUpdatedWithinDateRange,
   getNextPaginationCursor,
   getNextStartAfterId,
   resolveDateFilters,
@@ -11,10 +13,23 @@ const {
   normalizeGhlError,
   fetchAllAssignableUsers,
   fetchOpportunitiesByStatus,
+  fetchOpportunitiesByUpdatedDate,
+  enviarAGHL,
   obtenerMatrizOportunidadesDashboard,
 } = require("./ghlService");
 
 describe("ghlService matrix builder", () => {
+  test("rechaza identificadores LID antes de intentar el upsert del contacto", async () => {
+    await expect(enviarAGHL({
+      phone: "+593137009859449042",
+      message: "Hola",
+      isFromMe: false,
+    })).rejects.toMatchObject({
+      code: "INVALID_CONTACT_PHONE",
+      statusCode: 400,
+    });
+  });
+
   test("consulta el dashboard con el unico pipeline sin exigir GHL_PIPELINE_ID", async () => {
     const previousEnvironment = {
       token: process.env.GHL_TOKEN,
@@ -224,13 +239,18 @@ describe("ghlService matrix builder", () => {
     ).toBe("company-1");
   });
 
-  test("filtra oportunidades por fecha de creacion", () => {
+  test("filtra oportunidades por fecha de creacion o actualizacion", () => {
     const filtered = filterOpportunitiesByDateRange(
       [
         { id: "opp-1", createdAt: "2026-06-01T12:00:00.000Z" },
         { id: "opp-2", dateAdded: "2026-06-15T18:00:00.000Z" },
         { id: "opp-3", created_at: "2026-07-01T12:00:00.000Z" },
         { id: "opp-4", createdAt: null },
+        {
+          id: "opp-5",
+          createdAt: "2025-01-01T12:00:00.000Z",
+          updatedAt: "2026-06-20T12:00:00.000Z",
+        },
       ],
       {
         fechaInicio: "2026-06-01",
@@ -238,7 +258,40 @@ describe("ghlService matrix builder", () => {
       },
     );
 
-    expect(filtered.map((opportunity) => opportunity.id)).toEqual(["opp-1", "opp-2"]);
+    expect(filtered.map((opportunity) => opportunity.id)).toEqual(["opp-1", "opp-2", "opp-5"]);
+  });
+
+  test("acepta una oportunidad si cualquiera de sus fechas esta en el rango", () => {
+    const range = { fechaInicio: "2026-09-19", fechaFin: "2026-09-21" };
+
+    expect(isOpportunityWithinDateRange({
+      createdAt: "2025-01-01T12:00:00.000Z",
+      updatedAt: "2026-09-20T12:00:00.000Z",
+    }, range)).toBe(true);
+    expect(isOpportunityWithinDateRange({
+      createdAt: "2026-09-19T05:00:00.000Z",
+      updatedAt: "2026-09-22T05:00:00.000Z",
+    }, range)).toBe(true);
+    expect(isOpportunityWithinDateRange({
+      createdAt: "2026-09-18T12:00:00.000Z",
+      updatedAt: "2026-09-18T13:00:00.000Z",
+    }, range)).toBe(false);
+  });
+
+  test("el reparto puede exigir exclusivamente updatedAt dentro del rango", () => {
+    const range = { fechaInicio: "2026-09-19", fechaFin: "2026-09-21" };
+
+    expect(isOpportunityUpdatedWithinDateRange({
+      createdAt: "2026-09-20T12:00:00.000Z",
+      updatedAt: "2026-09-18T12:00:00.000Z",
+    }, range)).toBe(false);
+    expect(isOpportunityUpdatedWithinDateRange({
+      createdAt: "2025-01-01T12:00:00.000Z",
+      updatedAt: "2026-09-20T12:00:00.000Z",
+    }, range)).toBe(true);
+    expect(isOpportunityUpdatedWithinDateRange({
+      createdAt: "2026-09-20T12:00:00.000Z",
+    }, range)).toBe(false);
   });
 
   test("detiene paginacion por fecha cuando la pagina ya es anterior al rango", () => {
@@ -258,6 +311,17 @@ describe("ghlService matrix builder", () => {
           { id: "opp-1", createdAt: "2026-06-01T12:00:00.000Z" },
           { id: "opp-2", createdAt: "2026-05-29T12:00:00.000Z" },
         ],
+        { fechaInicio: "2026-06-01" },
+      ),
+    ).toBe(false);
+
+    expect(
+      shouldStopDatePagination(
+        [{
+          id: "opp-actualizada",
+          createdAt: "2025-01-01T12:00:00.000Z",
+          updatedAt: "2026-06-01T12:00:00.000Z",
+        }],
         { fechaInicio: "2026-06-01" },
       ),
     ).toBe(false);
@@ -360,5 +424,122 @@ describe("ghlService para reparto", () => {
     });
     expect(client.request.mock.calls[2][0].params).toHaveProperty("location_id", "location");
     expect(client.request.mock.calls[2][0].params).not.toHaveProperty("locationId");
+  });
+
+  test("usa snake_case desde la primera pagina con la version 2023-02-21", async () => {
+    const client = { request: jest.fn().mockResolvedValue({ data: { opportunities: [] } }) };
+
+    await fetchOpportunitiesByStatus(client, {
+      locationId: "location",
+      pipelineId: "pipeline",
+      pipelineStageId: "stage-no-contesta",
+      apiVersion: "2023-02-21",
+    }, "open");
+
+    expect(client.request).toHaveBeenCalledTimes(1);
+    expect(client.request.mock.calls[0][0].params).toMatchObject({
+      location_id: "location",
+      pipeline_id: "pipeline",
+      pipeline_stage_id: "stage-no-contesta",
+    });
+    expect(client.request.mock.calls[0][0].params).not.toHaveProperty("pipelineStageId");
+  });
+
+  test("envia a HighLevel el rango de fechas solicitado", async () => {
+    const client = { request: jest.fn().mockResolvedValue({ data: { opportunities: [] } }) };
+
+    await fetchOpportunitiesByStatus(client, {
+      locationId: "location",
+      pipelineId: "pipeline",
+      apiVersion: "2023-02-21",
+    }, "open", {
+      fechaInicio: "2026-09-19",
+      fechaFin: "2026-09-21",
+    });
+
+    expect(client.request.mock.calls[0][0].params).toMatchObject({
+      date: "09-19-2026",
+      endDate: "09-21-2026",
+    });
+  });
+
+  test("consulta oportunidades por updatedAt con filtros avanzados y pagina el resultado", async () => {
+    const opportunity = (id) => ({
+      id,
+      pipelineId: "pipeline",
+      pipelineStageId: "stage-no-contesta",
+      status: "open",
+      createdAt: "2025-01-01T12:00:00.000Z",
+      updatedAt: "2026-09-20T12:00:00.000Z",
+    });
+    const firstPage = Array.from({ length: 100 }, (_, index) => opportunity(`opp-${index}`));
+    const client = { request: jest.fn()
+      .mockResolvedValueOnce({ data: { opportunities: firstPage, total: 101 } })
+      .mockResolvedValueOnce({ data: { opportunities: [opportunity("opp-100")], total: 101 } }) };
+    const onPage = jest.fn();
+
+    const result = await fetchOpportunitiesByUpdatedDate(client, {
+      locationId: "location",
+      pipelineId: "pipeline",
+      pipelineStageId: "stage-no-contesta",
+    }, "open", {
+      fechaInicio: "2026-09-19",
+      fechaFin: "2026-09-21",
+    }, { onPage });
+
+    expect(result).toHaveLength(101);
+    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(client.request.mock.calls[0][0]).toMatchObject({
+      method: "POST",
+      url: "/opportunities/search",
+      headers: { Version: "v3" },
+      data: {
+        locationId: "location",
+        page: 1,
+        limit: 100,
+        filters: expect.arrayContaining([
+          { field: "pipeline_id", operator: "eq", value: "pipeline" },
+          { field: "pipeline_stage_id", operator: "eq", value: "stage-no-contesta" },
+          { field: "status", operator: "eq", value: "open" },
+          {
+            field: "date_updated",
+            operator: "range",
+            value: {
+              gte: "2026-09-19T05:00:00.000Z",
+              lte: "2026-09-22T04:59:59.999Z",
+            },
+          },
+        ]),
+      },
+    });
+    expect(client.request.mock.calls[1][0].data.page).toBe(2);
+    expect(onPage).toHaveBeenCalledTimes(2);
+  });
+
+  test("reintenta snake_case si GHL ignora mayoritariamente el filtro camelCase", async () => {
+    const unrelated = Array.from({ length: 100 }, (_, index) => ({
+      id: `other-${index}`,
+      pipelineId: "pipeline",
+      pipelineStageId: "otra-etapa",
+    }));
+    const expected = {
+      id: "target-1",
+      pipelineId: "pipeline",
+      pipelineStageId: "stage-no-contesta",
+    };
+    const client = { request: jest.fn()
+      .mockResolvedValueOnce({ data: { opportunities: unrelated } })
+      .mockResolvedValueOnce({ data: { opportunities: [expected] } }) };
+
+    const result = await fetchOpportunitiesByStatus(client, {
+      locationId: "location",
+      pipelineId: "pipeline",
+      pipelineStageId: "stage-no-contesta",
+    }, "open");
+
+    expect(result).toEqual([expected]);
+    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(client.request.mock.calls[0][0].params).toHaveProperty("pipelineStageId", "stage-no-contesta");
+    expect(client.request.mock.calls[1][0].params).toHaveProperty("pipeline_stage_id", "stage-no-contesta");
   });
 });

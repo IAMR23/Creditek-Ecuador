@@ -1151,6 +1151,9 @@ const ensurePagosComisionesSchema = async (queryInterface, tables) => {
     await addColumnIfMissing(queryInterface, "pagos_comisiones_sanciones_observaciones", "observacionesVendedores", {
       type: Sequelize.JSONB, allowNull: false, defaultValue: {},
     });
+    await addColumnIfMissing(queryInterface, "pagos_comisiones_sanciones_observaciones", "personalNuevoBonoVendedores", {
+      type: Sequelize.JSONB, allowNull: false, defaultValue: {},
+    });
   }
   if (!tables.includes("pagos_comisiones_multas_ajustes")) return;
 

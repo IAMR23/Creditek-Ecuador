@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, FileSpreadsheet, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
+import { Archive, CalendarRange, FileSpreadsheet, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
 import { agruparDescuentos, colorCuota, crearExcelDescuentos, ESTADOS_DESCUENTOS, MESES_DESCUENTOS, mesesDesde, totalesDescuentos } from "../../utils/rolDescuentosCreditek";
 
 const ENDPOINT = "/api/contabilidad/rol-descuentos-creditek";
 const moneda = (valor) => Number(valor || 0).toLocaleString("es-EC", { style: "currency", currency: "USD" });
+const fechaCorta = (fecha) => {
+  const [anio, mes, dia] = String(fecha || "").slice(0, 10).split("-");
+  return anio && mes && dia ? `${dia}/${mes}/${anio}` : "continúa";
+};
 const inputClass = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
 
 export default function RolDescuentosCreditek() {
@@ -124,7 +128,7 @@ export default function RolDescuentosCreditek() {
           <label className="grid gap-1 text-sm text-slate-600">Registros<select value={String(archivados)} onChange={(e) => setArchivados(e.target.value === "true")} className={inputClass}><option value="false">Activos</option><option value="true">Archivados</option></select></label>
           <label className="grid flex-1 gap-1 text-sm text-slate-600">Buscar<div className="flex items-center gap-2"><Search size={16} /><input aria-label="Buscar nombre o motivo" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre o motivo" className={`${inputClass} w-full min-w-[180px]`} /></div></label>
         </div>
-        <div className="flex flex-wrap gap-4 text-xs text-slate-600">{Object.entries(ESTADOS_DESCUENTOS).map(([key, estado]) => <span key={key} className="flex items-center gap-2"><span className="h-3 w-3 border border-slate-400" style={{ backgroundColor: `#${estado.color}` }} />{estado.label}</span>)}<span>Diciembre resaltado en naranja</span></div>
+        <div className="flex flex-wrap gap-4 text-xs text-slate-600">{Object.entries(ESTADOS_DESCUENTOS).map(([key, estado]) => <span key={key} className="flex items-center gap-2"><span className="h-3 w-3 border border-slate-400" style={{ backgroundColor: `#${estado.color}` }} />{estado.label}</span>)}<span>Diciembre resaltado en naranja</span><span className="flex items-center gap-1"><CalendarRange size={14} className="text-indigo-600" />Los préstamos de Egresos se muestran automáticamente en su período de vigencia</span></div>
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
         <section className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm" aria-busy={loading}>
           <div className="max-h-[70vh] overflow-auto">
@@ -142,9 +146,15 @@ export default function RolDescuentosCreditek() {
                   : !grupos.length ? <tr><td colSpan={meses.length + 3} className="p-12 text-center text-slate-500">{error ? "No se pudieron obtener los registros." : "No hay descuentos para este período y filtro."}</td></tr>
                     : grupos.map((grupo) => grupo.filas.map((fila, index) => <tr key={fila.id} className={index === 0 ? "border-t-2 border-black" : ""}>
                       {index === 0 && <th scope="rowgroup" rowSpan={grupo.filas.length} className="sticky left-0 z-20 w-[200px] min-w-[200px] max-w-[200px] border border-slate-500 bg-white px-3 py-2 text-left align-top font-medium italic uppercase">{grupo.nombre}</th>}
-                      <th scope="row" className="sticky left-[200px] z-10 min-w-[240px] border border-slate-500 bg-white px-3 py-2 text-left uppercase">{fila.motivo}</th>
+                      <th scope="row" className="sticky left-[200px] z-10 min-w-[240px] border border-slate-500 bg-white px-3 py-2 text-left uppercase">
+                        <span className="block">{fila.motivo}</span>
+                        {fila.origen === "EGRESOS_CREDITEK" && <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold normal-case text-indigo-700"><CalendarRange size={12} />Egresos · {fechaCorta(fila.fechaInicio)} a {fechaCorta(fila.fechaFin)}</span>}
+                      </th>
                       {meses.map((mes) => { const cuota = fila.cuotasPorMes[mes.key]; return <td key={mes.key} title={cuota ? `${ESTADOS_DESCUENTOS[cuota.estado]?.label}: ${moneda(cuota.valor)}` : "Sin cuota"} className="border border-slate-400 px-2 py-2 text-right tabular-nums" style={{ backgroundColor: `#${colorCuota(cuota, mes.mes)}` }}>{cuota ? moneda(cuota.valor) : ""}</td>; })}
-                      <td className="border border-slate-400 px-2 py-1"><div className="flex gap-2"><button type="button" title={`Editar ${fila.motivo} de ${grupo.nombre}`} aria-label={`Editar ${fila.motivo} de ${grupo.nombre}`} disabled={guardando} onClick={() => abrirEditor(fila)} className="rounded p-2 text-blue-700 hover:bg-blue-50"><Pencil size={15} /></button><button type="button" title={fila.activo ? "Archivar motivo" : "Restaurar motivo"} aria-label={`${fila.activo ? "Archivar" : "Restaurar"} ${fila.motivo} de ${grupo.nombre}`} disabled={guardando} onClick={() => cambiarEstado(fila)} className="rounded p-2 text-slate-600 hover:bg-slate-100">{fila.activo ? <Archive size={15} /> : <RotateCcw size={15} />}</button></div></td>
+                      <td className="border border-slate-400 px-2 py-1">{fila.soloLectura
+                        ? <span className="block text-center text-[10px] font-semibold uppercase text-indigo-700">Automático</span>
+                        : <div className="flex gap-2"><button type="button" title={`Editar ${fila.motivo} de ${grupo.nombre}`} aria-label={`Editar ${fila.motivo} de ${grupo.nombre}`} disabled={guardando} onClick={() => abrirEditor(fila)} className="rounded p-2 text-blue-700 hover:bg-blue-50"><Pencil size={15} /></button><button type="button" title={fila.activo ? "Archivar motivo" : "Restaurar motivo"} aria-label={`${fila.activo ? "Archivar" : "Restaurar"} ${fila.motivo} de ${grupo.nombre}`} disabled={guardando} onClick={() => cambiarEstado(fila)} className="rounded p-2 text-slate-600 hover:bg-slate-100">{fila.activo ? <Archive size={15} /> : <RotateCcw size={15} />}</button></div>}
+                      </td>
                     </tr>))}
               </tbody>
               {!loading && grupos.length > 0 && <tfoot><tr className="bg-slate-200 font-bold"><th colSpan={2} scope="row" className="border border-slate-500 px-3 py-3 text-left">TOTAL</th>{meses.map((mes) => <td key={mes.key} className="border border-slate-500 px-2 py-3 text-right">{moneda(totales[mes.key])}</td>)}<td className="border border-slate-500" /></tr></tfoot>}

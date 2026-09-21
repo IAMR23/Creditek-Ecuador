@@ -159,7 +159,7 @@ router.patch(
   auditoriaVentasController.actualizarComentarioAuditoriaResultadoPdf,
 );
 
-router.get("/entregas", async (req, res) => {
+router.get("/entregas", accesoAuditoria, async (req, res) => {
   try {
     const {
       fechaInicio,

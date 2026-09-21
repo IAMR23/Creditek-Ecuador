@@ -60,4 +60,67 @@ describe("recibirWebhookStevo con actualizacion de cedula", () => {
     );
     consoleError.mockRestore();
   });
+
+  test("usa SenderAlt cuando Sender contiene un identificador LID", async () => {
+    const req = {
+      body: {
+        data: {
+          Info: {
+            IsFromMe: false,
+            Sender: "137009859449042@lid",
+            SenderAlt: "593987981946@s.whatsapp.net",
+            Chat: "137009859449042@lid",
+          },
+          conversation: "Hola",
+        },
+      },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    await recibirWebhookStevo(req, res);
+
+    expect(enviarAGHL).toHaveBeenCalledWith(
+      expect.objectContaining({ phone: "+593987981946" }),
+    );
+    expect(actualizarCedulaContactoDesdeMensaje).toHaveBeenCalledWith({
+      phone: "+593987981946",
+      message: "Hola",
+      isFromMe: false,
+    });
+  });
+
+  test("no crea un contacto cuando el evento solo contiene un identificador LID", async () => {
+    const req = {
+      body: {
+        data: {
+          Info: {
+            IsFromMe: false,
+            Sender: "137009859449042@lid",
+            Chat: "137009859449042@lid",
+          },
+          conversation: "Hola",
+        },
+      },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    const consoleWarn = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    await recibirWebhookStevo(req, res);
+
+    expect(enviarAGHL).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        phone: null,
+        ghl: { skipped: true, reason: "INVALID_OR_MISSING_PHONE" },
+      }),
+    );
+    consoleWarn.mockRestore();
+  });
 });

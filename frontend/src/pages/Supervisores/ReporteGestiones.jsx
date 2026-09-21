@@ -97,7 +97,7 @@ export default function ReporteGestiones() {
                           return <div key={`${event.momento}-${index}`} className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5">
                             <span className={`inline-flex min-w-20 items-center gap-1 text-xs font-bold ${isPlay ? "text-green-700" : "text-slate-700"}`}>{isPlay ? <Play size={13} /> : <Pause size={13} />}{isPlay ? "Play" : "Descanso"}</span>
                             <span className="font-mono text-xs font-bold text-slate-900">{formatTime(event.momento)}</span>
-                            <span className="text-[11px] text-slate-500">{event.origen === "asesor" ? "por el gestor" : event.cambiadoPor ? `por ${event.cambiadoPor}` : "por supervisión"}</span>
+                            <span className="text-[11px] text-slate-500">{event.origen === "asesor" ? "por el gestor" : event.origen === "automatico" ? "por cierre automático" : event.cambiadoPor ? `por ${event.cambiadoPor}` : "por supervisión"}</span>
                           </div>;
                         })}
                         {!row.historial?.length && <span className="text-xs text-slate-400">Sin movimientos en esta fecha</span>}

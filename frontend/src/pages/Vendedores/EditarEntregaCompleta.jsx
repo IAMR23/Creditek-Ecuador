@@ -164,7 +164,11 @@ const EditarEntregaCompleta = () => {
         }
       } catch (error) {
         console.error(error);
-        Swal.fire("Error", "No se pudo cargar la entrega", "error");
+        Swal.fire(
+          "Error",
+          error.response?.data?.message || "No se pudo cargar la entrega",
+          "error",
+        );
       }
     };
 
@@ -475,12 +479,20 @@ const handleSubmit = async (e) => {
     });
 
 
-    await navigator.clipboard.writeText(texto);
+    let copiada = false;
+    try {
+      await navigator.clipboard.writeText(texto);
+      copiada = true;
+    } catch (clipboardError) {
+      console.warn("No se pudo copiar la entrega al portapapeles:", clipboardError);
+    }
 
-    Swal.fire(
-      "Éxito",
-      "📄 Entrega actualizada y copiada al portapapeles",
-      "success",
+    await Swal.fire(
+      copiada ? "Éxito" : "Entrega actualizada",
+      copiada
+        ? "📄 Entrega actualizada y copiada al portapapeles"
+        : "La entrega se actualizó correctamente, pero el navegador no permitió copiarla al portapapeles.",
+      copiada ? "success" : "warning",
     );
 
     navigate("/mis-entregas");

@@ -1,6 +1,7 @@
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/db");
 const Configuracion = require("../models/GhlRepartoConfiguracion");
+const RealtimeConfiguracion = require("../models/GhlRepartoTiempoRealConfiguracion");
 const Ejecucion = require("../models/GhlRepartoEjecucion");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
 const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
@@ -11,10 +12,10 @@ const distributionLock = require("./ghlDistributionExecutionLock");
 const realtimeReviewCoordinator = require("./ghlRealtimeReviewCoordinator");
 
 const TIME_ZONE = "America/Guayaquil";
-const DEFAULT_MAX_PENDING_PER_ADVISOR = 10;
+const DEFAULT_MAX_PENDING_PER_ADVISOR = 2;
 const MAX_PENDING_PER_ADVISOR = 1000;
 const DEFAULT_DB_OPERATION_MS = 15_000;
-const REALTIME_LOCK_SCOPE = "realtime:whatsapp-facebook";
+const REALTIME_LOCK_SCOPE = "realtime:selected-stages";
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
 const ACTIVE_STATES = Object.freeze(["running", "pause_requested", "cancel_requested"]);
 const BLOCKING_STATES = Object.freeze([...ACTIVE_STATES, "paused"]);
@@ -22,7 +23,6 @@ const TERMINAL_STATES = Object.freeze(["completed", "partial", "failed", "cancel
 const requestedStaleMs = Number(process.env.GHL_EXECUTION_STALE_MS);
 const STALE_AFTER_MS = Number.isFinite(requestedStaleMs) && requestedStaleMs >= 60_000 ? requestedStaleMs : 180_000;
 const activeAbortControllers = new Map();
-let realtimeNextUserIndex = 0;
 const sleep = (ms, signal = null) => new Promise((resolve, reject) => {
   if (signal?.aborted) return reject(signal.reason);
   const timer = setTimeout(() => {
@@ -155,6 +155,13 @@ function opportunityTodayRange(now = new Date()) {
   return { fechaInicio: date, fechaFin: date };
 }
 
+function realtimeOpportunityDateRange(now = new Date()) {
+  return {
+    fechaInicio: localScheduleParts(new Date(now.getTime() - (2 * 86_400_000))).date,
+    fechaFin: localScheduleParts(now).date,
+  };
+}
+
 async function getClient(signal, existingConfig = null) {
   const config = existingConfig || ghl.getGhlConfig({ requirePipelineId: false });
   const rawClient = ghl.createGhlClient(config);
@@ -211,58 +218,184 @@ async function getCatalogs() {
 
 const pipelineStages = (pipeline) => (pipeline?.stages || pipeline?.pipelineStages || []).filter(Boolean);
 
-const normalizeStageName = (value) =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+const plainRow = (row) => (typeof row?.toJSON === "function" ? row.toJSON() : row);
 
-const realtimeStageChannel = (stage) => {
-  const name = normalizeStageName(stage?.name || stage?.title || stage?.label);
-  if (name.includes("WHATSAPP")) {
-    return "whatsapp";
+function realtimeConfigurationState(row) {
+  const value = plainRow(row);
+  if (!value) {
+    return {
+      code: "GHL_REALTIME_CONFIGURATION_MISSING",
+      warning: "Configure el pipeline y las etapas del reparto en tiempo real antes de activarlo.",
+    };
   }
-  if (name.includes("FACEBOOK")) {
-    return "facebook";
+  if (value.activo !== true) {
+    return {
+      code: "GHL_REALTIME_CONFIGURATION_INACTIVE",
+      warning: "El reparto en tiempo real esta inactivo. No se asignaran oportunidades.",
+    };
+  }
+  if (!value.pipelineId || !Array.isArray(value.stageIds) || !value.stageIds.length) {
+    return {
+      code: "GHL_REALTIME_STAGES_NOT_CONFIGURED",
+      warning: "El reparto en tiempo real no tiene etapas seleccionadas. No se asignaran oportunidades.",
+    };
   }
   return null;
-};
+}
 
-function realtimeMaxPendingPerAdvisor(env = process.env) {
-  const value = Number(env.GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR);
-  return Number.isInteger(value) && value >= 1 && value <= MAX_PENDING_PER_ADVISOR
-    ? value
+function realtimeMaxPendingPerAdvisor(configuration = null, env = process.env) {
+  const stored = Number(plainRow(configuration)?.maxPendientesPorAsesor);
+  if (Number.isInteger(stored) && stored >= 1 && stored <= MAX_PENDING_PER_ADVISOR) return stored;
+  const environmentValue = Number(env.GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR);
+  return Number.isInteger(environmentValue)
+    && environmentValue >= 1
+    && environmentValue <= MAX_PENDING_PER_ADVISOR
+    ? environmentValue
     : DEFAULT_MAX_PENDING_PER_ADVISOR;
 }
 
-async function getRealtimePipelineContext(client, config) {
-  const pipelines = await ghl.fetchPipelines(client, config);
-  const configuredPipelineId = ghl.toId(config.pipelineId);
-  const pipeline = configuredPipelineId
-    ? pipelines.find((item) => idOf(item) === configuredPipelineId)
-    : pipelines[0];
-  if (configuredPipelineId && !pipeline) {
+async function getRealtimeDistributionConfiguration() {
+  const row = await RealtimeConfiguracion.findByPk(1);
+  const value = plainRow(row) || {
+    id: null,
+    pipelineId: null,
+    pipelineNombre: null,
+    stageIds: [],
+    stageNombres: [],
+    maxPendientesPorAsesor: realtimeMaxPendingPerAdvisor(),
+    indiceSiguienteUsuario: 0,
+    actualizadoPorId: null,
+    activo: false,
+    createdAt: null,
+    updatedAt: null,
+  };
+  return { configuracion: value, estado: realtimeConfigurationState(row) };
+}
+
+async function validateRealtimeConfigurationInput(input = {}) {
+  const active = input.activo === true;
+  const pipelineId = String(input.pipelineId || "").trim();
+  const rawStageIds = Array.isArray(input.stageIds)
+    ? input.stageIds.map((stageId) => String(stageId || "").trim())
+    : [];
+  if (rawStageIds.some((stageId) => !stageId || !ID_RE.test(stageId))) {
+    throw serviceError("INVALID_REALTIME_STAGE_IDS", "Todos los IDs de etapa deben ser validos", 400);
+  }
+  if (new Set(rawStageIds).size !== rawStageIds.length) {
+    throw serviceError("DUPLICATE_REALTIME_STAGE_IDS", "No se permiten etapas duplicadas", 400);
+  }
+  if (!ID_RE.test(pipelineId)) {
+    throw serviceError("INVALID_REALTIME_PIPELINE", "Seleccione un pipeline valido", 400);
+  }
+  if (active && !rawStageIds.length) {
+    throw serviceError("REALTIME_STAGES_REQUIRED", "Seleccione al menos una etapa para activar el reparto", 400);
+  }
+  const maxPendientesPorAsesor = Number(
+    input.maxPendientesPorAsesor ?? realtimeMaxPendingPerAdvisor(),
+  );
+  if (!Number.isInteger(maxPendientesPorAsesor)
+    || maxPendientesPorAsesor < 1
+    || maxPendientesPorAsesor > MAX_PENDING_PER_ADVISOR) {
     throw serviceError(
-      "GHL_CONFIGURED_PIPELINE_NOT_FOUND",
-      "GHL_PIPELINE_ID no corresponde a un pipeline disponible en la ubicacion configurada",
-      502,
+      "INVALID_MAX_PENDING",
+      `El limite por asesor debe ser un entero entre 1 y ${MAX_PENDING_PER_ADVISOR}`,
+      400,
     );
   }
-  if (!pipeline || !idOf(pipeline)) {
-    throw serviceError("GHL_PIPELINE_NOT_FOUND", "GHL no devolvio el pipeline de oportunidades", 502);
+  const { config, client } = await getClient();
+  const pipelines = await ghl.fetchPipelines(client, config);
+  const pipeline = pipelines.find((item) => idOf(item) === pipelineId);
+  if (!pipeline) {
+    throw serviceError("INVALID_REALTIME_PIPELINE", "El pipeline seleccionado no existe en GHL", 400);
   }
-  const receivedStages = pipelineStages(pipeline)
-    .map((stage) => ({ ...stage, channel: realtimeStageChannel(stage) }));
-  const stages = receivedStages.filter((stage) => stage.channel && idOf(stage));
-  if (!stages.length) {
-    throw serviceError("GHL_REALTIME_STAGES_NOT_FOUND", "GHL no devolvio las etapas WhatsApp o Facebook", 502);
+  const stagesById = new Map(pipelineStages(pipeline).map((stage) => [idOf(stage), stage]));
+  const invalidStageIds = rawStageIds.filter((stageId) => !stagesById.has(stageId));
+  if (invalidStageIds.length) {
+    throw serviceError(
+      "REALTIME_STAGE_PIPELINE_MISMATCH",
+      "Una o mas etapas no pertenecen al pipeline seleccionado",
+      400,
+    );
   }
+  return {
+    pipelineId: idOf(pipeline),
+    pipelineNombre: String(pipeline.name || pipeline.title || "Pipeline").slice(0, 200),
+    stageIds: rawStageIds,
+    stageNombres: rawStageIds.map((stageId) => {
+      const stage = stagesById.get(stageId);
+      return String(stage?.name || stage?.title || stage?.label || "Etapa").slice(0, 200);
+    }),
+    maxPendientesPorAsesor,
+    activo: active,
+  };
+}
+
+async function saveRealtimeDistributionConfiguration(input, userId) {
+  const values = await validateRealtimeConfigurationInput(input);
+  return sequelize.transaction(async (transaction) => {
+    const row = await RealtimeConfiguracion.findByPk(1, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (row) {
+      await row.update({ ...values, actualizadoPorId: userId }, { transaction });
+      return row;
+    }
+    return RealtimeConfiguracion.create({
+      id: 1,
+      ...values,
+      indiceSiguienteUsuario: 0,
+      actualizadoPorId: userId,
+    }, { transaction });
+  });
+}
+
+async function setRealtimeDistributionState(active, userId) {
+  const row = await RealtimeConfiguracion.findByPk(1);
+  if (!row) {
+    throw serviceError(
+      "GHL_REALTIME_CONFIGURATION_MISSING",
+      "Guarde la configuracion del reparto en tiempo real antes de activarlo",
+      409,
+    );
+  }
+  if (active) {
+    await validateRealtimeConfigurationInput({ ...plainRow(row), activo: true });
+  }
+  await row.update({ activo: active === true, actualizadoPorId: userId });
+  return row;
+}
+
+async function getRealtimePipelineContext(client, config, realtimeConfiguration) {
+  const selected = plainRow(realtimeConfiguration);
+  const unavailable = realtimeConfigurationState(selected);
+  if (unavailable) throw serviceError(unavailable.code, unavailable.warning, 409);
+  const pipelines = await ghl.fetchPipelines(client, config);
+  const pipeline = pipelines.find((item) => idOf(item) === String(selected.pipelineId));
+  if (!pipeline) {
+    throw serviceError(
+      "GHL_REALTIME_PIPELINE_NOT_FOUND",
+      "El pipeline configurado para el reparto en tiempo real ya no existe en GHL",
+      409,
+    );
+  }
+  const receivedStagesById = new Map(
+    pipelineStages(pipeline).filter((stage) => idOf(stage)).map((stage) => [idOf(stage), stage]),
+  );
+  const missingStageIds = selected.stageIds.filter((stageId) => !receivedStagesById.has(stageId));
+  if (missingStageIds.length) {
+    throw serviceError(
+      "GHL_REALTIME_STAGES_NOT_FOUND",
+      "Una o mas etapas configuradas ya no existen en el pipeline de GHL",
+      409,
+    );
+  }
+  const stages = selected.stageIds.map((stageId) => receivedStagesById.get(stageId));
   return {
     pipeline,
     pipelineId: idOf(pipeline),
     stages,
-    stageIds: new Set(stages.map(idOf)),
+    stageIds: new Set(selected.stageIds),
   };
 }
 
@@ -270,10 +403,15 @@ const isRealtimeStageOpportunity = (opportunity, context) =>
   ghl.getOpportunityPipelineId(opportunity) === context.pipelineId
   && context.stageIds.has(ghl.getOpportunityStageId(opportunity));
 
-async function fetchRealtimeOpenOpportunities(client, config, context, { onPage = null } = {}) {
+async function fetchRealtimeOpenOpportunities(
+  client,
+  config,
+  context,
+  { onPage = null, dateFilters = realtimeOpportunityDateRange() } = {},
+) {
   const opportunities = [];
   for (const stage of context.stages) {
-    const stageOpportunities = await ghl.fetchOpportunitiesByStatus(
+    const stageOpportunities = await ghl.fetchOpportunitiesByUpdatedDate(
       client,
       {
         ...config,
@@ -281,14 +419,16 @@ async function fetchRealtimeOpenOpportunities(client, config, context, { onPage 
         pipelineStageId: idOf(stage),
       },
       "open",
-      {},
+      dateFilters,
       { onPage },
     );
     opportunities.push(...stageOpportunities);
   }
   const deduplicated = ghl.dedupeOpportunitiesById(opportunities);
   const eligible = deduplicated.filter((opportunity) =>
-    isOpenOpportunity(opportunity) && isRealtimeStageOpportunity(opportunity, context));
+    isOpenOpportunity(opportunity)
+    && isRealtimeStageOpportunity(opportunity, context)
+    && ghl.isOpportunityUpdatedWithinDateRange(opportunity, dateFilters));
   return eligible;
 }
 
@@ -676,10 +816,13 @@ async function fetchWebhookOpportunity(client, config, { opportunityId, contactI
     || null;
 }
 
-function classifyRealtimeOpportunity(opportunity, context) {
+function classifyRealtimeOpportunity(opportunity, context, dateFilters = null) {
   if (!isRealtimeStageOpportunity(opportunity, context)) return "STAGE_NOT_ELIGIBLE";
   if (!isOpenOpportunity(opportunity)) return "OPPORTUNITY_NOT_OPEN";
   if (assignedToOf(opportunity)) return "ALREADY_ASSIGNED";
+  if (dateFilters && !ghl.isOpportunityUpdatedWithinDateRange(opportunity, dateFilters)) {
+    return "OPPORTUNITY_UPDATED_OUTSIDE_DATE_RANGE";
+  }
   return null;
 }
 
@@ -691,6 +834,7 @@ async function assignRealtimeOpportunity({
   loads,
   limit,
   trigger = "webhook",
+  dateFilters = null,
   onDiagnosticError = null,
 }) {
   try {
@@ -721,7 +865,7 @@ async function assignRealtimeOpportunity({
   }
   const current = payload.opportunity || payload.data || payload;
   throwIfClientAborted(client);
-  const skipCode = classifyRealtimeOpportunity(current, context);
+  const skipCode = classifyRealtimeOpportunity(current, context, dateFilters);
   if (skipCode) {
     return { code: skipCode, assigned: false };
   }
@@ -763,6 +907,16 @@ async function assignRealtimeOpportunity({
 }
 
 async function executeWebhookOpportunity({ opportunityId = null, contactId = null, locationId = null } = {}) {
+  const realtimeConfiguration = await RealtimeConfiguracion.findByPk(1);
+  const configurationState = realtimeConfigurationState(realtimeConfiguration);
+  if (configurationState) {
+    return {
+      code: configurationState.code,
+      warning: configurationState.warning,
+      assigned: false,
+      deferredToScheduler: false,
+    };
+  }
   const config = ghl.getGhlConfig({ requirePipelineId: false });
   if (locationId && String(locationId) !== String(config.locationId)) {
     return { code: "LOCATION_MISMATCH", assigned: false, deferredToScheduler: false };
@@ -792,7 +946,8 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
     if (!advisors.active.length) {
       return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
     }
-    const context = await getRealtimePipelineContext(client, config);
+    const context = await getRealtimePipelineContext(client, config, realtimeConfiguration);
+    const dateFilters = realtimeOpportunityDateRange(new Date());
     const opportunity = await fetchWebhookOpportunity(
       client,
       config,
@@ -802,20 +957,25 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
     if (!opportunity || !idOf(opportunity)) {
       return { code: "OPPORTUNITY_NOT_FOUND", assigned: false, deferredToScheduler: true };
     }
-    const initialSkipCode = classifyRealtimeOpportunity(opportunity, context);
+    const initialSkipCode = classifyRealtimeOpportunity(opportunity, context, dateFilters);
     if (initialSkipCode) {
       return { code: initialSkipCode, assigned: false, deferredToScheduler: false };
     }
-    const found = await fetchRealtimeOpenOpportunities(client, config, context);
+    const found = await fetchRealtimeOpenOpportunities(
+      client,
+      config,
+      context,
+      { dateFilters },
+    );
     distributionLock.throwIfAborted(lock);
-    const limit = realtimeMaxPendingPerAdvisor();
+    const limit = realtimeMaxPendingPerAdvisor(realtimeConfiguration);
     const loads = currentLoadsByAdvisor(found, advisors.active);
     const capacityPlan = buildCapacityAssignments(
       [opportunity],
       advisors.active,
       loads,
       limit,
-      realtimeNextUserIndex,
+      Number(realtimeConfiguration.indiceSiguienteUsuario) || 0,
     );
     if (!capacityPlan.assignments.length) {
       return { code: "NO_CAPACITY", assigned: false, deferredToScheduler: true };
@@ -828,8 +988,13 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
       loads,
       limit,
       trigger: "webhook",
+      dateFilters,
     });
-    if (result.assigned) realtimeNextUserIndex = capacityPlan.nextUserIndex;
+    if (result.assigned) {
+      await awaitReadWithAbort(RealtimeConfiguracion.update({
+        indiceSiguienteUsuario: capacityPlan.nextUserIndex,
+      }, { where: { id: 1 }, silent: true }), lock.controller.signal);
+    }
     return {
       ...result,
       deferredToScheduler: ["ADVISOR_PAUSED", "NO_CAPACITY", "OPPORTUNITY_NOT_FOUND"].includes(result.code),
@@ -867,6 +1032,7 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
   let firstError = null;
   let omitted = false;
   let config = null;
+  let realtimeConfiguration = null;
   let backoffRecorded = false;
   const summary = {
     fechaHora: null,
@@ -876,6 +1042,9 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
     asesoresActivos: null,
     asesoresPausados: null,
     asociacionesInvalidas: null,
+    fechaInicioConsulta: null,
+    fechaFinConsulta: null,
+    criterioFechaConsulta: "updatedAt",
     capacidadDisponibleTotal: null,
     asignacionesPlanificadas: null,
     asignacionesExitosas: null,
@@ -974,6 +1143,19 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
   };
 
   try {
+    realtimeConfiguration = await RealtimeConfiguracion.findByPk(1);
+    const configurationState = realtimeConfigurationState(realtimeConfiguration);
+    if (configurationState) {
+      queueResult = {
+        code: configurationState.code,
+        warning: configurationState.warning,
+        assigned: false,
+        assignedCount: 0,
+        pendingCount: null,
+        trigger,
+      };
+      return queueResult;
+    }
     config = ghl.getGhlConfig({ requirePipelineId: false });
     const retryState = await realtimeReviewCoordinator.getRetryState(config.locationId);
     if (retryState.suspended) {
@@ -1022,13 +1204,16 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
       return queueResult;
     }
     setPhase("PIPELINE_CONTEXT");
-    const context = await getRealtimePipelineContext(client, config);
+    const context = await getRealtimePipelineContext(client, config, realtimeConfiguration);
     setPhase("QUEUE_DATA");
+    const dateFilters = realtimeOpportunityDateRange(new Date());
+    summary.fechaInicioConsulta = dateFilters.fechaInicio;
+    summary.fechaFinConsulta = dateFilters.fechaFin;
     const found = await fetchRealtimeOpenOpportunities(
       client,
       config,
       context,
-      { onPage: recordPage },
+      { onPage: recordPage, dateFilters },
     );
     distributionLock.throwIfAborted(lock);
     const pending = eligibleOpportunities(found, "unassigned");
@@ -1041,14 +1226,14 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
       return queueResult;
     }
     setPhase("CAPACITY_PLANNING");
-    const limit = realtimeMaxPendingPerAdvisor();
+    const limit = realtimeMaxPendingPerAdvisor(realtimeConfiguration);
     const loads = currentLoadsByAdvisor(found, advisors.active);
     const capacityPlan = buildCapacityAssignments(
       pending,
       advisors.active,
       loads,
       limit,
-      realtimeNextUserIndex,
+      Number(realtimeConfiguration.indiceSiguienteUsuario) || 0,
     );
     summary.capacidadDisponibleTotal = capacityPlan.advisors.reduce(
       (total, advisor) => total + Number(advisor.capacidadDisponible || 0),
@@ -1077,6 +1262,7 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
           loads,
           limit,
           trigger,
+          dateFilters,
           onDiagnosticError: (error, fallbackCode) => recordError(error, "TRACE_PERSISTENCE", fallbackCode),
         });
         if (result.assigned) {
@@ -1091,7 +1277,11 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
         recordError(error, "ASSIGNMENT");
       }
     }
-    realtimeNextUserIndex = capacityPlan.nextUserIndex;
+    if (assignedCount > 0) {
+      await awaitReadWithAbort(RealtimeConfiguracion.update({
+        indiceSiguienteUsuario: capacityPlan.nextUserIndex,
+      }, { where: { id: 1 }, silent: true }), lock.controller.signal);
+    }
     queueResult = {
       code: errorCount ? (assignedCount ? "QUEUE_PARTIAL" : "QUEUE_FAILED") : "QUEUE_PROCESSED",
       assigned: assignedCount > 0,
@@ -1406,8 +1596,11 @@ async function listExecutions(query = {}) {
 module.exports = {
   TIME_ZONE, DEFAULT_MAX_PENDING_PER_ADVISOR, MAX_PENDING_PER_ADVISOR, REALTIME_LOCK_SCOPE, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
   uniqueUsers, buildAssignments, currentLoadsByAdvisor, buildCapacityAssignments, eligibleOpportunities, classifyCurrentOpportunity,
-  executionState, localScheduleParts, opportunityDateRange, opportunityTodayRange, heartbeatExpired, sanitize,
-  getCatalogs, pipelineStages, normalizeStageName, realtimeStageChannel, realtimeMaxPendingPerAdvisor,
+  executionState, localScheduleParts, opportunityDateRange, opportunityTodayRange,
+  realtimeOpportunityDateRange, heartbeatExpired, sanitize,
+  getCatalogs, pipelineStages, realtimeConfigurationState, realtimeMaxPendingPerAdvisor,
+  getRealtimeDistributionConfiguration, validateRealtimeConfigurationInput,
+  saveRealtimeDistributionConfiguration, setRealtimeDistributionState,
   getRealtimePipelineContext, isRealtimeStageOpportunity, fetchRealtimeOpenOpportunities,
   validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
   releaseLock, lockScopeForConfiguration, refreshCounters, processOneDetail, processPlan, execute, requestPause,

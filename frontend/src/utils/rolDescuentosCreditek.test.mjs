@@ -37,3 +37,22 @@ test("Excel conserva importes, años, colores, nombres agrupados y totales", asy
   assert.equal(sheet.getCell("C6").value, 0.3);
   assert.equal(sheet.getCell("D6").value, 65);
 });
+
+test("Excel identifica la linea de tiempo que proviene de Egresos", async () => {
+  const automatico = [{
+    id: "egreso-prestamo-11", usuarioId: 7, usuario: { nombre: "Ana Ortiz" },
+    motivo: "Mecánica · Reparación", origen: "EGRESOS_CREDITEK",
+    fechaInicio: "2026-12-15", fechaFin: "2027-01-20",
+    cuotas: [
+      { periodo: "2026-12", valor: 35.5, estado: "RECURRENTE" },
+      { periodo: "2027-01", valor: 35.5, estado: "RECURRENTE" },
+    ],
+  }];
+  const workbook = await crearExcelDescuentos(agruparDescuentos(automatico), mesesDesde("2026-12", 2));
+  const sheet = workbook.getWorksheet("Rol descuentos Creditek");
+
+  assert.match(sheet.getCell("B3").value, /EGRESOS.*2026-12-15.*2027-01-20/s);
+  assert.equal(sheet.getCell("C3").value, 35.5);
+  assert.equal(sheet.getCell("D3").value, 35.5);
+  assert.equal(sheet.getCell("C3").fill.fgColor.argb, "FFFFFF00");
+});

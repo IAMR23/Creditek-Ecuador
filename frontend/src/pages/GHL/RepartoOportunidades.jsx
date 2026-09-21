@@ -11,6 +11,7 @@ const STATUS_LABELS = {
   failed: "Fallida", cancelled: "Cancelada", interrupted: "Interrumpida", skipped: "Omitida",
 };
 const empty = { nombre: "Reparto de oportunidades", pipelineId: "", stageId: "", hora: "09:00", intervaloMinutos: 1, maxPendientesPorAsesor: 10, zonaHoraria: "America/Guayaquil", diasSemana: [1, 2, 3, 4, 5], modo: "unassigned", usuariosGhl: [], activo: true };
+const emptyRealtime = { pipelineId: "", pipelineNombre: "", stageIds: [], stageNombres: [], maxPendientesPorAsesor: 2, activo: false };
 const messageOf = (error) => error.response?.data?.message || error.message || "Ocurrio un error";
 const inputClass = "h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 
@@ -19,6 +20,10 @@ export default function RepartoOportunidades() {
   const [stages, setStages] = useState([]);
   const [users, setUsers] = useState([]);
   const [configs, setConfigs] = useState([]);
+  const [realtimeConfig, setRealtimeConfig] = useState(emptyRealtime);
+  const [savedRealtimeConfig, setSavedRealtimeConfig] = useState(emptyRealtime);
+  const [realtimeStages, setRealtimeStages] = useState([]);
+  const [realtimeStatus, setRealtimeStatus] = useState(null);
   const [history, setHistory] = useState([]);
   const [form, setForm] = useState(empty);
   const [selectedId, setSelectedId] = useState(null);
@@ -29,6 +34,7 @@ export default function RepartoOportunidades() {
   const [controlBusy, setControlBusy] = useState("");
   const [executionWaiting, setExecutionWaiting] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const loadHistory = useCallback(async () => {
     const response = await api.get("/api/ghl/repartos/ejecuciones", { params: { tipo: "reparto" } });
@@ -39,16 +45,21 @@ export default function RepartoOportunidades() {
     setLoading(true);
     setError("");
     try {
-      const [pipelineResponse, userResponse, configResponse, historyResponse] = await Promise.all([
+      const [pipelineResponse, userResponse, configResponse, historyResponse, realtimeResponse] = await Promise.all([
         api.get("/api/ghl/repartos/catalogos/pipelines"),
         api.get("/api/ghl/repartos/catalogos/users"),
         api.get("/api/ghl/repartos/configuraciones", { params: { tipo: "reparto" } }),
         api.get("/api/ghl/repartos/ejecuciones", { params: { tipo: "reparto" } }),
+        api.get("/api/ghl/repartos/configuracion-tiempo-real"),
       ]);
       setPipelines(pipelineResponse.data.pipelines || []);
       setUsers(userResponse.data.users || []);
       setConfigs(configResponse.data.configuraciones || []);
       setHistory(historyResponse.data.ejecuciones || []);
+      const loadedRealtimeConfig = { ...emptyRealtime, ...(realtimeResponse.data.configuracion || {}) };
+      setRealtimeConfig(loadedRealtimeConfig);
+      setSavedRealtimeConfig(loadedRealtimeConfig);
+      setRealtimeStatus(realtimeResponse.data.estado || null);
       if (!selectedId && configResponse.data.configuraciones?.[0]) {
         setSelectedId(configResponse.data.configuraciones[0].id);
         setForm({ ...configResponse.data.configuraciones[0], maxPendientesPorAsesor: configResponse.data.configuraciones[0].maxPendientesPorAsesor ?? 10 });
@@ -67,6 +78,12 @@ export default function RepartoOportunidades() {
       .then((response) => setStages(response.data.stages || []))
       .catch((requestError) => setError(messageOf(requestError)));
   }, [form.pipelineId]);
+  useEffect(() => {
+    if (!realtimeConfig.pipelineId) { setRealtimeStages([]); return; }
+    api.get(`/api/ghl/repartos/catalogos/pipelines/${encodeURIComponent(realtimeConfig.pipelineId)}/stages`)
+      .then((response) => setRealtimeStages(response.data.stages || []))
+      .catch((requestError) => setError(messageOf(requestError)));
+  }, [realtimeConfig.pipelineId]);
 
   const hasActiveExecution = executionWaiting || Boolean(controlBusy) || history.some((run) => ACTIVE_STATES.includes(run.estado));
   useEffect(() => {
@@ -79,6 +96,52 @@ export default function RepartoOportunidades() {
   const toggleUser = (user) => set("usuariosGhl", form.usuariosGhl.some((item) => item.id === user.id) ? form.usuariosGhl.filter((item) => item.id !== user.id) : [...form.usuariosGhl, user]);
   const toggleDay = (day) => set("diasSemana", form.diasSemana.includes(day) ? form.diasSemana.filter((item) => item !== day) : [...form.diasSemana, day]);
   const valid = useMemo(() => form.pipelineId && form.stageId && form.hora && form.diasSemana.length && form.usuariosGhl.length >= 2 && Number.isInteger(Number(form.maxPendientesPorAsesor)) && Number(form.maxPendientesPorAsesor) >= 1 && Number(form.maxPendientesPorAsesor) <= 1000, [form]);
+  const realtimeValid = useMemo(() => realtimeConfig.pipelineId
+    && (!realtimeConfig.activo || realtimeConfig.stageIds.length > 0)
+    && Number.isInteger(Number(realtimeConfig.maxPendientesPorAsesor))
+    && Number(realtimeConfig.maxPendientesPorAsesor) >= 1
+    && Number(realtimeConfig.maxPendientesPorAsesor) <= 1000, [realtimeConfig]);
+
+  const toggleRealtimeStage = (stageId) => {
+    setRealtimeConfig((old) => ({
+      ...old,
+      stageIds: old.stageIds.includes(stageId)
+        ? old.stageIds.filter((id) => id !== stageId)
+        : [...old.stageIds, stageId],
+    }));
+    setSuccess("");
+  };
+  const saveRealtime = async () => {
+    setBusy("realtime-save"); setError(""); setSuccess("");
+    try {
+      const response = await api.put("/api/ghl/repartos/configuracion-tiempo-real", realtimeConfig);
+      const saved = { ...emptyRealtime, ...response.data.configuracion };
+      setRealtimeConfig(saved);
+      setSavedRealtimeConfig(saved);
+      setRealtimeStatus(response.data.configuracion.activo ? null : {
+        code: "GHL_REALTIME_CONFIGURATION_INACTIVE",
+        warning: "El reparto en tiempo real esta inactivo. No se asignaran oportunidades.",
+      });
+      setSuccess(response.data.message || "Configuracion guardada correctamente");
+    } catch (requestError) { setError(messageOf(requestError)); }
+    finally { setBusy(""); }
+  };
+  const toggleRealtimeState = async () => {
+    setBusy("realtime-state"); setError(""); setSuccess("");
+    try {
+      const response = await api.patch("/api/ghl/repartos/configuracion-tiempo-real/estado", {
+        activo: !savedRealtimeConfig.activo,
+      });
+      setRealtimeConfig((old) => ({ ...old, ...response.data.configuracion }));
+      setSavedRealtimeConfig((old) => ({ ...old, ...response.data.configuracion }));
+      setRealtimeStatus(response.data.configuracion.activo ? null : {
+        code: "GHL_REALTIME_CONFIGURATION_INACTIVE",
+        warning: "El reparto en tiempo real esta inactivo. No se asignaran oportunidades.",
+      });
+      setSuccess(response.data.message);
+    } catch (requestError) { setError(messageOf(requestError)); }
+    finally { setBusy(""); }
+  };
 
   const save = async () => {
     setBusy("save"); setError("");
@@ -125,62 +188,77 @@ export default function RepartoOportunidades() {
       <div className={`rounded-full px-3 py-1 text-xs font-bold ${error ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{loading ? "Comprobando conexion..." : error ? "GHL no disponible" : "GHL conectado"}</div>
     </header>
     {error && <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertTriangle size={18}/><span className="flex-1">{error}</span><button onClick={() => setError("")}><X size={16}/></button></div>}
+    {success && <div className="flex items-center justify-between rounded border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800"><span>{success}</span><button onClick={() => setSuccess("")}><X size={16}/></button></div>}
 
-    <section className="space-y-4 rounded border bg-white p-4 shadow-sm">
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <Field label="Configuracion"><select className={inputClass} value={selectedId || ""} onChange={(event) => choose(event.target.value)}><option value="">Nueva configuracion</option>{configs.map((config) => <option key={config.id} value={config.id}>{config.nombre}</option>)}</select></Field>
-        <Field label="Nombre"><input className={inputClass} value={form.nombre} onChange={(event) => set("nombre", event.target.value)}/></Field>
-        <Field label="Pipeline"><select className={inputClass} value={form.pipelineId} onChange={(event) => { setForm((old) => ({ ...old, pipelineId: event.target.value, stageId: "" })); setPreview(null); }}><option value="">Seleccione...</option>{pipelines.map((pipeline) => <option key={pipeline.id || pipeline._id} value={pipeline.id || pipeline._id}>{pipeline.name}</option>)}</select></Field>
-        <Field label="Etapa"><select className={inputClass} value={form.stageId} onChange={(event) => set("stageId", event.target.value)} disabled={!form.pipelineId}><option value="">Seleccione...</option>{stages.map((stage) => <option key={stage.id || stage._id} value={stage.id || stage._id}>{stage.name}</option>)}</select></Field>
-        <Field label="Hora"><input type="time" className={inputClass} value={form.hora} onChange={(event) => set("hora", event.target.value)}/></Field>
-        <Field label="Intervalo de consulta"><select className={inputClass} value={form.intervaloMinutos || 1} onChange={(event) => set("intervaloMinutos", Number(event.target.value))}><option value={1}>Cada minuto</option><option value={2}>Cada 2 minutos</option><option value={5}>Cada 5 minutos</option><option value={10}>Cada 10 minutos</option><option value={15}>Cada 15 minutos</option></select></Field>
-        <Field label="Max. pendientes por asesor"><input type="number" min="1" max="1000" step="1" className={inputClass} value={form.maxPendientesPorAsesor} onChange={(event) => set("maxPendientesPorAsesor", event.target.value === "" ? "" : Number(event.target.value))}/></Field>
-        <Field label="Zona horaria"><input className={`${inputClass} bg-gray-100`} value="America/Guayaquil" disabled/></Field>
-        <Field label="Modo"><select className={inputClass} value={form.modo} onChange={(event) => set("modo", event.target.value)}><option value="unassigned">Solo sin propietario</option><option value="all">Redistribuir todas</option></select></Field>
-        <Field label="Estado"><label className="flex h-10 items-center gap-2"><input type="checkbox" checked={form.activo} onChange={(event) => set("activo", event.target.checked)} className="h-5 w-5 accent-green-600"/> {form.activo ? "Activo" : "Inactivo"}</label></Field>
+    <section className="space-y-4 rounded border border-green-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Configuración del reparto en tiempo real</h2>
+          <p className="text-sm text-gray-500">Las oportunidades abiertas de las etapas elegidas comparten un solo límite por asesor en Play.</p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${savedRealtimeConfig.activo ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-800"}`}>
+          {savedRealtimeConfig.activo ? "Activo" : "Inactivo"}
+        </span>
       </div>
-      <div><div className="mb-2 text-xs font-semibold text-gray-600">Dias de ejecucion</div><div className="flex flex-wrap gap-2">{DAYS.map(([day, name]) => <button type="button" key={day} onClick={() => toggleDay(day)} className={`rounded px-3 py-2 text-sm font-semibold ${form.diasSemana.includes(day) ? "bg-green-600 text-white" : "bg-gray-100 text-gray-700"}`}>{name}</button>)}</div></div>
-      <div><div className="mb-2 text-xs font-semibold text-gray-600">Usuarios GHL ({form.usuariosGhl.length} seleccionados)</div><div className="grid max-h-52 gap-2 overflow-auto rounded border p-2 md:grid-cols-2 lg:grid-cols-3">{users.length ? users.map((user) => <label key={user.id} className="flex items-start gap-2 rounded p-2 hover:bg-green-50"><input type="checkbox" className="mt-1 accent-green-600" checked={form.usuariosGhl.some((item) => item.id === user.id)} onChange={() => toggleUser(user)}/><span><b className="block text-sm">{user.name || "Sin nombre"}</b><span className="text-xs text-gray-500">{user.email || "Sin correo"}</span></span></label>) : <div className="p-3 text-sm text-gray-500">No hay usuarios asignables.</div>}</div></div>
+
+      {realtimeStatus?.warning && <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800"><AlertTriangle size={17}/>{realtimeStatus.warning}</div>}
+
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <Field label="Pipeline de GHL">
+          <select className={inputClass} value={realtimeConfig.pipelineId || ""} onChange={(event) => {
+            setRealtimeConfig((old) => ({ ...old, pipelineId: event.target.value, pipelineNombre: "", stageIds: [], stageNombres: [] }));
+            setSuccess("");
+          }}>
+            <option value="">Seleccione...</option>
+            {pipelines.map((pipeline) => <option key={pipeline.id || pipeline._id} value={pipeline.id || pipeline._id}>{pipeline.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Máximo de pendientes por asesor">
+          <input type="number" min="1" max="1000" step="1" className={inputClass} value={realtimeConfig.maxPendientesPorAsesor} onChange={(event) => setRealtimeConfig((old) => ({ ...old, maxPendientesPorAsesor: event.target.value === "" ? "" : Number(event.target.value) }))}/>
+        </Field>
+        <div className="rounded bg-gray-50 p-3 text-sm">
+          <div className="text-xs font-semibold text-gray-500">Última actualización</div>
+          <div className="mt-1 font-medium">{savedRealtimeConfig.updatedAt ? new Date(savedRealtimeConfig.updatedAt).toLocaleString("es-EC") : "Aún no guardada"}</div>
+          {savedRealtimeConfig.actualizadoPorId && <div className="text-xs text-gray-500">Usuario #{savedRealtimeConfig.actualizadoPorId}</div>}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 text-xs font-semibold text-gray-600">Etapas que participan ({realtimeConfig.stageIds.length} seleccionadas)</div>
+        <div className="grid max-h-56 gap-2 overflow-auto rounded border p-2 md:grid-cols-2 lg:grid-cols-3">
+          {!realtimeConfig.pipelineId && <div className="p-3 text-sm text-gray-500">Seleccione un pipeline para consultar sus etapas reales.</div>}
+          {realtimeConfig.pipelineId && !realtimeStages.length && <div className="p-3 text-sm text-gray-500">Este pipeline no devolvió etapas.</div>}
+          {realtimeStages.map((stage) => {
+            const stageId = String(stage.id || stage._id || "");
+            return <label key={stageId} className="flex items-center gap-2 rounded p-2 hover:bg-green-50">
+              <input type="checkbox" className="h-4 w-4 accent-green-600" checked={realtimeConfig.stageIds.includes(stageId)} onChange={() => toggleRealtimeStage(stageId)}/>
+              <span className="text-sm font-medium">{stage.name || stage.title || "Etapa sin nombre"}</span>
+            </label>;
+          })}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 text-xs font-semibold text-gray-600">Etapas activas actualmente</div>
+        <div className="flex flex-wrap gap-2">
+          {savedRealtimeConfig.stageNombres?.length
+            ? savedRealtimeConfig.stageNombres.map((name, index) => <span key={`${savedRealtimeConfig.stageIds[index]}-${name}`} className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">{name}</span>)
+            : <span className="text-sm text-gray-500">No hay etapas guardadas.</span>}
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2">
-        <button disabled={!valid || busy} onClick={save} className="flex items-center gap-2 rounded bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save size={16}/>{busy === "save" ? "Guardando..." : "Guardar configuracion"}</button>
-        <button disabled={!selectedId || busy} onClick={doPreview} className="flex items-center gap-2 rounded border px-4 py-2 text-sm font-bold disabled:opacity-50"><Search size={16}/>Vista previa</button>
-        <button disabled={!selectedId || busy} onClick={execute} className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Play size={16}/>{busy === "execute" ? "Ejecutando..." : "Ejecutar ahora"}</button>
-        <button onClick={load} disabled={loading} className="rounded border p-2"><RefreshCcw size={17} className={loading ? "animate-spin" : ""}/></button>
+        <button disabled={!realtimeValid || busy} onClick={saveRealtime} className="flex items-center gap-2 rounded bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><Save size={16}/>{busy === "realtime-save" ? "Guardando..." : "Guardar configuración"}</button>
+        <button disabled={!savedRealtimeConfig.id || busy || (!savedRealtimeConfig.activo && !savedRealtimeConfig.stageIds.length)} onClick={toggleRealtimeState} className={`flex items-center gap-2 rounded px-4 py-2 text-sm font-bold text-white disabled:opacity-50 ${savedRealtimeConfig.activo ? "bg-amber-600" : "bg-blue-600"}`}>
+          {savedRealtimeConfig.activo ? <Pause size={16}/> : <Play size={16}/>}
+          {busy === "realtime-state" ? "Actualizando..." : savedRealtimeConfig.activo ? "Desactivar reparto" : "Activar reparto"}
+        </button>
       </div>
     </section>
 
-    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Resumen de vista previa</h2><p className="mb-3 text-xs text-gray-500">{preview.rangoFechas ? `Periodo: ${preview.rangoFechas.fechaInicio} al ${preview.rangoFechas.fechaFin}` : `Carga activa dentro de la etapa · límite ${preview.maxPendientesPorAsesor} por asesor`} · America/Guayaquil</p>{preview.advertencia && <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{preview.advertencia}</div>}<div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8"><Metric label="Encontradas" value={preview.totalEncontradas}/><Metric label="Sin propietario" value={preview.totalSinPropietario}/><Metric label="Se asignarán" value={preview.totalPorAsignar}/><Metric label="Pendientes por capacidad" value={preview.totalPendientesCapacidad}/><Metric label="Con propietario" value={preview.totalConPropietario}/><Metric label="En Play" value={preview.usuariosActivos}/><Metric label="Pausados" value={preview.usuariosPausados}/><Metric label="Inválidos" value={preview.usuariosInvalidos}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-green-50 p-3 text-sm"><b>{user.name}</b><div>Carga actual: {user.cargaActual ?? 0}</div><div>Capacidad disponible: {user.capacidadDisponible ?? "-"}</div><div className="font-semibold text-green-800">Planificadas: {user.cantidadPlanificada ?? user.cantidad ?? 0}</div></div>)}{preview.pausados?.map((user) => <div key={user.id} className="rounded bg-gray-100 p-3 text-sm"><b>{user.name}</b><div>Pausado · carga actual: {user.cargaActual ?? 0}</div><div>Capacidad disponible: 0 mientras esté pausado</div></div>)}{preview.invalidos?.map((user) => <div key={user.id} className="rounded bg-amber-50 p-3 text-sm"><b>{user.name}</b><div>Asociación inválida · carga actual: {user.cargaActual ?? 0}</div><div>Capacidad disponible: 0</div></div>)}</div></section>}
 
-    <section className="overflow-hidden rounded border bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b p-4"><b>Historial de ejecuciones</b>{hasActiveExecution && <span className="text-xs font-semibold text-blue-700">Actualizando automaticamente...</span>}</div>
-      <div className="overflow-x-auto"><table className="min-w-[1250px] w-full text-sm"><thead className="bg-gray-100 text-left"><tr>{["Fecha", "Tipo", "Pipeline / etapa", "Progreso", "Resultado", "Estado", "Heartbeat", "Ejecutor", "Acciones"].map((header) => <th key={header} className="px-3 py-2">{header}</th>)}</tr></thead><tbody>
-        {history.length ? history.map((run) => {
-          const actionBusy = controlBusy.endsWith(`:${run.id}`);
-          return <tr key={run.id} className="border-t align-top">
-            <td className="whitespace-nowrap px-3 py-2">{new Date(run.startedAt).toLocaleString("es-EC")}</td>
-            <td className="px-3 py-2">{run.tipo === "scheduled" ? "Programada" : "Manual"}</td>
-            <td className="px-3 py-2">{run.pipelineNombre}<br/><span className="text-xs text-gray-500">{run.stageNombre}</span></td>
-            <td className="px-3 py-2"><b>{run.processedCount || 0} de {run.totalPlanificadas || run.totalElegibles || 0}</b><br/><span className="text-xs text-gray-500">procesadas del plan</span></td>
-            <td className="px-3 py-2"><b>{run.totalAsignadas || 0} asignadas</b><br/><span className="text-xs text-gray-600">{run.totalOmitidasCambioEtapa || 0} por cambio de etapa · {run.totalOmitidasAsesorPausado || 0} por pausa<br/>{run.totalOmitidasPropietarioCambiado || 0} con propietario nuevo · {run.totalPendientesCapacidad || 0} en cola por capacidad<br/>{run.totalErrores || 0} errores técnicos</span></td>
-            <td className="px-3 py-2 font-semibold">{STATUS_LABELS[run.estado] || run.estado}{run.isStale && <span className="mt-1 block text-xs text-red-700">Heartbeat vencido</span>}</td>
-            <td className="whitespace-nowrap px-3 py-2">{run.heartbeatAt ? new Date(run.heartbeatAt).toLocaleString("es-EC") : "Sin heartbeat"}</td>
-            <td className="px-3 py-2">{run.ejecutadoPor?.nombre || "-"}</td>
-            <td className="px-3 py-2"><div className="flex flex-wrap gap-1">
-              <button className="rounded border px-2 py-1 text-green-700" onClick={() => showDetail(run.id)}>Detalle</button>
-              {run.estado === "running" && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "pause")} icon={<Pause size={14}/>} label="Pausar ejecución"/>}
-              {run.estado === "paused" && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "resume")} icon={<RotateCcw size={14}/>} label="Reanudar ejecución"/>}
-              {["running", "pause_requested", "paused"].includes(run.estado) && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "cancel")} icon={<Ban size={14}/>} label="Cancelar" danger/>}
-              {run.isStale && <ActionButton disabled={actionBusy} onClick={() => controlExecution(run, "force-finish-stale")} icon={<ShieldAlert size={14}/>} label="Finalizar atascada" danger/>}
-            </div></td>
-          </tr>;
-        }) : <tr><td colSpan="9" className="p-8 text-center text-gray-500">Sin ejecuciones registradas.</td></tr>}
-      </tbody></table></div>
-    </section>
 
-    {detail && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="max-h-[85vh] w-full max-w-4xl overflow-auto rounded bg-white p-4 shadow-xl"><div className="mb-3 flex justify-between"><h2 className="font-bold">Ejecucion #{detail.id}</h2><button onClick={() => setDetail(null)}><X/></button></div>{detail.errorGeneral && <p className="mb-3 rounded bg-red-50 p-2 text-red-700">{detail.errorGeneral}</p>}<div className="mb-3 rounded bg-gray-50 p-3 text-sm"><b>{detail.totalAsignadas || 0}</b> asignadas · <b>{detail.totalPendientesCapacidad || 0}</b> permanecieron en cola por capacidad · <b>{detail.totalOmitidasAsesorPausado || 0}</b> omitidas por pausa · <b>{detail.totalOmitidasCambioEtapa || 0}</b> por cambio de etapa</div><table className="w-full text-sm"><thead><tr className="bg-gray-100"><th className="p-2 text-left">Oportunidad</th><th>Anterior</th><th>Nuevo</th><th>Estado</th><th>Motivo / error</th></tr></thead><tbody>{detail.detalles?.map((item) => <tr key={item.id} className="border-t"><td className="p-2">{item.opportunityId}</td><td>{item.previousAssignedTo || "-"}</td><td>{item.newAssignedTo || "-"}</td><td>{STATUS_LABELS[item.estado] || item.estado}</td><td>{item.errorMessage || "-"}</td></tr>)}</tbody></table></div></div>}
-  </div>;
+    </div>;
 }
 
 function Field({ label, children }) { return <label><span className="mb-1 block text-xs font-semibold text-gray-600">{label}</span>{children}</label>; }
-function Metric({ label, value }) { return <div className="rounded bg-gray-50 p-3"><div className="text-xs text-gray-500">{label}</div><div className="text-xl font-bold">{value || 0}</div></div>; }
-function ActionButton({ disabled, onClick, icon, label, danger = false }) { return <button disabled={disabled} onClick={onClick} className={`inline-flex items-center gap-1 rounded border px-2 py-1 disabled:opacity-50 ${danger ? "border-red-200 text-red-700" : "text-blue-700"}`}>{icon}{label}</button>; }

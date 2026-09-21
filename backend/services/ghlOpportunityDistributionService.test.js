@@ -22,6 +22,7 @@ const {
   localScheduleParts,
   opportunityDateRange,
   opportunityTodayRange,
+  realtimeOpportunityDateRange,
   preview,
   validateInput,
   requestWithRetry,
@@ -32,7 +33,6 @@ const {
   uniqueUsers,
   lockScopeForConfiguration,
   REALTIME_LOCK_SCOPE,
-  realtimeStageChannel,
   realtimeMaxPendingPerAdvisor,
 } = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
@@ -105,21 +105,35 @@ describe("reparto determinista de oportunidades GHL", () => {
     expect(lockScopeForConfiguration({ id: 3, modo: "refresh_non_management" }, "location-2"))
       .toBe("location:location-2");
   });
-  test("reconoce las etapas WhatsApp y Facebook por su nombre actual", () => {
-    expect(realtimeStageChannel({ name: "Nuevos - Whats App" })).toBe("whatsapp");
-    expect(realtimeStageChannel({ name: "Leads Facebook" })).toBe("facebook");
-    expect(realtimeStageChannel({ name: "Gestion" })).toBeNull();
+  test("el limite de tiempo real prioriza base, luego entorno y finalmente 2", () => {
+    expect(realtimeMaxPendingPerAdvisor(null, {})).toBe(2);
+    expect(realtimeMaxPendingPerAdvisor(null, { GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "15" })).toBe(15);
+    expect(realtimeMaxPendingPerAdvisor({ maxPendientesPorAsesor: 2 }, { GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "15" })).toBe(2);
+    expect(realtimeMaxPendingPerAdvisor(null, { GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "0" })).toBe(2);
   });
-  test("el limite de tiempo real usa 10 por defecto y acepta configuracion de entorno", () => {
-    expect(realtimeMaxPendingPerAdvisor({})).toBe(10);
-    expect(realtimeMaxPendingPerAdvisor({ GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "15" })).toBe(15);
-    expect(realtimeMaxPendingPerAdvisor({ GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR: "0" })).toBe(10);
+  test("un asesor vacio recibe maximo dos", () => {
+    expect(buildCapacityAssignments(opportunities(5), [users[0]], new Map(), 2).assignments).toHaveLength(2);
+  });
+  test("un asesor con carga uno recibe solamente uno", () => {
+    expect(buildCapacityAssignments(opportunities(5), [users[0]], new Map([["u1", 1]]), 2).assignments).toHaveLength(1);
+  });
+  test("un asesor con carga dos no recibe mas", () => {
+    expect(buildCapacityAssignments(opportunities(5), [users[0]], new Map([["u1", 2]]), 2).assignments).toHaveLength(0);
+  });
+  test("dos asesores vacios reciben dos cada uno", () => {
+    const result = buildCapacityAssignments(opportunities(8), users.slice(0, 2), new Map(), 2);
+    expect(counts(result.assignments, users.slice(0, 2))).toEqual([2, 2]);
+  });
+  test("el asesor con menor carga recibe primero", () => {
+    const result = buildCapacityAssignments(opportunities(1), users.slice(0, 2), new Map([["u1", 1], ["u2", 0]]), 2);
+    expect(result.assignments[0].user.id).toBe("u2");
   });
   test("solo sin propietario excluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "unassigned").map((o) => o.id)).toEqual(["a"]));
   test("redistribuir todas incluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "all")).toHaveLength(2));
   test("calcula dia y hora en America/Guayaquil", () => expect(localScheduleParts(new Date("2026-09-07T14:05:00Z"))).toMatchObject({ day: 1, time: "09:05", window: "2026-09-07T09:05" }));
   test("limita oportunidades a hoy y maximo un dia antes en Guayaquil", () => expect(opportunityDateRange(new Date("2026-09-07T04:30:00Z"))).toEqual({ fechaInicio: "2026-09-05", fechaFin: "2026-09-06" }));
   test("el refresco limita oportunidades exclusivamente al dia local", () => expect(opportunityTodayRange(new Date("2026-09-07T04:30:00Z"))).toEqual({ fechaInicio: "2026-09-06", fechaFin: "2026-09-06" }));
+  test("el reparto en tiempo real consulta tres dias locales inclusivos", () => expect(realtimeOpportunityDateRange(new Date("2026-09-21T17:30:00Z"))).toEqual({ fechaInicio: "2026-09-19", fechaFin: "2026-09-21" }));
   test("sanitiza tokens antes de persistir errores", () => expect(sanitize("Authorization Bearer abc.def token=secreto")).not.toMatch(/abc|secreto/));
 
   test("omite una oportunidad que cambio de etapa", () => expect(classifyCurrentOpportunity({ pipelineId: "p", pipelineStageId: "otra" }, { pipelineId: "p", stageId: "s", modo: "all" })).toBe("STAGE_CHANGED"));

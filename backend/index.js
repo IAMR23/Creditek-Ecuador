@@ -68,7 +68,12 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Idempotency-Key",
+  ],
   exposedHeaders: [
     "Content-Disposition",
     "X-RVE-Registros",
@@ -170,6 +175,9 @@ connectDB()
     require("./services/ghlOpportunityDistributionScheduler").start().catch((error) => {
       console.error("No se pudo iniciar scheduler GHL", { message: error.message });
     });
+    require("./services/ghlWorkflowScheduler").start().catch((error) => {
+      console.error("No se pudo iniciar scheduler de workflows GHL", { message: error.message });
+    });
 
     app.use("/agencias", agencia);
     app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));
@@ -249,6 +257,7 @@ connectDB()
     app.use("/api/denominaciones-caja", require("./routes/Contabilidad/denominacionesCajaTemp"));
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
     app.use("/api/ghl/repartos", require("./routes/GHL/repartoRoutes"));
+    app.use("/api/ghl/workflows-programados", require("./routes/GHL/workflowProgramacionesRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
     app.use("/api/meta", require("./routes/metaRoutes"));
     app.use("/api/facebook", require("./routes/facebookWebhookRoutes"));

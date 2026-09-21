@@ -32,6 +32,7 @@ import {
   Link2,
   TicketCheck,
   GraduationCap,
+  Clock3,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -399,6 +400,11 @@ export default function Sidebar({ auth }) {
                 label: "Disponibilidad de asesores",
                 icon: <UserPlus size={18} />,
                 path: "/ghl/disponibilidad-asesores",
+              },
+              {
+                label: "Workflows programados",
+                icon: <Clock3 size={18} />,
+                path: "/ghl/workflows-programados",
               },
             ],
           },

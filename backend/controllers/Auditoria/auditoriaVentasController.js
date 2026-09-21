@@ -680,6 +680,7 @@ exports.obtenerReporteEntregasAuditoria = async ({
           "formaPagoId",
           "entrada",
           "alcance",
+          "ubicacion",
         ],
         required:
           Object.keys(whereDetalleEntrega).length > 0 ||
@@ -743,6 +744,7 @@ exports.formatearReporteEntregas = (entregas = []) => {
         formaPagoId: detalle.formaPagoId || null,
         entrada: detalle.entrada || "0",
         alcance: detalle.alcance || "0",
+        ubicacion: detalle.ubicacion || "",
         activo: entrega.activo,
         estado: entrega.estado || "",
         cierreCaja: getCierreCajaDesdeDetalle(detalle),

@@ -20,6 +20,7 @@ const DetalleEntrega = require("../../models/DetalleEntrega");
 const { sequelize } = require("../../config/db");
 const {
   validarEntregaEnAgencia,
+  validarPropietarioEntrega,
 } = require("../../services/entregaOperacionService");
 
 
@@ -201,15 +202,10 @@ exports.obtenerEntregaPorId = async (req, res) => {
     );
     const esAdministrador = permisos.includes("administracion");
     const esLogistica = permisos.includes("logistica");
-    if (
-      !esAdministrador &&
-      !esLogistica &&
-      Number(entrega.usuarioAgencia?.id) !== Number(req.user?.usuarioAgenciaId)
-    ) {
-      return res.status(403).json({
-        ok: false,
-        code: "ENTREGA_NO_AUTORIZADA",
-        message: "No puede consultar una entrega de otra relación usuario-agencia.",
+    if (!esAdministrador && !esLogistica) {
+      await validarPropietarioEntrega({
+        entrega,
+        usuarioId: req.user.id,
       });
     }
     if (esLogistica && !esAdministrador) {
@@ -281,6 +277,10 @@ exports.obtenerEntregaPorId = async (req, res) => {
     return res.json({ ok: true, entrega: entregaFormateada });
   } catch (error) {
     console.error("Error obteniendo entrega por ID:", error);
-    return res.status(500).json({ ok: false, error: error.message });
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      code: error.code || "ERROR_OBTENIENDO_ENTREGA",
+      message: error.message || "Error al obtener la entrega",
+    });
   }
 };

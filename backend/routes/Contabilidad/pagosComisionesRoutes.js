@@ -15,6 +15,10 @@ router.put("/configuracion-meses/:year/:month", controller.actualizarConfiguraci
 router.put("/configuracion-anual/:year", controller.actualizarConfiguracionAnual);
 router.put("/periodos/:year/:month/pagado", controller.marcarPeriodoPagado);
 router.put("/multas", controller.actualizarValoresMultas);
+router.put(
+  "/vendedores/:usuarioId/personal-nuevo-bono/:year/:month",
+  controller.actualizarPersonalNuevoBono,
+);
 router.put("/vendedores/:usuarioId/jefe-comercial", controller.actualizarJefeComercial);
 router.put("/vendedores/:usuarioId/supervisor-comercial", controller.actualizarSupervisorComercial);
 router.put(

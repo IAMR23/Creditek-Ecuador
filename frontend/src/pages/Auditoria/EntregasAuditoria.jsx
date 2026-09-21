@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Eye, RefreshCw, Search, Trash, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Eye,
+  RefreshCw,
+  Search,
+  Trash,
+  X,
+} from "lucide-react";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { nombreCortoUsuario } from "../../utils/nombres";
@@ -23,6 +30,7 @@ const TABLE_COLUMNS = [
   "Forma de Pago",
   "Entrada",
   "Alcance",
+  "Ubicación del cliente",
   "Estado",
 ];
 
@@ -86,6 +94,7 @@ const mapEntregaAuditoria = (entrega) => ({
   "Forma de Pago": entrega.formaPago ?? "",
   Entrada: toMoney(entrega.entrada),
   Alcance: toMoney(entrega.alcance),
+  "Ubicación del cliente": entrega.ubicacion ?? "",
   Estado: entrega.activo === false ? "Desactivada" : entrega.estado ?? "",
 });
 
@@ -483,7 +492,7 @@ export default function EntregasAuditoria() {
         </div>
 
         <div className="max-w-full overflow-x-auto">
-          <table className="w-full min-w-[1500px] border-collapse text-xs">
+          <table className="w-full min-w-[1650px] border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-gray-100 text-left uppercase text-gray-600">
               <tr>
                 <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-100 px-3 py-2 text-center">
@@ -597,6 +606,10 @@ function getCellClass(key) {
 
   if (["ID Entrega", "Fecha", "Cedula"].includes(key)) {
     return `${base} whitespace-nowrap font-semibold`;
+  }
+
+  if (key === "Ubicación del cliente") {
+    return `${base} min-w-64 max-w-sm break-all`;
   }
 
   return base;

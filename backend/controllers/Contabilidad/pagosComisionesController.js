@@ -191,6 +191,21 @@ const actualizarValoresMultas = async (req, res) => {
   }
 };
 
+const actualizarPersonalNuevoBono = async (req, res) => {
+  try {
+    const resultado = await pagosComisionesService.actualizarPersonalNuevoBono({
+      usuarioId: req.params.usuarioId,
+      year: req.params.year,
+      month: req.params.month,
+      activo: req.body.activo,
+      actualizadoPorId: req.user.id,
+    });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
 const guardarEquipoSemanalJefeComercial = async (req, res) => {
   try {
     const resultado =
@@ -270,4 +285,5 @@ module.exports = {
   guardarPromedioMensualSupervisorComercial,
   actualizarOmisionMulta,
   actualizarValoresMultas,
+  actualizarPersonalNuevoBono,
 };

@@ -31,6 +31,10 @@ export const totalesDescuentos = (grupos, meses) => Object.fromEntries(meses.map
   grupos.reduce((sum, grupo) => sum + grupo.filas.reduce((total, fila) => total + Math.round(Number(fila.cuotasPorMes[key]?.valor || 0) * 100), 0), 0) / 100,
 ]));
 
+const motivoExcel = (fila) => fila.origen === "EGRESOS_CREDITEK"
+  ? `${fila.motivo.toUpperCase()}\nEGRESOS · ${fila.fechaInicio || "SIN FECHA"} A ${fila.fechaFin || "CONTINÚA"}`
+  : fila.motivo.toUpperCase();
+
 export const crearExcelDescuentos = async (grupos, meses) => {
   const { default: ExcelJS } = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
@@ -55,8 +59,8 @@ export const crearExcelDescuentos = async (grupos, meses) => {
   grupos.forEach((grupo) => {
     const primera = sheet.rowCount + 1;
     grupo.filas.forEach((fila) => {
-      const row = sheet.addRow([grupo.nombre.toUpperCase(), fila.motivo.toUpperCase(), ...meses.map((mes) => fila.cuotasPorMes[mes.key]?.valor ?? null)]);
-      row.height = 24;
+      const row = sheet.addRow([grupo.nombre.toUpperCase(), motivoExcel(fila), ...meses.map((mes) => fila.cuotasPorMes[mes.key]?.valor ?? null)]);
+      row.height = fila.origen === "EGRESOS_CREDITEK" ? 36 : 24;
       for (let col = 1; col <= columns; col += 1) {
         const mes = meses[col - 3];
         const cuota = mes && fila.cuotasPorMes[mes.key];

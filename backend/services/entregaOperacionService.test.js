@@ -27,6 +27,7 @@ const {
   actualizarEstado,
   cambiarResponsable,
   desactivarUsuarioAgencia,
+  validarPropietarioEntrega,
 } = require("./entregaOperacionService");
 
 const instancia = (values) => ({
@@ -44,6 +45,35 @@ describe("entregaOperacionService", () => {
     EntregaEvento.create.mockResolvedValue({ id: 1 });
     UsuarioAgencia.findOne.mockResolvedValue({ id: 22, usuarioId: 7, activo: true });
     Usuario.findOne.mockResolvedValue({ id: 7, activo: true, rol: { nombre: "Repartidor" }, roles: [] });
+  });
+
+  test("autoriza al vendedor propietario aunque su relacion historica este inactiva", async () => {
+    const entrega = { id: 10, usuarioAgenciaId: 12 };
+    UsuarioAgencia.findOne.mockResolvedValue({ id: 12 });
+
+    await expect(
+      validarPropietarioEntrega({ entrega, usuarioId: 13 }),
+    ).resolves.toBeUndefined();
+
+    expect(UsuarioAgencia.findOne).toHaveBeenCalledWith({
+      where: { id: 12, usuarioId: 13 },
+      attributes: ["id"],
+      transaction: undefined,
+    });
+  });
+
+  test("rechaza la edicion de una entrega perteneciente a otro vendedor", async () => {
+    UsuarioAgencia.findOne.mockResolvedValue(null);
+
+    await expect(
+      validarPropietarioEntrega({
+        entrega: { id: 10, usuarioAgenciaId: 12 },
+        usuarioId: 99,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      code: "ENTREGA_NO_AUTORIZADA",
+    });
   });
 
   test("rechaza una version obsoleta y revierte la transaccion", async () => {

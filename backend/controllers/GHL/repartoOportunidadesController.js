@@ -12,6 +12,40 @@ async function pipelines(req, res) {
 async function stages(req, res) {
   try { const data = await service.getCatalogs(); const pipeline = data.pipelines.find((p) => String(p.id || p._id) === req.params.pipelineId); if (!pipeline) return res.status(404).json({ ok: false, message: "Pipeline no encontrado" }); res.json({ ok: true, stages: service.pipelineStages(pipeline) }); } catch (error) { respondError(res, error); }
 }
+async function realtimeConfiguration(req, res) {
+  try {
+    const result = await service.getRealtimeDistributionConfiguration();
+    res.json({ ok: true, ...result });
+  } catch (error) { respondError(res, error); }
+}
+async function saveRealtimeConfiguration(req, res) {
+  try {
+    const configuracion = await service.saveRealtimeDistributionConfiguration(req.body, req.user.id);
+    const review = await service.scheduleRealtimeQueueReview({ trigger: "config-update" });
+    res.json({
+      ok: true,
+      configuracion,
+      review,
+      message: "Configuracion del reparto en tiempo real guardada correctamente",
+    });
+  } catch (error) { respondError(res, error); }
+}
+async function realtimeConfigurationState(req, res) {
+  try {
+    const configuracion = await service.setRealtimeDistributionState(req.body.activo === true, req.user.id);
+    const review = configuracion.activo
+      ? await service.scheduleRealtimeQueueReview({ trigger: "config-state" })
+      : null;
+    res.json({
+      ok: true,
+      configuracion,
+      review,
+      message: configuracion.activo
+        ? "Reparto en tiempo real activado"
+        : "Reparto en tiempo real desactivado",
+    });
+  } catch (error) { respondError(res, error); }
+}
 async function users(req, res) {
   try { const data = await service.getCatalogs(); res.json({ ok: true, users: data.users.map((u) => ({ id: u.id || u._id, name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(), email: u.email || "" })) }); } catch (error) { respondError(res, error); }
 }
@@ -72,6 +106,29 @@ async function advisorAvailability(req, res) {
   } catch (error) { respondError(res, error); }
 }
 
+async function advisorAutoPauseConfiguration(req, res) {
+  try {
+    res.json({
+      ok: true,
+      configuracion: await advisorService.getAutoPauseConfiguration({ force: true }),
+    });
+  } catch (error) { respondError(res, error); }
+}
+
+async function saveAdvisorAutoPauseConfiguration(req, res) {
+  try {
+    const configuracion = await advisorService.saveAutoPauseConfiguration(
+      { horaPausaAutomatica: req.body.horaPausaAutomatica },
+      req.user.id,
+    );
+    res.json({
+      ok: true,
+      configuracion,
+      message: "Hora de pausa automatica guardada correctamente",
+    });
+  } catch (error) { respondError(res, error); }
+}
+
 async function saveAdvisorAssociation(req, res) {
   try {
     const disponibilidad = await advisorService.saveAssociation({
@@ -123,4 +180,4 @@ async function setAdvisorManagementAvailability(req, res) {
   } catch (error) { respondError(res, error); }
 }
 
-module.exports = { pipelines, stages, users, list, get, create, update, state, preview, previewInput, execute, history, execution, pause, resume, cancel, forceFinishStale, myAvailability, setMyAvailability, advisorAvailability, saveAdvisorAssociation, setAdvisorAvailability, advisorManagementReport, setAdvisorManagementAvailability };
+module.exports = { pipelines, stages, realtimeConfiguration, saveRealtimeConfiguration, realtimeConfigurationState, users, list, get, create, update, state, preview, previewInput, execute, history, execution, pause, resume, cancel, forceFinishStale, myAvailability, setMyAvailability, advisorAvailability, advisorAutoPauseConfiguration, saveAdvisorAutoPauseConfiguration, saveAdvisorAssociation, setAdvisorAvailability, advisorManagementReport, setAdvisorManagementAvailability };

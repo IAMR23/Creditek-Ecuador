@@ -1,4 +1,9 @@
-const { shouldRunConfiguration } = require("./ghlOpportunityDistributionScheduler");
+const Configuracion = require("../models/GhlRepartoConfiguracion");
+const advisorAvailability = require("./ghlAdvisorAvailabilityService");
+const distributionService = require("./ghlOpportunityDistributionService");
+const { shouldRunConfiguration, tick } = require("./ghlOpportunityDistributionScheduler");
+
+afterEach(() => jest.restoreAllMocks());
 
 describe("scheduler periodico de reparto GHL", () => {
   const base = {
@@ -26,5 +31,23 @@ describe("scheduler periodico de reparto GHL", () => {
     expect(shouldRunConfiguration(row, { day: 1, time: "09:00" })).toBe(true);
     expect(shouldRunConfiguration(row, { day: 1, time: "09:05" })).toBe(false);
     expect(shouldRunConfiguration(row, { day: 2, time: "09:00" })).toBe(false);
+  });
+
+  test("cada ciclo aplica la pausa automatica antes de revisar la cola", async () => {
+    const now = new Date("2026-09-21T23:00:00.000Z");
+    const pause = jest.spyOn(advisorAvailability, "pauseAllActiveAdvisors")
+      .mockResolvedValue({ executed: true, paused: 2 });
+    const recoverStale = jest.spyOn(distributionService, "recoverStaleRuns")
+      .mockResolvedValue();
+    jest.spyOn(distributionService, "recoverPendingRealtimeQueueReviews").mockResolvedValue();
+    const executeQueue = jest.spyOn(distributionService, "executeRealtimeQueue")
+      .mockResolvedValue({ code: "NO_ACTIVE_ADVISORS" });
+    jest.spyOn(Configuracion, "findAll").mockResolvedValue([]);
+
+    await tick(now);
+
+    expect(pause).toHaveBeenCalledWith({ now });
+    expect(pause.mock.invocationCallOrder[0]).toBeLessThan(recoverStale.mock.invocationCallOrder[0]);
+    expect(executeQueue).toHaveBeenCalledWith({ trigger: "scheduler" });
   });
 });

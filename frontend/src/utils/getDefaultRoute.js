@@ -4,7 +4,7 @@ import {
   hasRouteAccess,
   normalizePermissions,
   normalizeRole,
-} from "../config/routePermissions";
+} from "../config/routePermissions.js";
 
 export function getDefaultRoute({ rol, permisos = [], activeMode }) {
   const rolNormalizado = normalizeRole(rol);

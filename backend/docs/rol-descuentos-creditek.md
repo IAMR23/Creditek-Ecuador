@@ -6,6 +6,9 @@ Permisos: `authenticate` y `requirePermission("Contabilidad", "Administracion")`
 
 ## Funcionamiento
 
+- Los préstamos activos de Egresos Creditek aparecen automáticamente como una línea de tiempo mensual entre su fecha inicial y final. Si no tienen fecha final, continúan hasta el último mes visible.
+- Las filas provenientes de Egresos son de solo lectura en esta pantalla, muestran su origen y fechas, y deben editarse desde Egresos Creditek.
+
 - Registro manual por usuario, motivo y cuotas mensuales. Admite varios motivos para una persona y cuotas entre años.
 - Cada cuota tiene importe y estado: pendiente, aplicado, recurrente o por revisar. Los estados son anotaciones de seguimiento; no ejecutan descuentos ni pagos automáticamente.
 - Esta sección no suma sus cuotas automáticamente al Resumen roles ni a la nómina. Los registros existentes de Egresos y Roles Creditek conservan su funcionamiento.

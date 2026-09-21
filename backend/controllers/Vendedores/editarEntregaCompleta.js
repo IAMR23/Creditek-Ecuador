@@ -14,6 +14,7 @@ const EntregaEvento = require("../../models/EntregaEvento");
 const {
   crearError,
   validarEntregaEnAgencia,
+  validarPropietarioEntrega,
   validarVersion,
 } = require("../../services/entregaOperacionService");
 const {
@@ -64,16 +65,12 @@ const editarEntregaCompleta = async (req, res) => {
     );
     const esAdministrador = permisos.includes("administracion");
     const esLogistica = permisos.includes("logistica");
-    if (
-      !esAdministrador &&
-      !esLogistica &&
-      Number(entregaDB.usuarioAgenciaId) !== Number(req.user.usuarioAgenciaId)
-    ) {
-      throw crearError(
-        403,
-        "ENTREGA_NO_AUTORIZADA",
-        "No puede editar una entrega de otra relacion usuario-agencia.",
-      );
+    if (!esAdministrador && !esLogistica) {
+      await validarPropietarioEntrega({
+        entrega: entregaDB,
+        usuarioId: req.user.id,
+        transaction: t,
+      });
     }
     if (esLogistica && !esAdministrador) {
       await validarEntregaEnAgencia({
@@ -341,14 +338,10 @@ const obtenerEntregaCompleta = async (req, res) => {
     );
     const esAdministrador = permisos.includes("administracion");
     const esLogistica = permisos.includes("logistica");
-    if (
-      !esAdministrador &&
-      !esLogistica &&
-      Number(entrega.usuarioAgenciaId) !== Number(req.user.usuarioAgenciaId)
-    ) {
-      return res.status(403).json({
-        code: "ENTREGA_NO_AUTORIZADA",
-        message: "No puede consultar una entrega de otra relacion usuario-agencia.",
+    if (!esAdministrador && !esLogistica) {
+      await validarPropietarioEntrega({
+        entrega,
+        usuarioId: req.user.id,
       });
     }
     if (esLogistica && !esAdministrador) {
@@ -392,7 +385,10 @@ const obtenerEntregaCompleta = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error al obtener la entrega" });
+    res.status(error.statusCode || 500).json({
+      code: error.code || "ERROR_OBTENIENDO_ENTREGA",
+      message: error.message || "Error al obtener la entrega",
+    });
   }
 };
 

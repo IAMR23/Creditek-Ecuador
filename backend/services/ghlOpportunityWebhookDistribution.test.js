@@ -3,12 +3,31 @@ jest.mock("./ghlAdvisorAvailabilityService", () => ({
   isGhlUserActiveToday: jest.fn(async () => true),
 }));
 
+jest.mock("../models/GhlRepartoTiempoRealConfiguracion", () => {
+  const row = {
+    id: 1,
+    pipelineId: "pipeline-1",
+    pipelineNombre: "Ventas",
+    stageIds: ["whatsapp", "facebook"],
+    stageNombres: ["WhatsApp", "Facebook"],
+    maxPendientesPorAsesor: 2,
+    indiceSiguienteUsuario: 0,
+    activo: true,
+  };
+  return {
+    __row: row,
+    findByPk: jest.fn(async () => row),
+    update: jest.fn(async (values) => Object.assign(row, values)),
+  };
+});
+
 const service = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 const realtimeReviewCoordinator = require("./ghlRealtimeReviewCoordinator");
 const { sequelize } = require("../config/db");
 const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
+const RealtimeConfiguracion = require("../models/GhlRepartoTiempoRealConfiguracion");
 
 const opportunity = (overrides = {}) => ({
   id: "opp-1",
@@ -16,6 +35,7 @@ const opportunity = (overrides = {}) => ({
   pipelineId: "pipeline-1",
   pipelineStageId: "whatsapp",
   status: "open",
+  updatedAt: new Date().toISOString(),
   ...overrides,
 });
 
@@ -44,7 +64,7 @@ function mockBase({ active = [{ id: "u1" }], open = [], locks = [true] } = {}) {
   jest.spyOn(ghl, "createGhlClient").mockReturnValue(client);
   jest.spyOn(ghl, "fetchPipelines").mockResolvedValue([pipeline]);
   jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(active);
-  jest.spyOn(ghl, "fetchOpportunitiesByStatus").mockResolvedValue(open);
+  jest.spyOn(ghl, "fetchOpportunitiesByUpdatedDate").mockResolvedValue(open);
   jest.spyOn(TiempoRealAsignacion, "create").mockResolvedValue({});
   advisorAvailability.resolveActiveAdvisors.mockResolvedValue({
     active,
@@ -62,6 +82,17 @@ const putCalls = () => ghl.requestGhl.mock.calls.filter(([, options]) => options
 
 describe("reparto GHL de tiempo real", () => {
   beforeEach(() => {
+    Object.assign(RealtimeConfiguracion.__row, {
+      pipelineId: "pipeline-1",
+      pipelineNombre: "Ventas",
+      stageIds: ["whatsapp", "facebook"],
+      stageNombres: ["WhatsApp", "Facebook"],
+      maxPendientesPorAsesor: 2,
+      indiceSiguienteUsuario: 0,
+      activo: true,
+    });
+    RealtimeConfiguracion.findByPk.mockResolvedValue(RealtimeConfiguracion.__row);
+    RealtimeConfiguracion.update.mockImplementation(async (values) => Object.assign(RealtimeConfiguracion.__row, values));
     delete process.env.GHL_REPARTO_MAX_PENDIENTES_POR_ASESOR;
     delete process.env.GHL_REPARTO_MAX_EXECUTION_MS;
   });
@@ -103,7 +134,7 @@ describe("reparto GHL de tiempo real", () => {
     expect(result).toMatchObject({ code: "NO_ACTIVE_ADVISORS", assigned: false });
     expect(putCalls()).toHaveLength(0);
     expect(ghl.fetchPipelines).not.toHaveBeenCalled();
-    expect(ghl.fetchOpportunitiesByStatus).not.toHaveBeenCalled();
+    expect(ghl.fetchOpportunitiesByUpdatedDate).not.toHaveBeenCalled();
     expect(ghl.requestGhl).not.toHaveBeenCalled();
   });
 
@@ -115,7 +146,7 @@ describe("reparto GHL de tiempo real", () => {
 
     expect(result).toMatchObject({ code: "NO_ACTIVE_ADVISORS", assigned: false, pendingCount: null });
     expect(ghl.fetchPipelines).not.toHaveBeenCalled();
-    expect(ghl.fetchOpportunitiesByStatus).not.toHaveBeenCalled();
+    expect(ghl.fetchOpportunitiesByUpdatedDate).not.toHaveBeenCalled();
   });
 
   test("una suspension persistida evita nuevos intentos GHL sin afectar el backend", async () => {
@@ -157,7 +188,7 @@ describe("reparto GHL de tiempo real", () => {
   test("consulta cada etapa admitida, deduplica y conserva la carga completa", async () => {
     const { client } = mockBase({ active: [{ id: "u1" }, { id: "u2" }] });
     const duplicate = opportunity({ id: "shared", pipelineStageId: "whatsapp", assignedTo: "u1" });
-    ghl.fetchOpportunitiesByStatus
+    ghl.fetchOpportunitiesByUpdatedDate
       .mockResolvedValueOnce([
         duplicate,
         opportunity({ id: "wa-u1", pipelineStageId: "whatsapp", assignedTo: "u1" }),
@@ -166,7 +197,7 @@ describe("reparto GHL de tiempo real", () => {
         duplicate,
         opportunity({ id: "fb-u2", pipelineStageId: "facebook", assignedTo: "u2" }),
       ]);
-    const context = await service.getRealtimePipelineContext(client, { locationId: "location-1" });
+    const context = await service.getRealtimePipelineContext(client, { locationId: "location-1" }, RealtimeConfiguracion.__row);
 
     const found = await service.fetchRealtimeOpenOpportunities(
       client,
@@ -178,25 +209,76 @@ describe("reparto GHL de tiempo real", () => {
     expect(found.map((item) => item.id).sort()).toEqual(["fb-u2", "shared", "wa-u1"]);
     expect(loads.get("u1")).toBe(2);
     expect(loads.get("u2")).toBe(1);
-    expect(ghl.fetchOpportunitiesByStatus).toHaveBeenNthCalledWith(
+    expect(ghl.fetchOpportunitiesByUpdatedDate).toHaveBeenNthCalledWith(
       1,
       client,
       expect.objectContaining({ pipelineId: "pipeline-1", pipelineStageId: "whatsapp" }),
       "open",
-      {},
+      expect.objectContaining({
+        fechaInicio: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        fechaFin: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
       expect.any(Object),
     );
-    expect(ghl.fetchOpportunitiesByStatus).toHaveBeenNthCalledWith(
+    expect(ghl.fetchOpportunitiesByUpdatedDate).toHaveBeenNthCalledWith(
       2,
       client,
       expect.objectContaining({ pipelineId: "pipeline-1", pipelineStageId: "facebook" }),
       "open",
-      {},
+      expect.objectContaining({
+        fechaInicio: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        fechaFin: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
       expect.any(Object),
     );
   });
 
-  test("usa el pipeline configurado aunque GHL devuelva otro primero", async () => {
+  test("solo conserva oportunidades de la etapa seleccionada actualizadas en los ultimos tres dias", async () => {
+    const { client } = mockBase();
+    ghl.fetchOpportunitiesByUpdatedDate.mockReset();
+    ghl.fetchOpportunitiesByUpdatedDate
+      .mockResolvedValueOnce([
+        opportunity({
+          id: "reciente",
+          pipelineStageId: "whatsapp",
+          createdAt: "2025-01-01T12:00:00.000Z",
+          updatedAt: "2026-09-20T12:00:00.000Z",
+        }),
+        opportunity({
+          id: "actualizacion-antigua",
+          pipelineStageId: "whatsapp",
+          createdAt: "2026-09-20T12:00:00.000Z",
+          updatedAt: "2026-09-18T12:00:00.000Z",
+        }),
+        opportunity({
+          id: "otra-etapa",
+          pipelineStageId: "gestion",
+          updatedAt: "2026-09-20T12:00:00.000Z",
+        }),
+      ])
+      .mockResolvedValueOnce([]);
+    const context = await service.getRealtimePipelineContext(
+      client,
+      { locationId: "location-1" },
+      RealtimeConfiguracion.__row,
+    );
+
+    const found = await service.fetchRealtimeOpenOpportunities(
+      client,
+      { locationId: "location-1" },
+      context,
+      {
+        dateFilters: {
+          fechaInicio: "2026-09-19",
+          fechaFin: "2026-09-21",
+        },
+      },
+    );
+
+    expect(found.map((item) => item.id)).toEqual(["reciente"]);
+  });
+
+  test("usa exclusivamente el pipeline guardado aunque GHL devuelva otro primero", async () => {
     const { client } = mockBase();
     ghl.fetchPipelines.mockResolvedValueOnce([
       { id: "otro-pipeline", stages: [{ id: "otra", name: "WhatsApp" }] },
@@ -205,23 +287,63 @@ describe("reparto GHL de tiempo real", () => {
 
     const context = await service.getRealtimePipelineContext(client, {
       locationId: "location-1",
-      pipelineId: "pipeline-1",
-    });
+    }, RealtimeConfiguracion.__row);
 
     expect(context.pipelineId).toBe("pipeline-1");
     expect([...context.stageIds].sort()).toEqual(["facebook", "whatsapp"]);
   });
 
-  test("rechaza un GHL_PIPELINE_ID configurado que no pertenece a la ubicacion", async () => {
+  test("rechaza un pipeline persistido que ya no pertenece a la ubicacion", async () => {
     const { client } = mockBase();
+    const invalidConfiguration = { ...RealtimeConfiguracion.__row, pipelineId: "pipeline-inexistente" };
 
     await expect(service.getRealtimePipelineContext(client, {
       locationId: "location-1",
-      pipelineId: "pipeline-inexistente",
-    })).rejects.toMatchObject({
-      code: "GHL_CONFIGURED_PIPELINE_NOT_FOUND",
-      statusCode: 502,
+    }, invalidConfiguration)).rejects.toMatchObject({
+      code: "GHL_REALTIME_PIPELINE_NOT_FOUND",
+      statusCode: 409,
     });
+  });
+
+  test("una etapa no seleccionada nunca se consulta ni se asigna", async () => {
+    RealtimeConfiguracion.__row.stageIds = ["whatsapp"];
+    RealtimeConfiguracion.__row.stageNombres = ["WhatsApp"];
+    const gestion = opportunity({ id: "gestion-1", pipelineStageId: "gestion" });
+    mockBase({ active: [{ id: "u1" }], open: [gestion] });
+    jest.spyOn(ghl, "requestGhl").mockResolvedValue({ opportunity: gestion });
+
+    const result = await service.executeRealtimeQueue({ trigger: "scheduler" });
+
+    expect(result).toMatchObject({ code: "NO_PENDING_OPPORTUNITIES", assigned: false });
+    expect(ghl.fetchOpportunitiesByUpdatedDate).toHaveBeenCalledTimes(1);
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  test("una oportunidad deja de contar cuando sale de las etapas seleccionadas", async () => {
+    RealtimeConfiguracion.__row.stageIds = ["whatsapp"];
+    RealtimeConfiguracion.__row.stageNombres = ["WhatsApp"];
+    const pending = opportunity({ id: "pending", pipelineStageId: "whatsapp" });
+    const outside = opportunity({ id: "outside", pipelineStageId: "gestion", assignedTo: "u1" });
+    mockBase({ active: [{ id: "u1" }], open: [pending, outside] });
+    jest.spyOn(ghl, "requestGhl").mockImplementation(async (_client, options) => (
+      options.method === "GET" ? { opportunity: pending } : { ok: true }
+    ));
+
+    const result = await service.executeRealtimeQueue({ trigger: "scheduler" });
+
+    expect(result).toMatchObject({ code: "QUEUE_PROCESSED", assignedCount: 1 });
+    expect(putCalls()).toHaveLength(1);
+  });
+
+  test("la configuracion inactiva detiene el reparto antes de consultar GHL", async () => {
+    RealtimeConfiguracion.__row.activo = false;
+    mockBase({ active: [{ id: "u1" }], open: [opportunity()] });
+
+    const result = await service.executeRealtimeQueue({ trigger: "scheduler" });
+
+    expect(result).toMatchObject({ code: "GHL_REALTIME_CONFIGURATION_INACTIVE", assigned: false });
+    expect(ghl.fetchAllAssignableUsers).not.toHaveBeenCalled();
+    expect(sequelize.connectionManager.getConnection).not.toHaveBeenCalled();
   });
 
   test("una oportunidad en otra etapa no se modifica", async () => {
@@ -232,6 +354,23 @@ describe("reparto GHL de tiempo real", () => {
     const result = await service.executeWebhookOpportunity({ opportunityId: "opp-1" });
 
     expect(result).toMatchObject({ code: "STAGE_NOT_ELIGIBLE", assigned: false });
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  test("una oportunidad sin actualizacion en los ultimos tres dias no se modifica", async () => {
+    const outdated = opportunity({
+      createdAt: new Date().toISOString(),
+      updatedAt: "2026-09-10T12:00:00.000Z",
+    });
+    mockBase({ active: [{ id: "u1" }], open: [outdated] });
+    jest.spyOn(ghl, "requestGhl").mockResolvedValue({ opportunity: outdated });
+
+    const result = await service.executeWebhookOpportunity({ opportunityId: "opp-1" });
+
+    expect(result).toMatchObject({
+      code: "OPPORTUNITY_UPDATED_OUTSIDE_DATE_RANGE",
+      assigned: false,
+    });
     expect(putCalls()).toHaveLength(0);
   });
 

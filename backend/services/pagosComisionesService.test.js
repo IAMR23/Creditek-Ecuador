@@ -525,19 +525,25 @@ describe("pagosComisionesService", () => {
     ).toBe(sancionVendedor);
   });
 
-  test("jefe comercial usa los escalones semanales configurados", () => {
+  test("jefe comercial de piso usa los rangos semanales configurados", () => {
     const grouped = buildWeeklyRulesByGroup([
-      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "24", comisionPorEquipo: 1, porcentaje: null },
-      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "26", comisionPorEquipo: 1.5, porcentaje: null },
-      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "28", comisionPorEquipo: 2, porcentaje: null },
-      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "32", comisionPorEquipo: 3, porcentaje: null },
+      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "50-59", comisionPorEquipo: 0.1, porcentaje: null },
+      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "60-69", comisionPorEquipo: 0.35, porcentaje: null },
+      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "70-89", comisionPorEquipo: 1, porcentaje: null },
+      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "90-109", comisionPorEquipo: 1.25, porcentaje: null },
+      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "110-149", comisionPorEquipo: 1.5, porcentaje: null },
+      { grupo: "JEFE COMERCIAL PISO", periodo: "COMISION_SEMANAL", unidadesVendidas: "150-199", comisionPorEquipo: 1.75, porcentaje: null },
     ]);
     const rules = grouped["JEFE COMERCIAL PISO"];
 
-    expect(calculateCommission({ rules, venden: 24, valorVendido: 0 }).totalComisiones).toBe(24);
-    expect(calculateCommission({ rules, venden: 27, valorVendido: 0 }).totalComisiones).toBe(40.5);
-    expect(calculateCommission({ rules, venden: 30, valorVendido: 0 }).totalComisiones).toBe(60);
-    expect(calculateCommission({ rules, venden: 35, valorVendido: 0 }).totalComisiones).toBe(105);
+    expect(calculateCommission({ rules, venden: 49, valorVendido: 0 }).totalComisiones).toBe(0);
+    expect(calculateCommission({ rules, venden: 50, valorVendido: 0 }).totalComisiones).toBe(5);
+    expect(calculateCommission({ rules, venden: 69, valorVendido: 0 }).totalComisiones).toBe(24.15);
+    expect(calculateCommission({ rules, venden: 89, valorVendido: 0 }).totalComisiones).toBe(89);
+    expect(calculateCommission({ rules, venden: 109, valorVendido: 0 }).totalComisiones).toBe(136.25);
+    expect(calculateCommission({ rules, venden: 149, valorVendido: 0 }).totalComisiones).toBe(223.5);
+    expect(calculateCommission({ rules, venden: 199, valorVendido: 0 }).totalComisiones).toBe(348.25);
+    expect(calculateCommission({ rules, venden: 200, valorVendido: 0 }).totalComisiones).toBe(0);
   });
 
   test("promedio del jefe usa dispositivos de juniors, semanas y cantidad de juniors", () => {
@@ -627,6 +633,29 @@ describe("pagosComisionesService", () => {
         venden: 20,
       }),
     ).toBe(55);
+  });
+
+  test("la primera meta solo nuevos requiere activacion manual", () => {
+    const grouped = buildMonthlyRulesByGroup([
+      {
+        grupo: "VENDEDORES DE CALL CENTER",
+        periodo: "BONO_MENSUAL_5_SEMANAS",
+        unidadesVendidas: "50",
+        bono: 60,
+        valorAproximado: "SOLO NUEVOS",
+      },
+      {
+        grupo: "VENDEDORES DE CALL CENTER",
+        periodo: "BONO_MENSUAL_5_SEMANAS",
+        unidadesVendidas: "55",
+        bono: 80,
+      },
+    ], 5);
+    const rules = grouped["VENDEDORES DE CALL CENTER"];
+
+    expect(calculateMonthlyBonus({ rules, venden: 54 })).toBe(0);
+    expect(calculateMonthlyBonus({ rules, venden: 54, personalNuevo: true })).toBe(60);
+    expect(calculateMonthlyBonus({ rules, venden: 55 })).toBe(80);
   });
 
   test("supervisor piso y call center usan la misma logica con sus propias configuraciones", () => {
@@ -1380,6 +1409,97 @@ describe("bono mensual del jefe comercial", () => {
   test("supervisor sin seleccionados no genera bono mensual", () => {
     expect(calcular(0, true, true)).toMatchObject({
       promedioVentasPorJunior: 0, valorComisionMensual: 0,
+    });
+  });
+});
+
+describe("tabla del jefe comercial de piso", () => {
+  const weeks = [5, 12, 19, 26].map((day) => ({
+    startDate: `2026-01-${String(day).padStart(2, "0")}`,
+    endDate: `2026-01-${String(day + 6).padStart(2, "0")}`,
+  }));
+  const weeklyRules = buildWeeklyRulesByGroup(
+    [
+      ["50-59", 0.1],
+      ["60-69", 0.35],
+      ["70-89", 1],
+      ["90-109", 1.25],
+      ["110-149", 1.5],
+      ["150-199", 1.75],
+    ].map(([unidadesVendidas, comisionPorEquipo]) => ({
+      grupo: "JEFE COMERCIAL PISO",
+      periodo: "COMISION_SEMANAL",
+      unidadesVendidas,
+      comisionPorEquipo,
+      porcentaje: null,
+    })),
+  );
+  const monthlyRules = buildMonthlyRulesByGroup([
+    {
+      grupo: "JEFE COMERCIAL PISO",
+      periodo: "BONO_MENSUAL",
+      unidadesVendidas: "1",
+      promedioPorVendedor: null,
+      bono: 100,
+    },
+  ], weeks.length);
+
+  const calcular = (ventasSemanales) => {
+    const jefe = {
+      usuarioId: 1,
+      cargoComision: "JEFE COMERCIAL DE PISO",
+      grupoComision: "JEFE COMERCIAL PISO",
+      esJefeComercial: true,
+      esSupervisorComercial: false,
+      cantidadVendedoresPromedioJefe: 0,
+      semanas: Object.fromEntries(
+        weeks.map((week, index) => [week.startDate, {
+          venden: ventasSemanales[index],
+          ventasParaPromedioAntiguedad: 0,
+          valorVendido: 0,
+          cantidadVendedores: 2,
+        }]),
+      ),
+      total: {
+        venden: 0,
+        valorVendido: 0,
+        totalComisiones: 0,
+        noCumpleMetas: 0,
+        valorDescontar: 0,
+      },
+    };
+
+    finalizarVendedor(
+      jefe,
+      weeks,
+      weeklyRules,
+      monthlyRules,
+      { byRole: {}, byCargo: {} },
+      new Map(),
+    );
+    return jefe;
+  };
+
+  test("suma las comisiones de las ventas seleccionadas y agrega 100 mensuales", () => {
+    const jefe = calcular([50, 60, 70, 90]);
+
+    expect(jefe.resumenMensual).toMatchObject({
+      bonoMensualFijoJefePiso: true,
+      ventasTvCelulaMensual: 270,
+      valorComisionSemanal: 208.5,
+      valorComisionMensual: 100,
+      totalComisionesSemanaMensual: 308.5,
+      promedioVentasPorJunior: null,
+    });
+  });
+
+  test("no paga comision ni bono con menos de 50 o desde 200 ventas", () => {
+    const jefe = calcular([49, 200, 0, 0]);
+
+    expect(jefe.resumenMensual).toMatchObject({
+      valorComisionSemanal: 0,
+      valorComisionMensual: 0,
+      totalComisionesSemanaMensual: 0,
     });
   });
 });

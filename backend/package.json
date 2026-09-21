@@ -8,6 +8,8 @@
     "migrate:capacitacion": "node scripts/migrateCapacitacionVideos.js",
     "migrate:ventas-con-entrega": "node scripts/migrateVentasConEntrega.js",
     "migrate:ghl-reviews": "node scripts/migrateGhlPendingReviews.js",
+    "migrate:ghl-realtime-config": "node scripts/migrateGhlRealtimeConfiguration.js",
+    "migrate:ghl-workflows": "node scripts/migrateGhlWorkflowProgramaciones.js",
     "entregas:reconciliar": "node scripts/reconciliarEntregas.js",
     "dev": "nodemon --config nodemon.json index.js",
     "start": "node index.js"

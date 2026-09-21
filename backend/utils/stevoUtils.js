@@ -26,23 +26,72 @@ function decodeBase64(value) {
   }
 }
 
-function limpiarTelefono(phone) {
-  if (!phone) return null;
+const ECUADOR_PHONE_PATTERN = /^593(?:9\d{8}|[2-7]\d{7})$/;
+const PHONE_JID_DOMAINS = new Set(["s.whatsapp.net", "c.us"]);
 
-  let cleaned = String(phone)
-    .replace("@s.whatsapp.net", "")
-    .replace("@c.us", "")
-    .replace(/\D/g, "");
+function limpiarTelefono(phone) {
+  if (phone === null || phone === undefined) return null;
+
+  let rawPhone = String(phone).trim();
+  if (!rawPhone) return null;
+
+  const jidSeparator = rawPhone.lastIndexOf("@");
+  if (jidSeparator >= 0) {
+    const jidDomain = rawPhone.slice(jidSeparator + 1).toLowerCase();
+    if (!PHONE_JID_DOMAINS.has(jidDomain)) return null;
+
+    rawPhone = rawPhone.slice(0, jidSeparator).split(":", 1)[0];
+  }
+
+  let cleaned = rawPhone.replace(/\D/g, "");
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
 
   if (cleaned.startsWith("0")) {
     cleaned = `593${cleaned.substring(1)}`;
-  }
-
-  if (!cleaned.startsWith("593")) {
+  } else if (/^(?:9\d{8}|[2-7]\d{7})$/.test(cleaned)) {
     cleaned = `593${cleaned}`;
   }
 
+  if (!ECUADOR_PHONE_PATTERN.test(cleaned)) return null;
+
   return `+${cleaned}`;
+}
+
+function findValuesDeep(obj, key, values = [], seen = new Set()) {
+  if (!obj || typeof obj !== "object" || seen.has(obj)) return values;
+  seen.add(obj);
+
+  if (Object.prototype.hasOwnProperty.call(obj, key)) values.push(obj[key]);
+
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === "object") {
+      findValuesDeep(value, key, values, seen);
+    }
+  }
+
+  return values;
+}
+
+function extraerTelefonoStevo(payload, { isFromMe = false } = {}) {
+  const info = payload?.data?.Info || findValueDeep(payload, ["Info"]) || {};
+  const explicitCandidates = isFromMe
+    ? [info?.RecipientAlt, info?.Chat, info?.SenderAlt, info?.Sender]
+    : [info?.SenderAlt, info?.ChatAlt, info?.Sender, info?.Chat];
+  const fallbackKeys = isFromMe
+    ? ["RecipientAlt", "phone", "number", "remoteJid", "Chat"]
+    : ["SenderAlt", "phone", "number", "remoteJid", "Sender", "sender", "from", "Chat"];
+  const candidates = [...explicitCandidates];
+
+  for (const key of fallbackKeys) {
+    candidates.push(...findValuesDeep(payload, key));
+  }
+
+  for (const candidate of candidates) {
+    const phone = limpiarTelefono(candidate);
+    if (phone) return phone;
+  }
+
+  return null;
 }
 
 function parseJsonSafe(value) {
@@ -124,5 +173,6 @@ module.exports = {
   findValueDeep,
   decodeBase64,
   limpiarTelefono,
+  extraerTelefonoStevo,
   detectarCampania,
 };

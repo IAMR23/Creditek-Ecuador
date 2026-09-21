@@ -57,4 +57,45 @@ describe("control de disponibilidad GHL", () => {
     });
     expect(schedule).not.toHaveBeenCalled();
   });
+
+  test("guarda la hora de pausa automatica con el actor autenticado", async () => {
+    const save = jest.spyOn(advisorService, "saveAutoPauseConfiguration")
+      .mockResolvedValue({ horaPausaAutomatica: "19:30", persistida: true });
+    const req = {
+      user: { id: 99 },
+      body: { horaPausaAutomatica: "19:30" },
+    };
+    const res = response();
+
+    await controller.saveAdvisorAutoPauseConfiguration(req, res);
+
+    expect(save).toHaveBeenCalledWith({ horaPausaAutomatica: "19:30" }, 99);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      ok: true,
+      configuracion: expect.objectContaining({ horaPausaAutomatica: "19:30" }),
+    }));
+  });
+
+  test("guardar una nueva seleccion solicita una revision segura de la cola", async () => {
+    const configuracion = { id: 1, pipelineId: "pipeline-1", stageIds: ["stage-1"], activo: true };
+    const save = jest.spyOn(distributionService, "saveRealtimeDistributionConfiguration")
+      .mockResolvedValue(configuracion);
+    const schedule = jest.spyOn(distributionService, "scheduleRealtimeQueueReview")
+      .mockResolvedValue({ code: "REVIEW_PENDING" });
+    const req = {
+      user: { id: 99 },
+      body: { pipelineId: "pipeline-1", stageIds: ["stage-1"], activo: true },
+    };
+    const res = response();
+
+    await controller.saveRealtimeConfiguration(req, res);
+
+    expect(save).toHaveBeenCalledWith(req.body, 99);
+    expect(schedule).toHaveBeenCalledWith({ trigger: "config-update" });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      ok: true,
+      configuracion,
+      message: expect.stringContaining("guardada"),
+    }));
+  });
 });

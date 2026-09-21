@@ -6,9 +6,12 @@ const Vinculo = require("../models/GhlAsesorVinculo");
 const Historial = require("../models/GhlAsesorDisponibilidadHistorial");
 const Detalle = require("../models/GhlRepartoEjecucionDetalle");
 const TiempoRealAsignacion = require("../models/GhlRepartoTiempoRealAsignacion");
+const RealtimeConfiguracion = require("../models/GhlRepartoTiempoRealConfiguracion");
 const ghl = require("./ghlService");
 
 const TIME_ZONE = "America/Guayaquil";
+const DEFAULT_AUTO_PAUSE_TIME = "18:00";
+const AUTO_PAUSE_CACHE_MS = 30000;
 const ESTADOS = Object.freeze(["ACTIVO", "PAUSADO"]);
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
 const CARGO_VENDEDOR_CALL_CENTER = "VENDEDOR CALL CENTER";
@@ -34,6 +37,176 @@ const normalizeCargo = (cargo) =>
 
 const isVendedorCallCenterCargo = (cargo) =>
   normalizeCargo(cargo) === CARGO_VENDEDOR_CALL_CENTER;
+
+const normalizeTime = (value) => {
+  const match = String(value || "").trim().match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
+    ? `${match[1]}:${match[2]}`
+    : null;
+};
+
+const getAutoPauseTime = (environment = process.env) =>
+  normalizeTime(environment.GHL_ADVISOR_AUTO_PAUSE_TIME) || DEFAULT_AUTO_PAUSE_TIME;
+
+let autoPauseCache = {
+  value: getAutoPauseTime(),
+  expiresAt: 0,
+  persistida: false,
+  migracionPendiente: false,
+  actualizadoPorId: null,
+  updatedAt: null,
+};
+
+const setAutoPauseCache = (value, metadata = {}) => {
+  autoPauseCache = {
+    value: normalizeTime(value) || getAutoPauseTime(),
+    expiresAt: Date.now() + AUTO_PAUSE_CACHE_MS,
+    persistida: metadata.persistida === true,
+    migracionPendiente: metadata.migracionPendiente === true,
+    actualizadoPorId: metadata.actualizadoPorId || null,
+    updatedAt: metadata.updatedAt || null,
+  };
+  return autoPauseCache.value;
+};
+
+const currentAutoPauseTime = () =>
+  normalizeTime(autoPauseCache.value) || getAutoPauseTime();
+
+const isMissingAutoPauseSchema = (error) => {
+  const code = error?.original?.code || error?.parent?.code || error?.code;
+  return code === "42703" || code === "42P01";
+};
+
+async function getAutoPauseConfiguration({ force = false } = {}) {
+  if (!force && autoPauseCache.expiresAt > Date.now()) {
+    return {
+      horaPausaAutomatica: currentAutoPauseTime(),
+      zonaHoraria: TIME_ZONE,
+      persistida: autoPauseCache.persistida,
+      migracionPendiente: autoPauseCache.migracionPendiente,
+      actualizadoPorId: autoPauseCache.actualizadoPorId,
+      updatedAt: autoPauseCache.updatedAt,
+    };
+  }
+
+  try {
+    const row = await RealtimeConfiguracion.findByPk(1, {
+      attributes: ["id", "horaPausaAutomatica", "actualizadoPorId", "updatedAt"],
+    });
+    const plain = typeof row?.toJSON === "function" ? row.toJSON() : row;
+    const persistida = Boolean(row && normalizeTime(plain?.horaPausaAutomatica));
+    const horaPausaAutomatica = setAutoPauseCache(plain?.horaPausaAutomatica, {
+      persistida,
+      actualizadoPorId: plain?.actualizadoPorId,
+      updatedAt: plain?.updatedAt,
+    });
+    return {
+      horaPausaAutomatica,
+      zonaHoraria: TIME_ZONE,
+      persistida,
+      actualizadoPorId: plain?.actualizadoPorId || null,
+      updatedAt: plain?.updatedAt || null,
+    };
+  } catch (error) {
+    if (!isMissingAutoPauseSchema(error)) throw error;
+    const horaPausaAutomatica = setAutoPauseCache(getAutoPauseTime(), {
+      persistida: false,
+      migracionPendiente: true,
+    });
+    return {
+      horaPausaAutomatica,
+      zonaHoraria: TIME_ZONE,
+      persistida: false,
+      migracionPendiente: true,
+      actualizadoPorId: null,
+      updatedAt: null,
+    };
+  }
+}
+
+async function saveAutoPauseConfiguration({ horaPausaAutomatica }, actorId) {
+  const normalizedTime = normalizeTime(horaPausaAutomatica);
+  if (!normalizedTime) {
+    throw availabilityError(
+      "INVALID_AUTO_PAUSE_TIME",
+      "La hora de pausa automatica debe tener formato HH:mm",
+      400,
+    );
+  }
+
+  try {
+    const row = await sequelize.transaction(async (transaction) => {
+      const existing = await RealtimeConfiguracion.findByPk(1, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (existing) {
+        await existing.update({
+          horaPausaAutomatica: normalizedTime,
+          actualizadoPorId: actorId,
+        }, { transaction });
+        return existing;
+      }
+      return RealtimeConfiguracion.create({
+        id: 1,
+        horaPausaAutomatica: normalizedTime,
+        actualizadoPorId: actorId,
+      }, { transaction });
+    });
+    const plain = typeof row?.toJSON === "function" ? row.toJSON() : row;
+    setAutoPauseCache(normalizedTime, {
+      persistida: true,
+      actualizadoPorId: plain?.actualizadoPorId || actorId,
+      updatedAt: plain?.updatedAt,
+    });
+    return {
+      horaPausaAutomatica: normalizedTime,
+      zonaHoraria: TIME_ZONE,
+      persistida: true,
+      actualizadoPorId: plain?.actualizadoPorId || actorId || null,
+      updatedAt: plain?.updatedAt || null,
+    };
+  } catch (error) {
+    if (!isMissingAutoPauseSchema(error)) throw error;
+    throw availabilityError(
+      "GHL_AUTO_PAUSE_MIGRATION_REQUIRED",
+      "Debe aplicar la migracion de configuracion GHL antes de guardar la hora",
+      503,
+    );
+  }
+}
+
+const resetAutoPauseCache = () => {
+  autoPauseCache = {
+    value: getAutoPauseTime(),
+    expiresAt: 0,
+    persistida: false,
+    migracionPendiente: false,
+    actualizadoPorId: null,
+    updatedAt: null,
+  };
+};
+
+function localTime(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
+  );
+  return `${values.hour}:${values.minute}`;
+}
+
+const isAtOrAfterAutoPauseTime = (
+  now = new Date(),
+  autoPauseTime = currentAutoPauseTime(),
+) => localTime(now) >= autoPauseTime;
 
 const hasVendedorCallCenterCargo = (usuario) => {
   const cargos = [
@@ -91,7 +264,8 @@ function localDayBounds(now = new Date()) {
 const effectiveState = (row, now = new Date()) =>
   row?.activo === true &&
   row?.estadoRecepcion === "ACTIVO" &&
-  String(row?.estadoFechaLocal || "") === localDate(now)
+  String(row?.estadoFechaLocal || "") === localDate(now) &&
+  !isAtOrAfterAutoPauseTime(now)
     ? "ACTIVO"
     : "PAUSADO";
 
@@ -162,6 +336,7 @@ function reportDayBounds(fecha) {
 }
 
 async function getAdvisorManagementReport({ fecha = localDate(), now = new Date() } = {}) {
+  await getAutoPauseConfiguration();
   const { date, start, end } = reportDayBounds(fecha);
   const vinculos = await Vinculo.findAll({
     where: { activo: true },
@@ -184,7 +359,14 @@ async function getAdvisorManagementReport({ fecha = localDate(), now = new Date(
           accion: "ESTADO",
           createdAt: { [Op.between]: [start, end] },
         },
-        attributes: ["usuarioId", "estadoNuevo", "createdAt", "cambiadoPorId", "motivoCambio"],
+        attributes: [
+          "usuarioId",
+          "estadoNuevo",
+          "createdAt",
+          "cambiadoPorId",
+          "motivoCambio",
+          "metadata",
+        ],
         include: [{
           model: Usuario,
           as: "cambiadoPor",
@@ -224,19 +406,23 @@ async function getAdvisorManagementReport({ fecha = localDate(), now = new Date(
         momento: event.createdAt,
         cambiadoPorId: event.cambiadoPorId || null,
         cambiadoPor: event.cambiadoPor?.nombre || null,
-        origen: event.motivoCambio,
+        origen: event.metadata?.origen || event.motivoCambio,
       })),
     };
   });
 }
 
 function serializeAvailability(row, leadsHoy = 0, now = new Date()) {
+  const horaPausaAutomatica = currentAutoPauseTime();
+  const bloqueadoPorHorario = isAtOrAfterAutoPauseTime(now, horaPausaAutomatica);
   if (!row) {
     return {
       vinculado: false,
       estado: "PAUSADO",
       recibiendoLeads: false,
       leadsHoy: 0,
+      horaPausaAutomatica,
+      bloqueadoPorHorario,
     };
   }
   const plain = typeof row.toJSON === "function" ? row.toJSON() : row;
@@ -255,10 +441,13 @@ function serializeAvailability(row, leadsHoy = 0, now = new Date()) {
     fechaActivacion: plain.estadoFechaLocal || null,
     motivoUltimoCambio: plain.motivoUltimoCambio || null,
     leadsHoy,
+    horaPausaAutomatica,
+    bloqueadoPorHorario,
   };
 }
 
 async function getMyAvailability(usuarioId, now = new Date()) {
+  await getAutoPauseConfiguration();
   const aplicaRepartoGhl = await isVendedorCallCenter(usuarioId);
   if (!aplicaRepartoGhl) {
     return { ...serializeAvailability(null, 0, now), aplicaRepartoGhl: false };
@@ -274,6 +463,7 @@ async function getMyAvailability(usuarioId, now = new Date()) {
 }
 
 async function listAdvisorAvailability(now = new Date()) {
+  await getAutoPauseConfiguration();
   const [usuarios, vinculos, currentGhlUsers] = await Promise.all([
     Usuario.findAll({
       where: { activo: true },
@@ -403,6 +593,14 @@ async function changeAvailability({
   }
 
   if (normalizedState === "ACTIVO") {
+    const { horaPausaAutomatica: autoPauseTime } = await getAutoPauseConfiguration();
+    if (isAtOrAfterAutoPauseTime(now, autoPauseTime)) {
+      throw availabilityError(
+        "GHL_AVAILABILITY_CLOSED",
+        `El reparto diario cerro a las ${autoPauseTime}. Podra volver a activar Play manana.`,
+        409,
+      );
+    }
     const usuario = await Usuario.findOne({ where: { id: usuarioId, activo: true } });
     if (!usuario) throw availabilityError("RVE_USER_INACTIVE", "El asesor RVE no esta activo", 409);
   }
@@ -499,7 +697,83 @@ async function changeAvailability({
   }
 }
 
+async function pauseAllActiveAdvisors({ now = new Date() } = {}) {
+  const { horaPausaAutomatica: autoPauseTime } = await getAutoPauseConfiguration({ force: true });
+  const fechaLocal = localDate(now);
+  if (!isAtOrAfterAutoPauseTime(now, autoPauseTime)) {
+    return {
+      executed: false,
+      paused: 0,
+      autoPauseTime,
+      fechaLocal,
+    };
+  }
+
+  const paused = await sequelize.transaction(async (transaction) => {
+    const rows = await Vinculo.findAll({
+      where: {
+        activo: true,
+        estadoRecepcion: "ACTIVO",
+        estadoFechaLocal: fechaLocal,
+      },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    for (const row of rows) {
+      await row.update(
+        {
+          estadoRecepcion: "PAUSADO",
+          estadoFechaLocal: null,
+          estadoCambiadoAt: now,
+          estadoCambiadoPorId: null,
+          motivoUltimoCambio: "administrador",
+        },
+        { transaction },
+      );
+      await Historial.create(
+        {
+          vinculoId: row.id,
+          usuarioId: row.usuarioId,
+          ghlUserId: row.ghlUserId,
+          accion: "ESTADO",
+          estadoAnterior: "ACTIVO",
+          estadoNuevo: "PAUSADO",
+          cambiadoPorId: null,
+          motivoCambio: "administrador",
+          fechaLocal,
+          metadata: {
+            origen: "automatico",
+            motivo: "CIERRE_HORARIO",
+            horaPausaAutomatica: autoPauseTime,
+          },
+        },
+        { transaction },
+      );
+    }
+
+    return rows.length;
+  });
+
+  if (paused > 0) {
+    console.log("[GHL] PAUSA_AUTOMATICA", {
+      fechaHora: now.toISOString(),
+      horaLocal: localTime(now),
+      horaConfigurada: autoPauseTime,
+      asesoresPausados: paused,
+    });
+  }
+
+  return {
+    executed: true,
+    paused,
+    autoPauseTime,
+    fechaLocal,
+  };
+}
+
 async function resolveConfiguredAdvisors(configuredUsers, currentGhlUsers, now = new Date()) {
+  await getAutoPauseConfiguration();
   const configured = (configuredUsers || []).map((user) => ({
     ...user,
     id: String(user.id || ""),
@@ -534,6 +808,7 @@ async function resolveConfiguredAdvisors(configuredUsers, currentGhlUsers, now =
 }
 
 async function isGhlUserActiveToday(ghlUserId, now = new Date()) {
+  await getAutoPauseConfiguration();
   const row = await Vinculo.findOne({
     where: { ghlUserId, activo: true },
     include: [{ model: Usuario, as: "usuario", attributes: ["id", "activo"] }],
@@ -542,6 +817,7 @@ async function isGhlUserActiveToday(ghlUserId, now = new Date()) {
 }
 
 async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
+  await getAutoPauseConfiguration();
   const rows = await Vinculo.findAll({
     where: { activo: true },
     include: [{
@@ -578,12 +854,21 @@ async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
 
 module.exports = {
   TIME_ZONE,
+  DEFAULT_AUTO_PAUSE_TIME,
   ESTADOS,
   availabilityError,
   normalizeCargo,
   isVendedorCallCenterCargo,
   hasVendedorCallCenterCargo,
   isVendedorCallCenter,
+  normalizeTime,
+  getAutoPauseTime,
+  currentAutoPauseTime,
+  getAutoPauseConfiguration,
+  saveAutoPauseConfiguration,
+  resetAutoPauseCache,
+  localTime,
+  isAtOrAfterAutoPauseTime,
   localDate,
   localDayBounds,
   effectiveState,
@@ -597,6 +882,7 @@ module.exports = {
   listAdvisorAvailability,
   saveAssociation,
   changeAvailability,
+  pauseAllActiveAdvisors,
   resolveConfiguredAdvisors,
   resolveActiveAdvisors,
   isGhlUserActiveToday,

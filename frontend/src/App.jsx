@@ -135,6 +135,7 @@ const GhlRendimientoPautas = lazy(() => import("./pages/GHL/RendimientoPautas"))
 const GhlRepartoOportunidades = lazy(() => import("./pages/GHL/RepartoOportunidades"));
 const GhlRefrescoOportunidades = lazy(() => import("./pages/GHL/RefrescoOportunidades"));
 const GhlDisponibilidadAsesores = lazy(() => import("./pages/GHL/DisponibilidadAsesores"));
+const GhlWorkflowsProgramados = lazy(() => import("./pages/GHL/WorkflowsProgramados"));
 const ReporteGestionesSupervisores = lazy(() => import("./pages/Supervisores/ReporteGestiones"));
 
 const emptyAuth = {
@@ -405,6 +406,13 @@ function App() {
                   element={protect(
                     <VentasConEntrega />,
                     "/ventas-con-entrega",
+                  )}
+                />
+                <Route
+                  path="ghl/workflows-programados"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}><GhlWorkflowsProgramados /></Suspense>,
+                    "/ghl/workflows-programados",
                   )}
                 />
                 <Route

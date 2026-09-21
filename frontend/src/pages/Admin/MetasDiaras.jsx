@@ -63,6 +63,10 @@ const MetasDiarias = ({ data, metaPorDefecto = 2 }) => {
     return vendedores.reduce((acc, v) => acc + v.ventas, 0);
   }, [vendedores]);
 
+  const totalMeta = useMemo(() => {
+    return vendedores.reduce((acc, v) => acc + v.meta, 0);
+  }, [vendedores]);
+
   // Colores
   const getColor = (faltan) => {
     if (faltan === 0) return "#00c853";
@@ -107,7 +111,7 @@ const MetasDiarias = ({ data, metaPorDefecto = 2 }) => {
           {/* TOTAL */}
           <tr style={styles.totalRow}>
             <td style={styles.td}>TOTAL</td>
-            <td></td>
+            <td style={styles.tdCenter}>{totalMeta}</td>
             <td style={styles.tdCenter}>{totalVentas}</td>
             <td></td>
           </tr>

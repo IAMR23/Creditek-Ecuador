@@ -54,6 +54,7 @@ export const ROUTE_PERMISSIONS = {
   "/ghl/reparto-oportunidades": ["Gerencia", "Administracion", "Sistemas"],
   "/ghl/refresco-oportunidades": ["Gerencia", "Administracion", "Sistemas"],
   "/ghl/disponibilidad-asesores": ["Gerencia", "Administracion", "Sistemas"],
+  "/ghl/workflows-programados": ["Gerencia", "Administracion", "Sistemas"],
   "/metas-comerciales": "Gerencia",
   "/costo-venta-marketing": "Gerencia",
   "/costo-entrega-marketing": "Gerencia",

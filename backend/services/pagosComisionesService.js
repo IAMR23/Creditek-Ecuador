@@ -1009,6 +1009,9 @@ const buildMonthlyRulesByGroup = (configs, weeksCount) => {
       grouped[key][period].tiers.push({
         min: range.min,
         bono: toNumber(config.bono),
+        soloNuevos:
+          normalizeText(config.valorAproximado).includes("SOLO NUEVOS") ||
+          normalizeText(config.notas).includes("SOLO NUEVOS"),
       });
     } else if (unidades.includes("EQUIPO EXTRA")) {
       grouped[key][period].extraPorEquipo = toNumber(config.bono);
@@ -1043,12 +1046,14 @@ const getMinimumMeta = (rules) => {
   return metas.length ? Math.min(...metas) : 0;
 };
 
-const calculateMonthlyBonus = ({ rules, venden }) => {
+const calculateMonthlyBonus = ({ rules, venden, personalNuevo = false }) => {
   if (!rules?.tiers?.length) return 0;
 
   const orderedTiers = [...rules.tiers].sort((a, b) => a.min - b.min);
   const tier = orderedTiers
-    .filter((item) => venden >= item.min)
+    .filter(
+      (item) => venden >= item.min && (!item.soloNuevos || personalNuevo),
+    )
     .sort((a, b) => b.min - a.min)[0];
 
   if (!tier) return 0;
@@ -1906,7 +1911,13 @@ const finalizarVendedor = (
   monthlyRulesByGroup,
   sanctionsByRole,
   penaltyAdjustments,
+  personalNuevoBonoIds = new Set(),
 ) => {
+  const esJefeComercialPiso =
+    Boolean(vendedor.esJefeComercial) &&
+    normalizeText(
+      `${vendedor.grupoComision || ""} ${vendedor.cargoComision || vendedor.cargo || ""}`,
+    ).includes("PISO");
   const rolComisionId = vendedor.rolPagoComisionId || vendedor.rolPagoId;
   const rolKey = rolComisionId ? `ROL:${rolComisionId}` : null;
   const grupoKey = vendedor.grupoComision ? normalizeText(vendedor.grupoComision) : null;
@@ -2022,24 +2033,33 @@ const finalizarVendedor = (
   vendedor.resumenMensual.ventasTvCelulaMensual = vendedor.total.venden;
   vendedor.resumenMensual.valorComisionSemanal = vendedor.total.totalComisiones;
   const esLiderComercial = vendedor.esJefeComercial || vendedor.esSupervisorComercial;
-  // Solo el numerador del promedio excluye ventas sin mas de 15 dias de ingreso.
-  // Las comisiones semanales, ventas visibles y divisor mensual se conservan.
-  const totalDispositivosParaBono = esLiderComercial
-    ? weeks.reduce((total, week) =>
+  // El jefe de piso usa directamente las ventas de su seleccion semanal. Los
+  // demas lideres conservan el promedio mensual y su filtro de antiguedad.
+  const totalDispositivosParaBono = esJefeComercialPiso
+    ? vendedor.total.venden
+    : esLiderComercial
+      ? weeks.reduce((total, week) =>
         total + toNumber(vendedor.semanas[week.startDate].ventasParaPromedioAntiguedad), 0)
-    : vendedor.total.venden;
+      : vendedor.total.venden;
   const totalVendedoresSemanas = null;
-  const promedioVentasPorJunior = esLiderComercial
-    ? calculateLeaderAverage({
+  const promedioVentasPorJunior = esJefeComercialPiso
+    ? null
+    : esLiderComercial
+      ? calculateLeaderAverage({
         totalDispositivos: totalDispositivosParaBono,
         cantidadSemanas: weeks.length,
         cantidadJuniors: cantidadVendedoresMensual,
         totalVendedoresSemanas,
       })
-    : null;
-  const unidadesParaBono = esLiderComercial
-    ? promedioVentasPorJunior
-    : vendedor.total.venden;
+      : null;
+  const unidadesParaBono = esJefeComercialPiso
+    ? vendedor.resumenMensual.valorComisionSemanal > 0
+      ? 1
+      : 0
+    : esLiderComercial
+      ? promedioVentasPorJunior
+      : vendedor.total.venden;
+  vendedor.resumenMensual.bonoMensualFijoJefePiso = esJefeComercialPiso;
   vendedor.resumenMensual.promedioVentasPorJunior = promedioVentasPorJunior;
   vendedor.resumenMensual.totalVendedoresSemanas = totalVendedoresSemanas;
   vendedor.resumenMensual.ventasConsideradasBono =
@@ -2072,9 +2092,11 @@ const finalizarVendedor = (
     vendedor.esSupervisorComercial ? cantidadVendedoresMensual : null;
   vendedor.resumenMensual.cantidadVendedoresPromedioJefe =
     vendedor.esJefeComercial ? cantidadVendedoresMensual : null;
+  vendedor.personalNuevoBono = personalNuevoBonoIds.has(Number(vendedor.usuarioId));
   vendedor.resumenMensual.valorComisionMensual = calculateMonthlyBonus({
     rules: monthlyRules,
     venden: unidadesParaBono,
+    personalNuevo: vendedor.personalNuevoBono,
   });
   vendedor.resumenMensual.totalComisionesSemanaMensual = round(
     vendedor.resumenMensual.valorComisionSemanal +
@@ -2170,6 +2192,12 @@ const construirReportePagosComisiones = async ({
   );
   const sanctionsByRole = buildSanctionsByRole(sanciones);
   const penaltyAdjustments = buildPenaltyAdjustmentsMap(penaltyAdjustmentsRows);
+  const personalNuevoBonoIds = new Set(
+    Object.entries(notaSanciones?.personalNuevoBonoVendedores || {})
+      .filter(([, activo]) => activo === true)
+      .map(([usuarioId]) => Number(usuarioId))
+      .filter(Number.isInteger),
+  );
   const weeklyTeams = buildWeeklyTeamsMap(weeklyTeamsRows);
   const chiefAverageSelections =
     buildChiefAverageSelectionsMap(chiefAverageRows);
@@ -2457,6 +2485,7 @@ const construirReportePagosComisiones = async ({
         monthlyRulesByGroup,
         sanctionsByRole,
         penaltyAdjustments,
+        personalNuevoBonoIds,
       );
       if (vendedor.semanasPersonalesVendedor) {
         vendedor.ventasPersonalesVendedor = buildPersonalSellerView({
@@ -3322,6 +3351,65 @@ const actualizarValoresMultas = async ({
   };
 };
 
+const actualizarPersonalNuevoBono = async ({
+  usuarioId,
+  year,
+  month,
+  activo,
+  actualizadoPorId,
+}) => {
+  const id = Number(usuarioId);
+  const { numericYear, numericMonth } = parseReportPeriod({ year, month });
+  if (!Number.isInteger(id) || id <= 0) {
+    throw createHttpError("El vendedor no es valido", 400);
+  }
+  if (typeof activo !== "boolean") {
+    throw createHttpError("El estado de personal nuevo debe ser verdadero o falso", 400);
+  }
+
+  const periodoPagado = await getPeriodoPagado(numericYear, numericMonth);
+  if (periodoPagado) {
+    throw createHttpError("No se puede cambiar personal nuevo en un periodo pagado", 400);
+  }
+
+  const reporte = await construirReportePagosComisiones({
+    year: numericYear,
+    month: numericMonth,
+  });
+  if (!reporte.vendedores.some((vendedor) => Number(vendedor.usuarioId) === id)) {
+    throw createHttpError("Vendedor no encontrado en el reporte seleccionado", 404);
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    const [registro] = await PagoComisionSancionObservacion.findOrCreate({
+      where: { anio: numericYear, mes: numericMonth },
+      defaults: {},
+      transaction,
+    });
+    await registro.reload({ transaction, lock: transaction.LOCK.UPDATE });
+    const seleccion = { ...(registro.personalNuevoBonoVendedores || {}) };
+    if (activo) seleccion[id] = true;
+    else delete seleccion[id];
+    await registro.update(
+      {
+        personalNuevoBonoVendedores: seleccion,
+        actualizadoPorId: actualizadoPorId || null,
+      },
+      { transaction },
+    );
+  });
+
+  return {
+    message: activo
+      ? "Vendedor marcado como personal nuevo para el bono mensual"
+      : "Marca de personal nuevo retirada para el bono mensual",
+    usuarioId: id,
+    anio: numericYear,
+    mes: numericMonth,
+    activo,
+  };
+};
+
 module.exports = {
   finalizarVendedor,
   normalizarCantidadVendedoresComision,
@@ -3381,4 +3469,5 @@ module.exports = {
   guardarPromedioMensualSupervisorComercial,
   actualizarOmisionMulta,
   actualizarValoresMultas,
+  actualizarPersonalNuevoBono,
 };
