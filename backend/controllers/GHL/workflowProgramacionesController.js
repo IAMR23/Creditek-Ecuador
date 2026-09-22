@@ -2,6 +2,7 @@ const Programacion = require("../../models/GhlWorkflowProgramacion");
 const Ejecucion = require("../../models/GhlWorkflowEjecucion");
 const configurationService = require("../../services/ghlWorkflowConfigurationService");
 const executionService = require("../../services/ghlWorkflowExecutionService");
+const scheduler = require("../../services/ghlWorkflowScheduler");
 
 const respondError = (res, error) => res.status(error.statusCode || 500).json({
   ok: false,
@@ -89,6 +90,26 @@ async function preview(req, res) {
   } catch (error) { return respondError(res, error); }
 }
 
+async function executeNow(req, res) {
+  try {
+    const row = await Programacion.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ ok: false, code: "CONFIGURATION_NOT_FOUND", message: "Programacion no encontrada" });
+    const { execution, completion } = await executionService.executeNow(row);
+    completion.catch(() => {});
+    return res.status(202).json({
+      ok: true,
+      code: "MANUAL_EXECUTION_STARTED",
+      message: "Ejecucion manual iniciada. Consulte el historial para ver el resultado.",
+      ejecucion: execution,
+    });
+  } catch (error) { return respondError(res, error); }
+}
+
+async function schedulerStatus(req, res) {
+  try { return res.json({ ok: true, scheduler: scheduler.getStatus() }); }
+  catch (error) { return respondError(res, error); }
+}
+
 async function history(req, res) {
   try { res.json({ ok: true, ejecuciones: await executionService.listExecutions(req.query) }); }
   catch (error) { respondError(res, error); }
@@ -107,4 +128,4 @@ async function execution(req, res) {
   } catch (error) { return respondError(res, error); }
 }
 
-module.exports = { pipelines, stages, workflows, list, get, create, update, state, previewInput, preview, history, execution };
+module.exports = { pipelines, stages, workflows, list, get, create, update, state, previewInput, preview, executeNow, schedulerStatus, history, execution };

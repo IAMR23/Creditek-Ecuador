@@ -237,7 +237,17 @@ async function refreshCounters(execution) {
 
 async function execute(programacion, execution) {
   const lock = await executionLock.acquire(`configuration:${programacion.id}`);
-  if (!lock) return { skipped: true, code: "EXECUTION_IN_PROGRESS", execution };
+  if (!lock) {
+    if (execution.tipo === "manual") {
+      await execution.update({
+        estado: "cancelled",
+        finishedAt: new Date(),
+        codigoGeneral: "EXECUTION_IN_PROGRESS",
+        mensajeGeneral: "Ya existe otra ejecucion activa para esta programacion",
+      });
+    }
+    return { skipped: true, code: "EXECUTION_IN_PROGRESS", execution };
+  }
   const started = Date.now();
   try {
     await execution.reload();
@@ -363,6 +373,30 @@ async function executeScheduled(programacion, now = new Date()) {
   return execute(programacion, execution);
 }
 
+async function executeNow(programacion, now = new Date()) {
+  if (!programacion?.activo) {
+    throw configurationService.serviceError(
+      "CONFIGURATION_PAUSED",
+      "Active la programacion antes de ejecutar ahora",
+      409,
+    );
+  }
+  const local = configurationService.localParts(now);
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  const execution = await Ejecucion.create({
+    configuracionId: programacion.id,
+    ventanaProgramada: `${programacion.id}:manual:${nonce}`,
+    tipo: "manual",
+    estado: "pending",
+    scheduledFor: now,
+    fechaLocal: local.date,
+  });
+  return {
+    execution,
+    completion: execute(programacion, execution),
+  };
+}
+
 async function recoverStaleRuns(now = new Date()) {
   const cutoff = new Date(now.getTime() - STALE_AFTER_MS);
   const staleRuns = await Ejecucion.findAll({
@@ -417,6 +451,7 @@ module.exports = {
   refreshCounters,
   scheduledWindow,
   executeScheduled,
+  executeNow,
   recoverStaleRuns,
   listExecutions,
 };

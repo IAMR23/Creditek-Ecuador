@@ -198,4 +198,34 @@ describe("ejecucion de workflows programados", () => {
     expect(updateExecution).not.toHaveBeenCalled();
     expect(updateDetail).not.toHaveBeenCalled();
   });
+
+  test("crea una ejecucion manual sin depender del dia ni la hora configurada", async () => {
+    const execution = {
+      id: 120,
+      tipo: "manual",
+      estado: "pending",
+      reload: jest.fn().mockResolvedValue(),
+      update: jest.fn(async function update(values) { Object.assign(this, values); return this; }),
+    };
+    const create = jest.spyOn(Ejecucion, "create").mockResolvedValue(execution);
+    jest.spyOn(executionLock, "acquire").mockResolvedValue(null);
+
+    const result = await service.executeNow(programacion, new Date("2026-09-20T13:15:00.000Z"));
+    await expect(result.completion).resolves.toMatchObject({ skipped: true, code: "EXECUTION_IN_PROGRESS" });
+
+    expect(create.mock.calls[0][0]).toMatchObject({
+      configuracionId: 7,
+      tipo: "manual",
+      estado: "pending",
+      fechaLocal: "2026-09-20",
+    });
+    expect(execution).toMatchObject({ estado: "cancelled", codigoGeneral: "EXECUTION_IN_PROGRESS" });
+  });
+
+  test("no permite ejecutar ahora una programacion pausada", async () => {
+    const create = jest.spyOn(Ejecucion, "create");
+    await expect(service.executeNow({ ...programacion, activo: false }))
+      .rejects.toMatchObject({ code: "CONFIGURATION_PAUSED", statusCode: 409 });
+    expect(create).not.toHaveBeenCalled();
+  });
 });

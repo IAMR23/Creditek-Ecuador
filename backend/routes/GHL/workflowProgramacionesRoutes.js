@@ -14,6 +14,8 @@ router.post("/programaciones", controller.create);
 router.put("/programaciones/:id", controller.update);
 router.patch("/programaciones/:id/estado", controller.state);
 router.post("/programaciones/:id/vista-previa", controller.preview);
+router.post("/programaciones/:id/ejecutar-ahora", controller.executeNow);
+router.get("/scheduler/estado", controller.schedulerStatus);
 router.get("/ejecuciones", controller.history);
 router.get("/ejecuciones/:id", controller.execution);
 

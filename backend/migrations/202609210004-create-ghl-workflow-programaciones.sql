@@ -4,7 +4,7 @@ SELECT to_regclass('public.ghl_workflow_programaciones'),
        to_regclass('public.ghl_workflow_ejecucion_detalles');
 
 DO $$ BEGIN
-  CREATE TYPE enum_ghl_workflow_ejecuciones_tipo AS ENUM ('scheduled');
+  CREATE TYPE enum_ghl_workflow_ejecuciones_tipo AS ENUM ('scheduled', 'manual');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE TYPE enum_ghl_workflow_ejecuciones_estado AS ENUM

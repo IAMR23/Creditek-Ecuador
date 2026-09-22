@@ -14,6 +14,8 @@ describe("rutas administrativas de workflows GHL", () => {
     expect(source).toContain('/programaciones');
     expect(source).toContain('/vista-previa');
     expect(source).toContain('/ejecuciones');
+    expect(source).toContain('/programaciones/:id/ejecutar-ahora');
+    expect(source).toContain('/scheduler/estado');
     expect(source).not.toMatch(/\/execute|\/inscribir/);
   });
 });

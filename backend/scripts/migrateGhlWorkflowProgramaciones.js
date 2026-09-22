@@ -9,6 +9,7 @@ async function run() {
   const migrations = [
     "202609210004-create-ghl-workflow-programaciones.sql",
     "202609210005-harden-ghl-workflow-idempotency.sql",
+    "202609220001-add-ghl-workflow-manual-execution.sql",
   ];
   for (const migration of migrations) {
     const sql = fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8");

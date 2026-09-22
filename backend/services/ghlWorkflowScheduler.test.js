@@ -18,6 +18,11 @@ describe("scheduler independiente de workflows GHL", () => {
     expect(recover).toHaveBeenCalledWith(now);
     expect(Programacion.findAll).toHaveBeenCalledWith({ where: { activo: true }, order: [["id", "ASC"]] });
     expect(execute.mock.calls.map((call) => call[0].id)).toEqual([1, 2]);
+    expect(scheduler.getStatus(now)).toMatchObject({
+      activeConfigurations: 2,
+      timezone: "America/Guayaquil",
+      localNow: { date: "2026-09-21", time: "10:00", day: 1 },
+    });
   });
 
   test("un error de una programacion no impide revisar la siguiente", async () => {

@@ -32,15 +32,22 @@ describe("integracion GHL para workflows existentes", () => {
       .rejects.toMatchObject({ code: "GHL_WORKFLOW_INACTIVE" });
   });
 
-  test("inscribe un contacto existente sin crear ni actualizar contactos", async () => {
+  test("inscribe un contacto con eventStartTime y offset numerico de Ecuador", async () => {
     const client = { request: jest.fn().mockResolvedValue({ data: { succeeded: true } }) };
     await enrollContactInWorkflow(client, {}, "contact-1", "workflow-1", { eventStartTime: "2026-09-21T15:00:00.000Z" });
     expect(client.request).toHaveBeenCalledTimes(1);
     expect(client.request).toHaveBeenCalledWith(expect.objectContaining({
       method: "POST",
       url: "/contacts/contact-1/workflow/workflow-1",
-      data: { eventStartTime: "2026-09-21T15:00:00.000Z" },
+      data: { eventStartTime: "2026-09-21T10:00:00-05:00" },
     }));
+  });
+
+  test("rechaza eventStartTime invalido antes de llamar a GHL", async () => {
+    const client = { request: jest.fn() };
+    await expect(enrollContactInWorkflow(client, {}, "contact-1", "workflow-1", { eventStartTime: "sin-fecha" }))
+      .rejects.toMatchObject({ code: "GHL_WORKFLOW_EVENT_START_TIME_INVALID", statusCode: 400 });
+    expect(client.request).not.toHaveBeenCalled();
   });
 
   test("no repite un POST cuando un 5xx deja el resultado ambiguo", async () => {

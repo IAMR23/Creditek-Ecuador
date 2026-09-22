@@ -1660,12 +1660,33 @@ const validateWorkflow = async (client, config, workflowId, { requireActive = tr
   return workflow;
 };
 
+const formatWorkflowEventStartTime = (value = new Date()) => {
+  if (!(value instanceof Date) && (typeof value !== "string" || !value.trim())) {
+    const error = new Error("eventStartTime debe ser una fecha valida");
+    error.code = "GHL_WORKFLOW_EVENT_START_TIME_INVALID";
+    error.statusCode = 400;
+    throw error;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error("eventStartTime debe ser una fecha valida");
+    error.code = "GHL_WORKFLOW_EVENT_START_TIME_INVALID";
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // HighLevel exige un offset numerico y rechaza el indicador UTC "Z".
+  // America/Guayaquil permanece en UTC-05:00 durante todo el anio.
+  const ecuadorTime = new Date(date.getTime() - (5 * 60 * 60 * 1000));
+  return `${ecuadorTime.toISOString().slice(0, 19)}-05:00`;
+};
+
 const enrollContactInWorkflow = async (
   client,
   config,
   contactId,
   workflowId,
-  { eventStartTime = new Date().toISOString(), beforeRetry } = {},
+  { eventStartTime = new Date(), beforeRetry } = {},
 ) => {
   const normalizedContactId = toId(contactId);
   const normalizedWorkflowId = toId(workflowId);
@@ -1675,11 +1696,12 @@ const enrollContactInWorkflow = async (
     error.statusCode = 400;
     throw error;
   }
+  const normalizedEventStartTime = formatWorkflowEventStartTime(eventStartTime);
   try {
     const payload = await requestGhl(client, {
       method: "POST",
       url: `/contacts/${encodeURIComponent(normalizedContactId)}/workflow/${encodeURIComponent(normalizedWorkflowId)}`,
-      data: { eventStartTime },
+      data: { eventStartTime: normalizedEventStartTime },
       headers: { Version: "2023-02-21", "Content-Type": "application/json" },
       maxRetries: 2,
       beforeRetry,

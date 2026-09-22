@@ -23,8 +23,14 @@ const GhlWorkflowEjecucionDetalle = sequelize.define("GhlWorkflowEjecucionDetall
   timestamps: true,
   indexes: [
     { unique: true, fields: ["ejecucionId", "contactId", "workflowId"], name: "ghl_workflow_detalle_contacto_unique" },
-    { fields: ["configuracionId", "contactId", "workflowId", "estado"] },
-    { fields: ["contactId", "workflowId", "fechaLocal", "estado"] },
+    {
+      fields: ["configuracionId", "contactId", "workflowId", "estado"],
+      name: "ghl_workflow_detalle_reingreso_off_idx",
+    },
+    {
+      fields: ["contactId", "workflowId", "fechaLocal", "estado"],
+      name: "ghl_workflow_detalle_reingreso_day_idx",
+    },
   ],
 });
 

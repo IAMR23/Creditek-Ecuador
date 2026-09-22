@@ -5,7 +5,7 @@ const GhlWorkflowEjecucion = sequelize.define("GhlWorkflowEjecucion", {
   id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
   configuracionId: { type: DataTypes.INTEGER, allowNull: false },
   ventanaProgramada: { type: DataTypes.STRING(80), allowNull: false },
-  tipo: { type: DataTypes.ENUM("scheduled"), allowNull: false, defaultValue: "scheduled" },
+  tipo: { type: DataTypes.ENUM("scheduled", "manual"), allowNull: false, defaultValue: "scheduled" },
   estado: {
     type: DataTypes.ENUM("pending", "running", "completed", "partial", "failed", "interrupted", "cancelled"),
     allowNull: false,
