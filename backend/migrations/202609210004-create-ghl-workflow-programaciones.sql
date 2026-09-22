@@ -12,7 +12,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE TYPE enum_ghl_workflow_ejecucion_detalles_estado AS ENUM
-    ('pending', 'success', 'failed_retryable', 'failed_final', 'skipped');
+    ('pending', 'processing', 'success', 'failed_retryable', 'failed_final', 'skipped');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS ghl_workflow_programaciones (

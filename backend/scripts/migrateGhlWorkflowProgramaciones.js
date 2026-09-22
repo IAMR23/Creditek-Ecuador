@@ -6,9 +6,14 @@ const { sequelize } = require("../config/db");
 
 async function run() {
   await sequelize.authenticate();
-  const migration = "202609210004-create-ghl-workflow-programaciones.sql";
-  const sql = fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8");
-  await sequelize.query(sql);
+  const migrations = [
+    "202609210004-create-ghl-workflow-programaciones.sql",
+    "202609210005-harden-ghl-workflow-idempotency.sql",
+  ];
+  for (const migration of migrations) {
+    const sql = fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8");
+    await sequelize.query(sql);
+  }
   console.log("Migracion de programaciones de workflows GHL aplicada");
 }
 

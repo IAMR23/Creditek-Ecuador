@@ -98,9 +98,16 @@ async function markDetail(detail, estado, values = {}) {
   });
 }
 
-async function revalidateContact(client, config, programacion, contactId) {
-  const opportunities = await ghl.fetchOpportunitiesByContact(client, config, contactId);
-  return opportunities.find((opportunity) => isEligibleOpportunity(opportunity, programacion)) || null;
+async function revalidateContact(client, programacion, candidates = []) {
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const opportunityId = idOf(candidate);
+    if (!opportunityId || seen.has(opportunityId)) continue;
+    seen.add(opportunityId);
+    const opportunity = await ghl.fetchOpportunityById(client, opportunityId);
+    if (opportunity && isEligibleOpportunity(opportunity, programacion)) return opportunity;
+  }
+  return null;
 }
 
 async function hasPriorSuccess(programacion, detail, execution) {
@@ -127,48 +134,41 @@ async function hasPriorSuccess(programacion, detail, execution) {
 }
 
 async function processDetail(detail, execution, shared) {
-  const programacion = await Programacion.findByPk(execution.configuracionId);
-  if (!programacion?.activo) {
-    await markDetail(detail, "skipped", {
-      errorCode: "CONFIGURATION_PAUSED",
-      mensaje: "La programacion fue pausada antes de procesar el contacto",
-    });
-    return;
-  }
-  const current = await Detalle.findByPk(detail.id);
-  if (!current || current.estado === "success" || current.estado === "skipped" || current.estado === "failed_final") return;
-
-  const opportunity = await revalidateContact(shared.client, shared.config, programacion, detail.contactId);
-  if (!opportunity) {
-    await markDetail(current, "skipped", {
-      errorCode: "OPPORTUNITY_NO_LONGER_ELIGIBLE",
-      mensaje: "La oportunidad dejo de estar abierta en el pipeline o etapas seleccionadas",
-    });
-    return;
-  }
-
-  try {
-    await ghl.validateWorkflow(shared.client, shared.config, programacion.workflowId);
-  } catch (error) {
-    if (["GHL_WORKFLOW_NOT_FOUND", "GHL_WORKFLOW_INACTIVE"].includes(error.code)) {
-      await markDetail(current, "skipped", { errorCode: error.code, mensaje: error.message });
-      return;
-    }
-    throw error;
-  }
-
-  const enrollmentScope = programacion.permitirReingreso
-    ? `contact-day:${current.contactId}:${current.workflowId}:${execution.fechaLocal}`
-    : `contact-config:${programacion.id}:${current.contactId}:${current.workflowId}`;
+  const initialProgramacion = await Programacion.findByPk(execution.configuracionId);
+  const initialDetail = await Detalle.findByPk(detail.id);
+  if (!initialDetail || ["processing", "success", "skipped", "failed_final"].includes(initialDetail.estado)) return;
+  const enrollmentScope = initialProgramacion?.permitirReingreso
+    ? `contact-day:${initialDetail.contactId}:${initialDetail.workflowId}:${execution.fechaLocal}`
+    : `contact-config:${execution.configuracionId}:${initialDetail.contactId}:${initialDetail.workflowId}`;
   const contactLock = await executionLock.acquire(enrollmentScope);
   if (!contactLock) {
-    await markDetail(current, "skipped", {
+    await markDetail(initialDetail, "skipped", {
       errorCode: "ENROLLMENT_IN_PROGRESS",
       mensaje: "Otra instancia ya procesa esta inscripcion",
     });
     return;
   }
   try {
+    const [currentExecution, programacion, current] = await Promise.all([
+      Ejecucion.findByPk(execution.id),
+      Programacion.findByPk(execution.configuracionId),
+      Detalle.findByPk(detail.id),
+    ]);
+    if (!current || ["processing", "success", "skipped", "failed_final"].includes(current.estado)) return;
+    if (currentExecution?.estado !== "running") {
+      await markDetail(current, "skipped", {
+        errorCode: "EXECUTION_NOT_ACTIVE",
+        mensaje: "La ejecucion ya no se encuentra activa",
+      });
+      return;
+    }
+    if (!programacion?.activo) {
+      await markDetail(current, "skipped", {
+        errorCode: "CONFIGURATION_PAUSED",
+        mensaje: "La programacion fue pausada antes de procesar el contacto",
+      });
+      return;
+    }
     if (await hasPriorSuccess(programacion, current, execution)) {
       await markDetail(current, "skipped", {
         errorCode: programacion.permitirReingreso ? "ALREADY_ENROLLED_TODAY" : "REENTRY_DISABLED",
@@ -178,7 +178,38 @@ async function processDetail(detail, execution, shared) {
       });
       return;
     }
-    await current.update({ intentos: current.intentos + 1, opportunityId: idOf(opportunity) });
+
+    const opportunity = await revalidateContact(
+      shared.client,
+      programacion,
+      shared.byContact.get(current.contactId) || [],
+    );
+    if (!opportunity) {
+      await markDetail(current, "skipped", {
+        errorCode: "OPPORTUNITY_NO_LONGER_ELIGIBLE",
+        mensaje: "La oportunidad dejo de estar abierta en el pipeline o etapas seleccionadas",
+      });
+      return;
+    }
+
+    try {
+      await ghl.validateWorkflow(shared.client, shared.config, programacion.workflowId);
+    } catch (error) {
+      if (["GHL_WORKFLOW_NOT_FOUND", "GHL_WORKFLOW_INACTIVE"].includes(error.code)) {
+        await markDetail(current, "skipped", { errorCode: error.code, mensaje: error.message });
+        return;
+      }
+      throw error;
+    }
+
+    await current.update({
+      estado: "processing",
+      intentos: current.intentos + 1,
+      opportunityId: idOf(opportunity),
+      processedAt: null,
+      errorCode: null,
+      mensaje: null,
+    });
     await ghl.enrollContactInWorkflow(
       shared.client,
       shared.config,
@@ -197,7 +228,7 @@ async function refreshCounters(execution) {
   const counters = details.reduce((acc, detail) => {
     if (detail.estado === "success") acc.totalProcesado += 1;
     else if (detail.estado === "skipped") acc.totalOmitido += 1;
-    else if (detail.estado.startsWith("failed")) acc.totalFallido += 1;
+    else if (detail.estado === "processing" || detail.estado.startsWith("failed")) acc.totalFallido += 1;
     return acc;
   }, { totalProcesado: 0, totalOmitido: 0, totalFallido: 0 });
   await execution.update(counters);
@@ -213,6 +244,12 @@ async function execute(programacion, execution) {
     if (["completed", "partial", "failed", "cancelled"].includes(execution.estado)) {
       return { skipped: true, code: "WINDOW_ALREADY_PROCESSED", execution };
     }
+    await Detalle.update({
+      estado: "failed_final",
+      processedAt: new Date(),
+      errorCode: "AMBIGUOUS_ENROLLMENT_RESULT",
+      mensaje: "No se repitio una inscripcion cuyo resultado pudo quedar confirmado en HighLevel",
+    }, { where: { ejecucionId: execution.id, estado: "processing" } });
     await execution.update({ estado: "running", startedAt: execution.startedAt || new Date(), heartbeatAt: new Date() });
     const freshProgramacion = await Programacion.findByPk(programacion.id);
     if (!freshProgramacion?.activo) {
@@ -328,11 +365,36 @@ async function executeScheduled(programacion, now = new Date()) {
 
 async function recoverStaleRuns(now = new Date()) {
   const cutoff = new Date(now.getTime() - STALE_AFTER_MS);
-  const [count] = await Ejecucion.update(
-    { estado: "interrupted", codigoGeneral: "STALE_HEARTBEAT", mensajeGeneral: "Ejecucion recuperable interrumpida por heartbeat vencido" },
-    { where: { estado: "running", [Op.or]: [{ heartbeatAt: null }, { heartbeatAt: { [Op.lt]: cutoff } }] } },
-  );
-  return count;
+  const staleRuns = await Ejecucion.findAll({
+    where: { estado: "running", [Op.or]: [{ heartbeatAt: null }, { heartbeatAt: { [Op.lt]: cutoff } }] },
+    attributes: ["id", "configuracionId"],
+  });
+  let recovered = 0;
+  for (const staleRun of staleRuns) {
+    const lock = await executionLock.acquire(`configuration:${staleRun.configuracionId}`);
+    if (!lock) continue;
+    try {
+      const [count] = await Ejecucion.update(
+        { estado: "interrupted", codigoGeneral: "STALE_HEARTBEAT", mensajeGeneral: "Ejecucion recuperable interrumpida por heartbeat vencido" },
+        { where: {
+          id: staleRun.id,
+          estado: "running",
+          [Op.or]: [{ heartbeatAt: null }, { heartbeatAt: { [Op.lt]: cutoff } }],
+        } },
+      );
+      if (!count) continue;
+      recovered += count;
+      await Detalle.update({
+        estado: "failed_final",
+        processedAt: now,
+        errorCode: "AMBIGUOUS_ENROLLMENT_RESULT",
+        mensaje: "No se repitio una inscripcion cuyo resultado pudo quedar confirmado en HighLevel",
+      }, { where: { ejecucionId: staleRun.id, estado: "processing" } });
+    } finally {
+      await executionLock.release(lock);
+    }
+  }
+  return recovered;
 }
 
 async function listExecutions(query = {}) {
@@ -349,6 +411,10 @@ module.exports = {
   isEligibleOpportunity,
   collectEligible,
   preview,
+  processDetail,
+  hasPriorSuccess,
+  revalidateContact,
+  refreshCounters,
   scheduledWindow,
   executeScheduled,
   recoverStaleRuns,

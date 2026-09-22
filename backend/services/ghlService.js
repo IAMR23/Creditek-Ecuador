@@ -1330,12 +1330,14 @@ const fetchOpportunitiesByStatus = async (
           method: "GET",
           url: "/opportunities/search",
           params: snakeCaseParams,
+          retryOn5xx: true,
         });
       }
       return requestGhl(client, {
         method: "GET",
         url: "/opportunities/search",
         params: camelCaseParams,
+        retryOn5xx: true,
       });
     };
 
@@ -1349,11 +1351,13 @@ const fetchOpportunitiesByStatus = async (
           method: "GET",
           url: "/opportunities/search",
           params: camelCaseParams,
+          retryOn5xx: true,
         },
         {
           method: "GET",
           url: "/opportunities/search",
           params: snakeCaseParams,
+          retryOn5xx: true,
         },
         (error) => {
           const shouldFallback = errorHasAnyMessage(error, [
@@ -1538,6 +1542,23 @@ const fetchOpportunitiesByContact = async (client, config, contactId) => {
   );
   return dedupeOpportunitiesById(extractOpportunities(payload).filter((opportunity) =>
     getOpportunityContactId(opportunity) === normalizedContactId));
+};
+
+const fetchOpportunityById = async (client, opportunityId) => {
+  const normalizedOpportunityId = toId(opportunityId);
+  if (!normalizedOpportunityId) return null;
+
+  try {
+    const payload = await requestGhl(client, {
+      method: "GET",
+      url: `/opportunities/${encodeURIComponent(normalizedOpportunityId)}`,
+      retryOn5xx: true,
+    });
+    return payload?.opportunity || payload?.data || payload || null;
+  } catch (error) {
+    if (error?.upstreamStatus === 404 || error?.statusCode === 404) return null;
+    throw error;
+  }
 };
 
 const fetchAllOpportunityStatuses = async (
@@ -2501,6 +2522,7 @@ module.exports = {
   fetchOpportunitiesByStatus,
   fetchOpportunitiesByUpdatedDate,
   fetchOpportunitiesByContact,
+  fetchOpportunityById,
   getOpportunityPipelineId,
   getOpportunityStageId,
   getOpportunityDateValue,

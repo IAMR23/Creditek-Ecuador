@@ -3,6 +3,8 @@ const {
   isWorkflowActive,
   validateWorkflow,
   enrollContactInWorkflow,
+  fetchOpportunityById,
+  fetchOpportunitiesByStatus,
 } = require("./ghlService");
 
 describe("integracion GHL para workflows existentes", () => {
@@ -54,5 +56,37 @@ describe("integracion GHL para workflows existentes", () => {
       code: "GHL_WORKFLOWS_SCOPE_REQUIRED",
       message: "El token de HighLevel requiere el permiso workflows.readonly",
     });
+  });
+
+  test("respeta Retry-After ante 429 antes de reintentar la inscripcion", async () => {
+    const client = { request: jest.fn()
+      .mockRejectedValueOnce({ response: { status: 429, data: {}, headers: { "retry-after": "0" } } })
+      .mockResolvedValueOnce({ data: { succeeded: true } }) };
+    await expect(enrollContactInWorkflow(client, {}, "contact-1", "workflow-1"))
+      .resolves.toEqual({ succeeded: true });
+    expect(client.request).toHaveBeenCalledTimes(2);
+  });
+
+  test("revalida una oportunidad por ID sin modificarla y reintenta lecturas 5xx", async () => {
+    const client = { request: jest.fn()
+      .mockRejectedValueOnce({ response: { status: 503, data: {}, headers: {} } })
+      .mockResolvedValueOnce({ data: { opportunity: { id: "opp-1", status: "open" } } }) };
+    await expect(fetchOpportunityById(client, "opp-1"))
+      .resolves.toEqual({ id: "opp-1", status: "open" });
+    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(client.request).toHaveBeenLastCalledWith(expect.objectContaining({
+      method: "GET", url: "/opportunities/opp-1",
+    }));
+  });
+
+  test("reintenta un 5xx al consultar las oportunidades iniciales", async () => {
+    const client = { request: jest.fn()
+      .mockRejectedValueOnce({ response: { status: 503, data: {}, headers: { "retry-after": "0" } } })
+      .mockResolvedValueOnce({ data: { opportunities: [{ id: "opp-1", status: "open" }] } }) };
+    const rows = await fetchOpportunitiesByStatus(client, {
+      locationId: "loc-1", pipelineId: "pipeline-1", pipelineStageId: "stage-1", apiVersion: "v3",
+    }, "open");
+    expect(rows).toHaveLength(1);
+    expect(client.request).toHaveBeenCalledTimes(2);
   });
 });

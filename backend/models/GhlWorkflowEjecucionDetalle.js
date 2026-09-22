@@ -10,7 +10,7 @@ const GhlWorkflowEjecucionDetalle = sequelize.define("GhlWorkflowEjecucionDetall
   workflowId: { type: DataTypes.STRING(100), allowNull: false },
   fechaLocal: { type: DataTypes.DATEONLY, allowNull: false },
   estado: {
-    type: DataTypes.ENUM("pending", "success", "failed_retryable", "failed_final", "skipped"),
+    type: DataTypes.ENUM("pending", "processing", "success", "failed_retryable", "failed_final", "skipped"),
     allowNull: false,
     defaultValue: "pending",
   },
