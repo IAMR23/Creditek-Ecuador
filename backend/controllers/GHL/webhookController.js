@@ -150,6 +150,7 @@ async function recibirWebhookStevo(req, res) {
         phone,
         message,
         isFromMe,
+        upsertResponse: ghlResponse,
       });
     } catch (cedulaError) {
       console.error("Error al actualizar el contacto en GHL.", {

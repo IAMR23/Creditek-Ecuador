@@ -53,6 +53,7 @@ describe("recibirWebhookStevo con actualizacion de cedula", () => {
       phone: "+593991234567",
       message: "Mi cedula es 1710034065",
       isFromMe: false,
+      upsertResponse: { ok: true },
     });
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(
@@ -89,6 +90,7 @@ describe("recibirWebhookStevo con actualizacion de cedula", () => {
       phone: "+593987981946",
       message: "Hola",
       isFromMe: false,
+      upsertResponse: { ok: true },
     });
   });
 

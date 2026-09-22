@@ -120,6 +120,26 @@ const getEstadoBadge = (estado) =>
       ? "bg-slate-100 text-slate-700 border-slate-200"
       : "bg-red-100 text-red-700 border-red-200";
 
+const getEstadoCajaBadge = (estado) => {
+  const estilos = {
+    COINCIDE_CAJA: "border-green-200 bg-green-50 text-green-700",
+    MONTO_DIFERENTE_CAJA: "border-amber-200 bg-amber-50 text-amber-800",
+    REVISAR_EN_BANCOS: "border-blue-200 bg-blue-50 text-blue-800",
+    COINCIDENCIA_AMBIGUA_CAJA: "border-orange-200 bg-orange-50 text-orange-800",
+    NO_EN_CAJA: "border-red-200 bg-red-50 text-red-700",
+  };
+
+  return estilos[estado] || "border-gray-200 bg-gray-50 text-gray-700";
+};
+
+const formatearDinero = (value) =>
+  value === null || value === undefined || value === ""
+    ? "-"
+    : new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(Number(value) || 0);
+
 const escaparHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -308,6 +328,9 @@ export default function VentasAuditoria() {
   const [guardandoFilaId, setGuardandoFilaId] = useState("");
   const [comentariosEditados, setComentariosEditados] = useState({});
   const [comentariosGuardando, setComentariosGuardando] = useState({});
+  const [auditoriaCaja, setAuditoriaCaja] = useState(null);
+  const [auditoriaCajaLoading, setAuditoriaCajaLoading] = useState(false);
+  const [auditoriaCajaError, setAuditoriaCajaError] = useState("");
 
   const filasFiltradasPorCliente = useMemo(
     () => filas.filter((fila) => coincideBusquedaCliente(fila, busquedaCliente)),
@@ -467,6 +490,62 @@ export default function VentasAuditoria() {
     }
   }, [fechaFin, fechaInicio, modoPdfActivo, pdfTipo]);
 
+  const cargarAuditoriaCaja = useCallback(
+    async ({ notificar = false } = {}) => {
+      if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) return null;
+
+      setAuditoriaCajaLoading(true);
+      setAuditoriaCajaError("");
+
+      try {
+        const params = {
+          fechaInicio,
+          fechaFin,
+          ...(agenciaId && agenciaId !== "todas" ? { agenciaId } : {}),
+          ...(vendedorId && vendedorId !== "todos" ? { vendedorId } : {}),
+          ...(modeloId && modeloId !== "todos" ? { modeloId } : {}),
+          ...(origenId && origenId !== "todos" ? { origenId } : {}),
+          ...(dispositivoId && dispositivoId !== "todos"
+            ? { dispositivoId }
+            : {}),
+          ...(estado && estado !== "todos" ? { estado } : {}),
+        };
+        const { data } = await api.get("/auditoria/ventas/control-caja", {
+          params,
+        });
+
+        setAuditoriaCaja(data);
+        if (notificar) {
+          Swal.fire(
+            "Control actualizado",
+            `Coinciden: ${data.resumen?.coincidenCaja || 0} | Sin caja: ${data.resumen?.sinRegistroCaja || 0} | Revisar bancos: ${data.resumen?.revisarBancos || 0}`,
+            "success",
+          );
+        }
+        return data;
+      } catch (error) {
+        const mensaje =
+          error.response?.data?.message ||
+          "No se pudo auditar las ventas al contado contra caja.";
+        setAuditoriaCaja(null);
+        setAuditoriaCajaError(mensaje);
+        if (notificar) Swal.fire("Error", mensaje, "error");
+        return null;
+      } finally {
+        setAuditoriaCajaLoading(false);
+      }
+    }, [
+      agenciaId,
+      dispositivoId,
+      estado,
+      fechaFin,
+      fechaInicio,
+      modeloId,
+      origenId,
+      vendedorId,
+    ],
+  );
+
   const fetchData = useCallback(async () => {
     if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
       setError("La fecha de inicio no puede ser mayor que la fecha de fin");
@@ -560,6 +639,12 @@ export default function VentasAuditoria() {
       fetchData();
     }
   }, [fechaFin, fechaInicio, fetchData, usuarioInfo?.id]);
+
+  useEffect(() => {
+    if (fechaInicio && fechaFin && usuarioInfo?.id) {
+      cargarAuditoriaCaja();
+    }
+  }, [cargarAuditoriaCaja, fechaFin, fechaInicio, usuarioInfo?.id]);
 
   const cambiarModoAuditoriaPdf = () => {
     setModoPdfActivo((activo) => !activo);
@@ -666,6 +751,7 @@ export default function VentasAuditoria() {
       setPdfFiles([]);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
       setAuditoriaPrecargada(precargaActualizada);
+      await cargarAuditoriaCaja();
 
       Swal.fire(
         "Listo",
@@ -1623,6 +1709,154 @@ export default function VentasAuditoria() {
           </>
         )}
       </form>
+
+      <section className="mb-4 rounded-lg border border-sky-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-sky-100 bg-sky-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-sky-950">
+              Control de ventas al contado contra caja
+            </h2>
+            <p className="mt-1 text-xs text-sky-800">
+              Busca cada venta en efectivo o tarjeta en cualquier caja del mismo día. La coincidencia puede ser por valor o por un nombre similar del cliente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => cargarAuditoriaCaja({ notificar: true })}
+            disabled={auditoriaCajaLoading || !fechaInicio || !fechaFin}
+            className="inline-flex items-center justify-center gap-2 rounded bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+          >
+            <RefreshCw
+              size={16}
+              className={auditoriaCajaLoading ? "animate-spin" : ""}
+            />
+            {auditoriaCajaLoading ? "Reauditando caja..." : "Reauditar caja"}
+          </button>
+        </div>
+
+        {auditoriaCajaError && (
+          <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700">
+            {auditoriaCajaError}
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 border-b border-gray-100 p-4 text-xs md:grid-cols-4 xl:grid-cols-7">
+          <MiniStat
+            label="Ventas contado"
+            value={auditoriaCaja?.resumen?.totalVentasContado || 0}
+            tone="slate"
+          />
+          <MiniStat
+            label="Coinciden en caja"
+            value={auditoriaCaja?.resumen?.coincidenCaja || 0}
+            tone="green"
+          />
+          <MiniStat
+            label="Sin registro"
+            value={auditoriaCaja?.resumen?.sinRegistroCaja || 0}
+            tone="red"
+          />
+          <MiniStat
+            label="Revisar bancos"
+            value={auditoriaCaja?.resumen?.revisarBancos || 0}
+            tone="blue"
+          />
+          <MiniStat
+            label="Monto diferente"
+            value={auditoriaCaja?.resumen?.montoDiferente || 0}
+            tone="amber"
+          />
+          <MiniStat
+            label="Ambiguas"
+            value={auditoriaCaja?.resumen?.ambiguas || 0}
+            tone="amber"
+          />
+          <MiniStat
+            label="Diferencia"
+            value={formatearDinero(auditoriaCaja?.resumen?.diferencia || 0)}
+            tone="slate"
+          />
+        </div>
+
+        <div className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-[1650px] border-collapse text-xs">
+            <thead className="bg-gray-100 text-left uppercase text-gray-600">
+              <tr>
+                <th className="border-b px-3 py-2">Fecha</th>
+                <th className="border-b px-3 py-2">Cliente venta</th>
+                <th className="border-b px-3 py-2">Modelo</th>
+                <th className="border-b px-3 py-2">Forma pago</th>
+                <th className="border-b px-3 py-2 text-right">Valor venta</th>
+                <th className="border-b px-3 py-2">Resultado</th>
+                <th className="border-b px-3 py-2">Agencia caja</th>
+                <th className="border-b px-3 py-2">Cliente caja</th>
+                <th className="border-b px-3 py-2 text-right">Valor caja</th>
+                <th className="border-b px-3 py-2 text-right">Diferencia</th>
+                <th className="border-b px-3 py-2">Coincidencia</th>
+                <th className="border-b px-3 py-2">Observación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(auditoriaCaja?.resultados || []).map((resultado, index) => (
+                <tr
+                  key={`${resultado.detalleVentaId || resultado.ventaId || "venta"}-${index}`}
+                  className="border-b border-gray-100 hover:bg-sky-50/40"
+                >
+                  <td className="whitespace-nowrap px-3 py-2">{resultado.fecha}</td>
+                  <td className="max-w-64 whitespace-normal px-3 py-2 font-medium text-gray-900">
+                    {resultado.clienteVenta || "-"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">{resultado.modelo || "-"}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{resultado.formaPagoVenta || "-"}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                    {formatearDinero(resultado.montoVenta)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-bold ${getEstadoCajaBadge(resultado.estado)}`}
+                    >
+                      {String(resultado.estado || "-").replaceAll("_", " ")}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">{resultado.agenciaCaja || "-"}</td>
+                  <td className="max-w-64 whitespace-normal px-3 py-2">{resultado.clienteCaja || "-"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {formatearDinero(resultado.montoCaja)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                    {formatearDinero(resultado.diferencia)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {resultado.tipoCoincidencia || "-"}
+                    {resultado.similitudCliente !== null &&
+                    resultado.similitudCliente !== undefined
+                      ? ` · ${resultado.similitudCliente}%`
+                      : ""}
+                  </td>
+                  <td className="max-w-72 whitespace-normal px-3 py-2 font-medium">
+                    {resultado.observacion || "-"}
+                  </td>
+                </tr>
+              ))}
+              {!auditoriaCajaLoading &&
+                (auditoriaCaja?.resultados || []).length === 0 && (
+                  <tr>
+                    <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
+                      No existen ventas al contado en efectivo o tarjeta para los filtros seleccionados.
+                    </td>
+                  </tr>
+                )}
+              {auditoriaCajaLoading && (
+                <tr>
+                  <td colSpan={12} className="px-4 py-8 text-center text-sky-700">
+                    Reauditando ventas contra caja...
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {error && <p className="mb-3 font-semibold text-red-500">{error}</p>}
 

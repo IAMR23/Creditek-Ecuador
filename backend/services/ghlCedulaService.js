@@ -105,13 +105,30 @@ const encontrarContactoExacto = (contacts, phone) => {
   return exactContact || (contacts.length === 1 ? contacts[0] : null);
 };
 
+const extraerContactoDesdeUpsert = (payload) => {
+  if (!payload || typeof payload !== "object") return null;
+
+  const candidates = [
+    payload.contact,
+    payload.data?.contact,
+    payload.data,
+    payload,
+  ];
+
+  return candidates.find((candidate) =>
+    candidate &&
+    typeof candidate === "object" &&
+    toId(candidate.id || candidate._id || candidate.contactId),
+  ) || null;
+};
+
 const errorMetadata = (error) => ({
   code: error?.code || null,
   status: error?.upstreamStatus || error?.statusCode || error?.response?.status || null,
 });
 
 async function actualizarCedulaContactoDesdeMensaje(
-  { phone, message, isFromMe },
+  { phone, message, isFromMe, upsertResponse },
   dependencies = {},
 ) {
   if (isFromMe !== false) return { status: "ignored_sender" };
@@ -136,26 +153,35 @@ async function actualizarCedulaContactoDesdeMensaje(
       apiVersion: process.env.GHL_CONTACTS_API_VERSION || CONTACTS_API_VERSION,
     });
 
-    const contactsPayload = await executeRequest(client, {
-      method: "POST",
-      url: "/contacts/search",
-      data: {
-        locationId: config.locationId,
-        page: 1,
-        pageLimit: 20,
-        filters: [
-          {
-            field: "phone",
-            operator: "eq",
-            value: phone,
-          },
-        ],
-      },
-    });
-    const contact = encontrarContactoExacto(extractContacts(contactsPayload), phone);
-    const contactId = toId(contact?.id || contact?._id);
+    let contact = extraerContactoDesdeUpsert(upsertResponse);
+    let contactId = toId(contact?.id || contact?._id || contact?.contactId);
 
-    if (!contact || !contactId) {
+    // El contacto recien creado por /contacts/upsert puede tardar unos instantes
+    // en aparecer en /contacts/search. Se usa primero el ID devuelto por el upsert
+    // y se conserva la busqueda por telefono para eventos o respuestas antiguas.
+    if (!contactId) {
+      const contactsPayload = await executeRequest(client, {
+        method: "POST",
+        url: "/contacts/search",
+        retryOn5xx: true,
+        data: {
+          locationId: config.locationId,
+          page: 1,
+          pageLimit: 20,
+          filters: [
+            {
+              field: "phone",
+              operator: "eq",
+              value: phone,
+            },
+          ],
+        },
+      });
+      contact = encontrarContactoExacto(extractContacts(contactsPayload), phone);
+      contactId = toId(contact?.id || contact?._id);
+    }
+
+    if (!contactId) {
       logger.warn("Contacto GHL no encontrado para la cedula detectada.");
       return { status: "contact_not_found", cedula };
     }
@@ -164,6 +190,7 @@ async function actualizarCedulaContactoDesdeMensaje(
       method: "GET",
       url: `/locations/${encodeURIComponent(config.locationId)}/customFields`,
       params: { model: "contact" },
+      retryOn5xx: true,
     });
     const fieldDefinition = encontrarCampoCedula(
       extraerDefinicionesCampos(definitionsPayload),
@@ -188,6 +215,7 @@ async function actualizarCedulaContactoDesdeMensaje(
     await executeRequest(client, {
       method: "PUT",
       url: `/contacts/${encodeURIComponent(contactId)}`,
+      retryOn5xx: true,
       data: {
         name: cedula,
         customFields: [
@@ -213,6 +241,7 @@ module.exports = {
   detectarCedulaEcuatoriana,
   encontrarCampoCedula,
   esCedulaEcuatorianaValida,
+  extraerContactoDesdeUpsert,
   normalizarPosibleCedula,
   obtenerValorCampoContacto,
 };

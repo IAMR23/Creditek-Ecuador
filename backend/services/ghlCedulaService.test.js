@@ -2,6 +2,7 @@ const {
   actualizarCedulaContactoDesdeMensaje,
   detectarCedulaEcuatoriana,
   esCedulaEcuatorianaValida,
+  extraerContactoDesdeUpsert,
   normalizarPosibleCedula,
 } = require("./ghlCedulaService");
 
@@ -113,6 +114,7 @@ describe("actualizacion del contacto GHL", () => {
       {
         method: "PUT",
         url: `/contacts/${CONTACT_ID}`,
+        retryOn5xx: true,
         data: {
           name: CEDULA_VALIDA,
           customFields: [{ id: FIELD_ID, fieldValue: CEDULA_VALIDA }],
@@ -122,6 +124,64 @@ describe("actualizacion del contacto GHL", () => {
     expect(logger.info).toHaveBeenCalledWith(
       "Cedula detectada y guardada correctamente en GHL.",
       { cedula: CEDULA_VALIDA },
+    );
+  });
+
+  test("usa el contacto devuelto por upsert sin buscarlo de inmediato", async () => {
+    const { dependencies, requestGhl } = createDependencies();
+    requestGhl.mockReset()
+      .mockResolvedValueOnce({
+        customFields: [{ id: FIELD_ID, fieldKey: "contact.cdula" }],
+      })
+      .mockResolvedValueOnce({ succeeded: true });
+
+    const result = await actualizarCedulaContactoDesdeMensaje(
+      {
+        phone: PHONE,
+        message: CEDULA_VALIDA,
+        isFromMe: false,
+        upsertResponse: {
+          contact: {
+            id: CONTACT_ID,
+            phone: PHONE,
+            name: "Cliente",
+            customFields: [],
+          },
+        },
+      },
+      dependencies,
+    );
+
+    expect(result).toEqual({
+      status: "updated",
+      cedula: CEDULA_VALIDA,
+      contactId: CONTACT_ID,
+    });
+    expect(requestGhl).toHaveBeenCalledTimes(2);
+    expect(requestGhl).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ url: "/contacts/search" }),
+    );
+    expect(requestGhl).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        method: "GET",
+        url: "/locations/location-1/customFields",
+      }),
+    );
+  });
+
+  test.each([
+    [{ contact: { id: CONTACT_ID } }],
+    [{ data: { contact: { id: CONTACT_ID } } }],
+    [{ data: { id: CONTACT_ID } }],
+    [{ contactId: CONTACT_ID }],
+  ])("extrae el ID del contacto desde respuestas comunes de upsert", (payload) => {
+    expect(extraerContactoDesdeUpsert(payload)).toEqual(
+      expect.objectContaining(
+        payload.contactId ? { contactId: CONTACT_ID } : { id: CONTACT_ID },
+      ),
     );
   });
 

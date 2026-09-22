@@ -8,8 +8,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  calcularCantidadSemanasOperativas,
+  getInicioSemanaJueves,
+} from "../../utils/powerBiPeriodos";
 
-const TOTAL_SEMANAS = 13;
 const COLORES_ORIGEN = [
   "#16a34a",
   "#2563eb",
@@ -25,15 +28,8 @@ const COLORES_ORIGEN = [
   "#65a30d",
 ];
 
-const crearFechaLocal = (fecha) => {
-  const [year, month, day] = String(fecha || "").split("-").map(Number);
-  if (!year || !month || !day) return null;
-
-  return new Date(year, month - 1, day);
-};
-
 const formatearRangoSemana = (fechaInicio, indiceSemana) => {
-  const inicioBase = crearFechaLocal(fechaInicio);
+  const inicioBase = getInicioSemanaJueves(fechaInicio);
   if (!inicioBase) return `Semana ${indiceSemana + 1}`;
 
   const inicio = new Date(inicioBase);
@@ -87,14 +83,33 @@ const obtenerSerieOrigen = (series, nombreOrigen) => {
   return entrada?.[1] || {};
 };
 
+const obtenerMayorSemana = (series = {}) =>
+  Object.values(series).reduce((mayor, valores = {}) => {
+    const mayorSerie = Object.keys(valores).reduce(
+      (maximo, clave) => Math.max(maximo, Number(String(clave).replace(/\D/g, "")) || 0),
+      0,
+    );
+
+    return Math.max(mayor, mayorSerie);
+  }, 0);
+
 export default function PowerBiMetricasOrigen({
   estadisticas,
   origenes = [],
   fechaInicio,
+  fechaFin,
   origenesError = "",
 }) {
   const series = estadisticas?.porOrigenPorSemana || {};
   const nombresOrigen = construirOrigenes(origenes, series);
+  const totalSemanas = Math.max(
+    1,
+    calcularCantidadSemanasOperativas(fechaInicio, fechaFin),
+    obtenerMayorSemana(series),
+  );
+  const intervaloEje = totalSemanas > 16
+    ? Math.ceil(totalSemanas / 12) - 1
+    : 0;
 
   if (!estadisticas) return null;
 
@@ -124,7 +139,7 @@ export default function PowerBiMetricasOrigen({
         {nombresOrigen.map((nombreOrigen, indiceOrigen) => {
           const colorOrigen = COLORES_ORIGEN[indiceOrigen % COLORES_ORIGEN.length];
           const valores = obtenerSerieOrigen(series, nombreOrigen);
-          const data = Array.from({ length: TOTAL_SEMANAS }, (_, index) => ({
+          const data = Array.from({ length: totalSemanas }, (_, index) => ({
             name: formatearRangoSemana(fechaInicio, index),
             semana: `Semana ${index + 1}`,
             ventas: Number(valores[`Semana ${index + 1}`]) || 0,
@@ -170,7 +185,7 @@ export default function PowerBiMetricasOrigen({
                     <XAxis
                       dataKey="name"
                       angle={-42}
-                      interval={0}
+                      interval={intervaloEje}
                       textAnchor="end"
                       tick={{ fontSize: 11 }}
                     />

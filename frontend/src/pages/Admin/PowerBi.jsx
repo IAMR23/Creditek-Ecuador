@@ -9,82 +9,22 @@ import DashboardGraficas2 from "./DashboardGraficas2";
 import PowerBiGraficasSupervisores from "./PowerBiGraficasSupervisores";
 import PowerBiMetricasOrigen from "./PowerBiMetricasOrigen";
 import { api } from "../../api/client";
+import {
+  PERIODO_POWER_BI,
+  SEMANAS_POWER_BI_POR_DEFECTO,
+  construirRango13SemanasDesdeFin,
+  construirRangoPeriodoPowerBi,
+  esPeriodoPowerBiValido,
+  esRango13SemanasOperativas,
+  formatearFechaLocal,
+  getFinSemanaMiercoles,
+  getInicioSemanaJueves,
+  getMesLocal,
+  sumarDias,
+} from "../../utils/powerBiPeriodos";
 
 const STORAGE_KEY = "powerbi_filtros";
-const SEMANAS_POWERBI = 13;
-const DIAS_RANGO_POWERBI = SEMANAS_POWERBI * 7 - 1;
 const OBSERVACIONES_OPERATIVAS = ["Uphone", "Creditv"];
-
-const crearFechaLocal = (fecha) => {
-  if (fecha instanceof Date) {
-    return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
-  }
-
-  const [year, month, day] = String(fecha || "").split("-").map(Number);
-  if (!year || !month || !day) return null;
-
-  return new Date(year, month - 1, day);
-};
-
-const formatearFechaLocal = (fecha) => {
-  const date = crearFechaLocal(fecha);
-  if (!date) return "";
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-};
-
-const sumarDias = (fecha, dias) => {
-  const date = crearFechaLocal(fecha);
-  if (!date) return null;
-
-  date.setDate(date.getDate() + dias);
-  return date;
-};
-
-const getInicioSemanaJueves = (fecha) => {
-  const inicio = crearFechaLocal(fecha);
-  if (!inicio) return null;
-
-  while (inicio.getDay() !== 4) {
-    inicio.setDate(inicio.getDate() - 1);
-  }
-
-  return inicio;
-};
-
-const getFinSemanaMiercoles = (fecha) => {
-  const inicio = getInicioSemanaJueves(fecha);
-  if (!inicio) return null;
-
-  return sumarDias(inicio, 6);
-};
-
-const construirRango13SemanasDesdeFin = (fechaReferencia = new Date()) => {
-  const fechaFin = getFinSemanaMiercoles(fechaReferencia);
-  const fechaInicio = sumarDias(fechaFin, -DIAS_RANGO_POWERBI);
-
-  return {
-    fechaInicio: formatearFechaLocal(fechaInicio),
-    fechaFin: formatearFechaLocal(fechaFin),
-  };
-};
-
-const esRango13SemanasOperativas = (fechaInicio, fechaFin) => {
-  const inicio = crearFechaLocal(fechaInicio);
-  const fin = crearFechaLocal(fechaFin);
-
-  if (!inicio || !fin || inicio > fin) return false;
-  if (inicio.getDay() !== 4 || fin.getDay() !== 3) return false;
-
-  const msPorDia = 24 * 60 * 60 * 1000;
-  const diferenciaDias = Math.round((fin - inicio) / msPorDia);
-
-  return diferenciaDias === DIAS_RANGO_POWERBI;
-};
 
 const getRangoInicialPowerBi = (filtrosGuardados = {}) => {
   if (
@@ -108,7 +48,22 @@ export default function Powerbi({ modoSupervisores = false }) {
     : STORAGE_KEY;
   const mostrarFiltroCierreCaja = !modoSupervisores;
   const filtrosGuardados = JSON.parse(localStorage.getItem(storageKey)) || {};
-  const rangoInicial = getRangoInicialPowerBi(filtrosGuardados);
+  const fechaHoy = formatearFechaLocal(new Date());
+  const periodoInicial =
+    !modoSupervisores && esPeriodoPowerBiValido(filtrosGuardados.periodoTipo)
+      ? filtrosGuardados.periodoTipo
+      : PERIODO_POWER_BI.POR_DEFECTO;
+  const fechaReferenciaInicial = filtrosGuardados.fechaReferencia || fechaHoy;
+  const mesReferenciaInicial = filtrosGuardados.mesReferencia || getMesLocal();
+  const rangoInicial = modoSupervisores
+    ? getRangoInicialPowerBi(filtrosGuardados)
+    : construirRangoPeriodoPowerBi({
+        tipo: periodoInicial,
+        fechaReferencia: fechaReferenciaInicial,
+        mesReferencia: mesReferenciaInicial,
+        fechaInicio: filtrosGuardados.fechaInicio,
+        fechaFin: filtrosGuardados.fechaFin,
+      });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -124,6 +79,9 @@ export default function Powerbi({ modoSupervisores = false }) {
   const [origenesError, setOrigenesError] = useState("");
   const [estadisticas, setEstadisticas] = useState(null);
   const [seccionActiva, setSeccionActiva] = useState("power-bi");
+  const [periodoTipo, setPeriodoTipo] = useState(periodoInicial);
+  const [fechaReferencia, setFechaReferencia] = useState(fechaReferenciaInicial);
+  const [mesReferencia, setMesReferencia] = useState(mesReferenciaInicial);
 
   const [openAgencias, setOpenAgencias] = useState(false);
 
@@ -207,6 +165,11 @@ export default function Powerbi({ modoSupervisores = false }) {
     localStorage.setItem(
       storageKey,
       JSON.stringify({
+        ...(!modoSupervisores && {
+          periodoTipo,
+          fechaReferencia,
+          mesReferencia,
+        }),
         fechaInicio,
         fechaFin,
         agenciaId,
@@ -222,6 +185,10 @@ export default function Powerbi({ modoSupervisores = false }) {
     vendedorId,
     cierreCajaTipo,
     observacion,
+    periodoTipo,
+    fechaReferencia,
+    mesReferencia,
+    modoSupervisores,
     storageKey,
     mostrarFiltroCierreCaja,
   ]);
@@ -327,7 +294,11 @@ export default function Powerbi({ modoSupervisores = false }) {
     }
 
     setFechaInicio(formatearFechaLocal(inicio));
-    setFechaFin(formatearFechaLocal(sumarDias(inicio, DIAS_RANGO_POWERBI)));
+    setFechaFin(
+      formatearFechaLocal(
+        sumarDias(inicio, SEMANAS_POWER_BI_POR_DEFECTO * 7 - 1),
+      ),
+    );
   };
 
   const actualizarFechaFin = (value) => {
@@ -338,8 +309,45 @@ export default function Powerbi({ modoSupervisores = false }) {
       return;
     }
 
-    setFechaInicio(formatearFechaLocal(sumarDias(fin, -DIAS_RANGO_POWERBI)));
+    setFechaInicio(
+      formatearFechaLocal(
+        sumarDias(fin, -(SEMANAS_POWER_BI_POR_DEFECTO * 7 - 1)),
+      ),
+    );
     setFechaFin(formatearFechaLocal(fin));
+  };
+
+  const aplicarRangoGerencia = (opciones) => {
+    const rango = construirRangoPeriodoPowerBi(opciones);
+    setFechaInicio(rango.fechaInicio);
+    setFechaFin(rango.fechaFin);
+  };
+
+  const actualizarPeriodoTipo = (tipo) => {
+    setPeriodoTipo(tipo);
+    aplicarRangoGerencia({
+      tipo,
+      fechaReferencia,
+      mesReferencia,
+      fechaInicio,
+      fechaFin,
+    });
+  };
+
+  const actualizarSemanaReferencia = (value) => {
+    setFechaReferencia(value);
+    aplicarRangoGerencia({
+      tipo: PERIODO_POWER_BI.SEMANA,
+      fechaReferencia: value,
+    });
+  };
+
+  const actualizarMesReferencia = (value) => {
+    setMesReferencia(value);
+    aplicarRangoGerencia({
+      tipo: PERIODO_POWER_BI.MES,
+      mesReferencia: value,
+    });
   };
 
   const fetchData = useCallback(async () => {
@@ -354,6 +362,7 @@ export default function Powerbi({ modoSupervisores = false }) {
     }
 
     if (
+      modoSupervisores &&
       fechaInicio &&
       fechaFin &&
       !esRango13SemanasOperativas(fechaInicio, fechaFin)
@@ -410,6 +419,7 @@ export default function Powerbi({ modoSupervisores = false }) {
     cierreCajaTipo,
     observacion,
     mostrarFiltroCierreCaja,
+    modoSupervisores,
   ]);
 
   useEffect(() => {
@@ -467,15 +477,80 @@ export default function Powerbi({ modoSupervisores = false }) {
             mostrarFiltroCierreCaja ? "xl:grid-cols-6" : "xl:grid-cols-5"
           }`}
         >
+          {!modoSupervisores && (
+            <div className="flex flex-col">
+              <label className="mb-1.5 text-sm font-medium text-gray-700">
+                Período
+              </label>
+              <select
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                value={periodoTipo}
+                onChange={(e) => actualizarPeriodoTipo(e.target.value)}
+              >
+                <option value={PERIODO_POWER_BI.POR_DEFECTO}>
+                  Por defecto (13 semanas)
+                </option>
+                <option value={PERIODO_POWER_BI.SEMANA}>Por semana</option>
+                <option value={PERIODO_POWER_BI.ULTIMOS_7_DIAS}>
+                  Últimos 7 días
+                </option>
+                <option value={PERIODO_POWER_BI.PERSONALIZADO}>
+                  Fecha de inicio y fin
+                </option>
+                <option value={PERIODO_POWER_BI.MES}>Por mes</option>
+                <option value={PERIODO_POWER_BI.ULTIMO_ANIO}>
+                  Último año
+                </option>
+              </select>
+            </div>
+          )}
+
+          {!modoSupervisores && periodoTipo === PERIODO_POWER_BI.SEMANA && (
+            <div className="flex flex-col">
+              <label className="mb-1.5 text-sm font-medium text-gray-700">
+                Semana de referencia
+              </label>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                value={fechaReferencia}
+                onChange={(e) => actualizarSemanaReferencia(e.target.value)}
+              />
+            </div>
+          )}
+
+          {!modoSupervisores && periodoTipo === PERIODO_POWER_BI.MES && (
+            <div className="flex flex-col">
+              <label className="mb-1.5 text-sm font-medium text-gray-700">
+                Mes
+              </label>
+              <input
+                type="month"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                value={mesReferencia}
+                onChange={(e) => actualizarMesReferencia(e.target.value)}
+              />
+            </div>
+          )}
+
           <div className="flex flex-col">
             <label className="mb-1.5 text-sm font-medium text-gray-700">
               Fecha Inicio
             </label>
             <input
               type="date"
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              readOnly={!modoSupervisores && periodoTipo !== PERIODO_POWER_BI.PERSONALIZADO}
+              className={`w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100 ${
+                !modoSupervisores && periodoTipo !== PERIODO_POWER_BI.PERSONALIZADO
+                  ? "cursor-default bg-gray-50"
+                  : "bg-white"
+              }`}
               value={fechaInicio}
-              onChange={(e) => actualizarFechaInicio(e.target.value)}
+              onChange={(e) =>
+                modoSupervisores
+                  ? actualizarFechaInicio(e.target.value)
+                  : setFechaInicio(e.target.value)
+              }
             />
           </div>
 
@@ -485,9 +560,18 @@ export default function Powerbi({ modoSupervisores = false }) {
             </label>
             <input
               type="date"
-              className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              readOnly={!modoSupervisores && periodoTipo !== PERIODO_POWER_BI.PERSONALIZADO}
+              className={`w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-800 shadow-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100 ${
+                !modoSupervisores && periodoTipo !== PERIODO_POWER_BI.PERSONALIZADO
+                  ? "cursor-default bg-gray-50"
+                  : "bg-white"
+              }`}
               value={fechaFin}
-              onChange={(e) => actualizarFechaFin(e.target.value)}
+              onChange={(e) =>
+                modoSupervisores
+                  ? actualizarFechaFin(e.target.value)
+                  : setFechaFin(e.target.value)
+              }
             />
           </div>
 
@@ -654,6 +738,7 @@ export default function Powerbi({ modoSupervisores = false }) {
           estadisticas={estadisticas}
           origenes={origenes}
           fechaInicio={fechaInicio}
+          fechaFin={fechaFin}
           origenesError={origenesError}
         />
       ) : modoSupervisores ? (

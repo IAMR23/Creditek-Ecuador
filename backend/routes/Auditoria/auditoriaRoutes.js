@@ -116,6 +116,12 @@ router.get("/ventas", accesoAuditoria, async (req, res) => {
   }
 });
 
+router.get(
+  "/ventas/control-caja",
+  accesoAuditoria,
+  auditoriaVentasController.obtenerControlCajaVentasContado,
+);
+
 router.post(
   "/ventas/importar-pdf",
   accesoAuditoria,

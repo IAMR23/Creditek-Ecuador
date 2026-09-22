@@ -26,6 +26,10 @@ jest.mock("../../services/controlFinancieroAuditoriaService", () => ({
   obtenerRegistrosAuditoriaDesdeControlFinanciero: jest.fn(),
 }));
 
+jest.mock("../../services/auditoriaVentasCajaService", () => ({
+  auditarVentasContadoContraCaja: jest.fn(),
+}));
+
 const ConciliacionModeloTv = require("../../models/ConciliacionModeloTv");
 const ConciliacionModeloCelular = require("../../models/ConciliacionModeloCelular");
 const DetalleVenta = require("../../models/DetalleVenta");
@@ -46,7 +50,65 @@ const {
 const {
   obtenerRegistrosAuditoriaDesdeControlFinanciero,
 } = require("../../services/controlFinancieroAuditoriaService");
+const {
+  auditarVentasContadoContraCaja,
+} = require("../../services/auditoriaVentasCajaService");
 const controller = require("./auditoriaVentasController");
+
+describe("obtenerControlCajaVentasContado", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.clearAllMocks();
+  });
+
+  test("consulta ventas contado y cruza todas las cajas del mismo dia", async () => {
+    const ventas = [{ id: 1, detalleVenta: [] }];
+    const reporte = [{ id: 1, cierreCaja: "CONTADO", formaPago: "Efectivo" }];
+    jest.spyOn(controller, "obtenerReporteAuditoria").mockResolvedValue(ventas);
+    jest.spyOn(controller, "formatearReporte").mockReturnValue(reporte);
+    auditarVentasContadoContraCaja.mockResolvedValue({
+      resumen: { totalVentasContado: 1 },
+      resultados: [{ ventaId: 1, estado: "COINCIDE_CAJA" }],
+    });
+    const req = {
+      query: {
+        fechaInicio: "2026-09-22",
+        fechaFin: "2026-09-22",
+        agenciaId: "4",
+      },
+    };
+    const res = { json: jest.fn(), status: jest.fn() };
+    res.status.mockReturnValue(res);
+
+    await controller.obtenerControlCajaVentasContado(req, res);
+
+    expect(controller.obtenerReporteAuditoria).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fechaInicio: "2026-09-22",
+        fechaFin: "2026-09-22",
+        agenciaId: "4",
+        cierreCaja: "CONTADO",
+      }),
+    );
+    expect(auditarVentasContadoContraCaja).toHaveBeenCalledWith({ ventas: reporte });
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      resumen: { totalVentasContado: 1 },
+      resultados: [{ ventaId: 1, estado: "COINCIDE_CAJA" }],
+    });
+  });
+
+  test("exige el rango de fechas", async () => {
+    const req = { query: { fechaInicio: "2026-09-22" } };
+    const res = { json: jest.fn(), status: jest.fn() };
+    res.status.mockReturnValue(res);
+
+    await controller.obtenerControlCajaVentasContado(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(auditarVentasContadoContraCaja).not.toHaveBeenCalled();
+  });
+});
 
 describe("formatearReporteEntregas", () => {
   test("incluye la ubicacion del cliente registrada en el detalle", () => {

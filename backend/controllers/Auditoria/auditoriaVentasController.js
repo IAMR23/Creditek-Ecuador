@@ -49,6 +49,9 @@ const {
   obtenerRegistrosAuditoriaDesdeControlFinanciero,
 } = require("../../services/controlFinancieroAuditoriaService");
 const {
+  auditarVentasContadoContraCaja,
+} = require("../../services/auditoriaVentasCajaService");
+const {
   esProcesoCompletoRegistrado,
 } = require("../../utils/procesoLlamadaEntrega");
 
@@ -124,6 +127,7 @@ exports.obtenerReporteAuditoria = async ({
     where: whereVenta,
     attributes: [
       "id",
+      "clienteId",
       "fecha",
       "validada",
       "observacion",
@@ -204,6 +208,57 @@ exports.obtenerReporteAuditoria = async ({
       },
     ],
   });
+};
+
+exports.obtenerControlCajaVentasContado = async (req, res) => {
+  try {
+    const {
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      modeloId,
+      origenId,
+      dispositivoId,
+      estado,
+    } = req.query;
+
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({
+        ok: false,
+        message: "fechaInicio y fechaFin son obligatorias",
+      });
+    }
+
+    if (fechaInicio > fechaFin) {
+      return res.status(400).json({
+        ok: false,
+        message: "fechaInicio no puede ser mayor que fechaFin",
+      });
+    }
+
+    const ventas = await exports.obtenerReporteAuditoria({
+      fechaInicio,
+      fechaFin,
+      agenciaId,
+      vendedorId,
+      modeloId,
+      cierreCaja: "CONTADO",
+      origenId,
+      dispositivoId,
+      estado,
+    });
+    const reporte = exports.formatearReporte(ventas);
+    const auditoria = await auditarVentasContadoContraCaja({ ventas: reporte });
+
+    return res.json({ ok: true, ...auditoria });
+  } catch (error) {
+    console.error("Error auditando ventas al contado contra caja:", error);
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      message: error.message || "No se pudo auditar las ventas contra caja",
+    });
+  }
 };
 
 exports.obtenerReporte = async ({
@@ -2027,6 +2082,7 @@ exports.formatearReporte = (ventas) => {
         local: venta.usuarioAgencia?.agencia?.nombre || "",
         origen: venta.origen?.nombre || "",
         nombre: venta.cliente?.cliente || "",
+        clienteId: venta.clienteId || null,
         cedula: venta.cliente?.cedula || "",
 
         vendedor: venta.usuarioAgencia?.usuario?.nombre || "",
