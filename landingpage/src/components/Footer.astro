@@ -1,5 +1,5 @@
 ---
-import { FBURL, INS } from "../const/constSocialNetworks";
+import { FBURL, INS, TIKTOK } from "../const/constSocialNetworks";
 ---
 
 <div class="contact-section">
@@ -27,6 +27,7 @@ import { FBURL, INS } from "../const/constSocialNetworks";
       <a
         href="https://api.whatsapp.com/send/?phone=593999062417"
         target="_blank"
+        rel="noopener noreferrer"
         ><h3 class="text-xl font-bold">
           <span class="font-bold text-yellow-500">Telé</span>fono
         </h3>
@@ -107,24 +108,34 @@ import { FBURL, INS } from "../const/constSocialNetworks";
       <p>Copyright  © 2026 CrediTek - Todos los derechos reservados</p>
     </div>
 
-    <div class="flex justify-center items-center">
-      <a href={FBURL} class="social-link" target="_blank">
+    <div class="social-networks">
+      <a href={FBURL} class="social-link social-icon-link" target="_blank" rel="noopener noreferrer">
         <img
-          class="hover:scale-150"
+          class="social-icon social-icon-facebook"
           src="/icon/icofb.webp"
-          alt=""
-          srcset=""
-          width="40px"
+          alt="Creditek en Facebook"
+          width="1024"
+          height="1024"
         />
       </a>
 
-      <a href={INS} class="social-link" target="_blank">
+      <a href={INS} class="social-link social-icon-link" target="_blank" rel="noopener noreferrer">
         <img
-          class="hover:scale-150"
+          class="social-icon social-icon-instagram"
           src="/icon/icoinstagram.webp"
-          alt=""
-          srcset=""
-          width="80px"
+          alt="Creditek en Instagram"
+          width="512"
+          height="512"
+        />
+      </a>
+
+      <a href={TIKTOK} class="social-link social-icon-link" target="_blank" rel="noopener noreferrer">
+        <img
+          class="social-icon social-icon-tiktok"
+          src="/icon/tiktok.webp"
+          alt="Creditek en TikTok"
+          width="2000"
+          height="2000"
         />
       </a>
     </div>
@@ -205,6 +216,47 @@ import { FBURL, INS } from "../const/constSocialNetworks";
 
   .social-link:hover {
     opacity: 0.8;
+  }
+
+  .social-networks {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+  }
+
+  .social-icon-link {
+    display: flex;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: opacity 0.3s ease, transform 0.2s ease;
+  }
+
+  .social-icon-link:hover {
+    transform: scale(1.08);
+  }
+
+  .social-icon {
+    flex: none;
+    max-width: none;
+  }
+
+  .social-icon-facebook {
+    width: 40px;
+    height: 40px;
+  }
+
+  .social-icon-instagram {
+    width: 84px;
+    height: 84px;
+  }
+
+  .social-icon-tiktok {
+    width: 67px;
+    height: 67px;
   }
 
   .whatsapp-button {

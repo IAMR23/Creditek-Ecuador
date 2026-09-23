@@ -11,12 +11,13 @@ import {
   Line,
   CartesianGrid,
 } from "recharts";
-import { FaCopy } from "react-icons/fa";
+import { FaCopy, FaInfoCircle } from "react-icons/fa";
 import { API_URL } from "../../../config";
 
 const COLORS = {
   semana: "#4ADE80",
   gerencia: "#2563eb",
+  ticketPromedio: "#9333ea",
   promedioGerencia: "#dc2626",
   enganche: "#16a34a",
   costo: "#f59e0b",
@@ -107,6 +108,19 @@ const toPromedioIndicadorGerenciaArray = (
       return {
         name: getRangoSemana(semanaNumero, fechaInicio),
         promedioMargen: Number(value) || 0,
+        semanaNumero,
+      };
+    })
+    .sort((a, b) => a.semanaNumero - b.semanaNumero);
+
+const toTicketPromedioArray = (obj = {}, fechaInicio = "2026-01-01") =>
+  Object.entries(obj || {})
+    .map(([name, value]) => {
+      const semanaNumero = Number(String(name).replace(/\D/g, ""));
+
+      return {
+        name: getRangoSemana(semanaNumero, fechaInicio),
+        ticketPromedio: Number(value) || 0,
         semanaNumero,
       };
     })
@@ -293,6 +307,24 @@ function CopyButton({ onClick, copiando = false }) {
   );
 }
 
+function InfoButton({ titulo, descripcion }) {
+  return (
+    <span
+      className="group relative inline-flex rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-blue-700 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-300"
+      tabIndex={0}
+      aria-label={`Información sobre ${titulo}`}
+    >
+      <FaInfoCircle size={18} />
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-72 rounded-lg bg-slate-900 px-3 py-2 text-left text-xs font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus:opacity-100"
+      >
+        {descripcion}
+      </span>
+    </span>
+  );
+}
+
 export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin }) {
   const [dataCostoVenta, setDataCostoVenta] = useState([]);
   const [dataCostoEntrega, setDataCostoEntrega] = useState([]);
@@ -305,6 +337,7 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
   const refEnganche = useRef(null);
   const refSemana = useRef(null);
   const refGerencia = useRef(null);
+  const refTicketPromedio = useRef(null);
   const refPromedioGerencia = useRef(null);
   const refCostoVenta = useRef(null);
   const refCostoEntrega = useRef(null);
@@ -332,6 +365,15 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
         fechaInicio,
       ),
     [estadisticas?.promedioIndicadorGerenciaPorSemana, fechaInicio],
+  );
+
+  const dataTicketPromedio = useMemo(
+    () =>
+      toTicketPromedioArray(
+        estadisticas?.ticketPromedioPorSemana,
+        fechaInicio,
+      ),
+    [estadisticas?.ticketPromedioPorSemana, fechaInicio],
   );
 
   const dataMargenPorcentual = useMemo(
@@ -584,12 +626,18 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Ventas Javier por Semana</h3>
-          <CopyButton
-            copiando={graficoCopiando === "Ventas Javier por Semana"}
-            onClick={() =>
-              copiarGrafico(refEnganche, "Ventas Javier por Semana")
-            }
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Ventas Javier por Semana"
+              descripcion="Cantidad de ventas identificadas para Javier en cada semana."
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Ventas Javier por Semana"}
+              onClick={() =>
+                copiarGrafico(refEnganche, "Ventas Javier por Semana")
+              }
+            />
+          </div>
         </div>
 
         <div ref={refEnganche} className="bg-white rounded-xl">
@@ -623,11 +671,16 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h3 className="font-semibold">Ventas por Semana</h3>
-
-          <CopyButton
-            copiando={graficoCopiando === "Ventas por Semana"}
-            onClick={() => copiarGrafico(refSemana, "Ventas por Semana")}
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Ventas por Semana"
+              descripcion="Cantidad total de ventas registradas en cada semana."
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Ventas por Semana"}
+              onClick={() => copiarGrafico(refSemana, "Ventas por Semana")}
+            />
+          </div>
         </div>
 
         <div ref={refSemana} className="bg-white rounded-xl">
@@ -661,12 +714,20 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Indicador Gerencia por Semana</h3>
-          <CopyButton
-            copiando={
-              graficoCopiando === "Indicador Gerencia por Semana"
-            }
-            onClick={() => copiarGrafico(refGerencia, "Indicador Gerencia por Semana")}
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Indicador Gerencia por Semana"
+              descripcion="Suma del margen generado por las ventas de cada semana."
+            />
+            <CopyButton
+              copiando={
+                graficoCopiando === "Indicador Gerencia por Semana"
+              }
+              onClick={() =>
+                copiarGrafico(refGerencia, "Indicador Gerencia por Semana")
+              }
+            />
+          </div>
         </div>
 
         <div ref={refGerencia} className="bg-white rounded-xl">
@@ -705,20 +766,77 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
 
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">Ticket Promedio por Semana</h3>
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Ticket Promedio por Semana"
+              descripcion="Grafica precio de venta sin iva dividido para el numero de ventas"
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Ticket Promedio por Semana"}
+              onClick={() =>
+                copiarGrafico(refTicketPromedio, "Ticket Promedio por Semana")
+              }
+            />
+          </div>
+        </div>
+
+        <div ref={refTicketPromedio} className="bg-white rounded-xl">
+          <ResponsiveContainer width="100%" height={650}>
+            <LineChart
+              data={dataTicketPromedio}
+              margin={{ top: 20, right: 12, left: 22, bottom: 110 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+              <XAxis dataKey="name" angle={-50} textAnchor="end" interval={0} />
+
+              <YAxis
+                domain={minDataDomain}
+                tickFormatter={(value) => moneyFormatter.format(value)}
+              />
+
+              <Tooltip
+                {...tooltipStyle}
+                formatter={(value) => moneyFormatter.format(Number(value) || 0)}
+              />
+
+              <Line
+                type="linear"
+                dataKey="ticketPromedio"
+                name="Ticket promedio sin IVA"
+                stroke={COLORS.ticketPromedio}
+                strokeWidth={3}
+                dot={{ r: 6 }}
+                activeDot={{ r: 10 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">
             Promedio Indicador Gerencia por Semana
           </h3>
-          <CopyButton
-            copiando={
-              graficoCopiando === "Promedio Indicador Gerencia por Semana"
-            }
-            onClick={() =>
-              copiarGrafico(
-                refPromedioGerencia,
-                "Promedio Indicador Gerencia por Semana",
-              )
-            }
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Promedio Indicador Gerencia por Semana"
+              descripcion="Margen total de la semana dividido para el número de ventas."
+            />
+            <CopyButton
+              copiando={
+                graficoCopiando === "Promedio Indicador Gerencia por Semana"
+              }
+              onClick={() =>
+                copiarGrafico(
+                  refPromedioGerencia,
+                  "Promedio Indicador Gerencia por Semana",
+                )
+              }
+            />
+          </div>
         </div>
 
         <div ref={refPromedioGerencia} className="bg-white rounded-xl">
@@ -758,15 +876,21 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Margen Porcentual por Semana</h3>
-          <CopyButton
-            copiando={graficoCopiando === "Margen Porcentual por Semana"}
-            onClick={() =>
-              copiarGrafico(
-                refMargenPorcentual,
-                "Margen Porcentual por Semana",
-              )
-            }
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Margen Porcentual por Semana"
+              descripcion="Margen total dividido para el costo total de cada semana, expresado como porcentaje."
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Margen Porcentual por Semana"}
+              onClick={() =>
+                copiarGrafico(
+                  refMargenPorcentual,
+                  "Margen Porcentual por Semana",
+                )
+              }
+            />
+          </div>
         </div>
 
         <div ref={refMargenPorcentual} className="bg-white rounded-xl">
@@ -805,10 +929,18 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Costo por Venta por Semana</h3>
-          <CopyButton
-            copiando={graficoCopiando === "Costo por Venta por Semana"}
-            onClick={() => copiarGrafico(refCostoVenta, "Costo por Venta por Semana")}
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Costo por Venta por Semana"
+              descripcion="Costo promedio generado por cada venta de la semana."
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Costo por Venta por Semana"}
+              onClick={() =>
+                copiarGrafico(refCostoVenta, "Costo por Venta por Semana")
+              }
+            />
+          </div>
         </div>
 
         <div ref={refCostoVenta} className="bg-white rounded-xl">
@@ -855,12 +987,18 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Costo por Entrega por Semana</h3>
-          <CopyButton
-            copiando={graficoCopiando === "Costo por Entrega por Semana"}
-            onClick={() =>
-              copiarGrafico(refCostoEntrega, "Costo por Entrega por Semana")
-            }
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Costo por Entrega por Semana"
+              descripcion="Costo promedio generado por cada entrega de la semana."
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Costo por Entrega por Semana"}
+              onClick={() =>
+                copiarGrafico(refCostoEntrega, "Costo por Entrega por Semana")
+              }
+            />
+          </div>
         </div>
 
         <div ref={refCostoEntrega} className="bg-white rounded-xl">
@@ -907,12 +1045,21 @@ export default function DashboardGraficas2({ estadisticas, fechaInicio, fechaFin
       <div className="bg-white p-4 rounded-2xl shadow lg:col-span-1 xl:col-span-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Tareas Finalizadas por Semana</h3>
-          <CopyButton
-            copiando={graficoCopiando === "Tareas Finalizadas por Semana"}
-            onClick={() =>
-              copiarGrafico(refTareasFinalizadas, "Tareas Finalizadas por Semana")
-            }
-          />
+          <div className="flex items-center gap-2">
+            <InfoButton
+              titulo="Tareas Finalizadas por Semana"
+              descripcion="Cantidad de tareas de Sistemas finalizadas en cada semana."
+            />
+            <CopyButton
+              copiando={graficoCopiando === "Tareas Finalizadas por Semana"}
+              onClick={() =>
+                copiarGrafico(
+                  refTareasFinalizadas,
+                  "Tareas Finalizadas por Semana",
+                )
+              }
+            />
+          </div>
         </div>
 
         <div ref={refTareasFinalizadas} className="bg-white rounded-xl">

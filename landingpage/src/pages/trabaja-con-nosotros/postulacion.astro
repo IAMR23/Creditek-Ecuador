@@ -6,7 +6,12 @@ import Whatsapp from "../../components/Whatsapp.astro";
 import FormProgress from "../../components/FormProgress.astro";
 ---
 
-<Layout title="Formulario Aspirantes – Previo a Entrevista">
+<Layout
+  title="Formulario de aspirantes a Creditek | Postulación"
+  description="Completa el formulario de aspirantes para participar en el proceso de selección de Creditek."
+  canonical="/trabaja-con-nosotros/postulacion/"
+  robots="noindex, follow"
+>
   <NavBar />
   <div class="h-20 bg-black"></div>
 
@@ -25,9 +30,9 @@ import FormProgress from "../../components/FormProgress.astro";
     >
       <FormProgress step="1" />
 
-      <h2 class="text-3xl font-bold text-emerald-700 mb-2">
+      <h1 class="text-3xl font-bold text-emerald-700 mb-2">
         Asesores Comerciales para el Valle y el Sur de Quito 
-      </h2>
+      </h1>
       <p class="text-gray-500 mb-8 text-sm">
         Completa tus datos personales para continuar con el proceso.
       </p>
@@ -64,6 +69,20 @@ import FormProgress from "../../components/FormProgress.astro";
             name="telefono"
             class="input"
             type="tel"
+          />
+        </div>
+
+        <div class="mt-5">
+          <label for="email" class="label required-label">Correo electrónico</label>
+          <input
+            id="email"
+            name="email"
+            class="input"
+            type="email"
+            inputmode="email"
+            autocomplete="email"
+            maxlength="254"
+            placeholder="Ej: nombre@correo.com"
           />
         </div>
 
@@ -1082,6 +1101,9 @@ import FormProgress from "../../components/FormProgress.astro";
   const hasData = (obj: Record<string, string>) =>
     Object.values(obj).some((value) => value !== "");
 
+  const isValidEmail = (value: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
   const validateStep = (step: number) => {
     clearErrors();
 
@@ -1101,6 +1123,15 @@ import FormProgress from "../../components/FormProgress.astro";
       if (!getValue("telefono")) {
         missing.push("teléfono");
         markField("telefono");
+      }
+
+      const email = getValue("email");
+      if (!email) {
+        missing.push("correo electrónico");
+        markField("email");
+      } else if (!isValidEmail(email)) {
+        missing.push("correo electrónico válido");
+        markField("email");
       }
 
       if (!getValue("edadCumplida")) {
@@ -1222,6 +1253,7 @@ import FormProgress from "../../components/FormProgress.astro";
         nombreCompleto: getValue("nombreCompleto"),
         cedula: getValue("cedula"),
         telefono: getValue("telefono"),
+        email: getValue("email").toLowerCase(),
         edadCumplida: getValue("edadCumplida"),
         numeroHijos: getValue("numeroHijos"),
         estadoCivil: getCheckedValue("estadoCivil"),

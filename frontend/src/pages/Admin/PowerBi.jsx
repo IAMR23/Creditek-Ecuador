@@ -498,8 +498,8 @@ export default function Powerbi({ modoSupervisores = false }) {
                   Fecha de inicio y fin
                 </option>
                 <option value={PERIODO_POWER_BI.MES}>Por mes</option>
-                <option value={PERIODO_POWER_BI.ULTIMO_ANIO}>
-                  Último año
+                <option value={PERIODO_POWER_BI.ESTE_ANIO}>
+                  Este año
                 </option>
               </select>
             </div>

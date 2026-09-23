@@ -1104,7 +1104,7 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
     const failure = finalError
       ? { error: finalError, phase: finalFailurePhase || phase }
       : (["QUEUE_FAILED", "QUEUE_PARTIAL"].includes(queueResult?.code) ? firstError : null);
-    console.log("[GHL] RESUMEN_REPARTO", {
+/*     console.log("[GHL] RESUMEN_REPARTO", {
       ...summary,
       fechaHora: new Date().toISOString(),
       duracionMs: Math.max(0, Date.now() - startedAt),
@@ -1118,7 +1118,7 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
           ?? null,
         mensaje: sanitize(failure.error.message),
       } : {}),
-    });
+    }); */
   };
   const recordPersistentFailure = async (code) => {
     if (!config?.locationId || backoffRecorded) return;

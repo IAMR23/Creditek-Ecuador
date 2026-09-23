@@ -82,14 +82,15 @@ describe("obtenerControlCajaVentasContado", () => {
 
     await controller.obtenerControlCajaVentasContado(req, res);
 
-    expect(controller.obtenerReporteAuditoria).toHaveBeenCalledWith(
+    const filtrosReporte = controller.obtenerReporteAuditoria.mock.calls[0][0];
+    expect(filtrosReporte).toEqual(
       expect.objectContaining({
         fechaInicio: "2026-09-22",
         fechaFin: "2026-09-22",
         agenciaId: "4",
-        cierreCaja: "CONTADO",
       }),
     );
+    expect(filtrosReporte).not.toHaveProperty("cierreCaja");
     expect(auditarVentasContadoContraCaja).toHaveBeenCalledWith({ ventas: reporte });
     expect(res.json).toHaveBeenCalledWith({
       ok: true,

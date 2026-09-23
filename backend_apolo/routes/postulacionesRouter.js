@@ -114,6 +114,7 @@ const REFERENCE_CONFIG = {
 };
 
 const isEmptyValue = (value) => value === "" || value === null || value === undefined;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const clean = (obj = {}) =>
   Object.fromEntries(
@@ -560,6 +561,9 @@ const buildListWhere = (query = {}) => {
       { nombre: { [Op.iLike]: `%${q}%` } },
       { cedula: { [Op.iLike]: `%${q}%` } },
       { telefono: { [Op.iLike]: `%${q}%` } },
+      sequelizeWhere(json("formulario.datos_personales.email"), {
+        [Op.iLike]: `%${q}%`,
+      }),
     ];
   }
 
@@ -666,6 +670,7 @@ const buildFromFlatPayload = (data) => ({
     nombreCompleto: data.nombreCompleto,
     cedula: data.cedula,
     telefono: data.telefono,
+    email: data.email || data.correo || data.correoElectronico,
     edadCumplida: data.edadCumplida,
     numeroHijos: data.numeroHijos,
     estadoCivil: data.estadoCivil,
@@ -732,6 +737,14 @@ const normalizePayload = (data = {}) => {
         observaciones: clean(data.observaciones),
       }
     : buildFromFlatPayload(data);
+
+  if (payload.datos_personales?.email !== undefined) {
+    payload.datos_personales.email = normalizeLimitedText(
+      payload.datos_personales.email,
+      254,
+      "El correo electrónico",
+    ).toLowerCase();
+  }
 
   payload.metadata = {
     fecha_envio: new Date().toISOString(),
@@ -1144,6 +1157,11 @@ const validatePayload = (payload) => {
   if (!datos.nombreCompleto) errors.push("Nombre completo es obligatorio");
   if (!datos.cedula) errors.push("Cedula es obligatoria");
   if (!datos.telefono) errors.push("Telefono es obligatorio");
+  if (!datos.email) {
+    errors.push("Correo electrónico es obligatorio");
+  } else if (!EMAIL_PATTERN.test(datos.email)) {
+    errors.push("Correo electrónico no es válido");
+  }
   if (!datos.edadCumplida) errors.push("Edad cumplida es obligatoria");
   if (isEmptyValue(datos.numeroHijos)) errors.push("Numero de hijos es obligatorio");
   if (!datos.estadoCivil) errors.push("Estado civil es obligatorio");

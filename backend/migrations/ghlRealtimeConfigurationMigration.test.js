@@ -36,3 +36,17 @@ describe("migracion incremental de pausa automatica", () => {
     expect(sql).not.toMatch(/DROP\s+TABLE/i);
   });
 });
+
+describe("migracion incremental de inicio de Play", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "202609230001-add-ghl-advisor-play-start-time.sql"),
+    "utf8",
+  );
+
+  test("agrega una hora valida sin modificar la seleccion del reparto", () => {
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "horaInicioPlay"');
+    expect(sql).toContain('SET "horaInicioPlay" = \'00:00\'');
+    expect(sql).toContain("ghl_reparto_tiempo_real_hora_inicio_play_check");
+    expect(sql).not.toMatch(/DROP\s+TABLE/i);
+  });
+});

@@ -118,13 +118,16 @@ async function advisorAutoPauseConfiguration(req, res) {
 async function saveAdvisorAutoPauseConfiguration(req, res) {
   try {
     const configuracion = await advisorService.saveAutoPauseConfiguration(
-      { horaPausaAutomatica: req.body.horaPausaAutomatica },
+      {
+        horaInicioPlay: req.body.horaInicioPlay,
+        horaPausaAutomatica: req.body.horaPausaAutomatica,
+      },
       req.user.id,
     );
     res.json({
       ok: true,
       configuracion,
-      message: "Hora de pausa automatica guardada correctamente",
+      message: "Horario diario de Play guardado correctamente",
     });
   } catch (error) { respondError(res, error); }
 }

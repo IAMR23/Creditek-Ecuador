@@ -7,8 +7,8 @@
     class="container mx-auto px-4 py-4 flex items-center justify-between relative"
   >
     <div class="flex items-center">
-      <a href="/">
-        <img src="/Creditek/logo.png" alt="" srcset="" width="150" />
+      <a href="/" aria-label="Ir al inicio de Creditek">
+        <img src="/Creditek/logo.png" alt="Creditek" width="150" height="50" />
       </a>
     </div>
 
@@ -27,7 +27,14 @@
     </div>
 
     <!-- Botón hamburguesa para móviles -->
-    <button id="menu-toggle" class="md:hidden flex items-center">
+    <button
+      id="menu-toggle"
+      class="md:hidden flex items-center"
+      type="button"
+      aria-label="Abrir menú de navegación"
+      aria-controls="mobile-menu"
+      aria-expanded="false"
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         class="h-6 w-6 text-white"
@@ -101,6 +108,7 @@
   if (menuToggle && mobileMenu) {
     menuToggle.addEventListener("click", () => {
       mobileMenu.classList.toggle("hidden");
+      menuToggle.setAttribute("aria-expanded", String(!mobileMenu.classList.contains("hidden")));
     });
   }
 
@@ -124,6 +132,7 @@
     link.addEventListener("click", () => {
       if (mobileMenu) {
         mobileMenu.classList.add("hidden");
+        menuToggle?.setAttribute("aria-expanded", "false");
       }
     });
   });

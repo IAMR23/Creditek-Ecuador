@@ -88,6 +88,24 @@ describe("calcularEstadisticasVentas", () => {
     expect(estadisticas.promedioIndicadorGerenciaPorSemana["Semana 1"]).toBe(15.5);
   });
 
+  test("calcula el ticket promedio con el precio vendedor sin IVA por fila", () => {
+    const estadisticas = calcularEstadisticasVentas(
+      [
+        { fecha: "2026-07-16", precioVendedor: "115.00" },
+        { fecha: "2026-07-17", precioVendedor: 230 },
+        { fecha: "2026-07-23", precioVendedor: "172.79" },
+      ],
+      "2026-07-16",
+    );
+
+    expect(estadisticas.valorVendidoSinIvaPorSemana["Semana 1"]).toBe(300);
+    expect(estadisticas.ticketPromedioPorSemana["Semana 1"]).toBe(150);
+    expect(estadisticas.valorVendidoSinIvaPorSemana["Semana 2"]).toBe(150.25);
+    expect(estadisticas.ticketPromedioPorSemana["Semana 2"]).toBe(150.25);
+    expect(estadisticas.valorVendidoSinIvaTotal).toBe(450.25);
+    expect(estadisticas.ticketPromedioTotal).toBe(150.08);
+  });
+
   test("calcula el precio vendedor promedio sobre el numero total de ventas", () => {
     const estadisticas = calcularEstadisticasVentas([
       { precioVendedor: "100.50" },

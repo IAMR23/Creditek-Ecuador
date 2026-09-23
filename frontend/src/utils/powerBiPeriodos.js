@@ -4,7 +4,7 @@ export const PERIODO_POWER_BI = Object.freeze({
   ULTIMOS_7_DIAS: "ULTIMOS_7_DIAS",
   PERSONALIZADO: "PERSONALIZADO",
   MES: "MES",
-  ULTIMO_ANIO: "ULTIMO_ANIO",
+  ESTE_ANIO: "ESTE_ANIO",
 });
 
 export const SEMANAS_POWER_BI_POR_DEFECTO = 13;
@@ -137,9 +137,9 @@ export const construirRangoPeriodoPowerBi = ({
     };
   }
 
-  if (tipo === PERIODO_POWER_BI.ULTIMO_ANIO) {
+  if (tipo === PERIODO_POWER_BI.ESTE_ANIO) {
     return {
-      fechaInicio: formatearFechaLocal(sumarDias(hoy, -364)),
+      fechaInicio: `${hoy.getFullYear()}-01-01`,
       fechaFin: formatearFechaLocal(hoy),
     };
   }

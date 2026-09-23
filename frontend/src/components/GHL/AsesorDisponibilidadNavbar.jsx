@@ -75,11 +75,14 @@ export default function AsesorDisponibilidadNavbar({ auth }) {
   ) return null;
 
   const active = availability.estado === "ACTIVO";
-  const closed = availability.bloqueadoPorHorario === true;
+  const blocked = availability.bloqueadoPorHorario === true;
+  const beforeStart = availability.bloqueadoAntesInicio === true;
   const label = active
     ? "Pausar reparto"
-    : closed
-      ? `Reparto cerrado desde las ${availability.horaPausaAutomatica}`
+    : beforeStart
+      ? `Play disponible desde las ${availability.horaInicioPlay}`
+      : blocked
+        ? `Reparto cerrado desde las ${availability.horaPausaAutomatica}`
       : "Activar reparto";
 
   return (
@@ -87,7 +90,7 @@ export default function AsesorDisponibilidadNavbar({ auth }) {
       <button
         type="button"
         onClick={toggle}
-        disabled={busy || (!active && closed)}
+        disabled={busy || (!active && blocked)}
         title={`${label}. Leads recibidos hoy: ${availability.leadsHoy || 0}`}
         aria-label={label}
         className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-2.5 text-xs font-bold shadow-sm transition sm:px-3 ${
@@ -97,7 +100,7 @@ export default function AsesorDisponibilidadNavbar({ auth }) {
         } disabled:cursor-wait disabled:opacity-60`}
       >
         {busy ? <FaSpinner className="animate-spin" /> : active ? <FaPause /> : <FaPlay />}
-        <span>{active ? "En Play" : closed ? "Cerrado" : "Play"}</span>
+        <span>{active ? "En Play" : beforeStart ? `Desde ${availability.horaInicioPlay}` : blocked ? "Cerrado" : "Play"}</span>
         <span className="hidden border-l border-current/30 pl-2 md:inline">
           {availability.leadsHoy || 0} hoy
         </span>

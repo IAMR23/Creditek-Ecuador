@@ -325,22 +325,31 @@ function ChartRenderer({
 
   if (type === "pie") {
     return (
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            outerRadius={105}
-            label={({ name, value }) => `${name}: ${value}`}
-          >
-            {data.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip {...tooltipStyle} />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className="flex h-full min-w-0 items-stretch">
+        <div className="min-w-0 flex-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                outerRadius="76%"
+                label={false}
+                labelLine={false}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                {...tooltipStyle}
+                formatter={(value, name) => [value, name]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <PieLegendColumn data={data} />
+      </div>
     );
   }
 
@@ -403,6 +412,33 @@ function ChartRenderer({
         <Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+function PieLegendColumn({ data }) {
+  return (
+    <div className="flex w-[44%] min-w-0 items-center border-l border-slate-100 pl-3">
+      <div className="max-h-[285px] w-full space-y-2 overflow-y-auto pr-1">
+        {data.map((item, index) => (
+          <div
+            key={`${item.name}-${index}`}
+            className="flex min-w-0 items-center gap-2 text-xs"
+            title={`${item.name}: ${item.value}`}
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-sm"
+              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+            />
+            <span className="min-w-0 flex-1 truncate text-slate-600">
+              {item.name}
+            </span>
+            <span className="shrink-0 font-bold tabular-nums text-slate-900">
+              {item.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

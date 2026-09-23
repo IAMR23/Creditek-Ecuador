@@ -9,32 +9,53 @@ import Credito from "../components/Credito.astro";
 import Branches from "../components/Branches.astro";
 import Testimonio from "../components/Testimonio.astro";
 import Contacto from "../components/Contacto.astro";
+import { FBURL, INS, TIKTOK } from "../const/constSocialNetworks";
+
+const localBusiness = {
+  "@context": "https://schema.org",
+  "@type": "LocalBusiness",
+  "@id": "https://www.creditek-ecuador.com/#localbusiness",
+  name: "Creditek",
+  url: "https://www.creditek-ecuador.com/",
+  logo: "https://www.creditek-ecuador.com/Creditek/logo.png",
+  image: "https://www.creditek-ecuador.com/Creditek/Principal.jpeg",
+  telephone: "+593984287413",
+  email: "desarrollo.organizacional@creditek-ecuador.com",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "General Julio Andrade Oe2-11 y Geovanny Benitez",
+    addressLocality: "Quito",
+    addressCountry: "EC",
+  },
+  areaServed: [
+    { "@type": "City", name: "Quito" },
+    { "@type": "City", name: "Sangolquí" },
+  ],
+  sameAs: [FBURL, INS, TIKTOK],
+};
 ---
 
 <Layout
-  title="Celulares y Televisiones a Crédito en Ecuador | Creditek"
-  description="Adquiere celulares y televisiones a crédito con Creditek Ecuador. Solicita información, conoce nuestras sucursales y encuentra opciones de crédito para tecnología."
+  title="Celulares y televisores a crédito en Quito | Creditek"
+  description="Compra celulares y televisores a crédito en Creditek. Conoce nuestras sucursales en Quito y Sangolquí y consulta las opciones disponibles para ti."
+  canonical="/"
+  structuredData={localBusiness}
 >
   <NavBar />
 
-  <section id="home">
-    <Banner />
-  </section>
+  <main>
+    <section id="home">
+      <Banner />
+    </section>
 
     <Branches />
 
-    
+    <Productos />
+    <Credito />
+    <Testimonio />
+    <Contacto />
+  </main>
 
-  <Productos/>
-
-  <Credito/> 
-
-  <Testimonio />
-
-
-<Contacto />
-
- 
   <Whatsapp />
   <Footer />
 </Layout>

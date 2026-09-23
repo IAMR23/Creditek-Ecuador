@@ -65,7 +65,8 @@ export default function AsesorDisponibilidadCard() {
   }
 
   const active = data.estado === "ACTIVO";
-  const closed = data.bloqueadoPorHorario === true;
+  const blocked = data.bloqueadoPorHorario === true;
+  const beforeStart = data.bloqueadoAntesInicio === true;
   return <section className={`mb-8 rounded-2xl border p-5 shadow-sm ${active ? "border-green-200 bg-green-50" : "border-gray-200 bg-white"}`}>
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -73,10 +74,10 @@ export default function AsesorDisponibilidadCard() {
         <h2 className={`mt-1 text-xl font-bold ${active ? "text-green-800" : "text-gray-800"}`}>{active ? "Recibiendo leads" : "Reparto pausado"}</h2>
         <p className="mt-1 text-sm text-gray-600">Último cambio: {formatDateTime(data.ultimoCambio)}</p>
         <p className="mt-1 text-sm font-semibold text-gray-700">Leads recibidos hoy: {data.leadsHoy || 0}</p>
-        <p className={`mt-1 text-sm ${closed ? "font-semibold text-amber-700" : "text-gray-600"}`}>{closed ? `El reparto cerró automáticamente a las ${data.horaPausaAutomatica}.` : `Pausa automática diaria: ${data.horaPausaAutomatica}.`}</p>
+        <p className={`mt-1 text-sm ${blocked ? "font-semibold text-amber-700" : "text-gray-600"}`}>{beforeStart ? `Podrás activar Play a partir de las ${data.horaInicioPlay}.` : blocked ? `El reparto cerró automáticamente a las ${data.horaPausaAutomatica}.` : `Horario de Play: ${data.horaInicioPlay} a ${data.horaPausaAutomatica}.`}</p>
       </div>
       <div className="flex gap-2">
-        <button type="button" disabled={busy || active || closed} onClick={() => changeState("ACTIVO")} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"><Play size={18} /> Play</button>
+        <button type="button" disabled={busy || active || blocked} onClick={() => changeState("ACTIVO")} className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-5 py-3 font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"><Play size={18} /> Play</button>
         <button type="button" disabled={busy || !active} onClick={() => changeState("PAUSADO")} className="inline-flex items-center gap-2 rounded-xl bg-gray-700 px-5 py-3 font-bold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"><Pause size={18} /> Pausa</button>
       </div>
     </div>

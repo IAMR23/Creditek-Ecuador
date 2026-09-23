@@ -258,6 +258,7 @@ connectDB()
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
     app.use("/api/ghl/repartos", require("./routes/GHL/repartoRoutes"));
     app.use("/api/ghl/workflows-programados", require("./routes/GHL/workflowProgramacionesRoutes"));
+    app.use("/api/public/solicitudes-credito", require("./routes/GHL/landingCreditRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
     app.use("/api/meta", require("./routes/metaRoutes"));
     app.use("/api/facebook", require("./routes/facebookWebhookRoutes"));

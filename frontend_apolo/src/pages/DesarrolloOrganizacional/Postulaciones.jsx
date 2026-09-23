@@ -21,7 +21,7 @@ import {
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
 import ModalDetalle from "../../components/PostulacionDetalle";
-import { getCandidateThirdLevelTitle } from "../../utils/interviews";
+import { getCandidateEmail, getCandidateThirdLevelTitle } from "../../utils/interviews";
 
 const dash = "-";
 const POSTULACIONES_EVENT = "apolo:postulaciones-updated";
@@ -1086,7 +1086,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                 <input
                   value={filters.q}
                   onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
-                  placeholder="Nombre, telefono o cedula"
+                  placeholder="Nombre, teléfono, cédula o correo"
                   className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                 />
               </div>
@@ -1337,6 +1337,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                     const trabajos = p.formulario?.historial_laboral?.length || 0;
                     const motivoDescarte = p.formulario?.metadata?.motivo_descarte || "";
                     const tituloTercerNivel = getCandidateThirdLevelTitle(p);
+                    const email = getCandidateEmail(p);
 
                     const editingObservation = editingObservationId === p.id;
 
@@ -1351,6 +1352,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
                             <p>ID #{p.id}</p>
                             <p className="break-all">C.I. {datos.cedula || p.cedula || dash}</p>
                             <p className="break-all">Tel. {datos.telefono || p.telefono || dash}</p>
+                            <p className="break-all">Correo: {email || dash}</p>
                           </div>
                         </td>
                         <td className={tdClass}>

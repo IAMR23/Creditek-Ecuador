@@ -1,0 +1,151 @@
+#solicitud-credito .form-control {
+  width: 100%;
+  border: 1px solid rgb(209 213 219);
+  border-radius: 0.75rem;
+  background: white;
+  padding: 0.875rem 1rem;
+  color: rgb(17 24 39);
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+#solicitud-credito .form-control::placeholder {
+  color: rgb(156 163 175);
+}
+
+#solicitud-credito .form-control:hover {
+  border-color: rgb(156 163 175);
+}
+
+#solicitud-credito .form-control:focus {
+  border-color: rgb(5 150 105);
+  box-shadow: 0 0 0 4px rgb(167 243 208 / 0.55);
+}
+
+#solicitud-credito .form-control[aria-invalid="true"] {
+  border-color: rgb(220 38 38);
+  background-color: rgb(254 242 242);
+  box-shadow: 0 0 0 3px rgb(254 202 202 / 0.55);
+}
+
+#solicitud-credito .field-error {
+  display: none;
+  margin-top: 0.5rem;
+  color: rgb(185 28 28);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+#solicitud-credito .field-error.is-visible {
+  display: block;
+}
+
+#solicitud-credito .product-option {
+  display: block;
+  min-width: 0;
+  cursor: pointer;
+}
+
+#solicitud-credito .product-card {
+  position: relative;
+  display: flex;
+  min-height: 6.5rem;
+  align-items: center;
+  gap: 0.875rem;
+  border: 1px solid rgb(209 213 219);
+  border-radius: 0.875rem;
+  background: white;
+  padding: 1rem;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+#solicitud-credito .product-option:hover .product-card {
+  border-color: rgb(110 231 183);
+  transform: translateY(-1px);
+}
+
+#solicitud-credito .product-option input:focus-visible + .product-card {
+  outline: none;
+  box-shadow: 0 0 0 4px rgb(167 243 208 / 0.65);
+}
+
+#solicitud-credito .product-option input:checked + .product-card {
+  border-color: rgb(5 150 105);
+  background: rgb(236 253 245);
+  box-shadow: 0 0 0 1px rgb(5 150 105);
+}
+
+#solicitud-credito .product-icon {
+  display: flex;
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: rgb(236 253 245);
+  color: rgb(5 150 105);
+}
+
+#solicitud-credito .product-icon svg {
+  width: 1.75rem;
+  height: 1.75rem;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#solicitud-credito .selection-check {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  width: 1.4rem;
+  height: 1.4rem;
+  transform: scale(0.7);
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgb(209 213 219);
+  border-radius: 9999px;
+  background: white;
+  color: white;
+  opacity: 0.7;
+  transition: all 150ms ease;
+}
+
+#solicitud-credito .selection-check svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#solicitud-credito .product-option input:checked + .product-card .selection-check {
+  transform: scale(1);
+  border-color: rgb(234 88 12);
+  background: rgb(234 88 12);
+  opacity: 1;
+}
+
+#solicitud-credito fieldset[aria-invalid="true"] .product-card {
+  border-color: rgb(252 165 165);
+}
+
+#solicitud-credito #form-status[data-state="loading"] {
+  border-color: rgb(191 219 254);
+  background: rgb(239 246 255);
+  color: rgb(30 64 175);
+}
+
+#solicitud-credito #form-status[data-state="success"] {
+  border-color: rgb(167 243 208);
+  background: rgb(236 253 245);
+  color: rgb(6 95 70);
+}
+
+#solicitud-credito #form-status[data-state="error"] {
+  border-color: rgb(254 202 202);
+  background: rgb(254 242 242);
+  color: rgb(153 27 27);
+}

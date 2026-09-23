@@ -9,6 +9,7 @@ async function run() {
   const migrations = [
     "202609210001-create-ghl-reparto-tiempo-real-configuracion.sql",
     "202609210002-add-ghl-advisor-auto-pause-time.sql",
+    "202609230001-add-ghl-advisor-play-start-time.sql",
   ];
   for (const migration of migrations) {
     const sql = fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8");

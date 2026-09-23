@@ -92,8 +92,15 @@ describe("disponibilidad diaria de asesores GHL", () => {
     expect(service.getAutoPauseTime({ GHL_ADVISOR_AUTO_PAUSE_TIME: "25:00" })).toBe("18:00");
   });
 
+  test("la hora de inicio de Play conserva compatibilidad y valida la configuracion", () => {
+    expect(service.getPlayStartTime({})).toBe("00:00");
+    expect(service.getPlayStartTime({ GHL_ADVISOR_PLAY_START_TIME: "08:30" })).toBe("08:30");
+    expect(service.getPlayStartTime({ GHL_ADVISOR_PLAY_START_TIME: "25:00" })).toBe("00:00");
+  });
+
   test("consulta y conserva la hora de pausa guardada en PostgreSQL", async () => {
     RealtimeConfiguracion.findByPk.mockResolvedValue({
+      horaInicioPlay: "08:00",
       horaPausaAutomatica: "19:15",
       actualizadoPorId: 99,
       updatedAt: new Date("2026-09-09T12:00:00.000Z"),
@@ -101,14 +108,17 @@ describe("disponibilidad diaria de asesores GHL", () => {
 
     await expect(service.getAutoPauseConfiguration({ force: true })).resolves.toMatchObject({
       horaPausaAutomatica: "19:15",
+      horaInicioPlay: "08:00",
       persistida: true,
       actualizadoPorId: 99,
     });
     expect(service.currentAutoPauseTime()).toBe("19:15");
+    expect(service.currentPlayStartTime()).toBe("08:00");
   });
 
   test("guarda la hora de pausa sin reemplazar la configuracion del reparto", async () => {
     const row = {
+      horaInicioPlay: "08:00",
       horaPausaAutomatica: "18:00",
       actualizadoPorId: 1,
       updatedAt: NOW,
@@ -117,15 +127,20 @@ describe("disponibilidad diaria de asesores GHL", () => {
     RealtimeConfiguracion.findByPk.mockResolvedValue(row);
 
     const result = await service.saveAutoPauseConfiguration(
-      { horaPausaAutomatica: "20:30" },
+      { horaInicioPlay: "08:30", horaPausaAutomatica: "20:30" },
       99,
     );
 
     expect(row.update).toHaveBeenCalledWith({
+      horaInicioPlay: "08:30",
       horaPausaAutomatica: "20:30",
       actualizadoPorId: 99,
     }, expect.anything());
-    expect(result).toMatchObject({ horaPausaAutomatica: "20:30", persistida: true });
+    expect(result).toMatchObject({
+      horaInicioPlay: "08:30",
+      horaPausaAutomatica: "20:30",
+      persistida: true,
+    });
   });
 
   test("rechaza una hora de pausa invalida", async () => {
@@ -133,6 +148,13 @@ describe("disponibilidad diaria de asesores GHL", () => {
       { horaPausaAutomatica: "25:90" },
       99,
     )).rejects.toMatchObject({ code: "INVALID_AUTO_PAUSE_TIME", statusCode: 400 });
+  });
+
+  test("rechaza un horario donde el inicio de Play no sea anterior al cierre", async () => {
+    await expect(service.saveAutoPauseConfiguration(
+      { horaInicioPlay: "18:00", horaPausaAutomatica: "18:00" },
+      99,
+    )).rejects.toMatchObject({ code: "INVALID_AVAILABILITY_WINDOW", statusCode: 400 });
   });
 
   test("al llegar la hora de cierre un asesor activo deja de ser elegible", () => {
@@ -259,6 +281,23 @@ describe("disponibilidad diaria de asesores GHL", () => {
       motivoCambio: "asesor",
       now: new Date("2026-09-09T23:01:00.000Z"),
     })).rejects.toMatchObject({ code: "GHL_AVAILABILITY_CLOSED", statusCode: 409 });
+    expect(fetchUsers).not.toHaveBeenCalled();
+  });
+
+  test("rechaza Play antes de la hora de inicio sin consultar GHL", async () => {
+    RealtimeConfiguracion.findByPk.mockResolvedValue({
+      horaInicioPlay: "08:00",
+      horaPausaAutomatica: "18:00",
+    });
+    const fetchUsers = jest.spyOn(ghl, "fetchAllAssignableUsers");
+
+    await expect(service.changeAvailability({
+      usuarioId: 10,
+      estado: "ACTIVO",
+      actorId: 10,
+      motivoCambio: "asesor",
+      now: new Date("2026-09-09T12:59:00.000Z"),
+    })).rejects.toMatchObject({ code: "GHL_AVAILABILITY_NOT_OPEN", statusCode: 409 });
     expect(fetchUsers).not.toHaveBeenCalled();
   });
 

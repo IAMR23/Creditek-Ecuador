@@ -10,6 +10,7 @@ const RealtimeConfiguracion = require("../models/GhlRepartoTiempoRealConfiguraci
 const ghl = require("./ghlService");
 
 const TIME_ZONE = "America/Guayaquil";
+const DEFAULT_PLAY_START_TIME = "00:00";
 const DEFAULT_AUTO_PAUSE_TIME = "18:00";
 const AUTO_PAUSE_CACHE_MS = 30000;
 const ESTADOS = Object.freeze(["ACTIVO", "PAUSADO"]);
@@ -51,8 +52,12 @@ const normalizeTime = (value) => {
 const getAutoPauseTime = (environment = process.env) =>
   normalizeTime(environment.GHL_ADVISOR_AUTO_PAUSE_TIME) || DEFAULT_AUTO_PAUSE_TIME;
 
+const getPlayStartTime = (environment = process.env) =>
+  normalizeTime(environment.GHL_ADVISOR_PLAY_START_TIME) || DEFAULT_PLAY_START_TIME;
+
 let autoPauseCache = {
   value: getAutoPauseTime(),
+  playStartTime: getPlayStartTime(),
   expiresAt: 0,
   persistida: false,
   migracionPendiente: false,
@@ -63,6 +68,7 @@ let autoPauseCache = {
 const setAutoPauseCache = (value, metadata = {}) => {
   autoPauseCache = {
     value: normalizeTime(value) || getAutoPauseTime(),
+    playStartTime: normalizeTime(metadata.playStartTime) || getPlayStartTime(),
     expiresAt: Date.now() + AUTO_PAUSE_CACHE_MS,
     persistida: metadata.persistida === true,
     migracionPendiente: metadata.migracionPendiente === true,
@@ -75,6 +81,9 @@ const setAutoPauseCache = (value, metadata = {}) => {
 const currentAutoPauseTime = () =>
   normalizeTime(autoPauseCache.value) || getAutoPauseTime();
 
+const currentPlayStartTime = () =>
+  normalizeTime(autoPauseCache.playStartTime) || getPlayStartTime();
+
 const isMissingAutoPauseSchema = (error) => {
   const code = error?.original?.code || error?.parent?.code || error?.code;
   return code === "42703" || code === "42P01";
@@ -84,6 +93,7 @@ async function getAutoPauseConfiguration({ force = false } = {}) {
   if (!force && autoPauseCache.expiresAt > Date.now()) {
     return {
       horaPausaAutomatica: currentAutoPauseTime(),
+      horaInicioPlay: currentPlayStartTime(),
       zonaHoraria: TIME_ZONE,
       persistida: autoPauseCache.persistida,
       migracionPendiente: autoPauseCache.migracionPendiente,
@@ -94,17 +104,21 @@ async function getAutoPauseConfiguration({ force = false } = {}) {
 
   try {
     const row = await RealtimeConfiguracion.findByPk(1, {
-      attributes: ["id", "horaPausaAutomatica", "actualizadoPorId", "updatedAt"],
+      attributes: ["id", "horaInicioPlay", "horaPausaAutomatica", "actualizadoPorId", "updatedAt"],
     });
     const plain = typeof row?.toJSON === "function" ? row.toJSON() : row;
-    const persistida = Boolean(row && normalizeTime(plain?.horaPausaAutomatica));
+    const persistida = Boolean(
+      row && normalizeTime(plain?.horaInicioPlay) && normalizeTime(plain?.horaPausaAutomatica),
+    );
     const horaPausaAutomatica = setAutoPauseCache(plain?.horaPausaAutomatica, {
+      playStartTime: plain?.horaInicioPlay,
       persistida,
       actualizadoPorId: plain?.actualizadoPorId,
       updatedAt: plain?.updatedAt,
     });
     return {
       horaPausaAutomatica,
+      horaInicioPlay: currentPlayStartTime(),
       zonaHoraria: TIME_ZONE,
       persistida,
       actualizadoPorId: plain?.actualizadoPorId || null,
@@ -113,11 +127,13 @@ async function getAutoPauseConfiguration({ force = false } = {}) {
   } catch (error) {
     if (!isMissingAutoPauseSchema(error)) throw error;
     const horaPausaAutomatica = setAutoPauseCache(getAutoPauseTime(), {
+      playStartTime: getPlayStartTime(),
       persistida: false,
       migracionPendiente: true,
     });
     return {
       horaPausaAutomatica,
+      horaInicioPlay: currentPlayStartTime(),
       zonaHoraria: TIME_ZONE,
       persistida: false,
       migracionPendiente: true,
@@ -127,12 +143,22 @@ async function getAutoPauseConfiguration({ force = false } = {}) {
   }
 }
 
-async function saveAutoPauseConfiguration({ horaPausaAutomatica }, actorId) {
+async function saveAutoPauseConfiguration({ horaInicioPlay, horaPausaAutomatica }, actorId) {
   const normalizedTime = normalizeTime(horaPausaAutomatica);
   if (!normalizedTime) {
     throw availabilityError(
       "INVALID_AUTO_PAUSE_TIME",
       "La hora de pausa automatica debe tener formato HH:mm",
+      400,
+    );
+  }
+  const requestedStartTime = horaInicioPlay === undefined
+    ? null
+    : normalizeTime(horaInicioPlay);
+  if (horaInicioPlay !== undefined && !requestedStartTime) {
+    throw availabilityError(
+      "INVALID_PLAY_START_TIME",
+      "La hora de inicio de Play debe tener formato HH:mm",
       400,
     );
   }
@@ -143,8 +169,19 @@ async function saveAutoPauseConfiguration({ horaPausaAutomatica }, actorId) {
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
+      const normalizedStartTime = requestedStartTime
+        || normalizeTime(existing?.horaInicioPlay)
+        || currentPlayStartTime();
+      if (normalizedStartTime >= normalizedTime) {
+        throw availabilityError(
+          "INVALID_AVAILABILITY_WINDOW",
+          "La hora de inicio de Play debe ser anterior a la hora de cierre",
+          400,
+        );
+      }
       if (existing) {
         await existing.update({
+          horaInicioPlay: normalizedStartTime,
           horaPausaAutomatica: normalizedTime,
           actualizadoPorId: actorId,
         }, { transaction });
@@ -152,17 +189,20 @@ async function saveAutoPauseConfiguration({ horaPausaAutomatica }, actorId) {
       }
       return RealtimeConfiguracion.create({
         id: 1,
+        horaInicioPlay: normalizedStartTime,
         horaPausaAutomatica: normalizedTime,
         actualizadoPorId: actorId,
       }, { transaction });
     });
     const plain = typeof row?.toJSON === "function" ? row.toJSON() : row;
     setAutoPauseCache(normalizedTime, {
+      playStartTime: plain?.horaInicioPlay,
       persistida: true,
       actualizadoPorId: plain?.actualizadoPorId || actorId,
       updatedAt: plain?.updatedAt,
     });
     return {
+      horaInicioPlay: normalizeTime(plain?.horaInicioPlay) || currentPlayStartTime(),
       horaPausaAutomatica: normalizedTime,
       zonaHoraria: TIME_ZONE,
       persistida: true,
@@ -182,6 +222,7 @@ async function saveAutoPauseConfiguration({ horaPausaAutomatica }, actorId) {
 const resetAutoPauseCache = () => {
   autoPauseCache = {
     value: getAutoPauseTime(),
+    playStartTime: getPlayStartTime(),
     expiresAt: 0,
     persistida: false,
     migracionPendiente: false,
@@ -207,6 +248,11 @@ const isAtOrAfterAutoPauseTime = (
   now = new Date(),
   autoPauseTime = currentAutoPauseTime(),
 ) => localTime(now) >= autoPauseTime;
+
+const isBeforePlayStartTime = (
+  now = new Date(),
+  playStartTime = currentPlayStartTime(),
+) => localTime(now) < playStartTime;
 
 const hasVendedorCallCenterCargo = (usuario) => {
   const cargos = [
@@ -265,6 +311,7 @@ const effectiveState = (row, now = new Date()) =>
   row?.activo === true &&
   row?.estadoRecepcion === "ACTIVO" &&
   String(row?.estadoFechaLocal || "") === localDate(now) &&
+  !isBeforePlayStartTime(now) &&
   !isAtOrAfterAutoPauseTime(now)
     ? "ACTIVO"
     : "PAUSADO";
@@ -413,15 +460,21 @@ async function getAdvisorManagementReport({ fecha = localDate(), now = new Date(
 }
 
 function serializeAvailability(row, leadsHoy = 0, now = new Date()) {
+  const horaInicioPlay = currentPlayStartTime();
   const horaPausaAutomatica = currentAutoPauseTime();
-  const bloqueadoPorHorario = isAtOrAfterAutoPauseTime(now, horaPausaAutomatica);
+  const bloqueadoAntesInicio = isBeforePlayStartTime(now, horaInicioPlay);
+  const bloqueadoDespuesCierre = isAtOrAfterAutoPauseTime(now, horaPausaAutomatica);
+  const bloqueadoPorHorario = bloqueadoAntesInicio || bloqueadoDespuesCierre;
   if (!row) {
     return {
       vinculado: false,
       estado: "PAUSADO",
       recibiendoLeads: false,
       leadsHoy: 0,
+      horaInicioPlay,
       horaPausaAutomatica,
+      bloqueadoAntesInicio,
+      bloqueadoDespuesCierre,
       bloqueadoPorHorario,
     };
   }
@@ -441,7 +494,10 @@ function serializeAvailability(row, leadsHoy = 0, now = new Date()) {
     fechaActivacion: plain.estadoFechaLocal || null,
     motivoUltimoCambio: plain.motivoUltimoCambio || null,
     leadsHoy,
+    horaInicioPlay,
     horaPausaAutomatica,
+    bloqueadoAntesInicio,
+    bloqueadoDespuesCierre,
     bloqueadoPorHorario,
   };
 }
@@ -593,7 +649,17 @@ async function changeAvailability({
   }
 
   if (normalizedState === "ACTIVO") {
-    const { horaPausaAutomatica: autoPauseTime } = await getAutoPauseConfiguration();
+    const {
+      horaInicioPlay: playStartTime,
+      horaPausaAutomatica: autoPauseTime,
+    } = await getAutoPauseConfiguration();
+    if (isBeforePlayStartTime(now, playStartTime)) {
+      throw availabilityError(
+        "GHL_AVAILABILITY_NOT_OPEN",
+        `Podra activar Play a partir de las ${playStartTime}.`,
+        409,
+      );
+    }
     if (isAtOrAfterAutoPauseTime(now, autoPauseTime)) {
       throw availabilityError(
         "GHL_AVAILABILITY_CLOSED",
@@ -854,6 +920,7 @@ async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
 
 module.exports = {
   TIME_ZONE,
+  DEFAULT_PLAY_START_TIME,
   DEFAULT_AUTO_PAUSE_TIME,
   ESTADOS,
   availabilityError,
@@ -862,12 +929,15 @@ module.exports = {
   hasVendedorCallCenterCargo,
   isVendedorCallCenter,
   normalizeTime,
+  getPlayStartTime,
   getAutoPauseTime,
+  currentPlayStartTime,
   currentAutoPauseTime,
   getAutoPauseConfiguration,
   saveAutoPauseConfiguration,
   resetAutoPauseCache,
   localTime,
+  isBeforePlayStartTime,
   isAtOrAfterAutoPauseTime,
   localDate,
   localDayBounds,

@@ -1,7 +1,7 @@
 ---
 // WhatsAppButton.astro
 
-const phoneNumber = "593962749300";
+const phoneNumber = "593984287413";
 const message = "Hola, me gustaría obtener más información.";
 
 // Codifica el mensaje para que sea válido en una URL
@@ -42,9 +42,12 @@ const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
 <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
   <button class="whatsapp-button">
     <img
-      width="100px"
+      width="100"
+      height="100"
       src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg"
-      alt="WhatsApp Icon"
+      alt="Contactar a Creditek por WhatsApp"
+      loading="lazy"
+      decoding="async"
     />
   </button>
 </a>

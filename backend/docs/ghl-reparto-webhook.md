@@ -97,17 +97,26 @@ suposiciones sobre `POSTGRES_*`, porque el backend tiene su propio juego de
 credenciales `DB_*`. `build backend` no reinicia servicios; el unico servicio
 recreado por `up -d --no-deps backend` es el backend.
 
-## Pausa automatica diaria de asesores
+## Horario diario de Play de asesores
 
-La hora se administra desde la pantalla `Disponibilidad de asesores` y se
-guarda en `ghl_reparto_tiempo_real_configuraciones.horaPausaAutomatica`.
-`GHL_ADVISOR_AUTO_PAUSE_TIME` (por defecto `18:00`) se usa solamente como
-respaldo mientras no exista una configuracion persistida.
+Las horas de inicio y cierre se administran desde la pantalla `Disponibilidad
+de asesores` y se guardan en
+`ghl_reparto_tiempo_real_configuraciones.horaInicioPlay` y
+`ghl_reparto_tiempo_real_configuraciones.horaPausaAutomatica`.
+`GHL_ADVISOR_PLAY_START_TIME` (por defecto `00:00`) y
+`GHL_ADVISOR_AUTO_PAUSE_TIME` (por defecto `18:00`) se usan solamente como
+respaldo mientras no exista una configuracion persistida. El inicio debe ser
+anterior al cierre.
+
+Antes de la hora de inicio el servidor rechaza cualquier intento de activar
+Play, incluso si se llama directamente al endpoint. La interfaz mantiene el
+boton deshabilitado y muestra la hora a partir de la cual estara disponible.
 
 El scheduler recarga la configuracion cada minuto usando la hora local de
 `America/Guayaquil`. Al llegar el cierre, todos los asesores que continuen en
 Play pasan a Pausa y el cambio queda auditado con origen automatico. Despues
-del cierre no se permite volver a activar Play hasta el siguiente dia local.
+del cierre no se permite volver a activar Play hasta el siguiente dia local y
+la nueva hora de inicio.
 La validacion tambien se ejecuta antes de cada asignacion, por lo que una
 ejecucion iniciada antes del cierre no continua repartiendo clientes despues
 de la hora configurada.

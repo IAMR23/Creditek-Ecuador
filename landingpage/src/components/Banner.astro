@@ -1,5 +1,5 @@
 ---
-import { FBURL, INS } from "../const/constSocialNetworks";
+import { FBURL, INS, TIKTOK } from "../const/constSocialNetworks";
 ---
 
 <section class="hero">
@@ -8,37 +8,46 @@ import { FBURL, INS } from "../const/constSocialNetworks";
   <div class="hero-content">
     <!-- IZQUIERDA -->
     <div class="hero-text">
-      <h1>Celulares y <span>Televisiones</span> a Crédito en Ecuador</h1>
+      <h1>Celulares y <span>televisores</span> a crédito </h1>
 
       <p class="subtitle">
-        Compra celulares y televisiones a crédito con Creditek. Encuentra equipos,
-        televisores a crédito y opciones en cuotas para toda la región Sierra.
+        Envios a <span>Quito</span> y toda la <span> Sierra Ecuatoriana</span>. Conoce el proceso de solicitud y recibe información en nuestros canales de atención.
       </p>
 
       <div class="hero-buttons">
         <a href="/trabaja-con-nosotros" class="btn btn-primary"> Trabaja con nosotros </a>
         <a
-         target="_blank" href="https://api.whatsapp.com/send/?phone=593962749300&text=Hola%2C+me+gustar%C3%ADa+obtener+m%C3%A1s+informaci%C3%B3n.&type=phone_number&app_absent=0" class="btn btn-secondary"> Quiero un producto </a>
+         target="_blank" rel="noopener noreferrer" href="https://api.whatsapp.com/send/?phone=593984287413&text=Hola%2C+me+gustar%C3%ADa+obtener+m%C3%A1s+informaci%C3%B3n.&type=phone_number&app_absent=0" class="btn btn-secondary"> Quiero un producto </a>
       </div>
 
-    <div class="flex justify-normal items-center">
-      <a href={FBURL} class="social-link" target="_blank">
+    <div class="social-networks">
+      <a href={FBURL} class="social-link social-icon-link" target="_blank" rel="noopener noreferrer">
         <img
-          class="hover:scale-150"
+          class="social-icon social-icon-facebook"
           src="/icon/icofb.webp"
-          alt=""
-          srcset=""
-          width="40px"
+          alt="Creditek en Facebook"
+          width="1024"
+          height="1024"
         />
       </a>
 
-      <a href={INS} class="social-link" target="_blank">
+      <a href={INS} class="social-link social-icon-link" target="_blank" rel="noopener noreferrer">
         <img
-          class="hover:scale-150"
+          class="social-icon social-icon-instagram"
           src="/icon/icoinstagram.webp"
-          alt=""
-          srcset=""
-          width="80px"
+          alt="Creditek en Instagram"
+          width="512"
+          height="512"
+        />
+      </a>
+
+      <a href={TIKTOK} class="social-link social-icon-link" target="_blank" rel="noopener noreferrer">
+        <img
+          class="social-icon social-icon-tiktok"
+          src="/icon/tiktok.webp"
+          alt="Creditek en TikTok"
+          width="2000"
+          height="2000"
         />
       </a>
     </div>
@@ -46,7 +55,15 @@ import { FBURL, INS } from "../const/constSocialNetworks";
 
     <!-- DERECHA -->
     <div class="hero-image">
-      <img src="/Creditek/Principal.jpeg" alt="Creditek productos" />
+      <img
+        src="/Creditek/Principal.jpeg"
+        alt="Mascota de Creditek "
+        width="1280"
+        height="853"
+        loading="eager"
+        decoding="async"
+        fetchpriority="high"
+      />
     </div>
   </div>
 
@@ -92,6 +109,8 @@ import { FBURL, INS } from "../const/constSocialNetworks";
   .hero-text h1 {
     font-size: clamp(2.25rem, 5vw, 3.2rem);
     font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
     margin-bottom: 1rem;
   }
 
@@ -142,6 +161,46 @@ import { FBURL, INS } from "../const/constSocialNetworks";
   .social-icons {
     display: flex;
     gap: 0.8rem;
+  }
+
+  .social-networks {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .social-icon-link {
+    display: flex;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: transform 0.2s ease;
+  }
+
+  .social-icon-link:hover {
+    transform: scale(1.08);
+  }
+
+  .social-icon {
+    flex: none;
+    max-width: none;
+  }
+
+  .social-icon-facebook {
+    width: 40px;
+    height: 40px;
+  }
+
+  .social-icon-instagram {
+    width: 84px;
+    height: 84px;
+  }
+
+  .social-icon-tiktok {
+    width: 67px;
+    height: 67px;
   }
 
   .social {

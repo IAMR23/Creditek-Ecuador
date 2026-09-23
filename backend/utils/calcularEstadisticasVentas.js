@@ -107,6 +107,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     precioVentaTotal: 0,
     precioVendedorTotal: 0,
     precioVendedorPromedio: 0,
+    valorVendidoSinIvaTotal: 0,
+    ticketPromedioTotal: 0,
     costoTotal: 0,
     margenPorcentualTotal: 0,
 
@@ -128,6 +130,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     porSemana: {},
     indicadorGerenciaPorSemana: {},
     promedioIndicadorGerenciaPorSemana: {},
+    valorVendidoSinIvaPorSemana: {},
+    ticketPromedioPorSemana: {},
     precioVentaPorSemana: {},
     costoPorSemana: {},
     margenPorcentualPorSemana: {},
@@ -230,10 +234,12 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     const margen = normalizarNumero(v.margen);
     const precioVenta = normalizarNumero(v.precioVenta, v.precioVendedor);
     const precioVendedor = normalizarNumero(v.precioVendedor);
+    const precioUnitarioSinIva = redondear2(precioVendedor / 1.15);
     const costo = normalizarNumero(v.costo);
     stats.indicadorGerenciaTotal += margen;
     stats.precioVentaTotal += precioVenta;
     stats.precioVendedorTotal += precioVendedor;
+    stats.valorVendidoSinIvaTotal += precioUnitarioSinIva;
     stats.costoTotal += costo;
 
     // Semana comercial jueves-miercoles calculada desde la fecha real.
@@ -248,6 +254,8 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
         stats.porSemana[key] = (stats.porSemana[key] || 0) + 1;
         stats.indicadorGerenciaPorSemana[key] =
           (stats.indicadorGerenciaPorSemana[key] || 0) + margen;
+        stats.valorVendidoSinIvaPorSemana[key] =
+          (stats.valorVendidoSinIvaPorSemana[key] || 0) + precioUnitarioSinIva;
         stats.precioVentaPorSemana[key] =
           (stats.precioVentaPorSemana[key] || 0) + precioVenta;
         stats.costoPorSemana[key] = (stats.costoPorSemana[key] || 0) + costo;
@@ -348,6 +356,7 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
   const semanasMargen = new Set([
     ...Object.keys(stats.porSemana),
     ...Object.keys(stats.indicadorGerenciaPorSemana),
+    ...Object.keys(stats.valorVendidoSinIvaPorSemana),
     ...Object.keys(stats.costoPorSemana),
   ]);
 
@@ -359,6 +368,13 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     stats.indicadorGerenciaPorSemana[key] = utilidad;
     stats.promedioIndicadorGerenciaPorSemana[key] =
       ventasSemana === 0 ? 0 : redondear2(utilidad / ventasSemana);
+    stats.valorVendidoSinIvaPorSemana[key] = redondear2(
+      stats.valorVendidoSinIvaPorSemana[key],
+    );
+    stats.ticketPromedioPorSemana[key] =
+      ventasSemana === 0
+        ? 0
+        : redondear2(stats.valorVendidoSinIvaPorSemana[key] / ventasSemana);
     stats.costoPorSemana[key] = costo;
     stats.precioVentaPorSemana[key] = redondear2(stats.precioVentaPorSemana[key]);
 
@@ -373,6 +389,11 @@ exports.calcularEstadisticasVentas = (ventas = [], fechaInicio = null) => {
     stats.totalVentas === 0
       ? 0
       : redondear2(stats.precioVendedorTotal / stats.totalVentas);
+  stats.valorVendidoSinIvaTotal = redondear2(stats.valorVendidoSinIvaTotal);
+  stats.ticketPromedioTotal =
+    stats.totalVentas === 0
+      ? 0
+      : redondear2(stats.valorVendidoSinIvaTotal / stats.totalVentas);
   stats.costoTotal = redondear2(stats.costoTotal);
 
   stats.margenPorcentualTotal =

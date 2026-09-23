@@ -21,6 +21,12 @@ const GhlRepartoTiempoRealConfiguracion = sequelize.define(
       validate: { isInt: true, min: 1, max: 1000 },
     },
     indiceSiguienteUsuario: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    horaInicioPlay: {
+      type: DataTypes.STRING(5),
+      allowNull: false,
+      defaultValue: "00:00",
+      validate: { is: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    },
     horaPausaAutomatica: {
       type: DataTypes.STRING(5),
       allowNull: false,

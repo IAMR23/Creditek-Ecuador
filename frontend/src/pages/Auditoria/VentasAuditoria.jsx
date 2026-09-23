@@ -46,6 +46,7 @@ const TABLE_COLUMNS = [
   "Precio Carga",
   "Precio Vendedor",
   "Costo",
+  "Margen",
   "REPORTE UPH",
   "Diferencia",
   "Precio Unitario",
@@ -58,6 +59,22 @@ const TABLE_COLUMNS = [
   "Observacion Detalle",
   "Comentario Auditoria",
   "Observacion Error",
+];
+
+const CAJA_EXPORT_COLUMNS = [
+  "#",
+  "Fecha",
+  "Cliente venta",
+  "Modelo",
+  "Forma pago",
+  "Valor venta",
+  "Resultado",
+  "Agencia caja",
+  "Cliente caja",
+  "Valor caja",
+  "Diferencia",
+  "Coincidencia",
+  "Observacion",
 ];
 
 const obtenerFiltrosGuardados = () => {
@@ -125,6 +142,8 @@ const getEstadoCajaBadge = (estado) => {
     COINCIDE_CAJA: "border-green-200 bg-green-50 text-green-700",
     MONTO_DIFERENTE_CAJA: "border-amber-200 bg-amber-50 text-amber-800",
     REVISAR_EN_BANCOS: "border-blue-200 bg-blue-50 text-blue-800",
+    REVISAR_EN_TRANSFERENCIAS:
+      "border-violet-200 bg-violet-50 text-violet-800",
     COINCIDENCIA_AMBIGUA_CAJA: "border-orange-200 bg-orange-50 text-orange-800",
     NO_EN_CAJA: "border-red-200 bg-red-50 text-red-700",
   };
@@ -139,6 +158,43 @@ const formatearDinero = (value) =>
         style: "currency",
         currency: "USD",
       }).format(Number(value) || 0);
+
+const mapResultadoCajaExport = (resultado, index) => ({
+  "#": index + 1,
+  Fecha: resultado.fecha || "",
+  "Cliente venta": resultado.clienteVenta || "",
+  Modelo: resultado.modelo || "",
+  "Forma pago": resultado.formaPagoVenta || "",
+  "Valor venta": toMoney(resultado.montoVenta),
+  Resultado: String(resultado.estado || "").replaceAll("_", " "),
+  "Agencia caja": resultado.agenciaCaja || "",
+  "Cliente caja": resultado.clienteCaja || "",
+  "Valor caja": toMoney(resultado.montoCaja),
+  Diferencia: toMoney(resultado.diferencia),
+  Coincidencia: [
+    resultado.tipoCoincidencia || "",
+    resultado.similitudCliente !== null &&
+    resultado.similitudCliente !== undefined
+      ? `${resultado.similitudCliente}%`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" - "),
+  Observacion: resultado.observacion || "",
+});
+
+const getResumenCajaExport = (resumen = {}) => [
+  ["Ventas contado", resumen.totalVentasContado || 0],
+  ["Coinciden en caja", resumen.coincidenCaja || 0],
+  ["Sin registro", resumen.sinRegistroCaja || 0],
+  ["Revisar bancos", resumen.revisarBancos || 0],
+  ["Revisar transferencias", resumen.revisarTransferencias || 0],
+  ["Monto diferente", resumen.montoDiferente || 0],
+  ["Ambiguas", resumen.ambiguas || 0],
+  ["Total ventas", toMoney(resumen.totalVenta)],
+  ["Total caja coincidente", toMoney(resumen.totalCajaCoincidente)],
+  ["Diferencia", toMoney(resumen.diferencia)],
+];
 
 const escaparHtml = (value) =>
   String(value ?? "")
@@ -254,6 +310,7 @@ const mapVentaAuditoria = (
     "Precio Carga": precioVenta,
     "Precio Vendedor": precioVendedor,
     Costo: toMoney(venta.costo),
+    Margen: toMoney(venta.margen),
     "REPORTE UPH": toMoney(venta.precioVendedorPdf),
     Diferencia: diferencia,
     "Precio Unitario":
@@ -350,6 +407,14 @@ export default function VentasAuditoria() {
       (acc, fila) => acc + toNumber(fila["Precio Vendedor"]),
       0,
     );
+    const totalMargen = filasVisibles.reduce(
+      (acc, fila) => acc + toNumber(fila.Margen),
+      0,
+    );
+    const totalPrecioUnitario = filasVisibles.reduce(
+      (acc, fila) => acc + toNumber(fila["Precio Unitario"]),
+      0,
+    );
     const diferenciasResumen = filasVisibles.reduce(
       (acc, fila) => {
         const diferencia = toNumber(fila.Diferencia);
@@ -371,6 +436,8 @@ export default function VentasAuditoria() {
       activas,
       desactivadas: filasVisibles.length - activas,
       totalVenta: Number(totalVenta.toFixed(2)),
+      totalMargen: Number(totalMargen.toFixed(2)),
+      totalPrecioUnitario: Number(totalPrecioUnitario.toFixed(2)),
       diferencias: Number(diferenciasResumen.total.toFixed(2)),
       aFavor: Number(diferenciasResumen.aFavor.toFixed(2)),
       enContra: Number(diferenciasResumen.enContra.toFixed(2)),
@@ -518,7 +585,7 @@ export default function VentasAuditoria() {
         if (notificar) {
           Swal.fire(
             "Control actualizado",
-            `Coinciden: ${data.resumen?.coincidenCaja || 0} | Sin caja: ${data.resumen?.sinRegistroCaja || 0} | Revisar bancos: ${data.resumen?.revisarBancos || 0}`,
+            `Coinciden: ${data.resumen?.coincidenCaja || 0} | Sin caja: ${data.resumen?.sinRegistroCaja || 0} | Revisar bancos: ${data.resumen?.revisarBancos || 0} | Revisar transferencias: ${data.resumen?.revisarTransferencias || 0}`,
             "success",
           );
         }
@@ -662,7 +729,7 @@ export default function VentasAuditoria() {
   };
 
   const auditarPdfs = async (event) => {
-    event.preventDefault();
+    event?.preventDefault();
 
     if (!modoPdfActivo) {
       return Swal.fire(
@@ -769,6 +836,15 @@ export default function VentasAuditoria() {
     }
   };
 
+  const reauditarPrecargaYCaja = async () => {
+    if (modoPdfActivo && auditoriaPrecargada && !pdfFiles.length) {
+      await auditarPdfs();
+      return;
+    }
+
+    await cargarAuditoriaCaja({ notificar: true });
+  };
+
   const generarReportePdf = () => {
     if (!filasVisibles.length) {
       Swal.fire({
@@ -820,6 +896,39 @@ export default function VentasAuditoria() {
       )
       .join("");
 
+    const resultadosCaja = auditoriaCaja?.resultados || [];
+    const filasCajaExport = resultadosCaja.map(mapResultadoCajaExport);
+    const resumenCajaHtml = getResumenCajaExport(auditoriaCaja?.resumen)
+      .map(
+        ([label, value]) =>
+          `<div><strong>${escaparHtml(label)}:</strong> ${escaparHtml(
+            label.includes("Total") || label === "Diferencia"
+              ? formatearDinero(value)
+              : value,
+          )}</div>`,
+      )
+      .join("");
+    const filasCajaHtml = filasCajaExport.length
+      ? filasCajaExport
+          .map(
+            (fila) => `
+              <tr>
+                ${CAJA_EXPORT_COLUMNS.map(
+                  (columna) =>
+                    `<td>${escaparHtml(
+                      ["Valor venta", "Valor caja", "Diferencia"].includes(
+                        columna,
+                      )
+                        ? formatearDinero(fila[columna])
+                        : fila[columna],
+                    )}</td>`,
+                ).join("")}
+              </tr>
+            `,
+          )
+          .join("")
+      : `<tr><td colspan="${CAJA_EXPORT_COLUMNS.length}">No existen ventas al contado para los filtros seleccionados.</td></tr>`;
+
     const ventana = window.open("", "_blank");
     if (!ventana) {
       Swal.fire({
@@ -845,12 +954,17 @@ export default function VentasAuditoria() {
             th { background: #1f2937; color: white; }
             th, td { border: 1px solid #d1d5db; padding: 4px; text-align: left; vertical-align: top; }
             tr:nth-child(even) td { background: #f9fafb; }
+            .caja-section { page-break-before: always; }
+            .caja-section h2 { font-size: 16px; margin: 0 0 6px; }
+            .caja-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; font-size: 10px; margin: 10px 0 12px; }
           </style>
         </head>
         <body>
           <h1>Reporte Ventas Auditoria</h1>
           <div class="summary">
             Total de registros: ${filasVisibles.length} |
+            Margen total: $${resumen.totalMargen.toFixed(2)} |
+            Precio unitario total: $${resumen.totalPrecioUnitario.toFixed(2)} |
             Diferencia total: $${resumen.diferencias.toFixed(2)} |
             A favor: $${resumen.aFavor.toFixed(2)} |
             En contra: $${resumen.enContra.toFixed(2)}
@@ -865,6 +979,20 @@ export default function VentasAuditoria() {
             </thead>
             <tbody>${filasHtml}</tbody>
           </table>
+          <section class="caja-section">
+            <h2>Control de ventas al contado contra caja</h2>
+            <div class="caja-summary">${resumenCajaHtml}</div>
+            <table>
+              <thead>
+                <tr>
+                  ${CAJA_EXPORT_COLUMNS.map(
+                    (columna) => `<th>${escaparHtml(columna)}</th>`,
+                  ).join("")}
+                </tr>
+              </thead>
+              <tbody>${filasCajaHtml}</tbody>
+            </table>
+          </section>
           <script>
             window.onload = () => {
               window.focus();
@@ -918,6 +1046,8 @@ export default function VentasAuditoria() {
       ],
       ["Vista", vistaResultados === "errores" ? "Solo errores" : "Todos"],
       ["Registros exportados", filasVisibles.length],
+      ["Margen total", resumen.totalMargen],
+      ["Precio unitario total", resumen.totalPrecioUnitario],
       ["Diferencia total", resumen.diferencias],
       ["A favor", resumen.aFavor],
       ["En contra", resumen.enContra],
@@ -934,9 +1064,30 @@ export default function VentasAuditoria() {
     const filtrosSheet = XLSX.utils.aoa_to_sheet(filtrosExcel);
     filtrosSheet["!cols"] = [{ wch: 22 }, { wch: 36 }];
 
+    const filasCajaExcel = (auditoriaCaja?.resultados || []).map(
+      mapResultadoCajaExport,
+    );
+    const controlCajaSheet = XLSX.utils.aoa_to_sheet([
+      ["Control de ventas al contado contra caja"],
+      ["Fecha inicio", fechaInicio || "Todas"],
+      ["Fecha fin", fechaFin || "Todas"],
+      [],
+      ["Resumen", "Valor"],
+      ...getResumenCajaExport(auditoriaCaja?.resumen),
+      [],
+      CAJA_EXPORT_COLUMNS,
+      ...filasCajaExcel.map((fila) =>
+        CAJA_EXPORT_COLUMNS.map((columna) => fila[columna] ?? ""),
+      ),
+    ]);
+    controlCajaSheet["!cols"] = CAJA_EXPORT_COLUMNS.map((columna) => ({
+      wch: Math.max(14, Math.min(38, columna.length + 12)),
+    }));
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas Auditoria");
     XLSX.utils.book_append_sheet(workbook, filtrosSheet, "Filtros");
+    XLSX.utils.book_append_sheet(workbook, controlCajaSheet, "Control Caja");
 
     const desde = fechaInicio || "todas";
     const hasta = fechaFin || "todas";
@@ -1040,6 +1191,7 @@ export default function VentasAuditoria() {
       "Precio Carga": precioVenta,
       "Precio Vendedor": precioVendedor,
       Costo: toMoney(detalle.costo),
+      Margen: toMoney(detalle.margen),
       Diferencia:
         precioVenta !== "" || precioVendedor !== ""
           ? Number((toNumber(precioVenta) - toNumber(precioVendedor)).toFixed(2))
@@ -1371,11 +1523,15 @@ export default function VentasAuditoria() {
     let clase = "px-3 py-2 align-top text-gray-700";
 
     if (key === "Precio Carga") {
-      clase += " text-right font-semibold text-blue-700";
+      clase += " bg-sky-50 text-right font-bold text-sky-800";
     }
 
     if (key === "Precio Vendedor") {
-      clase += `${getPrecioVendedorClass(fila[key], fila["Precio Carga"])} text-right`;
+      clase += ` bg-amber-50${getPrecioVendedorClass(fila[key], fila["Precio Carga"])} text-right`;
+    }
+
+    if (key === "REPORTE UPH") {
+      clase += " bg-violet-50 font-bold text-violet-800";
     }
 
     if (key === "Diferencia") {
@@ -1396,6 +1552,7 @@ export default function VentasAuditoria() {
         "Alcance",
         "REPORTE UPH",
         "Costo",
+        "Margen",
       ].includes(key)
     ) {
       clase += " text-right tabular-nums";
@@ -1413,6 +1570,14 @@ export default function VentasAuditoria() {
     }
 
     return clase;
+  };
+
+  const getHeaderClass = (key) => {
+    const base = "border-b px-3 py-2";
+    if (key === "Precio Carga") return `${base} bg-sky-700 text-white`;
+    if (key === "Precio Vendedor") return `${base} bg-amber-500 text-white`;
+    if (key === "REPORTE UPH") return `${base} bg-violet-700 text-white`;
+    return `${base} border-gray-200`;
   };
 
   return (
@@ -1446,14 +1611,15 @@ export default function VentasAuditoria() {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
-        <Metric label="Registros" value={resumen.registros} />
-        <Metric label="Activas" value={resumen.activas} tone="green" />
-        <Metric label="Desactivadas" value={resumen.desactivadas} tone="red" />
-        <Metric label="Total Venta" value={`$${resumen.totalVenta.toFixed(2)}`} tone="blue" />
-        <Metric label="Diferencia" value={`$${resumen.diferencias.toFixed(2)}`} tone="slate" />
-        <Metric label="A favor" value={`$${resumen.aFavor.toFixed(2)}`} tone="green" />
-        <Metric label="En contra" value={`$${resumen.enContra.toFixed(2)}`} tone="red" />
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-8">
+            <Metric label="Registros" value={resumen.registros} />
+            <Metric label="Activas" value={resumen.activas} tone="green" />
+            <Metric label="Desactivadas" value={resumen.desactivadas} tone="red" />
+            <Metric label="Total Venta" value={`$${resumen.totalVenta.toFixed(2)}`} tone="blue" />
+            <Metric label="Total Margen" value={`$${resumen.totalMargen.toFixed(2)}`} tone="green" />
+            <Metric label="Total Precio Unitario" value={`$${resumen.totalPrecioUnitario.toFixed(2)}`} tone="slate" />
+
+
       </div>
 
       <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -1630,26 +1796,20 @@ export default function VentasAuditoria() {
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={
-              loading ||
-              pdfLoading ||
-              (!pdfFiles.length && !auditoriaPrecargada)
-            }
-            className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {pdfLoading ? (
-              <RefreshCw className="animate-spin" size={16} />
-            ) : (
-              <Upload size={16} />
-            )}
-            {pdfLoading
-              ? "Auditando..."
-              : pdfFiles.length
-                ? "Auditar PDFs"
-                : "Reauditar precarga"}
-          </button>
+          {pdfFiles.length > 0 && (
+            <button
+              type="submit"
+              disabled={loading || pdfLoading}
+              className="inline-flex items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            >
+              {pdfLoading ? (
+                <RefreshCw className="animate-spin" size={16} />
+              ) : (
+                <Upload size={16} />
+              )}
+              {pdfLoading ? "Auditando..." : "Auditar PDFs"}
+            </button>
+          )}
         </div>
 
         {auditoriaPrecargada && !pdfFiles.length && (
@@ -1717,20 +1877,32 @@ export default function VentasAuditoria() {
               Control de ventas al contado contra caja
             </h2>
             <p className="mt-1 text-xs text-sky-800">
-              Busca cada venta en efectivo o tarjeta en cualquier caja del mismo día. La coincidencia puede ser por valor o por un nombre similar del cliente.
+              Incluye ventas al contado en efectivo, tarjeta y transferencia. Para tarjeta o transferencia, la observación indica revisar el grupo de transferencias.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => cargarAuditoriaCaja({ notificar: true })}
-            disabled={auditoriaCajaLoading || !fechaInicio || !fechaFin}
+            onClick={reauditarPrecargaYCaja}
+            disabled={
+              auditoriaCajaLoading ||
+              pdfLoading ||
+              pdfFiles.length > 0 ||
+              !fechaInicio ||
+              !fechaFin
+            }
             className="inline-flex items-center justify-center gap-2 rounded bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
           >
             <RefreshCw
               size={16}
-              className={auditoriaCajaLoading ? "animate-spin" : ""}
+              className={
+                auditoriaCajaLoading || pdfLoading ? "animate-spin" : ""
+              }
             />
-            {auditoriaCajaLoading ? "Reauditando caja..." : "Reauditar caja"}
+            {auditoriaCajaLoading || pdfLoading
+              ? "Reauditando..."
+              : modoPdfActivo && auditoriaPrecargada
+                ? "Reauditar precarga y caja"
+                : "Reauditar caja"}
           </button>
         </div>
 
@@ -1740,7 +1912,7 @@ export default function VentasAuditoria() {
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-2 border-b border-gray-100 p-4 text-xs md:grid-cols-4 xl:grid-cols-7">
+        <div className="grid grid-cols-2 gap-2 border-b border-gray-100 p-4 text-xs md:grid-cols-4 xl:grid-cols-8">
           <MiniStat
             label="Ventas contado"
             value={auditoriaCaja?.resumen?.totalVentasContado || 0}
@@ -1760,6 +1932,11 @@ export default function VentasAuditoria() {
             label="Revisar bancos"
             value={auditoriaCaja?.resumen?.revisarBancos || 0}
             tone="blue"
+          />
+          <MiniStat
+            label="Revisar transferencias"
+            value={auditoriaCaja?.resumen?.revisarTransferencias || 0}
+            tone="slate"
           />
           <MiniStat
             label="Monto diferente"
@@ -1842,7 +2019,7 @@ export default function VentasAuditoria() {
                 (auditoriaCaja?.resultados || []).length === 0 && (
                   <tr>
                     <td colSpan={12} className="px-4 py-8 text-center text-gray-500">
-                      No existen ventas al contado en efectivo o tarjeta para los filtros seleccionados.
+                      No existen ventas al contado en efectivo, transferencia o tarjeta para los filtros seleccionados.
                     </td>
                   </tr>
                 )}
@@ -1856,6 +2033,7 @@ export default function VentasAuditoria() {
             </tbody>
           </table>
         </div>
+
       </section>
 
       {error && <p className="mb-3 font-semibold text-red-500">{error}</p>}
@@ -1931,14 +2109,14 @@ export default function VentasAuditoria() {
           </div>
 
           <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[2650px] border-collapse text-xs">
+            <table className="w-full min-w-[2750px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-gray-100 text-left uppercase text-gray-600">
                 <tr>
                   <th className="sticky left-0 z-20 border-b border-gray-200 bg-gray-100 px-3 py-2 text-center">
                     #
                   </th>
                   {TABLE_COLUMNS.map((key) => (
-                    <th key={key} className="border-b border-gray-200 px-3 py-2">
+                    <th key={key} className={getHeaderClass(key)}>
                       {key}
                     </th>
                   ))}

@@ -60,19 +60,25 @@ describe("control de disponibilidad GHL", () => {
 
   test("guarda la hora de pausa automatica con el actor autenticado", async () => {
     const save = jest.spyOn(advisorService, "saveAutoPauseConfiguration")
-      .mockResolvedValue({ horaPausaAutomatica: "19:30", persistida: true });
+      .mockResolvedValue({ horaInicioPlay: "08:00", horaPausaAutomatica: "19:30", persistida: true });
     const req = {
       user: { id: 99 },
-      body: { horaPausaAutomatica: "19:30" },
+      body: { horaInicioPlay: "08:00", horaPausaAutomatica: "19:30" },
     };
     const res = response();
 
     await controller.saveAdvisorAutoPauseConfiguration(req, res);
 
-    expect(save).toHaveBeenCalledWith({ horaPausaAutomatica: "19:30" }, 99);
+    expect(save).toHaveBeenCalledWith({
+      horaInicioPlay: "08:00",
+      horaPausaAutomatica: "19:30",
+    }, 99);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       ok: true,
-      configuracion: expect.objectContaining({ horaPausaAutomatica: "19:30" }),
+      configuracion: expect.objectContaining({
+        horaInicioPlay: "08:00",
+        horaPausaAutomatica: "19:30",
+      }),
     }));
   });
 

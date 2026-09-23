@@ -14,16 +14,31 @@ const {
 const TIPO_PAGO = Object.freeze({
   EFECTIVO: "EFECTIVO",
   TARJETA_CREDITO: "TARJETA_CREDITO",
+  TRANSFERENCIA: "TRANSFERENCIA",
 });
+const OBSERVACION_REVISAR_GRUPO_TRANSFERENCIAS =
+  "REVISAR EL GRUPO DE TRANSFERENCIAS";
 const UMBRAL_SIMILITUD = 0.82;
+
+const requiereRevisionGrupoTransferencias = (tipoPago) =>
+  tipoPago === TIPO_PAGO.TARJETA_CREDITO ||
+  tipoPago === TIPO_PAGO.TRANSFERENCIA;
 
 const plano = (registro) =>
   registro?.get ? registro.get({ plain: true }) : registro;
 
 const clasificarFormaPagoVenta = (formaPago) => {
   const valor = normalizarNombre(formaPago);
-  if (valor.includes("TARJ") && valor.includes("CREDITO")) {
+  const tokens = valor.split(" ").filter(Boolean);
+  const esTarjeta =
+    tokens.some((token) => token === "TAR" || token.startsWith("TARJ")) &&
+    tokens.includes("CREDITO");
+
+  if (esTarjeta) {
     return TIPO_PAGO.TARJETA_CREDITO;
+  }
+  if (valor.includes("TRANSFER")) {
+    return TIPO_PAGO.TRANSFERENCIA;
   }
   if (valor.includes("EFECTIVO") || valor === "CONTADO") {
     return TIPO_PAGO.EFECTIVO;
@@ -33,12 +48,7 @@ const clasificarFormaPagoVenta = (formaPago) => {
 
 const esVentaContadoAuditable = (venta) => {
   if (venta?.activo === false) return false;
-
-  const tipoPago = clasificarFormaPagoVenta(venta?.formaPago);
-  if (!tipoPago) return false;
-
-  const cierreCaja = normalizarNombre(venta?.cierreCaja);
-  return cierreCaja === "CONTADO" || !cierreCaja;
+  return Boolean(clasificarFormaPagoVenta(venta?.formaPago));
 };
 
 const esMovimientoCompatible = (movimiento, tipoPago) => {
@@ -47,6 +57,10 @@ const esMovimientoCompatible = (movimiento, tipoPago) => {
 
   if (tipoPago === TIPO_PAGO.TARJETA_CREDITO) {
     return detalle.includes("TARJETA") && detalle.includes("CREDITO");
+  }
+
+  if (tipoPago === TIPO_PAGO.TRANSFERENCIA) {
+    return detalle === "CONTADO" && formaPago === "TRANSFERENCIA";
   }
 
   return detalle === "CONTADO" && formaPago === "EFECTIVO";
@@ -135,8 +149,49 @@ const prepararVentas = (ventas = []) =>
     }))
     .filter((venta) => venta.fechaNormalizada && venta.montoCentavos !== null);
 
+const crearResultadoAgrupado = ({
+  venta,
+  movimiento,
+  nombres,
+  clienteIdExacto,
+  cantidadVentas,
+}) => {
+  const detalleAgrupado = `${cantidadVentas} ventas suman $${desdeCentavos(
+    movimiento.montoCentavos,
+  ).toFixed(2)} y coinciden con un solo movimiento de caja.`;
+
+  return {
+    ventaId: Number(venta.id) || null,
+    detalleVentaId: Number(venta.detalleVentaId) || null,
+    fecha: venta.fechaNormalizada,
+    clienteVenta: venta.clienteVenta,
+    modelo: [venta.marca, venta.modelo].filter(Boolean).join(" ").trim(),
+    formaPagoVenta: venta.formaPago || "",
+    tipoPago: venta.tipoPago,
+    montoVenta: desdeCentavos(venta.montoCentavos),
+    estado: "COINCIDE_CAJA",
+    observacion: requiereRevisionGrupoTransferencias(venta.tipoPago)
+      ? `${OBSERVACION_REVISAR_GRUPO_TRANSFERENCIAS}. ${detalleAgrupado}`
+      : `OK - ${detalleAgrupado}`,
+    movimientoCajaId: Number(movimiento.id) || null,
+    cierreId: Number(movimiento.cierreId) || null,
+    agenciaCaja: movimiento.agencia,
+    clienteCaja: movimiento.clienteCaja,
+    montoCaja: desdeCentavos(movimiento.montoCentavos),
+    diferencia: 0,
+    similitudCliente: Number((nombres.similitud * 100).toFixed(2)),
+    tipoCoincidencia: clienteIdExacto
+      ? "CLIENTE_ID_TOTAL_AGRUPADO"
+      : `${nombres.tipo || "CLIENTE"}_TOTAL_AGRUPADO`,
+  };
+};
+
 const crearResultadoSinMovimiento = (venta, movimientosCompatibles) => {
   const esTarjeta = venta.tipoPago === TIPO_PAGO.TARJETA_CREDITO;
+  const esTransferencia = venta.tipoPago === TIPO_PAGO.TRANSFERENCIA;
+  const revisarGrupoTransferencias = requiereRevisionGrupoTransferencias(
+    venta.tipoPago,
+  );
   const ambiguo = movimientosCompatibles.length > 0;
 
   return {
@@ -152,9 +207,13 @@ const crearResultadoSinMovimiento = (venta, movimientosCompatibles) => {
       ? "REVISAR_EN_BANCOS"
       : ambiguo
         ? "COINCIDENCIA_AMBIGUA_CAJA"
-        : "NO_EN_CAJA",
-    observacion: esTarjeta
-      ? "REVISAR EN BANCOS"
+        : esTransferencia
+          ? "REVISAR_EN_TRANSFERENCIAS"
+          : "NO_EN_CAJA",
+    observacion: revisarGrupoTransferencias
+      ? ambiguo
+        ? `${OBSERVACION_REVISAR_GRUPO_TRANSFERENCIAS}. Existen movimientos posibles, pero no hay una coincidencia unica.`
+        : OBSERVACION_REVISAR_GRUPO_TRANSFERENCIAS
       : ambiguo
         ? "Existen movimientos posibles, pero no hay una coincidencia unica."
         : "La venta en efectivo no aparece en ninguna caja del mismo dia.",
@@ -184,9 +243,77 @@ const construirAuditoriaVentasCaja = ({
     agencias,
   });
   const asignados = new Set();
-  const resultados = [];
+  const ventasAsignadas = new Set();
+  const resultadosPorVenta = new Map();
+
+  movimientosPreparados.forEach((movimiento) => {
+    const gruposPorCliente = new Map();
+
+    ventasPreparadas.forEach((venta) => {
+      if (
+        ventasAsignadas.has(venta._key) ||
+        movimiento.fecha !== venta.fechaNormalizada ||
+        !esMovimientoCompatible(movimiento, venta.tipoPago)
+      ) {
+        return;
+      }
+
+      const nombres = compararNombresClientes(
+        venta.clienteVenta,
+        movimiento.clienteCaja,
+      );
+      const clienteIdExacto = Boolean(
+        venta.clienteId &&
+        movimiento.clienteId &&
+        Number(venta.clienteId) === Number(movimiento.clienteId),
+      );
+      if (!clienteIdExacto && !nombres.coincide) return;
+
+      const nombreNormalizado = normalizarNombre(venta.clienteVenta);
+      const claveCliente = nombreNormalizado
+        ? `NOMBRE:${nombreNormalizado}`
+        : `ID:${Number(venta.clienteId) || "SIN_ID"}`;
+      if (!gruposPorCliente.has(claveCliente)) {
+        gruposPorCliente.set(claveCliente, []);
+      }
+      gruposPorCliente.get(claveCliente).push({
+        venta,
+        nombres,
+        clienteIdExacto,
+      });
+    });
+
+    const gruposExactos = [...gruposPorCliente.values()].filter(
+      (grupo) =>
+        grupo.length > 1 &&
+        grupo.reduce(
+          (total, item) => total + item.venta.montoCentavos,
+          0,
+        ) === movimiento.montoCentavos,
+    );
+
+    if (gruposExactos.length !== 1) return;
+
+    const grupo = gruposExactos[0];
+    asignados.add(Number(movimiento.id));
+    grupo.forEach(({ venta, nombres, clienteIdExacto }) => {
+      ventasAsignadas.add(venta._key);
+      resultadosPorVenta.set(
+        venta._key,
+        crearResultadoAgrupado({
+          venta,
+          movimiento,
+          nombres,
+          clienteIdExacto,
+          cantidadVentas: grupo.length,
+        }),
+      );
+    });
+  });
 
   ventasPreparadas.forEach((venta) => {
+    if (ventasAsignadas.has(venta._key)) return;
+
     const candidatosDia = movimientosPreparados.filter(
       (movimiento) =>
         movimiento.fecha === venta.fechaNormalizada &&
@@ -228,12 +355,18 @@ const construirAuditoriaVentasCaja = ({
     }
 
     if (!mejor) {
-      resultados.push(crearResultadoSinMovimiento(venta, candidatos));
+      resultadosPorVenta.set(
+        venta._key,
+        crearResultadoSinMovimiento(venta, candidatos),
+      );
       return;
     }
 
     asignados.add(Number(mejor.movimiento.id));
     const diferenciaCentavos = venta.montoCentavos - mejor.movimiento.montoCentavos;
+    const revisarGrupoTransferencias = requiereRevisionGrupoTransferencias(
+      venta.tipoPago,
+    );
     const tipoCoincidencia = mejor.clienteIdExacto
       ? mejor.montoExacto
         ? "CLIENTE_ID_Y_MONTO"
@@ -244,7 +377,7 @@ const construirAuditoriaVentasCaja = ({
           : mejor.nombres.tipo
         : "MONTO_UNICO";
 
-    resultados.push({
+    resultadosPorVenta.set(venta._key, {
       ventaId: Number(venta.id) || null,
       detalleVentaId: Number(venta.detalleVentaId) || null,
       fecha: venta.fechaNormalizada,
@@ -254,8 +387,11 @@ const construirAuditoriaVentasCaja = ({
       tipoPago: venta.tipoPago,
       montoVenta: desdeCentavos(venta.montoCentavos),
       estado: diferenciaCentavos === 0 ? "COINCIDE_CAJA" : "MONTO_DIFERENTE_CAJA",
-      observacion:
-        diferenciaCentavos === 0
+      observacion: revisarGrupoTransferencias
+        ? diferenciaCentavos === 0
+          ? OBSERVACION_REVISAR_GRUPO_TRANSFERENCIAS
+          : `${OBSERVACION_REVISAR_GRUPO_TRANSFERENCIAS}. El cliente aparece en caja, pero el valor es diferente.`
+        : diferenciaCentavos === 0
           ? "OK"
           : "El cliente aparece en caja, pero el valor es diferente.",
       movimientoCajaId: Number(mejor.movimiento.id) || null,
@@ -269,16 +405,28 @@ const construirAuditoriaVentasCaja = ({
     });
   });
 
+  const resultados = ventasPreparadas
+    .map((venta) => resultadosPorVenta.get(venta._key))
+    .filter(Boolean);
+
+  const movimientosCajaContabilizados = new Set();
   const resumen = resultados.reduce(
     (acc, resultado) => {
       acc.totalVentasContado += 1;
       acc.totalVenta += Number(resultado.montoVenta) || 0;
-      if (resultado.movimientoCajaId) {
+      if (
+        resultado.movimientoCajaId &&
+        !movimientosCajaContabilizados.has(resultado.movimientoCajaId)
+      ) {
+        movimientosCajaContabilizados.add(resultado.movimientoCajaId);
         acc.totalCajaCoincidente += Number(resultado.montoCaja) || 0;
       }
       if (resultado.estado === "COINCIDE_CAJA") acc.coincidenCaja += 1;
       if (resultado.estado === "NO_EN_CAJA") acc.sinRegistroCaja += 1;
       if (resultado.estado === "REVISAR_EN_BANCOS") acc.revisarBancos += 1;
+      if (resultado.estado === "REVISAR_EN_TRANSFERENCIAS") {
+        acc.revisarTransferencias += 1;
+      }
       if (resultado.estado === "MONTO_DIFERENTE_CAJA") acc.montoDiferente += 1;
       if (resultado.estado === "COINCIDENCIA_AMBIGUA_CAJA") acc.ambiguas += 1;
       return acc;
@@ -288,6 +436,7 @@ const construirAuditoriaVentasCaja = ({
       coincidenCaja: 0,
       sinRegistroCaja: 0,
       revisarBancos: 0,
+      revisarTransferencias: 0,
       montoDiferente: 0,
       ambiguas: 0,
       totalVenta: 0,

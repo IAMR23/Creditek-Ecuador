@@ -5,7 +5,8 @@ import netlify from "@astrojs/netlify/functions";
 
 // https://astro.build/config
 export default defineConfig({
-  integrations: [tailwind()],
+  site: "https://www.creditek-ecuador.com",
+  integrations: [tailwind({ applyBaseStyles: false })],
   server: {
     host: true,
   },

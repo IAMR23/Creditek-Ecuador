@@ -34,6 +34,14 @@ Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page
 
 There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
 
+## Backend API
+
+The credit application form uses `https://api.creditek-ecuador.com` by default. For local development, set the public build-time variable before starting Astro:
+
+```env
+PUBLIC_BACKEND_API_URL=http://localhost:5020
+```
+
 Any static assets, like images, can be placed in the `public/` directory.
 
 ## 🧞 Commands

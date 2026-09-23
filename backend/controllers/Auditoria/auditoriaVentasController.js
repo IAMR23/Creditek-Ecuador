@@ -243,7 +243,6 @@ exports.obtenerControlCajaVentasContado = async (req, res) => {
       agenciaId,
       vendedorId,
       modeloId,
-      cierreCaja: "CONTADO",
       origenId,
       dispositivoId,
       estado,

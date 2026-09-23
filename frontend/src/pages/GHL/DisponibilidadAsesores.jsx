@@ -12,6 +12,8 @@ export default function DisponibilidadAsesores() {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [associationFilter, setAssociationFilter] = useState("todos");
+  const [playStartTime, setPlayStartTime] = useState("00:00");
+  const [savedPlayStartTime, setSavedPlayStartTime] = useState("00:00");
   const [autoPauseTime, setAutoPauseTime] = useState("18:00");
   const [savedAutoPauseTime, setSavedAutoPauseTime] = useState("18:00");
   const [pauseConfiguration, setPauseConfiguration] = useState(null);
@@ -26,8 +28,11 @@ export default function DisponibilidadAsesores() {
         api.get("/api/ghl/repartos/asesores/configuracion-pausa"),
       ]);
       const configuration = pauseResponse.data.configuracion || {};
+      const configuredStartTime = configuration.horaInicioPlay || "00:00";
       const configuredTime = configuration.horaPausaAutomatica || "18:00";
       setGhlUsers(usersResponse.data.users || []);
+      setPlayStartTime(configuredStartTime);
+      setSavedPlayStartTime(configuredStartTime);
       setAutoPauseTime(configuredTime);
       setSavedAutoPauseTime(configuredTime);
       setPauseConfiguration(configuration);
@@ -44,19 +49,28 @@ export default function DisponibilidadAsesores() {
   }, [loadGhlUsers]);
 
   const saveAutoPauseTime = async () => {
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(autoPauseTime) || savingPauseTime) return;
+    const validTime = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (
+      !validTime.test(playStartTime)
+      || !validTime.test(autoPauseTime)
+      || playStartTime >= autoPauseTime
+      || savingPauseTime
+    ) return;
     setSavingPauseTime(true);
     setError("");
     setSuccess("");
     try {
       const response = await api.put("/api/ghl/repartos/asesores/configuracion-pausa", {
+        horaInicioPlay: playStartTime,
         horaPausaAutomatica: autoPauseTime,
       });
       const configuration = response.data.configuracion;
       setPauseConfiguration(configuration);
+      setPlayStartTime(configuration.horaInicioPlay);
+      setSavedPlayStartTime(configuration.horaInicioPlay);
       setAutoPauseTime(configuration.horaPausaAutomatica);
       setSavedAutoPauseTime(configuration.horaPausaAutomatica);
-      setSuccess(response.data.message || "Hora de pausa guardada correctamente");
+      setSuccess(response.data.message || "Horario diario de Play guardado correctamente");
     } catch (requestError) {
       setError(messageOf(requestError));
     } finally {
@@ -104,13 +118,22 @@ export default function DisponibilidadAsesores() {
           <div className="flex items-start gap-3">
             <div className="rounded-lg bg-green-100 p-2 text-green-700"><Clock3 size={20} /></div>
             <div>
-              <h2 className="font-bold text-gray-900">Pausa automática de asesores</h2>
-              <p className="text-sm text-gray-500">A esta hora, todos los asesores que estén en Play pasarán a Pausa. Zona horaria: America/Guayaquil.</p>
+              <h2 className="font-bold text-gray-900">Horario diario de Play</h2>
+              <p className="text-sm text-gray-500">Los asesores podrán activar Play desde la hora de inicio y pasarán a Pausa al llegar la hora de cierre. Zona horaria: America/Guayaquil.</p>
               {pauseConfiguration?.migracionPendiente && <p className="mt-1 text-xs font-semibold text-amber-700">La migración de base de datos está pendiente; aplícala antes de guardar.</p>}
               {pauseConfiguration?.updatedAt && <p className="mt-1 text-xs text-gray-500">Última actualización: {new Date(pauseConfiguration.updatedAt).toLocaleString("es-EC", { timeZone: "America/Guayaquil" })}</p>}
             </div>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs font-semibold text-gray-600">
+              Inicio de Play
+              <input
+                type="time"
+                value={playStartTime}
+                onChange={(event) => { setPlayStartTime(event.target.value); setSuccess(""); }}
+                className="mt-1 block h-10 rounded border border-gray-300 bg-white px-3 text-sm shadow-sm outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+              />
+            </label>
             <label className="text-xs font-semibold text-gray-600">
               Hora de cierre
               <input
@@ -123,13 +146,18 @@ export default function DisponibilidadAsesores() {
             <button
               type="button"
               onClick={saveAutoPauseTime}
-              disabled={savingPauseTime || pauseConfiguration?.migracionPendiente || autoPauseTime === savedAutoPauseTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(autoPauseTime)}
+              disabled={savingPauseTime || pauseConfiguration?.migracionPendiente || (autoPauseTime === savedAutoPauseTime && playStartTime === savedPlayStartTime) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(autoPauseTime) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(playStartTime) || playStartTime >= autoPauseTime}
               className="inline-flex h-10 items-center gap-2 rounded bg-green-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Save size={16} /> {savingPauseTime ? "Guardando..." : "Guardar hora"}
             </button>
           </div>
         </div>
+        {playStartTime >= autoPauseTime && (
+          <p className="mt-3 text-sm font-semibold text-red-700">
+            La hora de inicio de Play debe ser anterior a la hora de cierre.
+          </p>
+        )}
       </section>
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
@@ -171,10 +199,11 @@ export default function DisponibilidadAsesores() {
       </div>
 
       <AsesoresDisponibilidadPanel
-        key={savedAutoPauseTime}
+        key={`${savedPlayStartTime}-${savedAutoPauseTime}`}
         ghlUsers={ghlUsers}
         searchTerm={searchTerm}
         associationFilter={associationFilter}
+        playStartTime={savedPlayStartTime}
         autoPauseTime={savedAutoPauseTime}
       />
     </div>

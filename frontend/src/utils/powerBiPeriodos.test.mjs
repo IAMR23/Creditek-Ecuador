@@ -53,13 +53,13 @@ test("construye el mes calendario seleccionado", () => {
   );
 });
 
-test("ultimo anio representa 365 dias incluyendo hoy", () => {
+test("este anio inicia el primero de enero y termina hoy", () => {
   assert.deepEqual(
     construirRangoPeriodoPowerBi({
-      tipo: PERIODO_POWER_BI.ULTIMO_ANIO,
+      tipo: PERIODO_POWER_BI.ESTE_ANIO,
       fechaActual: HOY,
     }),
-    { fechaInicio: "2025-09-23", fechaFin: "2026-09-22" },
+    { fechaInicio: "2026-01-01", fechaFin: "2026-09-22" },
   );
 });
 

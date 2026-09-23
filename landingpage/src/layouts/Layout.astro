@@ -1,24 +1,62 @@
 ---
+import "../styles/global.css";
+
 interface Props {
   title: string;
-  description?: string;
+  description: string;
+  canonical: string;
+  robots?: string;
+  image?: string;
+  structuredData?: Record<string, unknown> | Record<string, unknown>[];
 }
 
 const {
   title,
-  description = "Adquiere celulares y televisiones a crédito con Creditek Ecuador. Solicita información, conoce nuestras sucursales y encuentra opciones de crédito para tecnología.",
+  description,
+  canonical,
+  robots = "index, follow",
+  image = "/Creditek/Principal.jpeg",
+  structuredData,
 } = Astro.props;
+
+const siteOrigin = "https://www.creditek-ecuador.com";
+const canonicalUrl = new URL(canonical, siteOrigin).toString();
+const socialImageUrl = new URL(image, siteOrigin).toString();
+const serializedStructuredData = structuredData
+  ? JSON.stringify(structuredData).replace(/</g, "\\u003c")
+  : "";
 ---
 
 <!doctype html>
-<html lang="es">
+<html lang="es-EC">
   <head>
     <meta charset="UTF-8" />
     <meta name="description" content={description} />
-    <meta name="viewport" content="width=device-width" />
-    <link rel="icon"  href="/Creditek/ico2.png" />
+    <meta name="robots" content={robots} />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="icon" href="/Creditek/ico2.png" />
     <meta name="generator" content={Astro.generator} />
+    <meta property="og:locale" content="es_EC" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Creditek" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImageUrl} />
     <script is:inline src="https://unpkg.com/scrollreveal"></script>
+
+    {structuredData && (
+      <script
+        is:inline
+        type="application/ld+json"
+        set:html={serializedStructuredData}
+      ></script>
+    )}
 
     <title>{title}</title>
 
