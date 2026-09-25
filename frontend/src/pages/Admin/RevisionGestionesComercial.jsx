@@ -1,25 +1,203 @@
-import { useState, useEffect } from "react";
-import axios from "axios";
+import { useEffect, useMemo, useState } from "react";
+import PropTypes from "prop-types";
 import Swal from "sweetalert2";
-import { API_URL } from "../../../config";
+import api from "../../api/client";
 import {
+  FaBuilding,
+  FaChartBar,
   FaCheckCircle,
-  FaTimesCircle,
   FaClock,
   FaFileExcel,
+  FaTable,
+  FaTimesCircle,
+  FaUserTie,
 } from "react-icons/fa";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import * as XLSX from "xlsx";
+
+const ECUADOR_TIME_ZONE = "America/Guayaquil";
+const ECUADOR_HOUR_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: ECUADOR_TIME_ZONE,
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+const agruparGestiones = (gestiones, obtenerGrupo) => {
+  const grupos = new Map();
+
+  gestiones.forEach((gestion) => {
+    const datosGrupo = obtenerGrupo(gestion) || {};
+    const nombre = datosGrupo.name || "Sin asignar";
+    const clave = datosGrupo.id ? `${datosGrupo.id}:${nombre}` : nombre;
+    const grupo = grupos.get(clave) || {
+      name: nombre,
+      gestiones: 0,
+    };
+
+    grupo.gestiones += 1;
+    grupos.set(clave, grupo);
+  });
+
+  return [...grupos.values()]
+    .sort((a, b) => b.gestiones - a.gestiones || a.name.localeCompare(b.name));
+};
+
+const agruparGestionesPorHora = (gestiones) => {
+  const grupos = new Map();
+
+  gestiones.forEach((gestion) => {
+    const fecha = new Date(gestion.createdAt);
+    if (Number.isNaN(fecha.getTime())) return;
+
+    const hora = Number(ECUADOR_HOUR_FORMATTER.format(fecha));
+
+    grupos.set(hora, (grupos.get(hora) || 0) + 1);
+  });
+
+  return [...grupos.entries()]
+    .sort(([horaA], [horaB]) => horaA - horaB)
+    .map(([hora, gestiones]) => ({
+      name: `${String(hora).padStart(2, "0")}:00`,
+      gestiones,
+    }));
+};
+
+const ResumenCard = ({ icon, label, value, detail, color }) => (
+  <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-slate-500">{label}</p>
+        <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
+        <p className="mt-1 text-xs text-slate-400">{detail}</p>
+      </div>
+      <div className={`rounded-xl p-3 text-white ${color}`}>{icon}</div>
+    </div>
+  </div>
+);
+
+ResumenCard.propTypes = {
+  icon: PropTypes.node.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.number.isRequired,
+  detail: PropTypes.string.isRequired,
+  color: PropTypes.string.isRequired,
+};
+
+const GraficaGestiones = ({ title, subtitle, data, color, type = "barras" }) => {
+  if (!data.length) {
+    return (
+      <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-bold text-slate-800">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        <div className="flex h-72 items-center justify-center text-sm text-slate-400">
+          No hay datos para mostrar con los filtros seleccionados.
+        </div>
+      </section>
+    );
+  }
+
+  const chartWidth = Math.max(620, data.length * 90);
+
+  return (
+    <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+      <h2 className="text-lg font-bold text-slate-800">{title}</h2>
+      <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+      <div className="mt-5 overflow-x-auto">
+        <div style={{ height: 380, width: chartWidth }}>
+          <ResponsiveContainer width="100%" height="100%">
+            {type === "linea" ? (
+              <LineChart
+                data={data}
+                margin={{ top: 12, right: 24, left: 0, bottom: 35 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  height={50}
+                  tick={{ fill: "#475569", fontSize: 12 }}
+                />
+                <YAxis allowDecimals={false} />
+                <Tooltip
+                  formatter={(value) => [value, "Gestiones"]}
+                  contentStyle={{ borderRadius: 12, borderColor: "#e2e8f0" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="gestiones"
+                  name="Gestiones"
+                  stroke={color}
+                  strokeWidth={3}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            ) : (
+              <BarChart
+                data={data}
+                margin={{ top: 5, right: 24, left: 0, bottom: 75 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={90}
+                  tick={{ fill: "#475569", fontSize: 12 }}
+                />
+                <YAxis allowDecimals={false} />
+                <Tooltip
+                  formatter={(value) => [value, "Gestiones"]}
+                  contentStyle={{ borderRadius: 12, borderColor: "#e2e8f0" }}
+                />
+                <Bar
+                  dataKey="gestiones"
+                  name="Gestiones"
+                  fill={color}
+                  radius={[6, 6, 0, 0]}
+                />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+GraficaGestiones.propTypes = {
+  title: PropTypes.string.isRequired,
+  subtitle: PropTypes.string.isRequired,
+  data: PropTypes.arrayOf(
+    PropTypes.shape({
+      name: PropTypes.string.isRequired,
+      gestiones: PropTypes.number.isRequired,
+    }),
+  ).isRequired,
+  color: PropTypes.string.isRequired,
+  type: PropTypes.oneOf(["barras", "linea"]),
+};
 
 const RevisionGestionesComercial = () => {
   const [gestiones, setGestiones] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pestanaActiva, setPestanaActiva] = useState("tabla");
 
   const [solicitud, setSolicitud] = useState("");
   const [origen, setOrigen] = useState("");
   const [agenciaId, setAgenciaId] = useState("");
   const [agencias, setAgencias] = useState([]);
-  const [usuarios, setUsuarios] = useState([]);
-  const [usuarioAgenciaId, setUsuarioAgenciaId] = useState("");
 
   const today = new Date().toISOString().split("T")[0];
   const [fechaInicio, setFechaInicio] = useState(today);
@@ -29,7 +207,7 @@ const RevisionGestionesComercial = () => {
 
   const obtenerOrigenes = async () => {
     try {
-      const res = await axios.get(`${API_URL}/origen`);
+      const res = await api.get("/origen");
       setOrigenes(res.data || []);
     } catch (error) {
       console.error(error);
@@ -37,19 +215,9 @@ const RevisionGestionesComercial = () => {
     }
   };
 
-  const cargarUsuarios = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/usuarios`);
-      setUsuarios(res.data || []);
-    } catch (error) {
-      console.error("Error cargando usuarios:", error);
-      setUsuarios([]);
-    }
-  };
-
   const cargarAgencias = async () => {
     try {
-      const res = await axios.get(`${API_URL}/agencias`);
+      const res = await api.get("/agencias");
       setAgencias(res.data || []);
     } catch (error) {
       console.error("Error cargando agencias:", error);
@@ -65,13 +233,14 @@ const RevisionGestionesComercial = () => {
   };
 
   useEffect(() => {
-    cargarUsuarios();
     obtenerOrigenes();
     cargarAgencias();
   }, []);
 
   useEffect(() => {
     obtenerGestiones();
+    // La carga inicial usa los filtros por defecto; los cambios se aplican con el botón Filtrar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const descargarExcel = () => {
@@ -85,10 +254,10 @@ const RevisionGestionesComercial = () => {
 
       return {
         Fecha: fechaObj.toLocaleDateString("es-EC", {
-          timeZone: "America/Guayaquil",
+          timeZone: ECUADOR_TIME_ZONE,
         }),
         Hora: fechaObj.toLocaleTimeString("es-EC", {
-          timeZone: "America/Guayaquil",
+          timeZone: ECUADOR_TIME_ZONE,
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
@@ -126,9 +295,8 @@ const RevisionGestionesComercial = () => {
       if (solicitud) params.solicitud = solicitud;
       if (origen) params.origen = origen;
       if (agenciaId) params.agenciaId = agenciaId;
-      if (usuarioAgenciaId) params.usuarioAgenciaId = usuarioAgenciaId;
 
-      const { data } = await axios.get(`${API_URL}/api/gestion-comercial`, {
+      const { data } = await api.get("/api/gestion-comercial", {
         params,
       });
 
@@ -146,11 +314,49 @@ const RevisionGestionesComercial = () => {
     }
   };
 
+  const resumen = useMemo(() => {
+    const porUsuario = agruparGestiones(
+      gestiones,
+      (gestion) => ({
+        id: gestion.usuarioAgencia?.usuario?.id,
+        name: gestion.usuarioAgencia?.usuario?.nombre,
+      }),
+    );
+    const porAgencia = agruparGestiones(
+      gestiones,
+      (gestion) => ({
+        id: gestion.usuarioAgencia?.agencia?.id,
+        name: gestion.usuarioAgencia?.agencia?.nombre,
+      }),
+    );
+    const porHora = agruparGestionesPorHora(gestiones);
+
+    return {
+      totalGestiones: gestiones.length,
+      totalUsuarios: porUsuario.filter((item) => item.name !== "Sin asignar")
+        .length,
+      totalAgencias: porAgencia.filter((item) => item.name !== "Sin asignar")
+        .length,
+      porUsuario,
+      porAgencia,
+      porHora,
+    };
+  }, [gestiones]);
+
   const formatDate = (date) => {
-    return new Date(date).toLocaleString("es-EC", {
-      timeZone: "America/Guayaquil",
-      dateStyle: "short",
-      timeStyle: "short",
+    return new Date(date).toLocaleDateString("es-EC", {
+      timeZone: ECUADOR_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  };
+
+  const formatTime = (date) => {
+    return new Date(date).toLocaleTimeString("es-EC", {
+      timeZone: ECUADOR_TIME_ZONE,
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -247,22 +453,6 @@ const RevisionGestionesComercial = () => {
                 </option>
               ))}
             </select>
-{/* 
-            <select
-              className="border px-3 py-2 rounded"
-              value={usuarioAgenciaId}
-              onChange={(e) => setUsuarioAgenciaId(e.target.value)}
-            >
-              <option value="">Todos los usuarios</option>
-              {usuarios.map((u) => (
-                <option
-                  key={u.id}
-                  value={u.agenciaPrincipal?.usuarioAgenciaId || ""}
-                >
-                  {u.nombre}
-                </option>
-              ))}
-            </select> */}
 
             <button
               onClick={obtenerGestiones}
@@ -281,12 +471,40 @@ const RevisionGestionesComercial = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="mb-5 flex gap-2 border-b border-slate-200 px-2">
+        <button
+          type="button"
+          onClick={() => setPestanaActiva("tabla")}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${
+            pestanaActiva === "tabla"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <FaTable />
+          Tabla de gestiones
+        </button>
+        <button
+          type="button"
+          onClick={() => setPestanaActiva("graficas")}
+          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${
+            pestanaActiva === "graficas"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <FaChartBar />
+          Gráficas
+        </button>
+      </div>
+
+      {pestanaActiva === "tabla" ? (
+        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <table className="w-full min-w-[1200px] text-sm">
           <thead className="bg-gray-50 text-gray-500 uppercase text-xs tracking-wider">
             <tr>
               <th className="px-6 py-4 text-left">#</th>
-              <th className="px-6 py-4 text-left">Fecha</th>
+              <th className="px-6 py-4 text-left">Fecha de creación</th>
               <th className="px-6 py-4 text-left">Gestor</th>
               <th className="px-6 py-4 text-left">Celular Gestionado</th>
               <th className="px-6 py-4 text-left">Cédula Gestionada</th>
@@ -312,6 +530,9 @@ const RevisionGestionesComercial = () => {
                   <td className="px-6 py-6">
                     <div className="font-semibold text-gray-800">
                       {formatDate(g.createdAt)}
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      {formatTime(g.createdAt)}
                     </div>
                   </td>
 
@@ -371,8 +592,63 @@ const RevisionGestionesComercial = () => {
               </tr>
             )}
           </tbody>
-        </table>
-      </div>
+          </table>
+        </div>
+      ) : (
+        <div className="space-y-6 px-2 pb-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <ResumenCard
+              icon={<FaChartBar size={20} />}
+              label="Total de gestiones"
+              value={resumen.totalGestiones}
+              detail="Registros ingresados en el período"
+              color="bg-sky-600"
+            />
+            <ResumenCard
+              icon={<FaUserTie size={20} />}
+              label="Usuarios con gestiones"
+              value={resumen.totalUsuarios}
+              detail="Gestores que ingresaron información"
+              color="bg-violet-600"
+            />
+            <ResumenCard
+              icon={<FaBuilding size={20} />}
+              label="Agencias con gestiones"
+              value={resumen.totalAgencias}
+              detail="Agencias activas en el resultado"
+              color="bg-amber-500"
+            />
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <GraficaGestiones
+              title="Gestiones por usuario"
+              subtitle="Quién ingresó las gestiones y cuántas registró."
+              data={resumen.porUsuario}
+              color="#16a34a"
+            />
+            <GraficaGestiones
+              title="Gestiones por agencia"
+              subtitle="Cantidad total de gestiones registradas por agencia."
+              data={resumen.porAgencia}
+              color="#0284c7"
+            />
+            <div className="xl:col-span-2">
+              <GraficaGestiones
+                title="Gestiones por hora del día"
+                subtitle="Horas en las que se registran más gestiones, según la hora de creación en Ecuador."
+                data={resumen.porHora}
+                color="#7c3aed"
+                type="linea"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            Todas las métricas respetan los filtros seleccionados.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

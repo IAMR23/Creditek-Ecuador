@@ -217,7 +217,7 @@ export default function CrearGestionComercial() {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
-                Celular Gestionado *
+                Celular del Cliente *
               </label>
 
               <input
@@ -235,7 +235,7 @@ export default function CrearGestionComercial() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-600">
-                Cédula Gestionado
+                Cédula del Cliente *
               </label>
 
               <input
