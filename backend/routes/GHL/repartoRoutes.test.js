@@ -28,6 +28,8 @@ describe("seguridad de endpoints de reparto GHL", () => {
       "GET /configuracion-tiempo-real",
       "PUT /configuracion-tiempo-real",
       "PATCH /configuracion-tiempo-real/estado",
+      "GET /horarios-flujo",
+      "PUT /horarios-flujo",
       "GET /asesores",
       "GET /asesores/configuracion-pausa",
       "PUT /asesores/configuracion-pausa",

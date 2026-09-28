@@ -33,6 +33,21 @@ const GhlRepartoTiempoRealConfiguracion = sequelize.define(
       defaultValue: "18:00",
       validate: { is: /^([01]\d|2[0-3]):[0-5]\d$/ },
     },
+    horariosFlujoActivo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    horariosFlujo: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
+    },
+    nivelesFlujo: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
+    },
     actualizadoPorId: { type: DataTypes.INTEGER, allowNull: true },
     activo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   },

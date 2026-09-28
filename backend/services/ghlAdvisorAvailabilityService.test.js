@@ -40,6 +40,61 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe("disponibilidad diaria de asesores GHL", () => {
+  test("activa solamente usuarios dentro de su bloque semanal", () => {
+    const schedules = [
+      { diaSemana: 3, horaInicio: "08:00", horaFin: "11:00", usuariosGhl: ["ghl-10"] },
+      { diaSemana: 3, horaInicio: "11:00", horaFin: "18:00", usuariosGhl: ["ghl-20"] },
+    ];
+    const state = service.flowScheduleState(schedules, NOW);
+    expect(state.time).toBe("10:00");
+    expect([...state.activeIds]).toEqual(["ghl-10"]);
+    expect([...state.configuredIds]).toEqual(["ghl-10", "ghl-20"]);
+  });
+
+  test("un turno con fecha solo se activa durante la semana programada", () => {
+    const previousWeek = service.flowScheduleState([
+      { fecha: "2026-09-02", diaSemana: 3, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["ghl-10"] },
+    ], NOW);
+    const currentWeek = service.flowScheduleState([
+      { fecha: "2026-09-09", diaSemana: 3, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["ghl-10"] },
+    ], NOW);
+
+    expect(previousWeek.date).toBe("2026-09-09");
+    expect([...previousWeek.activeIds]).toEqual([]);
+    expect([...currentWeek.activeIds]).toEqual(["ghl-10"]);
+  });
+
+  test("el horario activa al vendedor automaticamente aunque nunca haya presionado Play", async () => {
+    const row = makeLink({
+      estadoRecepcion: "PAUSADO",
+      estadoFechaLocal: "2026-09-09",
+      usuario: { id: 10, activo: true },
+    });
+    jest.spyOn(Vinculo, "findAll").mockResolvedValue([row]);
+    const schedules = [
+      { diaSemana: 3, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["ghl-10"] },
+    ];
+
+    const active = await service.resolveScheduledAdvisors(schedules, [{ id: "ghl-10" }], NOW);
+    expect(active.active.map((user) => user.id)).toEqual(["ghl-10"]);
+  });
+
+  test("la validacion final permite asignar al asesor dentro de su horario sin Play", async () => {
+    jest.spyOn(Vinculo, "findOne").mockResolvedValue(makeLink({
+      estadoRecepcion: "PAUSADO",
+      estadoFechaLocal: null,
+      usuario: { id: 10, activo: true },
+    }));
+    RealtimeConfiguracion.findByPk.mockResolvedValue({
+      horariosFlujoActivo: true,
+      horariosFlujo: [
+        { diaSemana: 3, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["ghl-10"] },
+      ],
+    });
+
+    await expect(service.isGhlUserActiveToday("ghl-10", NOW)).resolves.toBe(true);
+  });
+
   test("identifica solamente el cargo exacto VENDEDOR CALL CENTER", () => {
     expect(service.isVendedorCallCenterCargo("  vendedor   call center ")).toBe(true);
     expect(service.isVendedorCallCenterCargo("SUPERVISOR DE CALL CENTER")).toBe(false);
@@ -78,6 +133,52 @@ describe("disponibilidad diaria de asesores GHL", () => {
     expect(result).toMatchObject({
       aplicaRepartoGhl: true,
       vinculado: false,
+    });
+  });
+
+  test("el horario automatico pone al asesor en flujo sin requerir Play", async () => {
+    jest.spyOn(Usuario, "findOne").mockResolvedValue({
+      id: 10,
+      activo: true,
+      rolPago: { cargo: "VENDEDOR CALL CENTER" },
+      rolesPago: [],
+    });
+    jest.spyOn(Vinculo, "findOne").mockResolvedValue(makeLink({
+      estadoRecepcion: "PAUSADO",
+      estadoFechaLocal: null,
+    }));
+    RealtimeConfiguracion.findByPk.mockResolvedValue({
+      horaInicioPlay: "00:00",
+      horaPausaAutomatica: "18:00",
+      horariosFlujoActivo: true,
+      horariosFlujo: [
+        { diaSemana: 3, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["ghl-10"] },
+      ],
+    });
+
+    const result = await service.getMyAvailability(10, NOW);
+
+    expect(result).toMatchObject({
+      modoHorarioAutomatico: true,
+      incluidoEnHorario: true,
+      dentroHorario: true,
+      estado: "ACTIVO",
+      recibiendoLeads: true,
+    });
+  });
+
+  test("impide cambios manuales mientras Horarios de flujo esta activo", async () => {
+    RealtimeConfiguracion.findByPk.mockResolvedValue({ horariosFlujoActivo: true });
+
+    await expect(service.changeAvailability({
+      usuarioId: 10,
+      estado: "ACTIVO",
+      actorId: 10,
+      motivoCambio: "asesor",
+      now: NOW,
+    })).rejects.toMatchObject({
+      code: "GHL_AUTOMATIC_SCHEDULE_ENABLED",
+      statusCode: 409,
     });
   });
 

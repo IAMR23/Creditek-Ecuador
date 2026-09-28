@@ -74,6 +74,29 @@ export default function AsesorDisponibilidadNavbar({ auth }) {
     !availability?.vinculado
   ) return null;
 
+  if (availability.modoHorarioAutomatico === true) {
+    const receiving = availability.dentroHorario === true;
+    const included = availability.incluidoEnHorario === true;
+    const label = receiving
+      ? "Flujo automático activo"
+      : included
+        ? "Fuera de tu horario de flujo"
+        : "Sin horario de flujo asignado";
+    return (
+      <div
+        title={`${label}. Leads recibidos hoy: ${availability.leadsHoy || 0}`}
+        className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-bold shadow-sm ${
+          receiving ? "bg-green-500 text-white" : "bg-gray-700 text-gray-100 ring-1 ring-gray-500"
+        }`}
+      >
+        <span>{receiving ? "Flujo automático" : included ? "Fuera de horario" : "Sin horario"}</span>
+        <span className="hidden border-l border-current/30 pl-2 md:inline">
+          {availability.leadsHoy || 0} hoy
+        </span>
+      </div>
+    );
+  }
+
   const active = availability.estado === "ACTIVO";
   const blocked = availability.bloqueadoPorHorario === true;
   const beforeStart = availability.bloqueadoAntesInicio === true;

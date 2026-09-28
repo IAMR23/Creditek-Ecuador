@@ -509,18 +509,48 @@ async function getMyAvailability(usuarioId, now = new Date()) {
     return { ...serializeAvailability(null, 0, now), aplicaRepartoGhl: false };
   }
 
-  const row = await Vinculo.findOne({ where: { usuarioId } });
-  if (!row) return { ...serializeAvailability(null, 0, now), aplicaRepartoGhl: true };
+  const [row, automaticConfiguration] = await Promise.all([
+    Vinculo.findOne({ where: { usuarioId } }),
+    RealtimeConfiguracion.findByPk(1, {
+      attributes: ["horariosFlujoActivo", "horariosFlujo"],
+    }),
+  ]);
+  const automatic = automaticConfiguration?.horariosFlujoActivo === true;
+  if (!row) return {
+    ...serializeAvailability(null, 0, now),
+    aplicaRepartoGhl: true,
+    modoHorarioAutomatico: automatic,
+    incluidoEnHorario: false,
+    dentroHorario: false,
+  };
   const counts = await countTodayByGhlUser([row.ghlUserId], now);
-  return {
+  const serialized = {
     ...serializeAvailability(row, counts.get(String(row.ghlUserId)) || 0, now),
     aplicaRepartoGhl: true,
+  };
+  if (!automatic) return { ...serialized, modoHorarioAutomatico: false };
+
+  const schedule = flowScheduleState(automaticConfiguration.horariosFlujo, now);
+  const ghlUserId = String(row.ghlUserId);
+  const incluidoEnHorario = schedule.configuredIds.has(ghlUserId);
+  const dentroHorario = schedule.activeIds.has(ghlUserId);
+  return {
+    ...serialized,
+    modoHorarioAutomatico: true,
+    incluidoEnHorario,
+    dentroHorario,
+    estado: dentroHorario ? "ACTIVO" : "PAUSADO",
+    recibiendoLeads: dentroHorario,
+    bloqueadoAntesInicio: false,
+    bloqueadoDespuesCierre: false,
+    bloqueadoPorHorario: incluidoEnHorario && !dentroHorario,
+    horaLocal: schedule.time,
   };
 }
 
 async function listAdvisorAvailability(now = new Date()) {
   await getAutoPauseConfiguration();
-  const [usuarios, vinculos, currentGhlUsers] = await Promise.all([
+  const [usuarios, vinculos, currentGhlUsers, automaticConfiguration] = await Promise.all([
     Usuario.findAll({
       where: { activo: true },
       attributes: ["id", "nombre", "email", "activo"],
@@ -528,7 +558,14 @@ async function listAdvisorAvailability(now = new Date()) {
     }),
     Vinculo.findAll(),
     fetchCurrentGhlUsers(),
+    RealtimeConfiguracion.findByPk(1, {
+      attributes: ["horariosFlujoActivo", "horariosFlujo"],
+    }),
   ]);
+  const automatic = automaticConfiguration?.horariosFlujoActivo === true;
+  const schedule = automatic
+    ? flowScheduleState(automaticConfiguration.horariosFlujo, now)
+    : null;
   const currentGhlIds = new Set(currentGhlUsers.map(ghlUserIdOf));
   const byUser = new Map(vinculos.map((row) => [String(row.usuarioId), row]));
   const counts = await countTodayByGhlUser(
@@ -538,13 +575,29 @@ async function listAdvisorAvailability(now = new Date()) {
   return usuarios.map((usuario) => {
     const plain = typeof usuario.toJSON === "function" ? usuario.toJSON() : usuario;
     const row = byUser.get(String(plain.id));
+    const disponibilidad = serializeAvailability(
+      row,
+      row ? counts.get(String(row.ghlUserId)) || 0 : 0,
+      now,
+    );
+    if (automatic) {
+      const ghlUserId = String(row?.ghlUserId || "");
+      const incluidoEnHorario = schedule.configuredIds.has(ghlUserId);
+      const dentroHorario = row?.activo === true
+        && currentGhlIds.has(ghlUserId)
+        && schedule.activeIds.has(ghlUserId);
+      Object.assign(disponibilidad, {
+        modoHorarioAutomatico: true,
+        incluidoEnHorario,
+        dentroHorario,
+        estado: dentroHorario ? "ACTIVO" : "PAUSADO",
+        recibiendoLeads: dentroHorario,
+        bloqueadoPorHorario: incluidoEnHorario && !dentroHorario,
+      });
+    }
     return {
       usuario: plain,
-      disponibilidad: serializeAvailability(
-        row,
-        row ? counts.get(String(row.ghlUserId)) || 0 : 0,
-        now,
-      ),
+      disponibilidad,
       asociacionIncompleta:
         !row || !row.activo || !row.ghlUserId || !currentGhlIds.has(String(row.ghlUserId)),
     };
@@ -643,10 +696,20 @@ async function changeAvailability({
   now = new Date(),
 }) {
   try {
-  const normalizedState = String(estado || "").trim().toUpperCase();
-  if (!ESTADOS.includes(normalizedState)) {
-    throw availabilityError("INVALID_AVAILABILITY_STATE", "El estado debe ser ACTIVO o PAUSADO", 400);
-  }
+    const automaticConfiguration = await RealtimeConfiguracion.findByPk(1, {
+      attributes: ["horariosFlujoActivo"],
+    });
+    if (automaticConfiguration?.horariosFlujoActivo === true) {
+      throw availabilityError(
+        "GHL_AUTOMATIC_SCHEDULE_ENABLED",
+        "La recepcion se controla automaticamente desde Horarios de flujo",
+        409,
+      );
+    }
+    const normalizedState = String(estado || "").trim().toUpperCase();
+    if (!ESTADOS.includes(normalizedState)) {
+      throw availabilityError("INVALID_AVAILABILITY_STATE", "El estado debe ser ACTIVO o PAUSADO", 400);
+    }
 
   if (normalizedState === "ACTIVO") {
     const {
@@ -873,13 +936,96 @@ async function resolveConfiguredAdvisors(configuredUsers, currentGhlUsers, now =
   return result;
 }
 
-async function isGhlUserActiveToday(ghlUserId, now = new Date()) {
-  await getAutoPauseConfiguration();
-  const row = await Vinculo.findOne({
-    where: { ghlUserId, activo: true },
+function flowScheduleState(schedules = [], now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
+  );
+  const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const day = dayMap[values.weekday];
+  const time = `${values.hour}:${values.minute}`;
+  const date = `${values.year}-${values.month}-${values.day}`;
+  const configuredIds = new Set();
+  const activeIds = new Set();
+
+  (Array.isArray(schedules) ? schedules : []).forEach((block) => {
+    const users = Array.isArray(block?.usuariosGhl) ? block.usuariosGhl : [];
+    users.forEach((userId) => configuredIds.add(String(userId)));
+    if (
+      (block?.fecha ? String(block.fecha) === date : Number(block?.diaSemana) === day)
+      && String(block?.horaInicio || "") <= time
+      && time < String(block?.horaFin || "")
+    ) {
+      users.forEach((userId) => activeIds.add(String(userId)));
+    }
+  });
+
+  return { day, date, time, configuredIds, activeIds };
+}
+
+async function resolveScheduledAdvisors(schedules, currentGhlUsers, now = new Date()) {
+  const state = flowScheduleState(schedules, now);
+  const ids = [...state.configuredIds];
+  if (!ids.length) return { active: [], paused: [], invalid: [], schedule: state };
+
+  const rows = await Vinculo.findAll({
+    where: { ghlUserId: { [Op.in]: ids }, activo: true },
     include: [{ model: Usuario, as: "usuario", attributes: ["id", "activo"] }],
   });
-  return Boolean(row?.usuario?.activo === true && effectiveState(row, now) === "ACTIVO");
+  const byGhl = new Map(rows.map((row) => [String(row.ghlUserId), row]));
+  const currentById = new Map(
+    (currentGhlUsers || [])
+      .filter((user) => user?.deleted !== true && user?.active !== false && user?.status !== "inactive")
+      .map((user) => [ghlUserIdOf(user), user]),
+  );
+  const result = { active: [], paused: [], invalid: [], schedule: state };
+
+  ids.forEach((ghlUserId) => {
+    const row = byGhl.get(ghlUserId);
+    const ghlUser = currentById.get(ghlUserId);
+    const user = {
+      id: ghlUserId,
+      name: ghlUser ? ghlUserNameOf(ghlUser) : row?.ghlNombre || "Sin nombre",
+      email: String(ghlUser?.email || row?.ghlEmail || ""),
+    };
+    if (!row || row.usuario?.activo !== true || !ghlUser) {
+      result.invalid.push({ ...user, reason: "Asociacion RVE-GHL incompleta o usuario inactivo" });
+    } else if (state.activeIds.has(ghlUserId)) {
+      result.active.push(user);
+    } else {
+      result.paused.push(user);
+    }
+  });
+
+  return result;
+}
+
+async function isGhlUserActiveToday(ghlUserId, now = new Date()) {
+  const [row, automaticConfiguration] = await Promise.all([
+    Vinculo.findOne({
+      where: { ghlUserId, activo: true },
+      include: [{ model: Usuario, as: "usuario", attributes: ["id", "activo"] }],
+    }),
+    RealtimeConfiguracion.findByPk(1, {
+      attributes: ["horariosFlujoActivo", "horariosFlujo"],
+    }),
+  ]);
+  if (row?.usuario?.activo !== true) return false;
+  if (automaticConfiguration?.horariosFlujoActivo === true) {
+    return flowScheduleState(automaticConfiguration.horariosFlujo, now)
+      .activeIds.has(String(ghlUserId));
+  }
+  await getAutoPauseConfiguration();
+  return effectiveState(row, now) === "ACTIVO";
 }
 
 async function resolveActiveAdvisors(currentGhlUsers, now = new Date()) {
@@ -954,6 +1100,8 @@ module.exports = {
   changeAvailability,
   pauseAllActiveAdvisors,
   resolveConfiguredAdvisors,
+  flowScheduleState,
+  resolveScheduledAdvisors,
   resolveActiveAdvisors,
   isGhlUserActiveToday,
 };

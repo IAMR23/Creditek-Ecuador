@@ -19,6 +19,8 @@ router.get("/catalogos/users", controller.users);
 router.get("/configuracion-tiempo-real", controller.realtimeConfiguration);
 router.put("/configuracion-tiempo-real", controller.saveRealtimeConfiguration);
 router.patch("/configuracion-tiempo-real/estado", controller.realtimeConfigurationState);
+router.get("/horarios-flujo", controller.flowScheduleConfiguration);
+router.put("/horarios-flujo", controller.saveFlowScheduleConfiguration);
 router.get("/configuraciones", controller.list);
 router.get("/configuraciones/:id", controller.get);
 router.post("/vista-previa", controller.previewInput);

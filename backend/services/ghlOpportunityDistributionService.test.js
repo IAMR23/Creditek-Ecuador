@@ -9,6 +9,12 @@ jest.mock("./ghlAdvisorAvailabilityService", () => ({
     paused: [],
     invalid: [],
   })),
+  resolveScheduledAdvisors: jest.fn(async (_schedules, currentUsers) => ({
+    active: currentUsers,
+    paused: [],
+    invalid: [],
+  })),
+  countTodayByGhlUser: jest.fn(async (ids) => new Map(ids.map((id) => [id, 0]))),
   isGhlUserActiveToday: jest.fn(async () => true),
 }));
 
@@ -20,6 +26,8 @@ const {
   classifyCurrentOpportunity,
   executionState,
   localScheduleParts,
+  normalizeFlowSchedules,
+  normalizeFlowLevels,
   opportunityDateRange,
   opportunityTodayRange,
   realtimeOpportunityDateRange,
@@ -34,6 +42,7 @@ const {
   lockScopeForConfiguration,
   REALTIME_LOCK_SCOPE,
   realtimeMaxPendingPerAdvisor,
+  validateFlowScheduleConfigurationInput,
 } = require("./ghlOpportunityDistributionService");
 const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
@@ -127,6 +136,74 @@ describe("reparto determinista de oportunidades GHL", () => {
   test("el asesor con menor carga recibe primero", () => {
     const result = buildCapacityAssignments(opportunities(1), users.slice(0, 2), new Map([["u1", 1], ["u2", 0]]), 2);
     expect(result.assignments[0].user.id).toBe("u2");
+  });
+  test("prioriza a quien lleva menos asignaciones en el dia aunque entre mas tarde", () => {
+    const result = buildCapacityAssignments(
+      opportunities(1),
+      users.slice(0, 2),
+      new Map([["u1", 0], ["u2", 0]]),
+      10,
+      0,
+      new Map([["u1", 5], ["u2", 0]]),
+    );
+    expect(result.assignments[0].user.id).toBe("u2");
+  });
+  test("pondera el reparto para dar menos flujo al nivel inicial y mas al experto", () => {
+    const weightedUsers = [
+      { ...users[0], nivelFlujo: 1 },
+      { ...users[1], nivelFlujo: 3 },
+    ];
+    const result = buildCapacityAssignments(
+      opportunities(40),
+      weightedUsers,
+      new Map(),
+      100,
+      0,
+      new Map(),
+    );
+    expect(counts(result.assignments, weightedUsers)).toEqual([10, 30]);
+  });
+  test("asigna nivel medio por defecto y rechaza niveles fuera de 1 a 5", () => {
+    expect(normalizeFlowLevels({}, ["u1", "u2"])).toEqual({ u1: 3, u2: 3 });
+    expect(() => normalizeFlowLevels({ u1: 6 }, ["u1"])).toThrow("entre 1 y 5");
+  });
+  test("rechaza bloques superpuestos para el mismo vendedor", () => {
+    expect(() => normalizeFlowSchedules([
+      { diaSemana: 1, horaInicio: "08:00", horaFin: "12:00", usuariosGhl: ["u1"] },
+      { diaSemana: 1, horaInicio: "11:00", horaFin: "18:00", usuariosGhl: ["u1"] },
+    ])).toThrow("superpuestos");
+  });
+  test("valida que la fecha fija corresponda al dia de la semana", () => {
+    expect(normalizeFlowSchedules([
+      { fecha: "2026-09-24", diaSemana: 4, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["u1"] },
+    ])).toEqual([expect.objectContaining({ fecha: "2026-09-24", diaSemana: 4 })]);
+    expect(() => normalizeFlowSchedules([
+      { fecha: "2026-09-24", diaSemana: 5, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["u1"] },
+    ])).toThrow("no coinciden");
+  });
+  test("el horario semanal no depende ni modifica la ventana manual de Play", async () => {
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(ghl, "createGhlClient").mockReturnValue({});
+    jest.spyOn(ghl, "fetchPipelines").mockResolvedValue([
+      { id: "pipeline", name: "Pipeline", stages: [{ id: "stage", name: "WhatsApp" }] },
+    ]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
+
+    const result = await validateFlowScheduleConfigurationInput({
+      pipelineId: "pipeline",
+      stageIds: ["stage"],
+      horariosFlujoActivo: true,
+      horariosFlujo: [
+        { diaSemana: 1, horaInicio: "09:00", horaFin: "17:00", usuariosGhl: ["u1"] },
+        { diaSemana: 2, horaInicio: "07:30", horaFin: "19:00", usuariosGhl: ["u2"] },
+      ],
+      nivelesFlujo: { u1: 1, u2: 5 },
+    });
+
+    expect(result).not.toHaveProperty("horaInicioPlay");
+    expect(result).not.toHaveProperty("horaPausaAutomatica");
+    expect(result.nivelesFlujo).toEqual({ u1: 1, u2: 5 });
+    jest.restoreAllMocks();
   });
   test("solo sin propietario excluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "unassigned").map((o) => o.id)).toEqual(["a"]));
   test("redistribuir todas incluye asignadas", () => expect(eligibleOpportunities([{ id: "a" }, { id: "b", assignedTo: "u1" }], "all")).toHaveLength(2));

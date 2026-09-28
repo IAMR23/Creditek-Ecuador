@@ -104,4 +104,24 @@ describe("control de disponibilidad GHL", () => {
       message: expect.stringContaining("guardada"),
     }));
   });
+
+  test("guardar horarios activa una revision inmediata de clientes pendientes", async () => {
+    const configuracion = { id: 1, horariosFlujoActivo: true };
+    const save = jest.spyOn(distributionService, "saveFlowScheduleConfiguration")
+      .mockResolvedValue(configuracion);
+    const schedule = jest.spyOn(distributionService, "scheduleRealtimeQueueReview")
+      .mockResolvedValue({ code: "REVIEW_PENDING" });
+    const req = { user: { id: 99 }, body: { horariosFlujoActivo: true } };
+    const res = response();
+
+    await controller.saveFlowScheduleConfiguration(req, res);
+
+    expect(save).toHaveBeenCalledWith(req.body, 99);
+    expect(schedule).toHaveBeenCalledWith({ trigger: "flow-schedule-update" });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      ok: true,
+      configuracion,
+      message: expect.stringContaining("activado"),
+    }));
+  });
 });

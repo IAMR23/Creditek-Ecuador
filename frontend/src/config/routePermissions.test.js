@@ -174,3 +174,10 @@ test("workflows programados exige un permiso administrativo GHL", () => {
   }
   assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Contabilidad"], path: "/ghl/workflows-programados" }), false);
 });
+
+test("horarios de flujo exige un permiso administrativo GHL", () => {
+  for (const permiso of ["Gerencia", "Administracion", "Sistemas"]) {
+    assert.equal(hasRouteAccess({ rol: "administrador", permisos: [permiso], path: "/ghl/horarios-flujo" }), true);
+  }
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Marketing"], path: "/ghl/horarios-flujo" }), false);
+});

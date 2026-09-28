@@ -135,6 +135,7 @@ const GhlRendimientoPautas = lazy(() => import("./pages/GHL/RendimientoPautas"))
 const GhlRepartoOportunidades = lazy(() => import("./pages/GHL/RepartoOportunidades"));
 const GhlRefrescoOportunidades = lazy(() => import("./pages/GHL/RefrescoOportunidades"));
 const GhlDisponibilidadAsesores = lazy(() => import("./pages/GHL/DisponibilidadAsesores"));
+const GhlHorariosFlujo = lazy(() => import("./pages/GHL/HorariosFlujo"));
 const GhlWorkflowsProgramados = lazy(() => import("./pages/GHL/WorkflowsProgramados"));
 const ReporteGestionesSupervisores = lazy(() => import("./pages/Supervisores/ReporteGestiones"));
 
@@ -383,6 +384,13 @@ function App() {
                   element={protect(
                     <Suspense fallback={<div className="p-4">Cargando...</div>}><GhlDisponibilidadAsesores /></Suspense>,
                     "/ghl/disponibilidad-asesores",
+                  )}
+                />
+                <Route
+                  path="ghl/horarios-flujo"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}><GhlHorariosFlujo /></Suspense>,
+                    "/ghl/horarios-flujo",
                   )}
                 />
                 <Route path="usuarios" element={protect(<Usuarios />, "/usuarios")} />

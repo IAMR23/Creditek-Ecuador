@@ -17,15 +17,17 @@ export default function DisponibilidadAsesores() {
   const [autoPauseTime, setAutoPauseTime] = useState("18:00");
   const [savedAutoPauseTime, setSavedAutoPauseTime] = useState("18:00");
   const [pauseConfiguration, setPauseConfiguration] = useState(null);
+  const [automaticScheduleActive, setAutomaticScheduleActive] = useState(false);
   const [savingPauseTime, setSavingPauseTime] = useState(false);
   const [success, setSuccess] = useState("");
 
   const loadGhlUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersResponse, pauseResponse] = await Promise.all([
+      const [usersResponse, pauseResponse, scheduleResponse] = await Promise.all([
         api.get("/api/ghl/repartos/catalogos/users"),
         api.get("/api/ghl/repartos/asesores/configuracion-pausa"),
+        api.get("/api/ghl/repartos/horarios-flujo"),
       ]);
       const configuration = pauseResponse.data.configuracion || {};
       const configuredStartTime = configuration.horaInicioPlay || "00:00";
@@ -36,6 +38,9 @@ export default function DisponibilidadAsesores() {
       setAutoPauseTime(configuredTime);
       setSavedAutoPauseTime(configuredTime);
       setPauseConfiguration(configuration);
+      setAutomaticScheduleActive(
+        scheduleResponse.data.configuracion?.horariosFlujoActivo === true,
+      );
       setError("");
     } catch (requestError) {
       setError(messageOf(requestError));
@@ -85,7 +90,7 @@ export default function DisponibilidadAsesores() {
           <div className="text-sm font-semibold text-green-700">GoHighLevel</div>
           <h1 className="text-2xl font-bold text-gray-900">Disponibilidad de asesores</h1>
           <p className="text-sm text-gray-500">
-            Asociaciones RVE–GHL y control de Play/Pausa para el reparto de nuevos leads.
+            Asociaciones RVE–GHL y estado del reparto de nuevos leads.
           </p>
         </div>
         <button
@@ -113,6 +118,19 @@ export default function DisponibilidadAsesores() {
         </div>
       )}
 
+      {automaticScheduleActive ? (
+        <section className="rounded border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Clock3 size={20} className="mt-0.5 shrink-0" />
+            <div>
+              <h2 className="font-bold">Recepción controlada por Horarios de flujo</h2>
+              <p className="mt-1">
+                Los asesores entran y salen del flujo automáticamente; no necesitan usar Play ni Pausa.
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : (
       <section className="rounded border border-green-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -159,6 +177,7 @@ export default function DisponibilidadAsesores() {
           </p>
         )}
       </section>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
         <div className="relative">

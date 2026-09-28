@@ -14,6 +14,9 @@ const realtimeReviewCoordinator = require("./ghlRealtimeReviewCoordinator");
 const TIME_ZONE = "America/Guayaquil";
 const DEFAULT_MAX_PENDING_PER_ADVISOR = 2;
 const MAX_PENDING_PER_ADVISOR = 1000;
+const DEFAULT_FLOW_LEVEL = 3;
+const MIN_FLOW_LEVEL = 1;
+const MAX_FLOW_LEVEL = 5;
 const DEFAULT_DB_OPERATION_MS = 15_000;
 const REALTIME_LOCK_SCOPE = "realtime:selected-stages";
 const ID_RE = /^[A-Za-z0-9_-]{2,100}$/;
@@ -48,7 +51,16 @@ const assignedToOf = (item) => ghl.toId(item?.assignedTo || item?.userId || item
 
 function uniqueUsers(users = []) {
   const seen = new Set();
-  return users.map((user) => ({ id: String(user?.id || "").trim(), name: String(user?.name || "").trim(), email: String(user?.email || "").trim() }))
+  return users.map((user) => ({
+    id: String(user?.id || "").trim(),
+    name: String(user?.name || "").trim(),
+    email: String(user?.email || "").trim(),
+    nivelFlujo: Number.isInteger(Number(user?.nivelFlujo))
+      && Number(user.nivelFlujo) >= MIN_FLOW_LEVEL
+      && Number(user.nivelFlujo) <= MAX_FLOW_LEVEL
+      ? Number(user.nivelFlujo)
+      : DEFAULT_FLOW_LEVEL,
+  }))
     .filter((user) => user.id && !seen.has(user.id) && seen.add(user.id));
 }
 
@@ -73,7 +85,14 @@ function currentLoadsByAdvisor(opportunities, users) {
   return loads;
 }
 
-function buildCapacityAssignments(opportunities, users, currentLoads, maxPending, startIndex = 0) {
+function buildCapacityAssignments(
+  opportunities,
+  users,
+  currentLoads,
+  maxPending,
+  startIndex = 0,
+  priorityLoads = currentLoads,
+) {
   const validUsers = uniqueUsers(users);
   if (!validUsers.length) throw serviceError("GHL_USERS_REQUIRED", "No hay asesores activos para el reparto", 409);
   const limit = Number(maxPending);
@@ -85,11 +104,15 @@ function buildCapacityAssignments(opportunities, users, currentLoads, maxPending
     return dateDiff || idOf(a).localeCompare(idOf(b));
   });
   const loadOf = (userId) => Number(currentLoads instanceof Map ? currentLoads.get(userId) : currentLoads?.[userId]) || 0;
+  const priorityLoadOf = (userId) => Number(
+    priorityLoads instanceof Map ? priorityLoads.get(userId) : priorityLoads?.[userId],
+  ) || 0;
   const advisorStates = validUsers.map((user, index) => ({
     ...user,
     index,
     cargaActual: Math.max(0, loadOf(user.id)),
     cargaProvisional: Math.max(0, loadOf(user.id)),
+    cargaPrioridad: Math.max(0, priorityLoadOf(user.id)),
     cantidadPlanificada: 0,
   }));
   let cursor = ((Number(startIndex) || 0) % validUsers.length + validUsers.length) % validUsers.length;
@@ -98,8 +121,11 @@ function buildCapacityAssignments(opportunities, users, currentLoads, maxPending
   for (const opportunity of sorted) {
     const candidates = advisorStates.filter((advisor) => advisor.cargaProvisional < limit);
     if (!candidates.length) break;
-    const minimumLoad = Math.min(...candidates.map((advisor) => advisor.cargaProvisional));
-    const tiedIds = new Set(candidates.filter((advisor) => advisor.cargaProvisional === minimumLoad).map((advisor) => advisor.id));
+    const weightedLoad = (advisor) => advisor.cargaPrioridad / advisor.nivelFlujo;
+    const minimumLoad = Math.min(...candidates.map(weightedLoad));
+    const tiedIds = new Set(candidates
+      .filter((advisor) => Math.abs(weightedLoad(advisor) - minimumLoad) < 1e-9)
+      .map((advisor) => advisor.id));
     let selected;
     for (let offset = 0; offset < advisorStates.length; offset += 1) {
       const candidate = advisorStates[(cursor + offset) % advisorStates.length];
@@ -107,6 +133,7 @@ function buildCapacityAssignments(opportunities, users, currentLoads, maxPending
     }
     assignments.push({ opportunity, user: { id: selected.id, name: selected.name, email: selected.email } });
     selected.cargaProvisional += 1;
+    selected.cargaPrioridad += 1;
     selected.cantidadPlanificada += 1;
     cursor = (selected.index + 1) % advisorStates.length;
   }
@@ -117,6 +144,7 @@ function buildCapacityAssignments(opportunities, users, currentLoads, maxPending
     totalPendientesCapacidad: sorted.length - assignments.length,
     advisors: advisorStates.map(({ index, cargaProvisional, ...advisor }) => ({
       ...advisor,
+      cargaPonderada: advisor.cargaPrioridad / advisor.nivelFlujo,
       capacidadDisponible: Math.max(0, limit - advisor.cargaActual),
       cargaResultante: cargaProvisional,
     })),
@@ -144,6 +172,113 @@ function localScheduleParts(date = new Date()) {
   }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
   const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   return { day: dayMap[parts.weekday], time: `${parts.hour}:${parts.minute}`, window: `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`, date: `${parts.year}-${parts.month}-${parts.day}` };
+}
+
+const FLOW_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const FLOW_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-([12]\d|3[01]|0[1-9])$/;
+
+const isValidFlowDate = (value) => {
+  if (!FLOW_DATE_RE.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+};
+
+function normalizeFlowSchedules(input = [], { active = true } = {}) {
+  if (!Array.isArray(input)) {
+    throw serviceError("INVALID_FLOW_SCHEDULE", "Los horarios de flujo deben ser una lista", 400);
+  }
+  const normalized = input.map((block, index) => {
+    const diaSemana = Number(block?.diaSemana);
+    const fecha = String(block?.fecha || "").trim();
+    const horaInicio = String(block?.horaInicio || "").trim();
+    const horaFin = String(block?.horaFin || "").trim();
+    const usuariosGhl = [...new Set(
+      (Array.isArray(block?.usuariosGhl) ? block.usuariosGhl : [])
+        .map((userId) => String(userId || "").trim())
+        .filter(Boolean),
+    )];
+    if (!Number.isInteger(diaSemana) || diaSemana < 0 || diaSemana > 6) {
+      throw serviceError("INVALID_FLOW_SCHEDULE_DAY", "Cada bloque debe tener un dia valido", 400);
+    }
+    if (fecha && !isValidFlowDate(fecha)) {
+      throw serviceError("INVALID_FLOW_SCHEDULE_DATE", "Cada bloque debe tener una fecha valida", 400);
+    }
+    if (fecha) {
+      const [year, month, day] = fecha.split("-").map(Number);
+      if (new Date(Date.UTC(year, month - 1, day)).getUTCDay() !== diaSemana) {
+        throw serviceError(
+          "FLOW_SCHEDULE_DATE_DAY_MISMATCH",
+          "La fecha y el dia del bloque no coinciden",
+          400,
+        );
+      }
+    }
+    if (!FLOW_TIME_RE.test(horaInicio) || !FLOW_TIME_RE.test(horaFin) || horaInicio >= horaFin) {
+      throw serviceError(
+        "INVALID_FLOW_SCHEDULE_TIME",
+        "La hora inicial debe ser anterior a la hora final en cada bloque",
+        400,
+      );
+    }
+    if (!usuariosGhl.length || usuariosGhl.some((userId) => !ID_RE.test(userId))) {
+      throw serviceError(
+        "INVALID_FLOW_SCHEDULE_USERS",
+        "Seleccione al menos un usuario GHL valido en cada bloque",
+        400,
+      );
+    }
+    return {
+      id: String(block?.id || `bloque-${index + 1}`).slice(0, 80),
+      diaSemana,
+      ...(fecha ? { fecha } : {}),
+      horaInicio,
+      horaFin,
+      usuariosGhl,
+    };
+  });
+  if (active && !normalized.length) {
+    throw serviceError("FLOW_SCHEDULE_REQUIRED", "Agregue al menos un bloque para activar el horario", 400);
+  }
+
+  const windowsByUserDay = new Map();
+  normalized.forEach((block) => block.usuariosGhl.forEach((userId) => {
+    const key = `${block.fecha || `dia-${block.diaSemana}`}:${userId}`;
+    if (!windowsByUserDay.has(key)) windowsByUserDay.set(key, []);
+    windowsByUserDay.get(key).push(block);
+  }));
+  windowsByUserDay.forEach((windows) => {
+    const sorted = [...windows].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+    for (let index = 1; index < sorted.length; index += 1) {
+      if (sorted[index].horaInicio < sorted[index - 1].horaFin) {
+        throw serviceError(
+          "OVERLAPPING_FLOW_SCHEDULE",
+          "Un usuario no puede tener bloques superpuestos el mismo dia",
+          400,
+        );
+      }
+    }
+  });
+  return normalized;
+}
+
+function normalizeFlowLevels(input = {}, scheduledUserIds = []) {
+  if (input === null || Array.isArray(input) || typeof input !== "object") {
+    throw serviceError("INVALID_FLOW_LEVELS", "Los niveles de flujo deben estar asociados por vendedor", 400);
+  }
+  return Object.fromEntries([...new Set(scheduledUserIds)].map((userId) => {
+    const level = input[userId] === undefined ? DEFAULT_FLOW_LEVEL : Number(input[userId]);
+    if (!Number.isInteger(level) || level < MIN_FLOW_LEVEL || level > MAX_FLOW_LEVEL) {
+      throw serviceError(
+        "INVALID_FLOW_LEVEL",
+        `El nivel de flujo de cada vendedor debe ser un entero entre ${MIN_FLOW_LEVEL} y ${MAX_FLOW_LEVEL}`,
+        400,
+      );
+    }
+    return [userId, level];
+  }));
 }
 
 function opportunityDateRange(now = new Date()) {
@@ -264,6 +399,9 @@ async function getRealtimeDistributionConfiguration() {
     stageNombres: [],
     maxPendientesPorAsesor: realtimeMaxPendingPerAdvisor(),
     indiceSiguienteUsuario: 0,
+    horariosFlujoActivo: false,
+    horariosFlujo: [],
+    nivelesFlujo: {},
     actualizadoPorId: null,
     activo: false,
     createdAt: null,
@@ -350,6 +488,122 @@ async function saveRealtimeDistributionConfiguration(input, userId) {
   });
 }
 
+async function getFlowScheduleConfiguration() {
+  const { configuracion, estado } = await getRealtimeDistributionConfiguration();
+  const horariosFlujo = Array.isArray(configuracion.horariosFlujo)
+    ? configuracion.horariosFlujo
+    : [];
+  const scheduledUserIds = horariosFlujo.flatMap((block) =>
+    Array.isArray(block?.usuariosGhl) ? block.usuariosGhl.map(String) : []);
+  return {
+    configuracion: {
+      pipelineId: configuracion.pipelineId,
+      pipelineNombre: configuracion.pipelineNombre,
+      stageIds: configuracion.stageIds || [],
+      stageNombres: configuracion.stageNombres || [],
+      horariosFlujoActivo: configuracion.horariosFlujoActivo === true,
+      horariosFlujo,
+      nivelesFlujo: normalizeFlowLevels(configuracion.nivelesFlujo || {}, scheduledUserIds),
+      repartoActivo: configuracion.activo === true,
+      actualizadoPorId: configuracion.actualizadoPorId || null,
+      updatedAt: configuracion.updatedAt || null,
+    },
+    estado,
+  };
+}
+
+async function validateFlowScheduleConfigurationInput(input = {}) {
+  const horariosFlujoActivo = input.horariosFlujoActivo === true;
+  const horariosFlujo = normalizeFlowSchedules(input.horariosFlujo, {
+    active: horariosFlujoActivo,
+  });
+  const pipelineId = String(input.pipelineId || "").trim();
+  const stageIds = [...new Set(
+    (Array.isArray(input.stageIds) ? input.stageIds : [])
+      .map((stageId) => String(stageId || "").trim())
+      .filter(Boolean),
+  )];
+  if (!ID_RE.test(pipelineId)) {
+    throw serviceError("INVALID_REALTIME_PIPELINE", "Seleccione un pipeline valido", 400);
+  }
+  if (horariosFlujoActivo && !stageIds.length) {
+    throw serviceError("REALTIME_STAGES_REQUIRED", "Seleccione al menos una etapa para activar el horario", 400);
+  }
+  if (stageIds.some((stageId) => !ID_RE.test(stageId))) {
+    throw serviceError("INVALID_REALTIME_STAGE_IDS", "Todos los IDs de etapa deben ser validos", 400);
+  }
+
+  const catalogs = await getCatalogs();
+  const pipeline = catalogs.pipelines.find((item) => idOf(item) === pipelineId);
+  if (!pipeline) {
+    throw serviceError("INVALID_REALTIME_PIPELINE", "El pipeline seleccionado no existe en GHL", 400);
+  }
+  const stagesById = new Map(pipelineStages(pipeline).map((stage) => [idOf(stage), stage]));
+  if (stageIds.some((stageId) => !stagesById.has(stageId))) {
+    throw serviceError(
+      "REALTIME_STAGE_PIPELINE_MISMATCH",
+      "Una o mas etapas no pertenecen al pipeline seleccionado",
+      400,
+    );
+  }
+  const activeUserIds = new Set(catalogs.users.map(idOf));
+  const scheduledUserIds = new Set(horariosFlujo.flatMap((block) => block.usuariosGhl));
+  const nivelesFlujo = normalizeFlowLevels(input.nivelesFlujo || {}, [...scheduledUserIds]);
+  if ([...scheduledUserIds].some((userId) => !activeUserIds.has(userId))) {
+    throw serviceError(
+      "INVALID_FLOW_SCHEDULE_USERS",
+      "Uno o mas usuarios del horario ya no estan activos en GHL",
+      400,
+    );
+  }
+  const advisorResolution = await advisorAvailability.resolveScheduledAdvisors(
+    horariosFlujo,
+    catalogs.users,
+    new Date(),
+  );
+  if (advisorResolution.invalid.length) {
+    throw serviceError(
+      "FLOW_SCHEDULE_ASSOCIATION_REQUIRED",
+      "Todos los vendedores del horario deben tener una asociacion RVE-GHL activa",
+      409,
+    );
+  }
+  return {
+    pipelineId: idOf(pipeline),
+    pipelineNombre: String(pipeline.name || pipeline.title || "Pipeline").slice(0, 200),
+    stageIds,
+    stageNombres: stageIds.map((stageId) => {
+      const stage = stagesById.get(stageId);
+      return String(stage?.name || stage?.title || stage?.label || "Etapa").slice(0, 200);
+    }),
+    horariosFlujoActivo,
+    horariosFlujo,
+    nivelesFlujo,
+    activo: horariosFlujoActivo,
+  };
+}
+
+async function saveFlowScheduleConfiguration(input, userId) {
+  const values = await validateFlowScheduleConfigurationInput(input);
+  const row = await sequelize.transaction(async (transaction) => {
+    const row = await RealtimeConfiguracion.findByPk(1, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (row) {
+      await row.update({ ...values, actualizadoPorId: userId }, { transaction });
+      return row;
+    }
+    return RealtimeConfiguracion.create({
+      id: 1,
+      ...values,
+      indiceSiguienteUsuario: 0,
+      actualizadoPorId: userId,
+    }, { transaction });
+  });
+  return row;
+}
+
 async function setRealtimeDistributionState(active, userId) {
   const row = await RealtimeConfiguracion.findByPk(1);
   if (!row) {
@@ -397,6 +651,36 @@ async function getRealtimePipelineContext(client, config, realtimeConfiguration)
     stages,
     stageIds: new Set(selected.stageIds),
   };
+}
+
+async function resolveRealtimeAdvisors(realtimeConfiguration, currentGhlUsers, now = new Date()) {
+  const configuration = plainRow(realtimeConfiguration) || {};
+  if (configuration.horariosFlujoActivo === true) {
+    const resolved = await advisorAvailability.resolveScheduledAdvisors(
+      configuration.horariosFlujo,
+      currentGhlUsers,
+      now,
+    );
+    const scheduledUserIds = (configuration.horariosFlujo || []).flatMap((block) =>
+      Array.isArray(block?.usuariosGhl) ? block.usuariosGhl.map(String) : []);
+    const levels = normalizeFlowLevels(configuration.nivelesFlujo || {}, scheduledUserIds);
+    const withLevel = (user) => ({
+      ...user,
+      nivelFlujo: levels[String(user.id)] || DEFAULT_FLOW_LEVEL,
+    });
+    return {
+      ...resolved,
+      active: resolved.active.map(withLevel),
+      paused: resolved.paused.map(withLevel),
+      invalid: resolved.invalid.map(withLevel),
+    };
+  }
+  return advisorAvailability.resolveActiveAdvisors(currentGhlUsers, now);
+}
+
+async function realtimePriorityLoads(advisors, now = new Date()) {
+  const ids = uniqueUsers(advisors).map((advisor) => advisor.id);
+  return advisorAvailability.countTodayByGhlUser(ids, now);
 }
 
 const isRealtimeStageOpportunity = (opportunity, context) =>
@@ -938,8 +1222,9 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
     const result = await distributionLock.runWithTimeout(lock, async () => {
     const { client } = await getClient(lock.controller.signal, config);
     const currentGhlUsers = await ghl.fetchAllAssignableUsers(client, config);
+    const now = new Date();
     const advisors = await awaitReadWithAbort(
-      advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date()),
+      resolveRealtimeAdvisors(realtimeConfiguration, currentGhlUsers, now),
       lock.controller.signal,
     );
     distributionLock.throwIfAborted(lock);
@@ -947,7 +1232,7 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
       return { code: "NO_ACTIVE_ADVISORS", assigned: false, deferredToScheduler: true };
     }
     const context = await getRealtimePipelineContext(client, config, realtimeConfiguration);
-    const dateFilters = realtimeOpportunityDateRange(new Date());
+    const dateFilters = realtimeOpportunityDateRange(now);
     const opportunity = await fetchWebhookOpportunity(
       client,
       config,
@@ -970,12 +1255,17 @@ async function executeWebhookOpportunity({ opportunityId = null, contactId = nul
     distributionLock.throwIfAborted(lock);
     const limit = realtimeMaxPendingPerAdvisor(realtimeConfiguration);
     const loads = currentLoadsByAdvisor(found, advisors.active);
+    const priorityLoads = await awaitReadWithAbort(
+      realtimePriorityLoads(advisors.active, now),
+      lock.controller.signal,
+    );
     const capacityPlan = buildCapacityAssignments(
       [opportunity],
       advisors.active,
       loads,
       limit,
       Number(realtimeConfiguration.indiceSiguienteUsuario) || 0,
+      priorityLoads,
     );
     if (!capacityPlan.assignments.length) {
       return { code: "NO_CAPACITY", assigned: false, deferredToScheduler: true };
@@ -1187,8 +1477,9 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
     setPhase("ADVISOR_CATALOG");
     const currentGhlUsers = await ghl.fetchAllAssignableUsers(client, config);
     setPhase("ADVISOR_RESOLUTION");
+    const now = new Date();
     const advisors = await awaitReadWithAbort(
-      advisorAvailability.resolveActiveAdvisors(currentGhlUsers, new Date()),
+      resolveRealtimeAdvisors(realtimeConfiguration, currentGhlUsers, now),
       lock.controller.signal,
     );
     distributionLock.throwIfAborted(lock);
@@ -1206,7 +1497,7 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
     setPhase("PIPELINE_CONTEXT");
     const context = await getRealtimePipelineContext(client, config, realtimeConfiguration);
     setPhase("QUEUE_DATA");
-    const dateFilters = realtimeOpportunityDateRange(new Date());
+    const dateFilters = realtimeOpportunityDateRange(now);
     summary.fechaInicioConsulta = dateFilters.fechaInicio;
     summary.fechaFinConsulta = dateFilters.fechaFin;
     const found = await fetchRealtimeOpenOpportunities(
@@ -1228,12 +1519,17 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
     setPhase("CAPACITY_PLANNING");
     const limit = realtimeMaxPendingPerAdvisor(realtimeConfiguration);
     const loads = currentLoadsByAdvisor(found, advisors.active);
+    const priorityLoads = await awaitReadWithAbort(
+      realtimePriorityLoads(advisors.active, now),
+      lock.controller.signal,
+    );
     const capacityPlan = buildCapacityAssignments(
       pending,
       advisors.active,
       loads,
       limit,
       Number(realtimeConfiguration.indiceSiguienteUsuario) || 0,
+      priorityLoads,
     );
     summary.capacidadDisponibleTotal = capacityPlan.advisors.reduce(
       (total, advisor) => total + Number(advisor.capacidadDisponible || 0),
@@ -1594,14 +1890,20 @@ async function listExecutions(query = {}) {
 }
 
 module.exports = {
-  TIME_ZONE, DEFAULT_MAX_PENDING_PER_ADVISOR, MAX_PENDING_PER_ADVISOR, REALTIME_LOCK_SCOPE, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
+  TIME_ZONE, DEFAULT_MAX_PENDING_PER_ADVISOR, MAX_PENDING_PER_ADVISOR,
+  DEFAULT_FLOW_LEVEL, MIN_FLOW_LEVEL, MAX_FLOW_LEVEL,
+  REALTIME_LOCK_SCOPE, ACTIVE_STATES, BLOCKING_STATES, TERMINAL_STATES, STALE_AFTER_MS,
   uniqueUsers, buildAssignments, currentLoadsByAdvisor, buildCapacityAssignments, eligibleOpportunities, classifyCurrentOpportunity,
-  executionState, localScheduleParts, opportunityDateRange, opportunityTodayRange,
+  executionState, localScheduleParts, normalizeFlowSchedules, normalizeFlowLevels,
+  opportunityDateRange, opportunityTodayRange,
   realtimeOpportunityDateRange, heartbeatExpired, sanitize,
   getCatalogs, pipelineStages, realtimeConfigurationState, realtimeMaxPendingPerAdvisor,
   getRealtimeDistributionConfiguration, validateRealtimeConfigurationInput,
-  saveRealtimeDistributionConfiguration, setRealtimeDistributionState,
-  getRealtimePipelineContext, isRealtimeStageOpportunity, fetchRealtimeOpenOpportunities,
+  saveRealtimeDistributionConfiguration, getFlowScheduleConfiguration,
+  validateFlowScheduleConfigurationInput, saveFlowScheduleConfiguration,
+  setRealtimeDistributionState,
+  getRealtimePipelineContext, resolveRealtimeAdvisors, realtimePriorityLoads,
+  isRealtimeStageOpportunity, fetchRealtimeOpenOpportunities,
   validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
   releaseLock, lockScopeForConfiguration, refreshCounters, processOneDetail, processPlan, execute, requestPause,
   requestCancel, resume, isExecutionStale, forceFinishStale, listExecutions, recoverStaleRuns,

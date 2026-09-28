@@ -46,6 +46,26 @@ async function realtimeConfigurationState(req, res) {
     });
   } catch (error) { respondError(res, error); }
 }
+async function flowScheduleConfiguration(req, res) {
+  try {
+    const result = await service.getFlowScheduleConfiguration();
+    res.json({ ok: true, ...result });
+  } catch (error) { respondError(res, error); }
+}
+async function saveFlowScheduleConfiguration(req, res) {
+  try {
+    const configuracion = await service.saveFlowScheduleConfiguration(req.body, req.user.id);
+    const review = await service.scheduleRealtimeQueueReview({ trigger: "flow-schedule-update" });
+    res.json({
+      ok: true,
+      configuracion,
+      review,
+      message: configuracion.horariosFlujoActivo
+        ? "Horario de flujo guardado y activado"
+        : "Horario de flujo guardado e inactivo",
+    });
+  } catch (error) { respondError(res, error); }
+}
 async function users(req, res) {
   try { const data = await service.getCatalogs(); res.json({ ok: true, users: data.users.map((u) => ({ id: u.id || u._id, name: u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim(), email: u.email || "" })) }); } catch (error) { respondError(res, error); }
 }
@@ -183,4 +203,4 @@ async function setAdvisorManagementAvailability(req, res) {
   } catch (error) { respondError(res, error); }
 }
 
-module.exports = { pipelines, stages, realtimeConfiguration, saveRealtimeConfiguration, realtimeConfigurationState, users, list, get, create, update, state, preview, previewInput, execute, history, execution, pause, resume, cancel, forceFinishStale, myAvailability, setMyAvailability, advisorAvailability, advisorAutoPauseConfiguration, saveAdvisorAutoPauseConfiguration, saveAdvisorAssociation, setAdvisorAvailability, advisorManagementReport, setAdvisorManagementAvailability };
+module.exports = { pipelines, stages, realtimeConfiguration, saveRealtimeConfiguration, realtimeConfigurationState, flowScheduleConfiguration, saveFlowScheduleConfiguration, users, list, get, create, update, state, preview, previewInput, execute, history, execution, pause, resume, cancel, forceFinishStale, myAvailability, setMyAvailability, advisorAvailability, advisorAutoPauseConfiguration, saveAdvisorAutoPauseConfiguration, saveAdvisorAssociation, setAdvisorAvailability, advisorManagementReport, setAdvisorManagementAvailability };

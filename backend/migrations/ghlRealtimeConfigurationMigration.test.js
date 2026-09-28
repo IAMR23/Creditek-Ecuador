@@ -50,3 +50,31 @@ describe("migracion incremental de inicio de Play", () => {
     expect(sql).not.toMatch(/DROP\s+TABLE/i);
   });
 });
+
+describe("migracion de horarios de flujo", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "202609270001-add-ghl-flow-schedules.sql"),
+    "utf8",
+  );
+
+  test("incluye todas las columnas requeridas por el modelo actual", () => {
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "horaInicioPlay"');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "horaPausaAutomatica"');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "horariosFlujoActivo"');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "horariosFlujo"');
+    expect(sql).not.toMatch(/DROP\s+TABLE/i);
+  });
+});
+
+describe("migracion de niveles de flujo", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "202609280001-add-ghl-flow-levels.sql"),
+    "utf8",
+  );
+
+  test("agrega una configuracion JSON por asesor sin eliminar datos", () => {
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "nivelesFlujo"');
+    expect(sql).toContain("DEFAULT '{}'::jsonb");
+    expect(sql).not.toMatch(/DROP\s+TABLE/i);
+  });
+});

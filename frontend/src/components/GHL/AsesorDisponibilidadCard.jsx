@@ -64,6 +64,20 @@ export default function AsesorDisponibilidadCard() {
     return <section className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5"><div className="flex items-start gap-3 text-amber-800"><AlertTriangle className="mt-0.5 shrink-0" size={20} /><div><h2 className="font-bold">Reparto GHL no configurado</h2><p className="mt-1 text-sm">Un administrador debe asociar tu usuario RVE con tu usuario de GHL.</p>{error && <p className="mt-2 text-sm font-semibold">{error}</p>}</div></div></section>;
   }
 
+  if (data.modoHorarioAutomatico === true) {
+    const receiving = data.dentroHorario === true;
+    const included = data.incluidoEnHorario === true;
+    return <section className={`mb-8 rounded-2xl border p-5 shadow-sm ${receiving ? "border-green-200 bg-green-50" : "border-gray-200 bg-white"}`}>
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Reparto automático de oportunidades GHL</p>
+      <h2 className={`mt-1 text-xl font-bold ${receiving ? "text-green-800" : "text-gray-800"}`}>
+        {receiving ? "Recibiendo leads según tu horario" : included ? "Fuera de tu horario de flujo" : "Sin horario de flujo asignado"}
+      </h2>
+      <p className="mt-2 text-sm text-gray-600">No necesitas activar Play ni realizar ninguna acción.</p>
+      <p className="mt-1 text-sm font-semibold text-gray-700">Leads recibidos hoy: {data.leadsHoy || 0}</p>
+      {error && <p className="mt-3 text-sm font-semibold text-red-700">{error}</p>}
+    </section>;
+  }
+
   const active = data.estado === "ACTIVO";
   const blocked = data.bloqueadoPorHorario === true;
   const beforeStart = data.bloqueadoAntesInicio === true;

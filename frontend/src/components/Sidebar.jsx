@@ -33,6 +33,7 @@ import {
   TicketCheck,
   GraduationCap,
   Clock3,
+  CalendarClock,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -400,6 +401,11 @@ export default function Sidebar({ auth }) {
                 label: "Disponibilidad de asesores",
                 icon: <UserPlus size={18} />,
                 path: "/ghl/disponibilidad-asesores",
+              },
+              {
+                label: "Horarios de flujo",
+                icon: <CalendarClock size={18} />,
+                path: "/ghl/horarios-flujo",
               },
               {
                 label: "Workflows programados",
