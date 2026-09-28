@@ -71,6 +71,7 @@ const corsOptions = {
   allowedHeaders: [
     "Content-Type",
     "Authorization",
+    "X-API-Key",
     "X-Requested-With",
     "Idempotency-Key",
   ],
@@ -178,6 +179,9 @@ connectDB()
     require("./services/ghlWorkflowScheduler").start().catch((error) => {
       console.error("No se pudo iniciar scheduler de workflows GHL", { message: error.message });
     });
+    require("./services/ghlBroadcastScheduler").start().catch((error) => {
+      console.error("No se pudo iniciar scheduler de difusiones GHL", { message: error.message });
+    });
 
     app.use("/agencias", agencia);
     app.use("/dashboard", require("./routes/Admin/dashboardRoutes"));
@@ -236,6 +240,7 @@ connectDB()
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/api/gerencia/facturas-fisicas", require("./routes/Gerencia/facturasFisicasRoutes"));
     app.use("/api/gerencia/facturas-ia", require("./routes/Gerencia/facturasIaRoutes"));
+    app.use("/api/uphone/solicitudes", require("./routes/Gerencia/uphoneSolicitudesRoutes"));
     app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));
     app.use("/api/marketing/copa-creditek", require("./routes/Marketing/copaCreditekRoutes"));
     app.use("/api/gerencia/secretarios-ejecutivos/planes", require("./routes/Gerencia/secretariosEjecutivosPlanesRoutes"));
@@ -258,6 +263,7 @@ connectDB()
     app.use("/api/ghl/dashboard", require("./routes/GHL/dashboardRoutes"));
     app.use("/api/ghl/repartos", require("./routes/GHL/repartoRoutes"));
     app.use("/api/ghl/workflows-programados", require("./routes/GHL/workflowProgramacionesRoutes"));
+    app.use("/api/ghl/difusiones", require("./routes/GHL/difusionesRoutes"));
     app.use("/api/public/solicitudes-credito", require("./routes/GHL/landingCreditRoutes"));
     app.use("/api/webhooks", require("./routes/webhookRoutes"));
     app.use("/api/meta", require("./routes/metaRoutes"));

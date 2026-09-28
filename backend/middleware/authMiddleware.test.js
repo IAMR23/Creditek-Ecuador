@@ -8,7 +8,7 @@ jest.mock("../utils/tokenConfig", () => ({
 
 const jwt = require("jsonwebtoken");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
-const { authenticate, requirePermission } = require("./authMiddleware");
+const { authenticate, requireAdminRole, requirePermission } = require("./authMiddleware");
 
 const crearRes = () => {
   const res = {
@@ -67,6 +67,27 @@ describe("requirePermission", () => {
     requirePermission("Gerencia", "Administracion")(req, res, next);
 
     expect(next).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("requireAdminRole", () => {
+  test.each(["admin", "Administrador", " ADMINISTRADOR "])("acepta el rol %s", (rol) => {
+    const next = jest.fn();
+    const res = crearRes();
+    requireAdminRole({ user: { rol } }, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test("rechaza usuarios que solo tienen permiso Sistemas", () => {
+    const next = jest.fn();
+    const res = crearRes();
+    requireAdminRole({ user: { rol: "Sistemas", permisos: ["Sistemas"] } }, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: "ADMIN_ROLE_REQUIRED",
+    }));
   });
 });
 

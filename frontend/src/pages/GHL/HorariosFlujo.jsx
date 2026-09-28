@@ -7,16 +7,22 @@ import {
   Clock3,
   Gauge,
   Info,
+  Pencil,
   Plus,
   Save,
   Settings2,
-  Trash2,
+  UserMinus,
   UserPlus,
   UsersRound,
   Workflow,
   X,
 } from "lucide-react";
 import api from "../../api/client";
+import {
+  buildScheduleRange,
+  layoutScheduleBlocks,
+  timeToMinutes,
+} from "../../utils/flowScheduleCalendar";
 
 const DAYS = [
   { value: 4, label: "Jueves" },
@@ -44,6 +50,8 @@ const emptyConfiguration = {
   nivelesFlujo: {},
   repartoActivo: false,
 };
+
+const HOUR_HEIGHT = 72;
 
 const messageOf = (error) =>
   error.response?.data?.message || error.message || "No se pudo guardar el horario";
@@ -101,6 +109,8 @@ export default function HorariosFlujo() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [showLevelManual, setShowLevelManual] = useState(false);
+  const [assignmentEditor, setAssignmentEditor] = useState(null);
+  const [assignmentCreator, setAssignmentCreator] = useState(null);
   const week = useMemo(() => operationalWeek(), []);
 
   const load = useCallback(async () => {
@@ -152,41 +162,20 @@ export default function HorariosFlujo() {
     setSuccess("");
   };
 
-  const updateBlock = (id, values) => {
-    setConfiguration((current) => ({
-      ...current,
-      horariosFlujo: current.horariosFlujo.map((block) =>
-        block.id === id ? { ...block, ...values } : block),
-    }));
-    setSuccess("");
-  };
-
-  const addUser = (block, userId) => {
-    if (!userId || block.usuariosGhl.includes(userId)) return;
-    setConfiguration((current) => ({
-      ...current,
-      horariosFlujo: current.horariosFlujo.map((currentBlock) =>
-        currentBlock.id === block.id
-          ? { ...currentBlock, usuariosGhl: [...currentBlock.usuariosGhl, userId] }
-          : currentBlock),
-      nivelesFlujo: {
-        ...current.nivelesFlujo,
-        [userId]: current.nivelesFlujo[userId] || 3,
-      },
-    }));
-    setSuccess("");
-  };
-
   const removeUser = (block, userId) => {
-    updateBlock(block.id, {
-      usuariosGhl: block.usuariosGhl.filter((currentId) => currentId !== userId),
-    });
-  };
-
-  const setUserLevel = (userId, level) => {
     setConfiguration((current) => ({
       ...current,
-      nivelesFlujo: { ...current.nivelesFlujo, [userId]: Number(level) },
+      horariosFlujo: block.usuariosGhl.length <= 1
+        ? current.horariosFlujo.filter((currentBlock) => currentBlock.id !== block.id)
+        : current.horariosFlujo.map((currentBlock) =>
+          currentBlock.id === block.id
+            ? {
+              ...currentBlock,
+              usuariosGhl: currentBlock.usuariosGhl.filter(
+                (currentId) => String(currentId) !== String(userId),
+              ),
+            }
+            : currentBlock),
     }));
     setSuccess("");
   };
@@ -247,11 +236,206 @@ export default function HorariosFlujo() {
       .sort((left, right) => String(left.horaInicio || "").localeCompare(String(right.horaInicio || ""))
         || String(left.id || "").localeCompare(String(right.id || ""))),
   ])), [configuration.horariosFlujo, week]);
+  const calendarRange = useMemo(
+    () => buildScheduleRange(configuration.horariosFlujo),
+    [configuration.horariosFlujo],
+  );
+  const calendarLayouts = useMemo(
+    () => new Map(week.map((day) => [
+      day.date,
+      layoutScheduleBlocks(blocksByDate.get(day.date) || []),
+    ])),
+    [blocksByDate, week],
+  );
   const weekSummary = useMemo(() => ({
     scheduledDays: week.filter((day) => (blocksByDate.get(day.date) || []).length > 0).length,
     shifts: configuration.horariosFlujo.length,
     advisors: new Set(configuration.horariosFlujo.flatMap((block) => block.usuariosGhl)).size,
   }), [blocksByDate, configuration.horariosFlujo, week]);
+
+  const openAssignmentCreator = (day = week.find((item) => item.isToday) || week[0]) => {
+    setAssignmentCreator({
+      date: day.date,
+      horaInicio: "08:00",
+      horaFin: "18:00",
+      userId: "",
+      nivel: 3,
+    });
+    setError("");
+  };
+
+  const applyAssignmentCreate = () => {
+    if (!assignmentCreator?.userId) {
+      setError("Seleccione un asesor para agregar al horario.");
+      return;
+    }
+    if (
+      !assignmentCreator.horaInicio
+      || !assignmentCreator.horaFin
+      || assignmentCreator.horaInicio >= assignmentCreator.horaFin
+    ) {
+      setError("La hora inicial debe ser anterior a la hora final.");
+      return;
+    }
+
+    const userId = String(assignmentCreator.userId);
+    const startMinute = timeToMinutes(assignmentCreator.horaInicio);
+    const endMinute = timeToMinutes(assignmentCreator.horaFin);
+    const overlappingAssignment = configuration.horariosFlujo.some((block) => (
+      block.fecha === assignmentCreator.date
+      && block.usuariosGhl.map(String).includes(userId)
+      && startMinute < timeToMinutes(block.horaFin)
+      && endMinute > timeToMinutes(block.horaInicio)
+    ));
+    if (overlappingAssignment) {
+      setError("Ese asesor ya tiene un horario que se cruza con las horas seleccionadas.");
+      return;
+    }
+
+    const day = week.find((item) => item.date === assignmentCreator.date);
+    if (!day) {
+      setError("Seleccione un día de la semana actual.");
+      return;
+    }
+
+    setConfiguration((current) => {
+      const matchingBlock = current.horariosFlujo.find((block) => (
+        block.fecha === assignmentCreator.date
+        && block.horaInicio === assignmentCreator.horaInicio
+        && block.horaFin === assignmentCreator.horaFin
+      ));
+      const horariosFlujo = matchingBlock
+        ? current.horariosFlujo.map((block) => (
+          block.id === matchingBlock.id
+            ? { ...block, usuariosGhl: [...block.usuariosGhl, userId] }
+            : block
+        ))
+        : [
+          ...current.horariosFlujo,
+          {
+            ...newBlock(day),
+            horaInicio: assignmentCreator.horaInicio,
+            horaFin: assignmentCreator.horaFin,
+            usuariosGhl: [userId],
+          },
+        ];
+
+      return {
+        ...current,
+        horariosFlujo,
+        nivelesFlujo: {
+          ...current.nivelesFlujo,
+          [userId]: Number(assignmentCreator.nivel),
+        },
+      };
+    });
+    setAssignmentCreator(null);
+    setError("");
+    setSuccess("");
+  };
+
+  const openAssignmentEditor = (block, userId) => {
+    const day = week.find((item) => item.date === block.fecha);
+    const user = userById.get(String(userId));
+    setAssignmentEditor({
+      blockId: block.id,
+      userId,
+      userName: user?.name || String(userId),
+      dayLabel: day ? `${day.label} ${day.dateLabel}` : "Día programado",
+      horaInicio: block.horaInicio,
+      horaFin: block.horaFin,
+      nivel: configuration.nivelesFlujo[userId] || 3,
+    });
+  };
+
+  const applyAssignmentEdit = () => {
+    if (
+      !assignmentEditor?.horaInicio
+      || !assignmentEditor?.horaFin
+      || assignmentEditor.horaInicio >= assignmentEditor.horaFin
+    ) {
+      setError("La hora inicial debe ser anterior a la hora final.");
+      return;
+    }
+
+    const sourceBlock = configuration.horariosFlujo.find(
+      (block) => block.id === assignmentEditor.blockId,
+    );
+    const editedStartMinute = timeToMinutes(assignmentEditor.horaInicio);
+    const editedEndMinute = timeToMinutes(assignmentEditor.horaFin);
+    const overlappingAssignment = sourceBlock && configuration.horariosFlujo.some((block) => (
+      block.id !== sourceBlock.id
+      && block.fecha === sourceBlock.fecha
+      && block.usuariosGhl.map(String).includes(String(assignmentEditor.userId))
+      && editedStartMinute < timeToMinutes(block.horaFin)
+      && editedEndMinute > timeToMinutes(block.horaInicio)
+    ));
+    if (overlappingAssignment) {
+      setError("Ese asesor ya tiene otro horario que se cruza con las horas seleccionadas.");
+      return;
+    }
+
+    setConfiguration((current) => {
+      const source = current.horariosFlujo.find(
+        (block) => block.id === assignmentEditor.blockId,
+      );
+      if (!source) return current;
+
+      const timeChanged = source.horaInicio !== assignmentEditor.horaInicio
+        || source.horaFin !== assignmentEditor.horaFin;
+      let horariosFlujo;
+      if (timeChanged && source.usuariosGhl.length > 1) {
+        horariosFlujo = [
+          ...current.horariosFlujo.map((block) =>
+            block.id === source.id
+              ? {
+                ...block,
+                usuariosGhl: block.usuariosGhl.filter(
+                  (userId) => String(userId) !== String(assignmentEditor.userId),
+                ),
+              }
+              : block),
+          {
+            ...source,
+            id: `bloque-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            horaInicio: assignmentEditor.horaInicio,
+            horaFin: assignmentEditor.horaFin,
+            usuariosGhl: [assignmentEditor.userId],
+          },
+        ];
+      } else {
+        horariosFlujo = current.horariosFlujo.map((block) =>
+          block.id === source.id
+            ? {
+              ...block,
+              horaInicio: assignmentEditor.horaInicio,
+              horaFin: assignmentEditor.horaFin,
+            }
+            : block);
+      }
+
+      return {
+        ...current,
+        horariosFlujo,
+        nivelesFlujo: {
+          ...current.nivelesFlujo,
+          [assignmentEditor.userId]: Number(assignmentEditor.nivel),
+        },
+      };
+    });
+    setError("");
+    setSuccess("");
+    setAssignmentEditor(null);
+  };
+
+  const removeAssignment = () => {
+    if (!assignmentEditor) return;
+    const block = configuration.horariosFlujo.find(
+      (item) => item.id === assignmentEditor.blockId,
+    );
+    if (block) removeUser(block, assignmentEditor.userId);
+    setAssignmentEditor(null);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6">
@@ -318,42 +502,168 @@ export default function HorariosFlujo() {
         </div>
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700"><CalendarClock size={19} /></span>
-          <div><h2 className="font-bold text-slate-900">Agenda semanal</h2><p className="text-sm text-slate-500">Semana automática de jueves a miércoles. Agrega turnos únicamente en los días que tendrán flujo.</p></div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span className="rounded-lg bg-indigo-50 p-2 text-indigo-700"><CalendarClock size={19} /></span>
+            <div>
+              <h2 className="font-bold text-slate-900">Horario semanal por persona</h2>
+              <p className="text-sm text-slate-500">
+                Vista tipo horario de clases. Usa el lápiz para cambiar horas o nivel, o quita a una persona del turno.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800">
+              Los cambios se aplican al presionar Guardar programación
+            </div>
+            <button
+              type="button"
+              onClick={() => openAssignmentCreator()}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"
+            >
+              <UserPlus size={15} /> Agregar asesor
+            </button>
+          </div>
         </div>
 
-        <div className="grid items-start gap-4 xl:grid-cols-2">
-          {week.map((day) => {
-            const blocks = blocksByDate.get(day.date) || [];
-            return <article key={day.date} className={`overflow-hidden rounded-xl border bg-white transition ${day.isToday ? "border-emerald-400 shadow-md shadow-emerald-100/70 ring-1 ring-emerald-200" : "border-slate-200 shadow-sm"}`}>
-              <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 ${day.isToday ? "border-emerald-200 bg-emerald-50" : "border-slate-100 bg-slate-50/80"}`}>
-                <div>
-                  <div className="flex items-center gap-2"><h3 className="font-bold text-slate-900">{day.label}</h3>{day.isToday && <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Hoy</span>}</div>
-                  <p className="text-xs font-medium text-slate-500">{day.dateLabel} · {blocks.length} {blocks.length === 1 ? "turno" : "turnos"}</p>
-                </div>
-                <button type="button" onClick={() => setField("horariosFlujo", [...configuration.horariosFlujo, newBlock(day)])} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 shadow-sm transition hover:bg-emerald-50"><Plus size={15} />Nuevo turno</button>
+        <div className="overflow-x-auto">
+          <div className="min-w-[1220px]">
+            <div
+              className="grid border-b border-slate-200 bg-slate-50"
+              style={{ gridTemplateColumns: "72px repeat(7, minmax(160px, 1fr))" }}
+            >
+              <div className="flex items-center justify-center border-r border-slate-200 px-2 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Hora
               </div>
-              <div className="space-y-3 p-3">
-                {blocks.map((block) => (
-                  <div key={block.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[120px_120px_minmax(220px,1fr)_auto]">
-                      <label className="text-xs font-semibold text-gray-600">Desde<input type="time" value={block.horaInicio} onChange={(event) => updateBlock(block.id, { horaInicio: event.target.value })} className="mt-1 h-10 w-full rounded border border-gray-300 px-2" /></label>
-                      <label className="text-xs font-semibold text-gray-600">Hasta<input type="time" value={block.horaFin} onChange={(event) => updateBlock(block.id, { horaFin: event.target.value })} className="mt-1 h-10 w-full rounded border border-gray-300 px-2" /></label>
-                      <label className="text-xs font-semibold text-gray-600">Agregar vendedor<select value="" onChange={(event) => addUser(block, event.target.value)} className="mt-1 h-10 w-full rounded border border-gray-300 bg-white px-2"><option value="">Seleccione...</option>{users.filter((user) => !block.usuariosGhl.includes(String(user.id))).map((user) => <option key={user.id} value={user.id}>{user.name || "Sin nombre"}{user.email ? ` · ${user.email}` : ""}</option>)}</select></label>
-                      <button type="button" title="Eliminar turno" onClick={() => setField("horariosFlujo", configuration.horariosFlujo.filter((current) => current.id !== block.id))} className="mt-5 inline-flex h-10 items-center justify-center rounded-lg border border-red-200 bg-white px-3 text-red-600 transition hover:bg-red-50"><Trash2 size={17} /></button>
-                    </div>
-                    <div className="mt-3 flex min-h-8 flex-wrap gap-2">
-                      {block.usuariosGhl.map((userId) => { const user = userById.get(String(userId)); return <div key={userId} className="flex flex-wrap items-center gap-2 rounded-lg bg-green-100 px-3 py-2 text-xs font-semibold text-green-900"><span className="inline-flex items-center gap-1"><UserPlus size={13} />{user?.name || userId}</span><label className="inline-flex items-center gap-1">Nivel<select value={configuration.nivelesFlujo[userId] || 3} onChange={(event) => setUserLevel(userId, event.target.value)} className="h-7 rounded border border-green-300 bg-white px-1 text-xs text-gray-800">{FLOW_LEVELS.map((level) => <option key={level.value} value={level.value}>{level.label}</option>)}</select></label><button type="button" onClick={() => removeUser(block, userId)} aria-label="Quitar vendedor" className="rounded p-1 hover:bg-green-200"><X size={13} /></button></div>; })}
-                      {!block.usuariosGhl.length && <span className="text-xs font-semibold text-amber-700">Selecciona al menos un vendedor.</span>}
-                    </div>
+              {week.map((day) => (
+                <div
+                  key={day.date}
+                  className={`border-r border-slate-200 px-3 py-3 text-center last:border-r-0 ${day.isToday ? "bg-emerald-50" : ""}`}
+                >
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="text-sm font-bold text-slate-900">{day.label}</span>
+                    {day.isToday && <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white">Hoy</span>}
+                    <button
+                      type="button"
+                      title={`Agregar asesor el ${day.label}`}
+                      aria-label={`Agregar asesor el ${day.label}`}
+                      onClick={() => openAssignmentCreator(day)}
+                      className="rounded-md border border-indigo-200 bg-white p-1 text-indigo-600 shadow-sm hover:bg-indigo-50"
+                    >
+                      <Plus size={12} />
+                    </button>
                   </div>
+                  <p className="mt-0.5 text-[11px] text-slate-500">{day.dateLabel}</p>
+                </div>
+              ))}
+            </div>
+
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: "72px repeat(7, minmax(160px, 1fr))" }}
+            >
+              <div
+                className="relative border-r border-slate-200 bg-slate-50"
+                style={{
+                  height: `${((calendarRange.endMinute - calendarRange.startMinute) / 60) * HOUR_HEIGHT}px`,
+                }}
+              >
+                {calendarRange.hours.map((minute, index) => (
+                  <span
+                    key={minute}
+                    className="absolute right-2 text-[11px] font-semibold text-slate-500"
+                    style={{
+                      top: `${((minute - calendarRange.startMinute) / 60) * HOUR_HEIGHT}px`,
+                      transform: index === 0 ? "translateY(2px)" : "translateY(-50%)",
+                    }}
+                  >
+                    {String(Math.floor(minute / 60)).padStart(2, "0")}:00
+                  </span>
                 ))}
-                {!blocks.length && <div className="flex min-h-24 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-4 text-center text-xs text-slate-500"><Clock3 size={20} className="mb-2 text-slate-300" />Sin turnos programados</div>}
               </div>
-            </article>;
-          })}
+
+              {week.map((day) => {
+                const layout = calendarLayouts.get(day.date) || [];
+                return (
+                  <div
+                    key={day.date}
+                    className={`relative border-r border-slate-200 last:border-r-0 ${day.isToday ? "bg-emerald-50/30" : "bg-white"}`}
+                    style={{
+                      height: `${((calendarRange.endMinute - calendarRange.startMinute) / 60) * HOUR_HEIGHT}px`,
+                    }}
+                  >
+                    {calendarRange.hours.map((minute) => (
+                      <div
+                        key={minute}
+                        className="pointer-events-none absolute inset-x-0 border-t border-slate-100"
+                        style={{
+                          top: `${((minute - calendarRange.startMinute) / 60) * HOUR_HEIGHT}px`,
+                        }}
+                      />
+                    ))}
+
+                    {layout.map(({ block, startMinute, endMinute, lane, laneCount }) => {
+                      const top = ((startMinute - calendarRange.startMinute) / 60) * HOUR_HEIGHT;
+                      const height = Math.max(56, ((endMinute - startMinute) / 60) * HOUR_HEIGHT - 4);
+                      const width = 100 / laneCount;
+                      return (
+                        <article
+                          key={block.id}
+                          className="absolute overflow-hidden rounded-lg border border-indigo-200 bg-indigo-50 shadow-sm"
+                          style={{
+                            top: `${top + 2}px`,
+                            height: `${height}px`,
+                            left: `calc(${lane * width}% + 3px)`,
+                            width: `calc(${width}% - 6px)`,
+                          }}
+                        >
+                          <div className="border-b border-indigo-200 bg-indigo-100/80 px-2 py-1 text-[10px] font-bold text-indigo-900">
+                            {block.horaInicio}–{block.horaFin}
+                          </div>
+                          <div className="h-[calc(100%_-_25px)] space-y-1 overflow-y-auto p-1.5">
+                            {block.usuariosGhl.map((userId) => {
+                              const user = userById.get(String(userId));
+                              return (
+                                <div key={userId} className="rounded-md bg-white px-1.5 py-1 shadow-sm ring-1 ring-indigo-100">
+                                  <div className="flex items-center gap-1">
+                                    <span className="min-w-0 flex-1 truncate text-[10px] font-bold text-slate-800" title={user?.name || userId}>
+                                      {user?.name || userId}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      title="Editar horario de la persona"
+                                      aria-label={`Editar horario de ${user?.name || userId}`}
+                                      onClick={() => openAssignmentEditor(block, userId)}
+                                      className="rounded p-0.5 text-indigo-600 hover:bg-indigo-100"
+                                    >
+                                      <Pencil size={11} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="Quitar persona del turno"
+                                      aria-label={`Quitar a ${user?.name || userId} del turno`}
+                                      onClick={() => removeUser(block, userId)}
+                                      className="rounded p-0.5 text-rose-600 hover:bg-rose-50"
+                                    >
+                                      <UserMinus size={11} />
+                                    </button>
+                                  </div>
+                                  <p className="mt-0.5 text-[9px] font-semibold text-indigo-600">
+                                    Nivel {configuration.nivelesFlujo[userId] || 3}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -361,6 +671,241 @@ export default function HorariosFlujo() {
         <div className={`flex items-center gap-2 text-sm font-semibold ${validationMessage ? "text-amber-700" : "text-emerald-700"}`}>{validationMessage ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}{validationMessage || "La programación está lista para publicarse."}</div>
         <button type="button" disabled={saving || loading || Boolean(validationMessage)} onClick={save} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"><Save size={17} />{saving ? "Guardando..." : "Guardar programación"}</button>
       </div>
+
+      {assignmentCreator && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
+          onClick={() => setAssignmentCreator(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assignment-creator-title"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-600">Horario semanal</p>
+                <h2 id="assignment-creator-title" className="mt-1 text-lg font-bold text-slate-900">
+                  Agregar asesor
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignmentCreator(null)}
+                aria-label="Cerrar formulario"
+                className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="space-y-4 p-5">
+              <label className="block text-sm font-semibold text-slate-700">
+                Día
+                <select
+                  value={assignmentCreator.date}
+                  onChange={(event) => setAssignmentCreator((current) => ({
+                    ...current,
+                    date: event.target.value,
+                  }))}
+                  className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                >
+                  {week.map((day) => (
+                    <option key={day.date} value={day.date}>{day.label} · {day.dateLabel}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-sm font-semibold text-slate-700">
+                  Desde
+                  <input
+                    type="time"
+                    value={assignmentCreator.horaInicio}
+                    onChange={(event) => setAssignmentCreator((current) => ({
+                      ...current,
+                      horaInicio: event.target.value,
+                    }))}
+                    className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+                <label className="text-sm font-semibold text-slate-700">
+                  Hasta
+                  <input
+                    type="time"
+                    value={assignmentCreator.horaFin}
+                    onChange={(event) => setAssignmentCreator((current) => ({
+                      ...current,
+                      horaFin: event.target.value,
+                    }))}
+                    className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                Asesor
+                <select
+                  value={assignmentCreator.userId}
+                  onChange={(event) => setAssignmentCreator((current) => ({
+                    ...current,
+                    userId: event.target.value,
+                  }))}
+                  className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="">Seleccione...</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name || "Sin nombre"}{user.email ? ` · ${user.email}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                Nivel de flujo
+                <select
+                  value={assignmentCreator.nivel}
+                  onChange={(event) => setAssignmentCreator((current) => ({
+                    ...current,
+                    nivel: Number(event.target.value),
+                  }))}
+                  className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                >
+                  {FLOW_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>{level.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <footer className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setAssignmentCreator(null)}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={applyAssignmentCreate}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700"
+              >
+                <UserPlus size={16} /> Agregar al horario
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {assignmentEditor && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm"
+          onClick={() => setAssignmentEditor(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assignment-editor-title"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-600">{assignmentEditor.dayLabel}</p>
+                <h2 id="assignment-editor-title" className="mt-1 text-lg font-bold text-slate-900">
+                  Editar a {assignmentEditor.userName}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignmentEditor(null)}
+                aria-label="Cerrar edición"
+                className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-sm font-semibold text-slate-700">
+                  Desde
+                  <input
+                    type="time"
+                    value={assignmentEditor.horaInicio}
+                    onChange={(event) => setAssignmentEditor((current) => ({
+                      ...current,
+                      horaInicio: event.target.value,
+                    }))}
+                    className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+                <label className="text-sm font-semibold text-slate-700">
+                  Hasta
+                  <input
+                    type="time"
+                    value={assignmentEditor.horaFin}
+                    onChange={(event) => setAssignmentEditor((current) => ({
+                      ...current,
+                      horaFin: event.target.value,
+                    }))}
+                    className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-sm font-semibold text-slate-700">
+                Nivel de flujo
+                <select
+                  value={assignmentEditor.nivel}
+                  onChange={(event) => setAssignmentEditor((current) => ({
+                    ...current,
+                    nivel: Number(event.target.value),
+                  }))}
+                  className="mt-1 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                >
+                  {FLOW_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>{level.label}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs font-normal text-slate-500">
+                  El nivel se aplica a esta persona en todos sus turnos.
+                </span>
+              </label>
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={removeAssignment}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50"
+              >
+                <UserMinus size={16} /> Quitar del horario
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignmentEditor(null)}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={applyAssignmentEdit}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700"
+                >
+                  <Pencil size={15} /> Aplicar cambio
+                </button>
+              </div>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {showLevelManual && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-200/80 p-4 backdrop-blur-sm" onClick={() => setShowLevelManual(false)}>

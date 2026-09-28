@@ -127,4 +127,16 @@ const requirePermission = (...permisosPermitidos) => (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, requirePermission };
+const requireAdminRole = (req, res, next) => {
+  const rol = normalize(req.user?.rol);
+  if (!["admin", "administrador"].includes(rol)) {
+    return res.status(403).json({
+      code: "ADMIN_ROLE_REQUIRED",
+      message: "Esta accion requiere rol de administrador",
+    });
+  }
+
+  next();
+};
+
+module.exports = { authenticate, requirePermission, requireAdminRole };

@@ -244,6 +244,36 @@ const ensureGhlFlowScheduleSchema = async (queryInterface) => {
   `);
 };
 
+const ensureGhlBroadcastQueueSchema = async (tables) => {
+  if (!tables.includes("ghl_difusion_ejecuciones")) return;
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_unique
+    ON ghl_difusion_ejecuciones ((1))
+    WHERE estado IN ('pending', 'running');
+  `);
+  if (!tables.includes("ghl_difusion_ejecucion_detalles")) return;
+  await sequelize.query(`
+    DO $$
+    DECLARE
+      tag_status_constraint TEXT;
+    BEGIN
+      SELECT pg_get_constraintdef(oid)
+      INTO tag_status_constraint
+      FROM pg_constraint
+      WHERE conname = 'ghl_difusion_detalles_tag_estado_check'
+        AND conrelid = 'ghl_difusion_ejecucion_detalles'::regclass;
+
+      IF tag_status_constraint IS NULL OR POSITION('skipped' IN tag_status_constraint) = 0 THEN
+        ALTER TABLE ghl_difusion_ejecucion_detalles
+          DROP CONSTRAINT IF EXISTS ghl_difusion_detalles_tag_estado_check;
+        ALTER TABLE ghl_difusion_ejecucion_detalles
+          ADD CONSTRAINT ghl_difusion_detalles_tag_estado_check
+          CHECK ("tagStatus" IN ('pending', 'tagged', 'failed', 'skipped', 'cancelled'));
+      END IF;
+    END $$;
+  `);
+};
+
 const ensureCierreCajaSchema = async (queryInterface, tables) => {
   if (!tables.includes("cierre_caja")) return;
 
@@ -2008,6 +2038,7 @@ const connectDB = async () => {
     ));
 
     const tables = await queryInterface.showAllTables();
+    await ensureGhlBroadcastQueueSchema(tables);
     if (tables.includes("pagos_comisiones_equipos_semanales")) {
       await addColumnIfMissing(queryInterface, "pagos_comisiones_equipos_semanales", "cantidadVendedoresComision", {
         type: Sequelize.INTEGER, allowNull: true,

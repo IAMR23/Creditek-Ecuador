@@ -34,6 +34,7 @@ import {
   GraduationCap,
   Clock3,
   CalendarClock,
+  Send,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -55,6 +56,7 @@ export default function Sidebar({ auth }) {
   // Acordeones
   const [open, setOpen] = useState({
     comercial: true,
+    jefesComerciales: location.pathname.startsWith("/uphone/"),
     ghl: location.pathname.startsWith("/ghl/"),
     Marketing: false,
     logistica: false,
@@ -166,6 +168,17 @@ export default function Sidebar({ auth }) {
             label: "Rendimiento de pautas",
             icon: <BarChart3 size={20} />,
             path: "/ghl/rendimiento-pautas",
+          },
+        ],
+      },
+      jefesComerciales: {
+        title: "Jefes comerciales",
+        permission: ["Gerencia", "Administracion", "Sistemas"],
+        items: [
+          {
+            label: "Uphone",
+            icon: <FileSpreadsheet size={20} />,
+            path: "/uphone/solicitudes",
           },
         ],
       },
@@ -412,6 +425,12 @@ export default function Sidebar({ auth }) {
                 icon: <Clock3 size={18} />,
                 path: "/ghl/workflows-programados",
               },
+              {
+                label: "Difusion de mensajes",
+                icon: <Send size={18} />,
+                path: "/ghl/difusiones",
+                allowedRoles: ["admin", "administrador"],
+              },
             ],
           },
         ],
@@ -556,14 +575,17 @@ export default function Sidebar({ auth }) {
 
                 return {
                   ...item,
-                  items: item.items.filter((child) =>
-                    hasRouteAccess({
+                  items: item.items.filter((child) => {
+                    const childRoles = (child.allowedRoles || []).map(normalizeRole);
+                    const childRoleAllowed = childRoles.length === 0
+                      || childRoles.includes(normalizeRole(rol));
+                    return childRoleAllowed && hasRouteAccess({
                       rol,
                       permisos,
                       path: child.path,
                       permission: ROUTE_PERMISSIONS[child.path],
-                    }),
-                  ),
+                    });
+                  }),
                 };
               })
               .filter((item) =>
@@ -652,7 +674,7 @@ export default function Sidebar({ auth }) {
                     <div
                       className={`overflow-hidden transition-all duration-200 ease-in-out ${
                         nestedOpen
-                          ? "mt-1 max-h-60 opacity-100"
+                          ? "mt-1 max-h-[1000px] opacity-100"
                           : "max-h-0 opacity-0"
                       }`}
                     >

@@ -75,6 +75,9 @@ const GhlAsesorDisponibilidadHistorial = require('./GhlAsesorDisponibilidadHisto
 const GhlWorkflowProgramacion = require('./GhlWorkflowProgramacion');
 const GhlWorkflowEjecucion = require('./GhlWorkflowEjecucion');
 const GhlWorkflowEjecucionDetalle = require('./GhlWorkflowEjecucionDetalle');
+const GhlDifusionLista = require('./GhlDifusionLista');
+const GhlDifusionEjecucion = require('./GhlDifusionEjecucion');
+const GhlDifusionEjecucionDetalle = require('./GhlDifusionEjecucionDetalle');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
 const SancionConfiguracion = require('./SancionConfiguracion');
 const PagoComisionMultaAjuste = require('./PagoComisionMultaAjuste');
@@ -105,6 +108,7 @@ RolDescuentoCreditek.belongsTo(Usuario, { as: 'usuario', foreignKey: 'usuarioId'
 const FacturaFisica = require('./FacturaFisica');
 const FacturaFisicaProductoOcr = require('./FacturaFisicaProductoOcr');
 const FacturaIaResultado = require('./FacturaIaResultado');
+const UphoneSolicitud = require('./UphoneSolicitud');
 
 // -------------------- Usuario, Rol, Agencia --------------------
 Usuario.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
@@ -257,6 +261,15 @@ Usuario.hasMany(FacturaIaResultado, {
 FacturaIaResultado.belongsTo(Usuario, {
   foreignKey: "seleccionadoPorId",
   as: "seleccionadoPor",
+});
+
+Usuario.hasMany(UphoneSolicitud, {
+  foreignKey: "importadoPorId",
+  as: "solicitudesUphoneImportadas",
+});
+UphoneSolicitud.belongsTo(Usuario, {
+  foreignKey: "importadoPorId",
+  as: "importadoPor",
 });
 
 // Agencia ↔ Usuario (muchos a muchos)
@@ -1366,3 +1379,8 @@ GhlWorkflowEjecucion.hasMany(GhlWorkflowEjecucionDetalle, { foreignKey: "ejecuci
 GhlWorkflowEjecucionDetalle.belongsTo(GhlWorkflowEjecucion, { foreignKey: "ejecucionId", as: "ejecucion" });
 GhlWorkflowProgramacion.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });
 GhlWorkflowProgramacion.belongsTo(Usuario, { foreignKey: "actualizadoPorId", as: "actualizadoPor" });
+GhlDifusionLista.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });
+GhlDifusionLista.belongsTo(Usuario, { foreignKey: "actualizadoPorId", as: "actualizadoPor" });
+GhlDifusionEjecucion.hasMany(GhlDifusionEjecucionDetalle, { foreignKey: "ejecucionId", as: "detalles" });
+GhlDifusionEjecucionDetalle.belongsTo(GhlDifusionEjecucion, { foreignKey: "ejecucionId", as: "ejecucion" });
+GhlDifusionEjecucion.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });

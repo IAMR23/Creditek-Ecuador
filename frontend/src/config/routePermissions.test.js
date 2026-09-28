@@ -181,3 +181,31 @@ test("horarios de flujo exige un permiso administrativo GHL", () => {
   }
   assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Marketing"], path: "/ghl/horarios-flujo" }), false);
 });
+
+test("difusiones GHL solo permite Administracion o Sistemas", () => {
+  for (const permiso of ["Administracion", "Sistemas"]) {
+    assert.equal(hasRouteAccess({ rol: "administrador", permisos: [permiso], path: "/ghl/difusiones" }), true);
+  }
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Gerencia"], path: "/ghl/difusiones" }), false);
+});
+
+test("solicitudes Uphone permite Gerencia, Administracion o Sistemas", () => {
+  for (const permiso of ["Gerencia", "Administracion", "Sistemas"]) {
+    assert.equal(
+      hasRouteAccess({
+        rol: "administrador",
+        permisos: [permiso],
+        path: "/uphone/solicitudes",
+      }),
+      true,
+    );
+  }
+  assert.equal(
+    hasRouteAccess({
+      rol: "administrador",
+      permisos: ["Marketing"],
+      path: "/uphone/solicitudes",
+    }),
+    false,
+  );
+});
