@@ -1,8 +1,15 @@
 ---
+interface Props {
+  solid?: boolean;
+}
 
+const { solid = false } = Astro.props;
 ---
 
-<header id="navbar" class="fixed w-full transition-all duration-300 z-50">
+<header
+  id="navbar"
+  class:list={["fixed z-50 w-full transition-all duration-300", { solid }]}
+>
   <nav
     class="container mx-auto px-4 py-4 flex items-center justify-between relative"
   >
@@ -92,6 +99,10 @@
   #navbar {
     background-color: rgba(91, 86, 86, 0);
     backdrop-filter: blur(5px);
+  }
+
+  #navbar.solid {
+    background-color: #000;
   }
 
   #navbar.scrolled {
