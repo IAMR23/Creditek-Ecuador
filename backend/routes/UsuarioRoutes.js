@@ -26,6 +26,7 @@ const ETIQUETAS_CAMPOS_USUARIO = {
   password: "Contraseña",
   rolId: "Rol",
   usuario: "Nombre de usuario",
+  usuarioUphone: "Usuario Uphone",
 };
 
 const obtenerDetallesValidacion = (error) =>
@@ -50,7 +51,8 @@ const responderErrorPersistenciaUsuario = (
 ) => {
   if (error.name === "SequelizeUniqueConstraintError") {
     return res.status(400).json({
-      message: "El email o nombre de usuario ya esta registrado.",
+      message:
+        "El email, nombre de usuario o usuario Uphone ya esta registrado.",
     });
   }
 
@@ -120,6 +122,11 @@ const normalizarTexto = (value) =>
 const buscarUsuarioPorNombre = (nombreUsuario) =>
   Usuario.findOne({
     where: condicionCampoNormalizado("usuario", nombreUsuario),
+  });
+
+const buscarUsuarioPorUphone = (usuarioUphone) =>
+  Usuario.findOne({
+    where: condicionCampoNormalizado("usuarioUphone", usuarioUphone),
   });
 
 const generarUsuarioDisponible = async (email) => {
@@ -241,6 +248,7 @@ router.post("/", async (req, res) => {
       cedula,
       email,
       usuario: nombreUsuario,
+      usuarioUphone,
       password,
       rolId,
       rolIds,
@@ -256,6 +264,7 @@ router.post("/", async (req, res) => {
 
     const rolesIdsNormalizados = normalizarRolIds(rolId, rolIds);
     const emailNormalizado = String(email || "").trim().toLowerCase();
+    const usuarioUphoneNormalizado = String(usuarioUphone || "").trim() || null;
     const camposFaltantes = [];
 
     if (!emailNormalizado) camposFaltantes.push("Correo electrónico");
@@ -300,6 +309,15 @@ router.post("/", async (req, res) => {
       });
     }
 
+    if (
+      usuarioUphoneNormalizado &&
+      (await buscarUsuarioPorUphone(usuarioUphoneNormalizado))
+    ) {
+      return res.status(400).json({
+        message: "El usuario Uphone ya esta asignado a otro usuario.",
+      });
+    }
+
     try {
       await validarRoles(rolesIdsNormalizados);
     } catch (error) {
@@ -328,6 +346,7 @@ router.post("/", async (req, res) => {
       cedula,
       email: emailNormalizado,
       usuario: usuarioNormalizado,
+      usuarioUphone: usuarioUphoneNormalizado,
       password: hashedPassword,
       rolId: rolesIdsNormalizados[0],
       fechaIngreso,
@@ -470,6 +489,7 @@ const actualizarUsuario = async (req, res) => {
       cedula,
       email,
       usuario: nombreUsuario,
+      usuarioUphone,
       password,
       rolId,
       rolIds,
@@ -527,6 +547,24 @@ const actualizarUsuario = async (req, res) => {
       }
 
       usuario.usuario = usuarioNormalizado;
+    }
+
+    if (usuarioUphone !== undefined) {
+      const usuarioUphoneNormalizado = String(usuarioUphone || "").trim() || null;
+      const existeUsuarioUphone = usuarioUphoneNormalizado
+        ? await buscarUsuarioPorUphone(usuarioUphoneNormalizado)
+        : null;
+
+      if (
+        existeUsuarioUphone &&
+        Number(existeUsuarioUphone.id) !== Number(usuario.id)
+      ) {
+        return res.status(400).json({
+          message: "El usuario Uphone ya esta asignado a otro usuario.",
+        });
+      }
+
+      usuario.usuarioUphone = usuarioUphoneNormalizado;
     }
 
     // ========== VALIDAR PASSWORD SOLO SI LO ENVIAN ==========

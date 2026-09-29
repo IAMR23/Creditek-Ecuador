@@ -47,6 +47,24 @@ const Usuario = sequelize.define(
       },
     },
 
+    usuarioUphone: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      validate: {
+        len: {
+          args: [1, 100],
+          msg: "El usuario Uphone no puede superar los 100 caracteres.",
+        },
+      },
+      set(value) {
+        const usuarioUphoneNormalizado = String(value || "").trim();
+        this.setDataValue(
+          "usuarioUphone",
+          usuarioUphoneNormalizado || null,
+        );
+      },
+    },
+
     password: {
       type: DataTypes.STRING,
       allowNull: false,

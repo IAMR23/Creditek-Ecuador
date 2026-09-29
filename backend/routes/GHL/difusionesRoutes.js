@@ -16,6 +16,11 @@ router.use(
 router.get("/estado", controller.status);
 router.get("/contactos", controller.contacts);
 router.get("/etiquetas", controller.tags);
+router.get("/catalogos/pipelines", controller.pipelines);
+router.get("/mensajes", controller.savedMessages);
+router.post("/mensajes", controller.createSavedMessage);
+router.put("/mensajes/:id", controller.updateSavedMessage);
+router.delete("/mensajes/:id", controller.deleteSavedMessage);
 router.get("/listas", controller.smartLists);
 router.post("/listas", controller.createSmartList);
 router.get("/listas/:id/contactos", controller.smartListContacts);

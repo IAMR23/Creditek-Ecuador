@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -8,6 +9,7 @@ import {
   ListFilter,
   LoaderCircle,
   MessageSquareText,
+  Pencil,
   Plus,
   RefreshCcw,
   Save,
@@ -24,6 +26,7 @@ import api from "../../api/client";
 import { useAuthUser } from "../../utils/useAuthUser";
 
 const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50];
 const FILTER_FIELDS = [
   { value: "tags", label: "Etiqueta" },
   { value: "source", label: "Origen" },
@@ -32,6 +35,7 @@ const FILTER_FIELDS = [
   { value: "lastName", label: "Apellido" },
   { value: "email", label: "Correo electronico" },
   { value: "phone", label: "Telefono" },
+  { value: "pipelineStageId", label: "Etapa del pipeline" },
 ];
 const FILTER_OPERATORS = [
   { value: "eq", label: "Es" },
@@ -47,6 +51,7 @@ const EXECUTION_STATUS = {
   cancelled: "Cancelada",
 };
 let filterRuleSequence = 0;
+let messageVariantSequence = 0;
 
 const errorMessage = (error) =>
   error.response?.data?.message || error.message || "No se pudo completar la operacion";
@@ -57,9 +62,15 @@ const newFilterRule = (values = {}) => ({
   field: "tags",
   operator: "eq",
   value: "",
+  pipelineId: "",
   ...values,
 });
 const emptySmartListForm = () => ({ nombre: "", logic: "AND", rules: [newFilterRule()] });
+const newMessageVariant = (content = "") => ({
+  key: `message-variant-${messageVariantSequence += 1}`,
+  content,
+});
+const emptySavedMessageForm = () => ({ nombre: "", contenido: "" });
 
 const contactStatus = (contact) => {
   if (contact.canSend) {
@@ -80,17 +91,23 @@ export default function Difusiones() {
   const [contacts, setContacts] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [searchDraft, setSearchDraft] = useState("");
   const [query, setQuery] = useState("");
   const [smartLists, setSmartLists] = useState([]);
   const [ghlTags, setGhlTags] = useState([]);
+  const [pipelines, setPipelines] = useState([]);
   const [activeSmartListId, setActiveSmartListId] = useState(null);
   const [editingSmartListId, setEditingSmartListId] = useState(null);
   const [smartListForm, setSmartListForm] = useState(emptySmartListForm);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState({});
   const [instances, setInstances] = useState(initialInstances);
-  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState(() => [newMessageVariant()]);
+  const [savedMessages, setSavedMessages] = useState([]);
+  const [savedMessageForm, setSavedMessageForm] = useState(emptySavedMessageForm);
+  const [editingSavedMessageId, setEditingSavedMessageId] = useState(null);
+  const [savedMessageEditorOpen, setSavedMessageEditorOpen] = useState(false);
   const [preview, setPreview] = useState(null);
   const [execution, setExecution] = useState(null);
   const [batchSize, setBatchSize] = useState(3);
@@ -101,7 +118,10 @@ export default function Difusiones() {
   const [sending, setSending] = useState(false);
   const [smartListsLoading, setSmartListsLoading] = useState(false);
   const [tagsLoading, setTagsLoading] = useState(false);
+  const [pipelinesLoading, setPipelinesLoading] = useState(false);
   const [savingSmartList, setSavingSmartList] = useState(false);
+  const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
+  const [savingSavedMessage, setSavingSavedMessage] = useState(false);
   const [error, setError] = useState("");
 
   const selectedList = useMemo(() => Object.values(selectedContacts), [selectedContacts]);
@@ -115,8 +135,12 @@ export default function Difusiones() {
     [activeSmartListId, smartLists],
   );
   const executionActive = ["pending", "running"].includes(execution?.estado);
-  const estimatedBatches = selectedList.length && batchSize > 0
-    ? Math.ceil(selectedList.length / batchSize)
+  const messageContents = messages.map((item) => item.content);
+  const allMessagesValid = messageContents.length > 0
+    && messageContents.every((content) => content.trim());
+  const effectiveBatchSize = Math.min(batchSize, selectedInstances.length);
+  const estimatedBatches = selectedList.length && effectiveBatchSize > 0
+    ? Math.ceil(selectedList.length / effectiveBatchSize)
     : 0;
   const estimatedMinutes = estimatedBatches > 0
     ? Math.max(0, estimatedBatches - 1) * intervalMinutes
@@ -149,18 +173,18 @@ export default function Difusiones() {
         : "/api/ghl/difusiones/contactos";
       const response = await api.get(endpoint, {
         params: activeSmartListId
-          ? { page, pageSize: PAGE_SIZE }
-          : { query, page, pageSize: PAGE_SIZE },
+          ? { page, pageSize }
+          : { query, page, pageSize },
       });
       setContacts(response.data.contacts || []);
-      setPagination(response.data.pagination || { page, pageSize: PAGE_SIZE, total: 0, totalPages: 1 });
+      setPagination(response.data.pagination || { page, pageSize, total: 0, totalPages: 1 });
     } catch (requestError) {
       setContacts([]);
       setError(errorMessage(requestError));
     } finally {
       setContactsLoading(false);
     }
-  }, [activeSmartListId, page, query]);
+  }, [activeSmartListId, page, pageSize, query]);
 
   const loadSmartLists = useCallback(async () => {
     if (!isAdmin) return;
@@ -189,6 +213,33 @@ export default function Difusiones() {
     }
   }, [isAdmin]);
 
+  const loadPipelines = useCallback(async () => {
+    if (!isAdmin) return;
+    setPipelinesLoading(true);
+    try {
+      const response = await api.get("/api/ghl/difusiones/catalogos/pipelines");
+      setPipelines(response.data.pipelines || []);
+    } catch (requestError) {
+      setPipelines([]);
+      setError(errorMessage(requestError));
+    } finally {
+      setPipelinesLoading(false);
+    }
+  }, [isAdmin]);
+
+  const loadSavedMessages = useCallback(async () => {
+    if (!isAdmin) return;
+    setSavedMessagesLoading(true);
+    try {
+      const response = await api.get("/api/ghl/difusiones/mensajes");
+      setSavedMessages(response.data.mensajes || []);
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setSavedMessagesLoading(false);
+    }
+  }, [isAdmin]);
+
   const loadActiveExecution = useCallback(async () => {
     if (!isAdmin) return;
     try {
@@ -214,6 +265,14 @@ export default function Difusiones() {
   useEffect(() => {
     loadGhlTags();
   }, [loadGhlTags]);
+
+  useEffect(() => {
+    loadPipelines();
+  }, [loadPipelines]);
+
+  useEffect(() => {
+    loadSavedMessages();
+  }, [loadSavedMessages]);
 
   useEffect(() => {
     loadActiveExecution();
@@ -274,7 +333,7 @@ export default function Difusiones() {
   const payload = () => ({
     contactIds: selectedList.map((contact) => contact.id),
     instanceIndexes: selectedInstances.map((instance) => instance.index),
-    message,
+    messages: messageContents,
     batchSize,
     intervalMinutes,
   });
@@ -296,7 +355,7 @@ export default function Difusiones() {
   const sendBroadcast = async () => {
     if (!preview || executionActive) return;
     const confirmed = window.confirm(
-      `Se programaran ${preview.totalEligible} mensajes en lotes de ${batchSize} cada ${intervalMinutes} minutos. A los contactos se agregara la etiqueta regestion. ¿Desea continuar?`,
+      `Se programaran ${preview.totalEligible} mensajes en lotes de hasta ${effectiveBatchSize} cada ${intervalMinutes} minutos, con maximo uno por extension. A los contactos se agregara la etiqueta regestion. ¿Desea continuar?`,
     );
     if (!confirmed) return;
 
@@ -381,6 +440,8 @@ export default function Difusiones() {
         if (rule.key !== key) return rule;
         const next = { ...rule, ...patch };
         if (patch.field === "query") next.operator = "contains";
+        if (patch.field === "pipelineStageId") next.operator = "eq";
+        if (patch.field) next.pipelineId = "";
         return next;
       }),
     }));
@@ -410,10 +471,11 @@ export default function Difusiones() {
         nombre: smartListForm.nombre,
         filtros: {
           logic: "AND",
-          rules: smartListForm.rules.map(({ field, operator, value }) => ({
+          rules: smartListForm.rules.map(({ field, operator, value, pipelineId }) => ({
             field,
             operator: field === "query" ? "contains" : operator,
             value,
+            ...(field === "pipelineStageId" ? { pipelineId } : {}),
           })),
         },
       };
@@ -447,6 +509,78 @@ export default function Difusiones() {
     }
   };
 
+  const updateMessageVariant = (key, content) => {
+    invalidatePreview();
+    setMessages((current) => current.map((item) => item.key === key ? { ...item, content } : item));
+  };
+
+  const addMessageVariant = (content = "") => {
+    invalidatePreview();
+    setMessages((current) => {
+      if (current.length >= 10) return current;
+      if (content && current.length === 1 && !current[0].content.trim()) {
+        return [{ ...current[0], content }];
+      }
+      return [...current, newMessageVariant(content)];
+    });
+  };
+
+  const removeMessageVariant = (key) => {
+    invalidatePreview();
+    setMessages((current) => current.length === 1
+      ? [newMessageVariant()]
+      : current.filter((item) => item.key !== key));
+  };
+
+  const openNewSavedMessage = (content = "") => {
+    setEditingSavedMessageId(null);
+    setSavedMessageForm({ nombre: "", contenido: content });
+    setSavedMessageEditorOpen(true);
+  };
+
+  const openEditSavedMessage = (savedMessage) => {
+    setEditingSavedMessageId(savedMessage.id);
+    setSavedMessageForm({ nombre: savedMessage.nombre, contenido: savedMessage.contenido });
+    setSavedMessageEditorOpen(true);
+  };
+
+  const closeSavedMessageEditor = () => {
+    setEditingSavedMessageId(null);
+    setSavedMessageForm(emptySavedMessageForm());
+    setSavedMessageEditorOpen(false);
+  };
+
+  const saveSavedMessage = async (event) => {
+    event.preventDefault();
+    setSavingSavedMessage(true);
+    setError("");
+    try {
+      if (editingSavedMessageId) {
+        await api.put(`/api/ghl/difusiones/mensajes/${editingSavedMessageId}`, savedMessageForm);
+      } else {
+        await api.post("/api/ghl/difusiones/mensajes", savedMessageForm);
+      }
+      closeSavedMessageEditor();
+      await loadSavedMessages();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setSavingSavedMessage(false);
+    }
+  };
+
+  const deleteSavedMessage = async (savedMessage) => {
+    if (!window.confirm(`Se eliminara el mensaje guardado "${savedMessage.nombre}". ¿Desea continuar?`)) return;
+    setError("");
+    try {
+      await api.delete(`/api/ghl/difusiones/mensajes/${savedMessage.id}`);
+      if (String(editingSavedMessageId) === String(savedMessage.id)) closeSavedMessageEditor();
+      await loadSavedMessages();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    }
+  };
+
   return (
     <div className="min-h-screen space-y-5 bg-gray-50 p-4 md:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -454,12 +588,12 @@ export default function Difusiones() {
           <div className="text-sm font-semibold text-green-700">GoHighLevel · Message Hub</div>
           <h1 className="text-2xl font-bold text-gray-900">Difusion de mensajes</h1>
           <p className="mt-1 max-w-3xl text-sm text-gray-500">
-            Seleccione clientes, escriba el mensaje y distribuya el envio de forma equilibrada entre sus numeros de WhatsApp.
+            Seleccione clientes, combine varios mensajes y distribuya el envio de forma equilibrada entre sus numeros de WhatsApp.
           </p>
         </div>
         <button
           type="button"
-          onClick={() => { loadStatus(); loadContacts(); loadSmartLists(); loadGhlTags(); }}
+          onClick={() => { loadStatus(); loadContacts(); loadSmartLists(); loadGhlTags(); loadPipelines(); loadSavedMessages(); }}
           disabled={loading || contactsLoading}
           className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-bold text-gray-700 shadow-sm disabled:opacity-50"
         >
@@ -558,8 +692,12 @@ export default function Difusiones() {
                           <select value={rule.field} onChange={(event) => updateFilterRule(rule.key, { field: event.target.value, value: "" })} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500">
                             {FILTER_FIELDS.map((field) => <option key={field.value} value={field.value}>{field.label}</option>)}
                           </select>
-                          <select value={rule.field === "query" ? "contains" : rule.operator} onChange={(event) => updateFilterRule(rule.key, { operator: event.target.value })} disabled={rule.field === "query"} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500 disabled:bg-gray-100">
-                            {(rule.field === "query" ? FILTER_OPERATORS.filter((operator) => operator.value === "contains") : FILTER_OPERATORS).map((operator) => <option key={operator.value} value={operator.value}>{operator.label}</option>)}
+                          <select value={rule.field === "query" ? "contains" : rule.field === "pipelineStageId" ? "eq" : rule.operator} onChange={(event) => updateFilterRule(rule.key, { operator: event.target.value })} disabled={rule.field === "query" || rule.field === "pipelineStageId"} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500 disabled:bg-gray-100">
+                            {(rule.field === "query"
+                              ? FILTER_OPERATORS.filter((operator) => operator.value === "contains")
+                              : rule.field === "pipelineStageId"
+                                ? FILTER_OPERATORS.filter((operator) => operator.value === "eq")
+                                : FILTER_OPERATORS).map((operator) => <option key={operator.value} value={operator.value}>{operator.label}</option>)}
                           </select>
                           <button type="button" onClick={() => removeFilterRule(rule.key)} className="rounded-lg border border-gray-300 bg-white p-2.5 text-gray-500 hover:border-red-200 hover:text-red-600" aria-label="Eliminar filtro"><Trash2 size={17} /></button>
                         </div>
@@ -574,6 +712,31 @@ export default function Difusiones() {
                             <option value="">{tagsLoading ? "Cargando etiquetas de GHL..." : "Seleccione una etiqueta de GHL"}</option>
                             {ghlTags.map((tag) => <option key={tag.id} value={tag.name}>{tag.name}</option>)}
                           </select>
+                        ) : rule.field === "pipelineStageId" ? (
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <select
+                              value={rule.pipelineId || ""}
+                              onChange={(event) => updateFilterRule(rule.key, { pipelineId: event.target.value, value: "" })}
+                              disabled={pipelinesLoading}
+                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500 disabled:bg-gray-100"
+                              required
+                            >
+                              <option value="">{pipelinesLoading ? "Cargando pipelines de GHL..." : "Seleccione un pipeline"}</option>
+                              {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
+                            </select>
+                            <select
+                              value={rule.value}
+                              onChange={(event) => updateFilterRule(rule.key, { value: event.target.value })}
+                              disabled={!rule.pipelineId || pipelinesLoading}
+                              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500 disabled:bg-gray-100"
+                              required
+                            >
+                              <option value="">Seleccione una etapa</option>
+                              {(pipelines.find((pipeline) => String(pipeline.id) === String(rule.pipelineId))?.stages || []).map((stage) => (
+                                <option key={stage.id} value={stage.id}>{stage.name}</option>
+                              ))}
+                            </select>
+                          </div>
                         ) : (
                           <input
                             value={rule.value}
@@ -610,6 +773,54 @@ export default function Difusiones() {
               </div>
             </form>
           </aside>
+        </>
+      )}
+
+      {isAdmin && savedMessageEditorOpen && (
+        <>
+          <button type="button" className="fixed inset-0 z-40 cursor-default bg-black/35" onClick={closeSavedMessageEditor} aria-label="Cerrar editor de mensaje" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <form onSubmit={saveSavedMessage} className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-5 py-4">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">{editingSavedMessageId ? "Editar mensaje guardado" : "Guardar mensaje"}</h2>
+                  <p className="text-xs text-gray-500">Disponible para futuras difusiones.</p>
+                </div>
+                <button type="button" onClick={closeSavedMessageEditor} className="rounded-lg bg-gray-100 p-2 text-gray-600 hover:bg-gray-200" aria-label="Cerrar"><X size={19} /></button>
+              </div>
+              <div className="space-y-4 p-5">
+                <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Nombre
+                  <input
+                    value={savedMessageForm.nombre}
+                    onChange={(event) => setSavedMessageForm((current) => ({ ...current, nombre: event.target.value }))}
+                    maxLength="120"
+                    placeholder="Ej. Seguimiento inicial"
+                    className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-normal normal-case tracking-normal outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                    required
+                  />
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Contenido
+                  <textarea
+                    value={savedMessageForm.contenido}
+                    onChange={(event) => setSavedMessageForm((current) => ({ ...current, contenido: event.target.value }))}
+                    rows="7"
+                    maxLength="4000"
+                    className="mt-2 w-full resize-y rounded-lg border border-gray-300 p-3 text-sm font-normal normal-case tracking-normal outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                    required
+                  />
+                </label>
+                <div className="text-right text-xs text-gray-500">{savedMessageForm.contenido.length}/4000</div>
+              </div>
+              <div className="flex justify-end gap-2 border-t bg-gray-50 p-4">
+                <button type="button" onClick={closeSavedMessageEditor} className="rounded-lg border bg-white px-4 py-2 text-sm font-bold text-gray-600">Cancelar</button>
+                <button type="submit" disabled={savingSavedMessage} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                  {savingSavedMessage ? <LoaderCircle size={17} className="animate-spin" /> : <Save size={17} />} Guardar
+                </button>
+              </div>
+            </form>
+          </div>
         </>
       )}
 
@@ -680,7 +891,27 @@ export default function Difusiones() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-gray-600">
-            <span>{pagination.total.toLocaleString("es-EC")} clientes · pagina {pagination.page} de {pagination.totalPages}</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span>{pagination.total.toLocaleString("es-EC")} clientes · pagina {pagination.page} de {pagination.totalPages}</span>
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600">
+                Mostrar
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setPage(1);
+                  }}
+                  disabled={contactsLoading}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm font-semibold text-gray-700 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 disabled:opacity-50"
+                  aria-label="Cantidad de clientes por pagina"
+                >
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                clientes
+              </label>
+            </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1 || contactsLoading} className="rounded border p-2 disabled:opacity-40"><ChevronLeft size={17} /></button>
               <button type="button" onClick={() => setPage((current) => Math.min(pagination.totalPages, current + 1))} disabled={page >= pagination.totalPages || contactsLoading} className="rounded border p-2 disabled:opacity-40"><ChevronRight size={17} /></button>
@@ -690,16 +921,59 @@ export default function Difusiones() {
 
         <div className="space-y-5">
           <section className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2"><MessageSquareText size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Mensaje</h2></div>
-            <textarea
-              value={message}
-              onChange={(event) => { setMessage(event.target.value); invalidatePreview(); }}
-              rows="7"
-              maxLength="4000"
-              placeholder="Escriba el texto que recibiran los clientes..."
-              className="w-full resize-y rounded-lg border border-gray-300 p-3 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
-            />
-            <div className="mt-1 text-right text-xs text-gray-500">{message.length}/4000</div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2"><MessageSquareText size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Mensajes ({messages.length}/10)</h2></div>
+              <button type="button" onClick={() => addMessageVariant()} disabled={messages.length >= 10} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold text-gray-700 disabled:opacity-40"><Plus size={15} /> Variante</button>
+            </div>
+            <p className="mb-3 text-xs text-gray-500">Los textos se alternaran en orden entre los destinatarios.</p>
+            <div className="space-y-3">
+              {messages.map((item, index) => (
+                <div key={item.key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-gray-600">Variante {index + 1}</span>
+                    <div className="flex gap-1">
+                      <button type="button" onClick={() => openNewSavedMessage(item.content)} disabled={!item.content.trim()} className="rounded p-1.5 text-green-700 hover:bg-green-100 disabled:opacity-30" title="Guardar en biblioteca"><Save size={15} /></button>
+                      <button type="button" onClick={() => removeMessageVariant(item.key)} className="rounded p-1.5 text-red-600 hover:bg-red-100" title="Quitar variante"><Trash2 size={15} /></button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={item.content}
+                    onChange={(event) => updateMessageVariant(item.key, event.target.value)}
+                    rows="5"
+                    maxLength="4000"
+                    placeholder="Escriba el texto que recibiran los clientes..."
+                    className="w-full resize-y rounded-lg border border-gray-300 bg-white p-3 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  />
+                  <div className="mt-1 text-right text-xs text-gray-500">{item.content.length}/4000</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2"><BookOpen size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Biblioteca</h2></div>
+              <button type="button" onClick={() => openNewSavedMessage()} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold text-gray-700"><Plus size={15} /> Nuevo</button>
+            </div>
+            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+              {savedMessages.map((savedMessage) => (
+                <div key={savedMessage.id} className="rounded-lg border border-gray-200 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-gray-800" title={savedMessage.nombre}>{savedMessage.nombre}</div>
+                      <p className="mt-1 line-clamp-2 text-xs text-gray-500">{savedMessage.contenido}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button type="button" onClick={() => addMessageVariant(savedMessage.contenido)} disabled={messages.length >= 10} className="rounded bg-green-50 px-2 py-1 text-xs font-bold text-green-700 disabled:opacity-40">Usar</button>
+                      <button type="button" onClick={() => openEditSavedMessage(savedMessage)} className="rounded p-1.5 text-gray-600 hover:bg-gray-100" title="Editar"><Pencil size={14} /></button>
+                      <button type="button" onClick={() => deleteSavedMessage(savedMessage)} className="rounded p-1.5 text-red-600 hover:bg-red-50" title="Eliminar"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {savedMessagesLoading && <div className="py-5 text-center text-xs text-gray-500"><LoaderCircle size={17} className="mr-2 inline animate-spin" />Cargando mensajes...</div>}
+              {!savedMessagesLoading && !savedMessages.length && <div className="rounded-lg bg-gray-50 p-4 text-center text-xs text-gray-500">Aun no hay mensajes guardados.</div>}
+            </div>
           </section>
 
           <section className="rounded-xl border bg-white p-4 shadow-sm">
@@ -721,7 +995,7 @@ export default function Difusiones() {
             <div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Cadencia de envio</h2></div>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs font-bold text-gray-600">
-                Mensajes por lote
+                Max. mensajes por lote
                 <input type="number" min="1" max="20" value={batchSize} onChange={(event) => { setBatchSize(Number(event.target.value)); invalidatePreview(); }} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-green-500" />
               </label>
               <label className="text-xs font-bold text-gray-600">
@@ -730,7 +1004,7 @@ export default function Difusiones() {
               </label>
             </div>
             <div className="mt-3 rounded-lg border border-green-100 bg-green-50 p-3 text-xs text-green-800">
-              Predeterminado: <strong>3 mensajes cada 5 minutos</strong>. La etiqueta <strong>regestion</strong> se agregara a todos los contactos seleccionados.
+              Predeterminado: <strong>hasta 3 mensajes cada 5 minutos</strong>, con maximo uno por extension en cada lote. La etiqueta <strong>regestion</strong> se agregara a todos los contactos seleccionados.
             </div>
             <p className="mt-2 text-xs text-gray-500">Estimado actual: {estimatedBatches} lotes durante aproximadamente {estimatedMinutes} minutos.</p>
           </section>
@@ -744,7 +1018,7 @@ export default function Difusiones() {
             <button
               type="button"
               onClick={runPreview}
-              disabled={previewing || sending || !message.trim() || !selectedList.length || !selectedInstances.length || !messageHub?.configured || batchSize < 1 || intervalMinutes < 1}
+              disabled={previewing || sending || !allMessagesValid || !selectedList.length || !selectedInstances.length || !messageHub?.configured || batchSize < 1 || intervalMinutes < 1}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               {previewing ? <LoaderCircle size={17} className="animate-spin" /> : <Eye size={17} />} Generar vista previa
@@ -759,7 +1033,7 @@ export default function Difusiones() {
             <div>
               <h2 className="font-bold text-blue-950">Vista previa del reparto</h2>
               <p className="text-sm text-blue-800">{preview.totalEligible} envios · {preview.totalExcluded} excluidos · reparto equilibrado entre {preview.distribution.length} numeros.</p>
-              <p className="mt-1 text-xs font-semibold text-blue-700">{batchSize} mensajes cada {intervalMinutes} minutos · etiqueta regestion.</p>
+              <p className="mt-1 text-xs font-semibold text-blue-700">{preview.messageCount || messages.length} variantes alternadas · hasta {effectiveBatchSize} envios cada {intervalMinutes} minutos · maximo uno por extension · etiqueta regestion.</p>
             </div>
             <button type="button" onClick={() => setPreview(null)} className="text-blue-900"><X size={19} /></button>
           </div>

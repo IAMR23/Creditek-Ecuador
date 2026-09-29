@@ -5,6 +5,8 @@ jest.mock("../../services/uphoneSolicitudesService", () => ({
   MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024,
 }));
 jest.mock("../../controllers/Gerencia/uphoneSolicitudesController", () => ({
+  eliminar: jest.fn((_req, res) => res.json({ ok: true })),
+  exportar: jest.fn((_req, res) => res.send(Buffer.from("excel"))),
   listar: jest.fn((_req, res) => res.json({ ok: true, solicitudes: [] })),
   importarApiKey: jest.fn((req, res) =>
     res.status(201).json({ ok: true, archivo: req.file.originalname }),
@@ -62,6 +64,32 @@ describe("rutas de solicitudes Uphone", () => {
       .get("/api/uphone/solicitudes")
       .set("x-test-permission", "Marketing");
     expect(response.status).toBe(403);
+  });
+
+  test("permite exportar con sesion RVE y permiso autorizado", async () => {
+    const response = await request(createApp())
+      .get("/api/uphone/solicitudes/exportar?estado=PENDIENTE")
+      .set("x-test-permission", "Gerencia");
+    expect(response.status).toBe(200);
+    expect(controller.exportar).toHaveBeenCalled();
+    expect(controller.exportar.mock.calls[0][0].query.estado).toBe("PENDIENTE");
+  });
+
+  test("permite eliminar con sesion RVE y permiso autorizado", async () => {
+    const response = await request(createApp())
+      .delete("/api/uphone/solicitudes/14")
+      .set("x-test-permission", "Sistemas");
+    expect(response.status).toBe(200);
+    expect(controller.eliminar).toHaveBeenCalled();
+    expect(controller.eliminar.mock.calls[0][0].params.id).toBe("14");
+  });
+
+  test("no permite eliminar sin un permiso autorizado", async () => {
+    const response = await request(createApp())
+      .delete("/api/uphone/solicitudes/14")
+      .set("x-test-permission", "Marketing");
+    expect(response.status).toBe(403);
+    expect(controller.eliminar).not.toHaveBeenCalled();
   });
 
   test("acepta un Excel xlsx con API key y sin ejecutar autenticacion JWT", async () => {

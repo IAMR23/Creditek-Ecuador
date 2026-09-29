@@ -3,6 +3,11 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
 import { api } from "../../api/client";
+import {
+  obtenerAgenciaUsuarioUphone,
+  obtenerUsuarioUphoneCanonico,
+  USUARIOS_UPHONE_POR_AGENCIA,
+} from "../../config/usuariosUphone";
 
 const normalizeText = (value) => (value?.trim() ? value.trim() : null);
 const getRolesPagoUsuario = (usuario) =>
@@ -45,6 +50,71 @@ const obtenerMensajeError = (error, mensajePredeterminado) => {
   return [...new Set(mensajes)].join("\n");
 };
 
+const renderizarSelectorUsuarioUphone = ({
+  value,
+  onChange,
+  usuarios,
+  usuarioId = null,
+}) => {
+  const agenciaSeleccionada = obtenerAgenciaUsuarioUphone(value);
+  const valorSeleccionado = obtenerUsuarioUphoneCanonico(value);
+  const valorFueraDelCatalogo = value && !agenciaSeleccionada;
+  const estaAsignadoAOtroUsuario = (usuarioUphone) =>
+    usuarios.some(
+      (usuario) =>
+        String(usuario.usuarioUphone || "").trim().toLowerCase() ===
+          usuarioUphone.toLowerCase() &&
+        Number(usuario.id) !== Number(usuarioId),
+    );
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-semibold text-slate-700">
+        Usuario Uphone
+      </label>
+      <select
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+        value={valorSeleccionado}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">Sin usuario Uphone</option>
+        {valorFueraDelCatalogo ? (
+          <optgroup label="SIN AGENCIA CONFIGURADA">
+            <option value={valorSeleccionado}>{valorSeleccionado}</option>
+          </optgroup>
+        ) : null}
+        {USUARIOS_UPHONE_POR_AGENCIA.map(({ agencia, usuarios: opciones }) => (
+          <optgroup key={agencia} label={agencia}>
+            {opciones.map((usuarioUphone) => {
+              const asignado = estaAsignadoAOtroUsuario(usuarioUphone);
+              return (
+                <option
+                  key={usuarioUphone}
+                  value={usuarioUphone}
+                  disabled={asignado}
+                >
+                  {usuarioUphone}{asignado ? " - ASIGNADO" : ""}
+                </option>
+              );
+            })}
+          </optgroup>
+        ))}
+      </select>
+      {value ? (
+        <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <span className="font-semibold text-slate-800">Usuario:</span>{" "}
+          {valorSeleccionado}
+          <span className="mx-2 text-slate-300">|</span>
+          <span className="font-semibold text-slate-800">Agencia:</span>{" "}
+          {agenciaSeleccionada || "Sin agencia configurada"}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Campo opcional.</p>
+      )}
+    </div>
+  );
+};
+
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -63,6 +133,7 @@ export default function Usuarios() {
     cedula: "",
     email: "",
     usuario: "",
+    usuarioUphone: "",
     password: "",
     rolId: "",
     rolIds: [],
@@ -82,6 +153,7 @@ export default function Usuarios() {
     cedula: "",
     email: "",
     usuario: "",
+    usuarioUphone: "",
     password: "",
     rolId: "",
     rolIds: [],
@@ -111,6 +183,7 @@ export default function Usuarios() {
       cedula: usuario.cedula || "",
       email: usuario.email || "",
       usuario: usuario.usuario || "",
+      usuarioUphone: usuario.usuarioUphone || "",
       password: "",
       rolId: rolIds[0] || "",
       rolIds,
@@ -134,6 +207,7 @@ export default function Usuarios() {
       cedula: "",
       email: "",
       usuario: "",
+      usuarioUphone: "",
       password: "",
       rolId: "",
       rolIds: [],
@@ -321,6 +395,7 @@ export default function Usuarios() {
         cedula: form.cedula,
         email: form.email,
         usuario: form.usuario,
+        usuarioUphone: normalizeText(form.usuarioUphone),
         password: form.password,
         rolId: form.rolIds[0] || form.rolId,
         rolIds: form.rolIds,
@@ -338,6 +413,7 @@ export default function Usuarios() {
         cedula: "",
         email: "",
         usuario: "",
+        usuarioUphone: "",
         password: "",
         rolId: "",
         rolIds: [],
@@ -388,6 +464,7 @@ export default function Usuarios() {
         cedula: editForm.cedula,
         email: editForm.email,
         usuario: editForm.usuario,
+        usuarioUphone: normalizeText(editForm.usuarioUphone),
         password: editForm.password || undefined,
         rolId: editForm.rolIds[0] || editForm.rolId,
         rolIds: editForm.rolIds,
@@ -427,12 +504,14 @@ export default function Usuarios() {
         const nombre = (u.nombre || "").toLowerCase();
         const email = (u.email || "").toLowerCase();
         const usuario = (u.usuario || "").toLowerCase();
+        const usuarioUphone = (u.usuarioUphone || "").toLowerCase();
         const cedula = (u.cedula || "").toLowerCase();
         const telefono = (u.telefono || "").toLowerCase();
         return (
           nombre.includes(q) ||
           email.includes(q) ||
           usuario.includes(q) ||
+          usuarioUphone.includes(q) ||
           cedula.includes(q) ||
           telefono.includes(q)
         );
@@ -577,6 +656,13 @@ export default function Usuarios() {
                   required
                 />
               </div>
+
+              {renderizarSelectorUsuarioUphone({
+                value: form.usuarioUphone,
+                onChange: (usuarioUphone) =>
+                  setForm({ ...form, usuarioUphone }),
+                usuarios,
+              })}
 
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-700">
@@ -870,6 +956,12 @@ export default function Usuarios() {
                         <p className="text-xs font-medium text-emerald-700">
                           @{u.usuario || "sin-usuario"}
                         </p>
+                        <p className="text-xs text-slate-500">
+                          Uphone: {u.usuarioUphone || "-"}
+                          {u.usuarioUphone
+                            ? ` · ${obtenerAgenciaUsuarioUphone(u.usuarioUphone) || "Sin agencia"}`
+                            : ""}
+                        </p>
                         <p className="text-sm text-slate-500">{u.email}</p>
                       </div>
                     </td>
@@ -988,6 +1080,12 @@ export default function Usuarios() {
                     <h3 className="font-bold text-slate-900">{u.nombre}</h3>
                     <p className="text-xs font-medium text-emerald-700">
                       @{u.usuario || "sin-usuario"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Uphone: {u.usuarioUphone || "-"}
+                      {u.usuarioUphone
+                        ? ` · ${obtenerAgenciaUsuarioUphone(u.usuarioUphone) || "Sin agencia"}`
+                        : ""}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">{u.email}</p>
                   </div>
@@ -1195,6 +1293,14 @@ export default function Usuarios() {
                       required
                     />
                   </div>
+
+                  {renderizarSelectorUsuarioUphone({
+                    value: editForm.usuarioUphone,
+                    onChange: (usuarioUphone) =>
+                      setEditForm({ ...editForm, usuarioUphone }),
+                    usuarios,
+                    usuarioId: editForm.id,
+                  })}
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-slate-700">

@@ -42,6 +42,45 @@ describe("ghlSmartListService", () => {
     });
   });
 
+  test("admite una etapa real asociada a su pipeline", () => {
+    expect(service.normalizeFilters({
+      rules: [
+        {
+          field: "pipelineStageId",
+          operator: "eq",
+          pipelineId: "pipeline-1",
+          value: "stage-2",
+        },
+        { field: "tags", operator: "eq", value: "prospecto" },
+      ],
+    })).toEqual({
+      logic: "AND",
+      rules: [
+        {
+          field: "pipelineStageId",
+          operator: "eq",
+          pipelineId: "pipeline-1",
+          value: "stage-2",
+        },
+        { field: "tags", operator: "eq", value: "prospecto" },
+      ],
+    });
+  });
+
+  test("exige el pipeline y solo permite una etapa por lista", () => {
+    expect(() => service.normalizeRule({
+      field: "pipelineStageId",
+      operator: "eq",
+      value: "stage-2",
+    })).toThrow(expect.objectContaining({ code: "GHL_SMART_LIST_PIPELINE_REQUIRED" }));
+    expect(() => service.normalizeFilters({
+      rules: [
+        { field: "pipelineStageId", operator: "eq", pipelineId: "p-1", value: "s-1" },
+        { field: "pipelineStageId", operator: "eq", pipelineId: "p-1", value: "s-2" },
+      ],
+    })).toThrow(expect.objectContaining({ code: "GHL_SMART_LIST_PIPELINE_STAGE_LIMIT" }));
+  });
+
   test("crea una lista compartida con auditoria", async () => {
     const created = row({
       id: 8,

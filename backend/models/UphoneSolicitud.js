@@ -19,6 +19,7 @@ const UphoneSolicitud = sequelize.define(
     vendedor: { type: DataTypes.STRING(220), allowNull: true },
     usuario: { type: DataTypes.STRING(100), allowNull: true },
     cedula: { type: DataTypes.STRING(30), allowNull: true },
+    cedulaNormalizada: { type: DataTypes.STRING(30), allowNull: true },
     cliente: { type: DataTypes.STRING(220), allowNull: true },
     telefonoSolicitud: { type: DataTypes.STRING(30), allowNull: true },
     telefonoContrato: { type: DataTypes.STRING(30), allowNull: true },
@@ -42,6 +43,11 @@ const UphoneSolicitud = sequelize.define(
       { name: "uphone_solicitudes_estado_idx", fields: ["estado"] },
       { name: "uphone_solicitudes_vendedor_idx", fields: ["vendedor"] },
       { name: "uphone_solicitudes_created_at_idx", fields: ["createdAt"] },
+      {
+        name: "uphone_solicitudes_cedula_normalizada_unique",
+        unique: true,
+        fields: ["cedulaNormalizada"],
+      },
     ],
   },
 );

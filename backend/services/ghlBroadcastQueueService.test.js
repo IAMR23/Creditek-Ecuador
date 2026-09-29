@@ -34,6 +34,35 @@ describe("ghlBroadcastQueueService", () => {
       .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_RATE_INVALID" }));
   });
 
+  test("selecciona como maximo un mensaje por extension en cada lote", () => {
+    const details = [
+      { id: 1, instanceIndex: 1, estado: "pending" },
+      { id: 2, instanceIndex: 1, estado: "pending" },
+      { id: 3, instanceIndex: 1, estado: "pending" },
+      { id: 4, instanceIndex: 2, estado: "pending" },
+      { id: 5, instanceIndex: 2, estado: "pending" },
+      { id: 6, instanceIndex: 3, estado: "pending" },
+    ];
+
+    expect(service.selectBalancedBatchDetails(details, [1, 2, 3], 3).map((detail) => detail.id))
+      .toEqual([1, 4, 6]);
+    expect(service.selectBalancedBatchDetails(details, [1, 2, 3], 20).map((detail) => detail.id))
+      .toEqual([1, 4, 6]);
+  });
+
+  test("rota primero hacia las extensiones con menos mensajes procesados", () => {
+    const details = [
+      { id: 1, instanceIndex: 1, estado: "sent" },
+      { id: 2, instanceIndex: 1, estado: "pending" },
+      { id: 3, instanceIndex: 2, estado: "sent" },
+      { id: 4, instanceIndex: 2, estado: "pending" },
+      { id: 5, instanceIndex: 3, estado: "pending" },
+    ];
+
+    expect(service.selectBalancedBatchDetails(details, [1, 2, 3], 2).map((detail) => detail.id))
+      .toEqual([5, 2]);
+  });
+
   test("crea una ejecucion persistente con contactos repartidos", async () => {
     const execution = executionRow({ batchSize: 5, intervalMinutes: 7 });
     const Ejecucion = {
@@ -54,7 +83,7 @@ describe("ghlBroadcastQueueService", () => {
       confirmation: "ENVIAR",
       contactIds: ["c1", "c2"],
       instanceIndexes: [1, 2],
-      message: "Hola cliente",
+      messages: ["Hola cliente", "Seguimos atentos"],
       batchSize: 5,
       intervalMinutes: 7,
     }, 9, {
@@ -69,10 +98,12 @@ describe("ghlBroadcastQueueService", () => {
       intervalMinutes: 7,
       tagName: "regestion",
       creadoPorId: 9,
+      mensaje: "Hola cliente",
+      mensajes: ["Hola cliente", "Seguimos atentos"],
     }), expect.anything());
     expect(Detalle.bulkCreate).toHaveBeenCalledWith([
-      expect.objectContaining({ contactId: "c1", instanceIndex: 1 }),
-      expect.objectContaining({ contactId: "c2", instanceIndex: 2 }),
+      expect.objectContaining({ contactId: "c1", instanceIndex: 1, mensaje: "Hola cliente" }),
+      expect.objectContaining({ contactId: "c2", instanceIndex: 2, mensaje: "Seguimos atentos" }),
     ], expect.anything());
     expect(result).toMatchObject({ id: "12", batchSize: 5, intervalMinutes: 7 });
   });
@@ -80,7 +111,14 @@ describe("ghlBroadcastQueueService", () => {
   test("envia y agrega regestion a cada contacto reclamado", async () => {
     const now = new Date("2026-09-28T15:00:00.000Z");
     const execution = executionRow({ nextBatchAt: now });
-    const detail = { id: 1, contactId: "c1", contactName: "Uno", instanceIndex: 2 };
+    const detail = {
+      id: 1,
+      contactId: "c1",
+      contactName: "Uno",
+      instanceIndex: 2,
+      mensaje: "Variante asignada",
+      estado: "pending",
+    };
     const Ejecucion = {
       findByPk: jest.fn().mockResolvedValue(execution),
       update: jest.fn().mockResolvedValue([1]),
@@ -114,7 +152,7 @@ describe("ghlBroadcastQueueService", () => {
 
     expect(requestGhl).toHaveBeenNthCalledWith(1, expect.anything(), expect.objectContaining({
       url: "/conversations/messages",
-      data: expect.objectContaining({ message: "Hola cliente\n\n{ WA#2 }" }),
+      data: expect.objectContaining({ message: "Variante asignada\n\n{ WA#2 }" }),
       maxRetries: 0,
     }));
     expect(requestGhl).toHaveBeenNthCalledWith(2, expect.anything(), expect.objectContaining({
@@ -130,7 +168,7 @@ describe("ghlBroadcastQueueService", () => {
   test("no agrega regestion cuando el mensaje no fue enviado", async () => {
     const now = new Date("2026-09-28T15:00:00.000Z");
     const execution = executionRow({ nextBatchAt: now });
-    const detail = { id: 1, contactId: "c1", contactName: "Uno", instanceIndex: 2 };
+    const detail = { id: 1, contactId: "c1", contactName: "Uno", instanceIndex: 2, estado: "pending" };
     const Ejecucion = {
       findByPk: jest.fn().mockResolvedValue(execution),
       update: jest.fn().mockResolvedValue([1]),

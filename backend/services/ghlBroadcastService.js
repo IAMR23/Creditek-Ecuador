@@ -1,7 +1,10 @@
 const {
   createGhlClient,
   extractContacts,
+  fetchOpportunitiesByStatus,
   fetchContactsByIdsInBatches,
+  fetchPipelines,
+  getOpportunityContactId,
   getGhlConfig,
   requestGhl,
   toId,
@@ -14,6 +17,7 @@ const MAX_PAGE_SIZE = 100;
 const MAX_RECIPIENTS = 100;
 const MAX_INSTANCES = 20;
 const MAX_MESSAGE_LENGTH = 4000;
+const MAX_MESSAGE_VARIANTS = 10;
 const INSTANCE_MARKER_PATTERN = /\{\s*WA#\d+\s*\}/i;
 
 const compactString = (value) => String(value || "").trim();
@@ -99,15 +103,139 @@ const normalizeAdvancedFilters = (filters) => {
     "lastName",
     "email",
     "phone",
+    "pipelineStageId",
   ]);
   const allowedOperators = new Set(["eq", "not_eq", "contains", "not_contains"]);
   return filters.slice(0, 10).flatMap((filter) => {
     const field = compactString(filter?.field);
     const operator = compactString(filter?.operator).toLowerCase();
     const value = compactString(filter?.value).slice(0, 150);
+    const pipelineId = compactString(filter?.pipelineId).slice(0, 150);
     if (!allowedFields.has(field) || !allowedOperators.has(operator) || !value) return [];
-    return [{ field, operator, value }];
+    if (field === "pipelineStageId" && (operator !== "eq" || !pipelineId)) return [];
+    return [{
+      field,
+      operator,
+      value,
+      ...(field === "pipelineStageId" ? { pipelineId } : {}),
+    }];
   });
+};
+
+const matchesTextFilter = (actualValue, filter) => {
+  const actual = normalizeName(actualValue);
+  const expected = normalizeName(filter.value);
+  if (filter.operator === "eq") return actual === expected;
+  if (filter.operator === "not_eq") return actual !== expected;
+  if (filter.operator === "contains") return actual.includes(expected);
+  return !actual.includes(expected);
+};
+
+const matchesContactFilter = (contact, filter) => {
+  if (filter.field !== "tags") return matchesTextFilter(contact?.[filter.field], filter);
+  const tags = Array.isArray(contact?.tags) ? contact.tags : [];
+  const positive = tags.some((tag) => matchesTextFilter(tag, {
+    ...filter,
+    operator: filter.operator === "not_eq"
+      ? "eq"
+      : filter.operator === "not_contains" ? "contains" : filter.operator,
+  }));
+  return filter.operator === "not_eq" || filter.operator === "not_contains" ? !positive : positive;
+};
+
+const matchesContactQuery = (contact, query) => {
+  const expected = normalizeName(query);
+  if (!expected) return true;
+  return [
+    contact?.contactName,
+    contact?.name,
+    contact?.firstName,
+    contact?.lastName,
+    contact?.email,
+    contact?.phone,
+  ].some((value) => normalizeName(value).includes(expected));
+};
+
+const listPipelineStageContacts = async ({
+  client,
+  config,
+  query,
+  page,
+  pageSize,
+  stageFilter,
+  contactFilters,
+  dependencies,
+}) => {
+  const opportunityLoader = dependencies.fetchOpportunitiesByStatus || fetchOpportunitiesByStatus;
+  const contactLoader = dependencies.fetchContactsByIdsInBatches || fetchContactsByIdsInBatches;
+  const opportunities = await opportunityLoader(
+    client,
+    {
+      ...config,
+      pipelineId: stageFilter.pipelineId,
+      pipelineStageId: stageFilter.value,
+    },
+    "",
+  );
+  const embeddedContacts = new Map();
+  const contactIds = [];
+  const seenContactIds = new Set();
+
+  opportunities.forEach((opportunity) => {
+    const contactId = getOpportunityContactId(opportunity);
+    if (!contactId || seenContactIds.has(contactId)) return;
+    seenContactIds.add(contactId);
+    contactIds.push(contactId);
+    const embedded = opportunity?.contact || opportunity?.contactDetails;
+    if (embedded) embeddedContacts.set(contactId, {
+      ...embedded,
+      id: contactId,
+      source: embedded.source || opportunity.source,
+    });
+  });
+
+  const requiresFullFiltering = Boolean(query || contactFilters.length);
+  const idsToLoad = requiresFullFiltering
+    ? contactIds
+    : contactIds.slice((page - 1) * pageSize, page * pageSize);
+  const loadedContacts = idsToLoad.length
+    ? await contactLoader({ client, locationId: config.locationId, contactIds: idsToLoad })
+    : new Map();
+  const resolveContact = (contactId) => {
+    const loaded = loadedContacts.get(contactId);
+    const embedded = embeddedContacts.get(contactId);
+    return loaded
+      ? { ...embedded, ...loaded, source: loaded.source || embedded?.source }
+      : embedded;
+  };
+
+  if (!requiresFullFiltering) {
+    return {
+      contacts: idsToLoad.map(resolveContact).filter(Boolean).map(formatContact),
+      pagination: {
+        page,
+        pageSize,
+        total: contactIds.length,
+        totalPages: Math.max(1, Math.ceil(contactIds.length / pageSize)),
+      },
+    };
+  }
+
+  const matched = contactIds
+    .map(resolveContact)
+    .filter(Boolean)
+    .filter((contact) => matchesContactQuery(contact, query))
+    .filter((contact) => contactFilters.every((filter) => matchesContactFilter(contact, filter)));
+  const pageContacts = matched.slice((page - 1) * pageSize, page * pageSize);
+  return {
+    contacts: pageContacts.map(formatContact),
+    pagination: {
+      page,
+      pageSize,
+      total: matched.length,
+      totalPages: Math.max(1, Math.ceil(matched.length / pageSize)),
+    },
+  };
 };
 
 const normalizeContactIds = (contactIds) => {
@@ -165,6 +293,20 @@ const validateMessage = (value) => {
   return message;
 };
 
+const normalizeMessages = (input = {}) => {
+  const source = Array.isArray(input.messages) ? input.messages : [input.message];
+  if (!source.length) {
+    throw createError("Escriba al menos un mensaje para la difusion", "GHL_BROADCAST_MESSAGE_REQUIRED");
+  }
+  if (source.length > MAX_MESSAGE_VARIANTS) {
+    throw createError(
+      `La difusion admite hasta ${MAX_MESSAGE_VARIANTS} mensajes alternados`,
+      "GHL_BROADCAST_MESSAGE_VARIANT_LIMIT",
+    );
+  }
+  return source.map(validateMessage);
+};
+
 const buildBalancedDistribution = (contacts, instanceIndexes) => {
   const instances = normalizeInstanceIndexes(instanceIndexes);
   const base = Math.floor(contacts.length / instances.length);
@@ -195,6 +337,20 @@ const listContacts = async ({ query = "", page = 1, pageSize = DEFAULT_PAGE_SIZE
   const normalizedQuery = compactString(query).slice(0, 75);
   const normalizedFilters = normalizeAdvancedFilters(filters);
 
+  const stageFilter = normalizedFilters.find((filter) => filter.field === "pipelineStageId");
+  if (stageFilter) {
+    return listPipelineStageContacts({
+      client,
+      config,
+      query: normalizedQuery,
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+      stageFilter,
+      contactFilters: normalizedFilters.filter((filter) => filter !== stageFilter),
+      dependencies,
+    });
+  }
+
   const payload = await executeRequest(client, {
     method: "POST",
     url: "/contacts/search",
@@ -221,6 +377,23 @@ const listContacts = async ({ query = "", page = 1, pageSize = DEFAULT_PAGE_SIZE
       totalPages: Math.max(1, Math.ceil((Number.isFinite(total) ? total : contacts.length) / normalizedPageSize)),
     },
   };
+};
+
+const listPipelines = async (dependencies = {}) => {
+  const configFactory = dependencies.getGhlConfig || getGhlConfig;
+  const clientFactory = dependencies.createGhlClient || createGhlClient;
+  const pipelineLoader = dependencies.fetchPipelines || fetchPipelines;
+  const config = configFactory({ requirePipelineId: false });
+  const client = clientFactory(config);
+  const pipelines = await pipelineLoader(client, config);
+  return pipelines.map((pipeline) => ({
+    id: toId(pipeline?.id || pipeline?._id),
+    name: compactString(pipeline?.name || pipeline?.title) || "Pipeline sin nombre",
+    stages: (pipeline?.stages || pipeline?.pipelineStages || []).map((stage) => ({
+      id: toId(stage?.id || stage?._id),
+      name: compactString(stage?.name || stage?.title) || "Etapa sin nombre",
+    })).filter((stage) => stage.id),
+  })).filter((pipeline) => pipeline.id);
 };
 
 const getSmsProviders = async (client, config, executeRequest = requestGhl) => {
@@ -328,8 +501,9 @@ const loadSelectedContacts = async (contactIds, dependencies = {}) => {
   };
 };
 
-const previewBroadcast = async ({ contactIds, instanceIndexes, message }, dependencies = {}) => {
-  const cleanMessage = validateMessage(message);
+const previewBroadcast = async (input = {}, dependencies = {}) => {
+  const cleanMessages = normalizeMessages(input);
+  const { contactIds, instanceIndexes } = input;
   const instances = normalizeInstanceIndexes(instanceIndexes);
   const { eligible, excluded } = await loadSelectedContacts(contactIds, dependencies);
 
@@ -341,7 +515,9 @@ const previewBroadcast = async ({ contactIds, instanceIndexes, message }, depend
   }
 
   return {
-    messageLength: cleanMessage.length,
+    messageLength: cleanMessages[0].length,
+    messageLengths: cleanMessages.map((message) => message.length),
+    messageCount: cleanMessages.length,
     totalSelected: eligible.length + excluded.length,
     totalEligible: eligible.length,
     totalExcluded: excluded.length,
@@ -361,7 +537,7 @@ const sendBroadcast = async (input, dependencies = {}) => {
   const preview = await previewBroadcast(input, dependencies);
   const { client, provider } = await getMessageHubProvider(dependencies);
   const providerId = toId(provider._id || provider.id);
-  const cleanMessage = validateMessage(input.message);
+  const cleanMessages = normalizeMessages(input);
   const requestedInterval = Number(process.env.GHL_BROADCAST_INTERVAL_MS ?? 750);
   const intervalMs = Number.isFinite(requestedInterval)
     ? Math.min(10000, Math.max(0, requestedInterval))
@@ -370,6 +546,7 @@ const sendBroadcast = async (input, dependencies = {}) => {
 
   for (const group of preview.distribution) {
     for (const contact of group.contacts) {
+      const cleanMessage = cleanMessages[results.length % cleanMessages.length];
       try {
         const payload = await executeRequest(client, {
           method: "POST",
@@ -422,15 +599,18 @@ const sendBroadcast = async (input, dependencies = {}) => {
 };
 
 module.exports = {
+  MAX_MESSAGE_VARIANTS,
   MAX_RECIPIENTS,
   buildBalancedDistribution,
   formatContact,
   getMessageHubStatus,
   getMessageHubProvider,
   listLocationTags,
+  listPipelines,
   listContacts,
   normalizeAdvancedFilters,
   normalizeInstanceIndexes,
+  normalizeMessages,
   previewBroadcast,
   selectMessageHubProvider,
   sendBroadcast,

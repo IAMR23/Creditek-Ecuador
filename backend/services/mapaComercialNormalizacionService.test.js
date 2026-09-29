@@ -9,8 +9,12 @@ jest.mock("../models/MapaUbicacionNormalizada", () => ({
   sync: jest.fn(),
   update: jest.fn(),
 }));
+jest.mock("../models/MapaComercialZona", () => ({
+  sync: jest.fn(),
+}));
 
 const axios = require("axios");
+const MapaComercialZona = require("../models/MapaComercialZona");
 const MapaUbicacionNormalizada = require("../models/MapaUbicacionNormalizada");
 const {
   encolarVentasParaNormalizar,
@@ -284,6 +288,7 @@ describe("mapaComercialNormalizacionService", () => {
       original: { code: "42P01" },
       sql: 'UPDATE "mapa_ubicaciones_normalizadas" SET ...',
     });
+    MapaComercialZona.sync.mockResolvedValue();
     MapaUbicacionNormalizada.sync.mockResolvedValue();
 
     await expect(procesarColaNormalizaciones()).resolves.toEqual({
@@ -291,6 +296,10 @@ describe("mapaComercialNormalizacionService", () => {
       procesados: 0,
       esquemaRecuperado: true,
     });
+    expect(MapaComercialZona.sync).toHaveBeenCalledTimes(1);
     expect(MapaUbicacionNormalizada.sync).toHaveBeenCalledTimes(1);
+    expect(MapaComercialZona.sync.mock.invocationCallOrder[0]).toBeLessThan(
+      MapaUbicacionNormalizada.sync.mock.invocationCallOrder[0],
+    );
   });
 });

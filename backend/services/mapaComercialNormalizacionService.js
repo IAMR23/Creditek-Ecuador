@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { Op, literal } = require("sequelize");
+const MapaComercialZona = require("../models/MapaComercialZona");
 const MapaUbicacionNormalizada = require("../models/MapaUbicacionNormalizada");
 const {
   clasificarUbicacionPermitida,
@@ -501,6 +502,9 @@ const procesarColaNormalizaciones = async ({
   } catch (error) {
     if (!esTablaNormalizacionInexistente(error)) throw error;
 
+    // La tabla de ubicaciones referencia a zonas; la dependencia debe existir
+    // antes de intentar recuperar la tabla hija.
+    await MapaComercialZona.sync();
     await MapaUbicacionNormalizada.sync();
     return {
       procesando: false,

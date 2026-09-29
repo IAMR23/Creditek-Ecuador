@@ -57,7 +57,9 @@ router.use(
   authenticate,
   requirePermission("Gerencia", "Administracion", "Sistemas"),
 );
+router.get("/exportar", controller.exportar);
 router.get("/", controller.listar);
+router.delete("/:id", controller.eliminar);
 router.post("/importar-manual", cargarExcel, controller.importarManual);
 
 module.exports = router;

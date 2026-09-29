@@ -1,10 +1,11 @@
 const ExcelJS = require("exceljs");
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 
 const UphoneSolicitud = require("../models/UphoneSolicitud");
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_ROWS_PER_FILE = 25000;
+const MAX_EXPORT_ROWS = 25000;
 const MAX_PAGE_SIZE = 100;
 const INSERT_CHUNK_SIZE = 500;
 
@@ -71,6 +72,13 @@ const normalizarNumeroSolicitud = (value) => {
   const text = normalizarTexto(value, 40);
   if (!text) return null;
   return /^\d+\.0+$/.test(text) ? text.replace(/\.0+$/, "") : text;
+};
+
+const normalizarCedula = (value) => {
+  const text = normalizarTexto(value, 30);
+  if (!text) return null;
+  const digits = text.replace(/\D/g, "");
+  return digits.length >= 6 ? digits : null;
 };
 
 const normalizarFechaSolicitud = (value) => {
@@ -211,6 +219,7 @@ const parsearExcel = async (buffer) => {
       continue;
     }
 
+    const cedula = normalizarTexto(get("cedula"), 30);
     records.push({
       filaExcel: rowNumber,
       numeroSolicitud,
@@ -218,7 +227,8 @@ const parsearExcel = async (buffer) => {
       matriz: normalizarTexto(get("matriz"), 180),
       vendedor: normalizarTexto(get("vendedor"), 220),
       usuario: normalizarTexto(get("usuario"), 100),
-      cedula: normalizarTexto(get("cedula"), 30),
+      cedula,
+      cedulaNormalizada: normalizarCedula(cedula),
       cliente: normalizarTexto(get("cliente"), 220),
       telefonoSolicitud: normalizarTexto(get("telefonoSolicitud"), 30),
       telefonoContrato: normalizarTexto(get("telefonoContrato"), 30),
@@ -250,14 +260,18 @@ const importarExcel = async ({ file, usuarioId, requestId }) => {
     error.uphoneStage = "analizar_excel";
     throw error;
   }
-  const uniqueByNumber = new Map();
+  const seenNumbers = new Set();
+  const seenCedulas = new Set();
+  const uniqueRecords = [];
   for (const record of parsed.records) {
-    if (!uniqueByNumber.has(record.numeroSolicitud)) {
-      uniqueByNumber.set(record.numeroSolicitud, record);
-    }
+    if (seenNumbers.has(record.numeroSolicitud)) continue;
+    seenNumbers.add(record.numeroSolicitud);
+    if (record.cedulaNormalizada && seenCedulas.has(record.cedulaNormalizada)) continue;
+    if (record.cedulaNormalizada) seenCedulas.add(record.cedulaNormalizada);
+    uniqueRecords.push(record);
   }
 
-  const candidates = [...uniqueByNumber.values()].map(({ filaExcel, ...record }) => ({
+  const candidates = uniqueRecords.map(({ filaExcel, ...record }) => ({
     ...record,
     archivoOrigen: normalizarTexto(file.originalname, 255) || "reporte-uphone.xlsx",
     importadoPorId: usuarioId || null,
@@ -309,14 +323,32 @@ const parseDateBoundary = (value, endOfDay = false) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const listar = async (query = {}) => {
-  const page = normalizarEntero(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
-  const pageSize = normalizarEntero(query.pageSize, 25, 1, MAX_PAGE_SIZE);
+const obtenerFechaActualEcuador = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const valueByType = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${valueByType.year}-${valueByType.month}-${valueByType.day}`;
+};
+
+const crearWhereSolicitudes = (query = {}) => {
   const where = {};
   const q = normalizarTexto(query.q, 120);
   const estado = normalizarTexto(query.estado, 80);
+  const usuarioUphone = normalizarTexto(query.usuarioUphone, 100);
   const desde = parseDateBoundary(query.fechaDesde);
   const hasta = parseDateBoundary(query.fechaHasta, true);
+
+  if (desde && hasta && desde > hasta) {
+    throw crearError(
+      "La fecha inicial no puede ser posterior a la fecha final",
+      400,
+      "RANGO_FECHAS_INVALIDO",
+    );
+  }
 
   if (q) {
     where[Op.or] = [
@@ -330,6 +362,7 @@ const listar = async (query = {}) => {
     ].map((field) => ({ [field]: { [Op.iLike]: `%${q}%` } }));
   }
   if (estado) where.estado = { [Op.iLike]: estado };
+  if (usuarioUphone) where.usuario = { [Op.iLike]: usuarioUphone };
   if (desde || hasta) {
     where.fechaSolicitud = {
       ...(desde ? { [Op.gte]: desde } : {}),
@@ -337,9 +370,277 @@ const listar = async (query = {}) => {
     };
   }
 
-  const [result, totalRegistradas] = await Promise.all([
+  return where;
+};
+
+const normalizarEtiqueta = (value, fallback) =>
+  normalizarTexto(value, 180)?.replace(/\s+/g, " ").toUpperCase() || fallback;
+
+const clasificarValorResultado = (value) => {
+  const normalized = normalizarEncabezado(value);
+  if (normalized.includes("INVALIDAD")) return "invalidadas";
+  if (normalized.includes("APROBAD")) return "aprobadas";
+  if (normalized.includes("DENEG") || normalized.includes("RECHAZ")) {
+    return "denegadas";
+  }
+  return "otros";
+};
+
+const clasificarResultado = (estadoContrato, estado) => {
+  const resultadoContrato = clasificarValorResultado(estadoContrato);
+  return resultadoContrato === "otros"
+    ? clasificarValorResultado(estado)
+    : resultadoContrato;
+};
+
+const crearDashboard = (rows = [], totalSolicitudes = 0) => {
+  const estados = new Map();
+  const agencias = new Map();
+
+  rows.forEach((row) => {
+    const cantidad = Number(row.cantidad) || 0;
+    const estado = normalizarEtiqueta(row.estado, "SIN ESTADO");
+    const agencia = normalizarEtiqueta(
+      row.distribuidor || row.matriz,
+      "SIN AGENCIA",
+    );
+    const resultado = clasificarResultado(row.estadoContrato, row.estado);
+
+    estados.set(estado, (estados.get(estado) || 0) + cantidad);
+    const acumulado = agencias.get(agencia) || {
+      agencia,
+      total: 0,
+      aprobadas: 0,
+      denegadas: 0,
+      invalidadas: 0,
+      otros: 0,
+    };
+    acumulado.total += cantidad;
+    acumulado[resultado] += cantidad;
+    agencias.set(agencia, acumulado);
+  });
+
+  const detalleAgencias = [...agencias.values()].sort(
+    (a, b) => b.total - a.total || a.agencia.localeCompare(b.agencia),
+  );
+  const detalleEstados = [...estados.entries()]
+    .map(([estado, cantidad]) => ({ estado, cantidad }))
+    .sort((a, b) => b.cantidad - a.cantidad || a.estado.localeCompare(b.estado));
+  const totales = detalleAgencias.reduce(
+    (acc, item) => ({
+      aprobadas: acc.aprobadas + item.aprobadas,
+      denegadas: acc.denegadas + item.denegadas,
+      invalidadas: acc.invalidadas + item.invalidadas,
+      otros: acc.otros + item.otros,
+    }),
+    { aprobadas: 0, denegadas: 0, invalidadas: 0, otros: 0 },
+  );
+
+  return {
+    totalSolicitudes: Number(totalSolicitudes) || 0,
+    totalAprobadas: totales.aprobadas,
+    totalDenegadas: totales.denegadas,
+    totalInvalidadas: totales.invalidadas,
+    totalOtros: totales.otros,
+    estados: detalleEstados,
+    agencias: detalleAgencias,
+    agenciaLider: detalleAgencias[0] || null,
+  };
+};
+
+const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
+  UphoneSolicitud.sequelize.query(
+    `
+      WITH solicitudes_clasificadas AS (
+        SELECT
+          id,
+          distribuidor,
+          matriz,
+          usuario,
+          estado,
+          "estadoContrato",
+          "fechaSolicitud",
+          CASE
+            WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
+              THEN 'CEDULA:' || REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
+            ELSE 'SOLICITUD:' || id::text
+          END AS cliente_clave,
+          CASE
+            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
+              THEN TRUE
+            ELSE FALSE
+          END AS contrato_aprobado
+        FROM uphone_solicitudes
+      ), solicitudes_priorizadas AS (
+        SELECT
+          *,
+          COUNT(*) FILTER (WHERE contrato_aprobado) OVER (
+            PARTITION BY cliente_clave
+          ) AS contratos_aprobados_cliente,
+          ROW_NUMBER() OVER (
+            PARTITION BY cliente_clave
+            ORDER BY contrato_aprobado DESC, "fechaSolicitud" DESC NULLS LAST, id DESC
+          ) AS prioridad_cliente
+        FROM solicitudes_clasificadas
+      ), solicitudes_periodo AS (
+        SELECT
+          *,
+          contratos_aprobados_cliente > 0
+            AND NOT (contrato_aprobado AND prioridad_cliente = 1) AS invalidada
+        FROM solicitudes_priorizadas
+        WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
+          AND (
+            :usuarioUphone IS NULL
+            OR LOWER(BTRIM(usuario)) = LOWER(:usuarioUphone)
+          )
+      )
+      SELECT
+        distribuidor,
+        matriz,
+        CASE
+          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
+          ELSE estado
+        END AS estado,
+        CASE
+          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
+          ELSE "estadoContrato"
+        END AS "estadoContrato",
+        COUNT(*)::integer AS cantidad
+      FROM solicitudes_periodo
+      GROUP BY
+        distribuidor,
+        matriz,
+        CASE
+          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
+          ELSE estado
+        END,
+        CASE
+          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
+          ELSE "estadoContrato"
+        END
+    `,
+    {
+      replacements: { desde, hasta, usuarioUphone },
+      type: QueryTypes.SELECT,
+    },
+  );
+
+const obtenerClientesPorVendedor = async ({ desde, hasta, usuarioUphone }) =>
+  UphoneSolicitud.sequelize.query(
+    `
+      WITH solicitudes_periodo AS (
+        SELECT
+          id,
+          "fechaSolicitud",
+          UPPER(NULLIF(BTRIM(usuario), '')) AS usuario_uphone_clave,
+          CASE
+            WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
+              THEN 'CEDULA:' || REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
+            ELSE 'SOLICITUD:' || id::text
+          END AS cliente_clave
+        FROM uphone_solicitudes
+        WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
+          AND (
+            :usuarioUphone IS NULL
+            OR LOWER(BTRIM(usuario)) = LOWER(:usuarioUphone)
+          )
+      ), clientes_priorizados AS (
+        SELECT
+          *,
+          ROW_NUMBER() OVER (
+            PARTITION BY cliente_clave
+            ORDER BY "fechaSolicitud" DESC NULLS LAST, id DESC
+          ) AS prioridad_cliente
+        FROM solicitudes_periodo
+      )
+      SELECT
+        COALESCE(
+          NULLIF(BTRIM(u.nombre), ''),
+          s.usuario_uphone_clave,
+          'SIN USUARIO UPHONE'
+        ) AS vendedor,
+        COALESCE(NULLIF(BTRIM(u."usuarioUphone"), ''), s.usuario_uphone_clave) AS "usuarioUphone",
+        u.id AS "usuarioId",
+        (u.id IS NOT NULL) AS vinculado,
+        COUNT(*)::integer AS clientes
+      FROM clientes_priorizados s
+      LEFT JOIN usuarios u
+        ON LOWER(BTRIM(u."usuarioUphone")) = LOWER(s.usuario_uphone_clave)
+      WHERE s.prioridad_cliente = 1
+      GROUP BY
+        u.id,
+        u.nombre,
+        u."usuarioUphone",
+        s.usuario_uphone_clave
+      ORDER BY clientes DESC, vendedor ASC
+    `,
+    {
+      replacements: { desde, hasta, usuarioUphone },
+      type: QueryTypes.SELECT,
+    },
+  );
+
+const crearResumenVendedores = (rows = []) => rows.map((row) => ({
+  usuarioId: row.usuarioId ? Number(row.usuarioId) : null,
+  vendedor: normalizarTexto(row.vendedor, 180) || "SIN USUARIO UPHONE",
+  usuarioUphone: normalizarTexto(row.usuarioUphone, 100),
+  vinculado: row.vinculado === true,
+  clientes: Number(row.clientes) || 0,
+}));
+
+const obtenerUsuariosUphone = async () =>
+  UphoneSolicitud.sequelize.query(
+    `
+      SELECT
+        id,
+        nombre,
+        BTRIM("usuarioUphone") AS "usuarioUphone"
+      FROM usuarios
+      WHERE NULLIF(BTRIM("usuarioUphone"), '') IS NOT NULL
+      ORDER BY nombre ASC, "usuarioUphone" ASC
+    `,
+    { type: QueryTypes.SELECT },
+  );
+
+const crearCatalogoUsuariosUphone = (rows = []) => rows.map((row) => ({
+  id: Number(row.id),
+  nombre: normalizarTexto(row.nombre, 180) || row.usuarioUphone,
+  usuarioUphone: normalizarTexto(row.usuarioUphone, 100),
+})).filter((row) => row.usuarioUphone);
+
+const listar = async (query = {}) => {
+  const page = normalizarEntero(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
+  const pageSize = normalizarEntero(query.pageSize, 25, 1, MAX_PAGE_SIZE);
+  const where = crearWhereSolicitudes(query);
+  const fechaActual = obtenerFechaActualEcuador();
+  const dashboardFechaDesde = parseDateBoundary(query.dashboardFechaDesde)
+    ? query.dashboardFechaDesde
+    : fechaActual;
+  const dashboardFechaHasta = parseDateBoundary(query.dashboardFechaHasta, true)
+    ? query.dashboardFechaHasta
+    : fechaActual;
+  const dashboardDesde = parseDateBoundary(dashboardFechaDesde);
+  const dashboardHasta = parseDateBoundary(dashboardFechaHasta, true);
+  const dashboardUsuarioUphone = normalizarTexto(query.dashboardUsuarioUphone, 100);
+
+  if (dashboardDesde > dashboardHasta) {
+    throw crearError(
+      "La fecha inicial del dashboard no puede ser posterior a la fecha final",
+      400,
+      "RANGO_FECHAS_INVALIDO",
+    );
+  }
+
+  const [
+    result,
+    totalRegistradas,
+    resumenAgrupado,
+    clientesPorVendedor,
+    usuariosUphone,
+  ] = await Promise.all([
     UphoneSolicitud.findAndCountAll({
       where,
+      attributes: { exclude: ["cedulaNormalizada"] },
       limit: pageSize,
       offset: (page - 1) * pageSize,
       order: [
@@ -348,15 +649,40 @@ const listar = async (query = {}) => {
       ],
     }),
     UphoneSolicitud.count(),
+    obtenerResumenDashboard({
+      desde: dashboardDesde,
+      hasta: dashboardHasta,
+      usuarioUphone: dashboardUsuarioUphone,
+    }),
+    obtenerClientesPorVendedor({
+      desde: dashboardDesde,
+      hasta: dashboardHasta,
+      usuarioUphone: dashboardUsuarioUphone,
+    }),
+    obtenerUsuariosUphone(),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(result.count / pageSize));
+  const dashboardTotal = resumenAgrupado.reduce(
+    (total, item) => total + (Number(item.cantidad) || 0),
+    0,
+  );
   return {
     ok: true,
     solicitudes: result.rows,
     resumen: {
       totalRegistradas,
       totalFiltradas: result.count,
+    },
+    dashboard: {
+      ...crearDashboard(resumenAgrupado, dashboardTotal),
+      vendedores: crearResumenVendedores(clientesPorVendedor),
+      usuarios: crearCatalogoUsuariosUphone(usuariosUphone),
+      periodo: {
+        fechaDesde: dashboardFechaDesde,
+        fechaHasta: dashboardFechaHasta,
+        usuarioUphone: dashboardUsuarioUphone,
+      },
     },
     paginacion: {
       page,
@@ -367,10 +693,122 @@ const listar = async (query = {}) => {
   };
 };
 
+const exportarExcel = async (query = {}) => {
+  const solicitudes = await UphoneSolicitud.findAll({
+    where: crearWhereSolicitudes(query),
+    attributes: { exclude: ["cedulaNormalizada"] },
+    order: [
+      ["fechaSolicitud", "DESC NULLS LAST"],
+      ["id", "DESC"],
+    ],
+    limit: MAX_EXPORT_ROWS + 1,
+    raw: true,
+  });
+
+  if (solicitudes.length > MAX_EXPORT_ROWS) {
+    throw crearError(
+      `La exportacion supera ${MAX_EXPORT_ROWS} registros. Refina los filtros e intenta nuevamente`,
+      413,
+      "EXPORTACION_DEMASIADO_GRANDE",
+    );
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "RVE";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Solicitudes Uphone", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+  sheet.columns = [
+    { header: "NUMERO DE SOLICITUD", key: "numeroSolicitud", width: 22 },
+    { header: "DISTRIBUIDOR", key: "distribuidor", width: 28 },
+    { header: "MATRIZ", key: "matriz", width: 28 },
+    { header: "VENDEDOR", key: "vendedor", width: 28 },
+    { header: "USUARIO UPHONE", key: "usuario", width: 20 },
+    { header: "CEDULA", key: "cedula", width: 18 },
+    { header: "CLIENTE", key: "cliente", width: 32 },
+    { header: "TELEFONO SOLICITUD", key: "telefonoSolicitud", width: 20 },
+    { header: "TELEFONO CONTRATO", key: "telefonoContrato", width: 20 },
+    { header: "FECHA SOLICITUD", key: "fechaSolicitud", width: 22 },
+    { header: "FECHA CONTRATO", key: "fechaContrato", width: 20 },
+    { header: "GRUPO ARRENDAMIENTO", key: "grupoArrendamiento", width: 28 },
+    { header: "ESTADO", key: "estado", width: 24 },
+    { header: "ESTADO CONTRATO", key: "estadoContrato", width: 34 },
+    { header: "ARCHIVO ORIGEN", key: "archivoOrigen", width: 30 },
+  ];
+  sheet.addRows(solicitudes.map((solicitud) => ({
+    numeroSolicitud: solicitud.numeroSolicitud,
+    distribuidor: solicitud.distribuidor,
+    matriz: solicitud.matriz,
+    vendedor: solicitud.vendedor,
+    usuario: solicitud.usuario,
+    cedula: solicitud.cedula,
+    cliente: solicitud.cliente,
+    telefonoSolicitud: solicitud.telefonoSolicitud,
+    telefonoContrato: solicitud.telefonoContrato,
+    fechaSolicitud: solicitud.fechaSolicitud,
+    fechaContrato: solicitud.fechaContrato,
+    grupoArrendamiento: solicitud.grupoArrendamiento,
+    estado: solicitud.estado,
+    estadoContrato: solicitud.estadoContrato,
+    archivoOrigen: solicitud.archivoOrigen,
+  })));
+
+  const header = sheet.getRow(1);
+  header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  header.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F766E" } };
+  header.alignment = { vertical: "middle", horizontal: "center" };
+  header.height = 24;
+  sheet.autoFilter = { from: "A1", to: `O${Math.max(1, solicitudes.length + 1)}` };
+  sheet.getColumn("fechaSolicitud").numFmt = "dd/mm/yyyy hh:mm";
+
+  return {
+    buffer: Buffer.from(await workbook.xlsx.writeBuffer()),
+    filename: `solicitudes-uphone-${obtenerFechaActualEcuador()}.xlsx`,
+    total: solicitudes.length,
+  };
+};
+
+const eliminarSolicitud = async (id) => {
+  const solicitudId = Number.parseInt(id, 10);
+  if (!Number.isInteger(solicitudId) || solicitudId <= 0) {
+    throw crearError(
+      "El identificador de la solicitud no es valido",
+      400,
+      "SOLICITUD_ID_INVALIDO",
+    );
+  }
+
+  const solicitud = await UphoneSolicitud.findByPk(solicitudId);
+  if (!solicitud) {
+    throw crearError(
+      "La solicitud Uphone no existe o ya fue eliminada",
+      404,
+      "SOLICITUD_NO_ENCONTRADA",
+    );
+  }
+
+  const resultado = {
+    id: solicitud.id,
+    numeroSolicitud: solicitud.numeroSolicitud,
+    cliente: solicitud.cliente,
+  };
+  await solicitud.destroy();
+  return resultado;
+};
+
 module.exports = {
   MAX_FILE_SIZE_BYTES,
+  MAX_EXPORT_ROWS,
   MAX_ROWS_PER_FILE,
+  crearWhereSolicitudes,
+  eliminarSolicitud,
+  exportarExcel,
   importarExcel,
   listar,
+  crearDashboard,
+  crearCatalogoUsuariosUphone,
+  crearResumenVendedores,
+  normalizarCedula,
   parsearExcel,
 };

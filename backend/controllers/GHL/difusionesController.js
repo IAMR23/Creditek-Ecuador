@@ -1,4 +1,5 @@
 const broadcastService = require("../../services/ghlBroadcastService");
+const messageService = require("../../services/ghlBroadcastMessageService");
 const smartListService = require("../../services/ghlSmartListService");
 const queueService = require("../../services/ghlBroadcastQueueService");
 const broadcastScheduler = require("../../services/ghlBroadcastScheduler");
@@ -29,6 +30,14 @@ async function contacts(req, res) {
 async function tags(_req, res) {
   try {
     return res.json({ ok: true, tags: await broadcastService.listLocationTags() });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function pipelines(_req, res) {
+  try {
+    return res.json({ ok: true, pipelines: await broadcastService.listPipelines() });
   } catch (error) {
     return respondError(res, error);
   }
@@ -133,18 +142,58 @@ async function smartListContacts(req, res) {
   }
 }
 
+async function savedMessages(_req, res) {
+  try {
+    return res.json({ ok: true, mensajes: await messageService.listSavedMessages() });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function createSavedMessage(req, res) {
+  try {
+    const mensaje = await messageService.createSavedMessage(req.body || {}, req.user.id);
+    return res.status(201).json({ ok: true, mensaje });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function updateSavedMessage(req, res) {
+  try {
+    const mensaje = await messageService.updateSavedMessage(req.params.id, req.body || {}, req.user.id);
+    return res.json({ ok: true, mensaje });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function deleteSavedMessage(req, res) {
+  try {
+    const deleted = await messageService.deleteSavedMessage(req.params.id);
+    return res.json({ ok: true, deleted });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
 module.exports = {
   contacts,
   activeExecution,
   cancelExecution,
+  createSavedMessage,
   createSmartList,
   deleteSmartList,
+  deleteSavedMessage,
   execution,
+  pipelines,
   preview,
+  savedMessages,
   send,
   smartListContacts,
   smartLists,
   status,
   tags,
+  updateSavedMessage,
   updateSmartList,
 };

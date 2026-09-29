@@ -10,6 +10,8 @@
     "migrate:ghl-reviews": "node scripts/migrateGhlPendingReviews.js",
     "migrate:ghl-realtime-config": "node scripts/migrateGhlRealtimeConfiguration.js",
     "migrate:ghl-workflows": "node scripts/migrateGhlWorkflowProgramaciones.js",
+    "migrate:ghl-broadcasts": "node scripts/migrateGhlBroadcasts.js",
+    "migrate:uphone": "node scripts/migrateUphoneSolicitudes.js",
     "entregas:reconciliar": "node scripts/reconciliarEntregas.js",
     "dev": "nodemon --config nodemon.json index.js",
     "start": "node index.js"

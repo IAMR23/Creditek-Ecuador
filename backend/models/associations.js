@@ -76,6 +76,7 @@ const GhlWorkflowProgramacion = require('./GhlWorkflowProgramacion');
 const GhlWorkflowEjecucion = require('./GhlWorkflowEjecucion');
 const GhlWorkflowEjecucionDetalle = require('./GhlWorkflowEjecucionDetalle');
 const GhlDifusionLista = require('./GhlDifusionLista');
+const GhlDifusionMensaje = require('./GhlDifusionMensaje');
 const GhlDifusionEjecucion = require('./GhlDifusionEjecucion');
 const GhlDifusionEjecucionDetalle = require('./GhlDifusionEjecucionDetalle');
 const ComisionConfiguracion = require('./ComisionConfiguracion');
@@ -1381,6 +1382,8 @@ GhlWorkflowProgramacion.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "cre
 GhlWorkflowProgramacion.belongsTo(Usuario, { foreignKey: "actualizadoPorId", as: "actualizadoPor" });
 GhlDifusionLista.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });
 GhlDifusionLista.belongsTo(Usuario, { foreignKey: "actualizadoPorId", as: "actualizadoPor" });
+GhlDifusionMensaje.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });
+GhlDifusionMensaje.belongsTo(Usuario, { foreignKey: "actualizadoPorId", as: "actualizadoPor" });
 GhlDifusionEjecucion.hasMany(GhlDifusionEjecucionDetalle, { foreignKey: "ejecucionId", as: "detalles" });
 GhlDifusionEjecucionDetalle.belongsTo(GhlDifusionEjecucion, { foreignKey: "ejecucionId", as: "ejecucion" });
 GhlDifusionEjecucion.belongsTo(Usuario, { foreignKey: "creadoPorId", as: "creadoPor" });

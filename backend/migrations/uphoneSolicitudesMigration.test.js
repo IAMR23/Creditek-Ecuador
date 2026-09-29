@@ -40,3 +40,21 @@ describe("migracion para cargas Uphone mediante API key", () => {
     expect(sql).not.toMatch(/DELETE\s+FROM/i);
   });
 });
+
+describe("migracion de unicidad por cedula Uphone", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "202609290002-add-uphone-cedula-unique.sql"),
+    "utf8",
+  );
+
+  test("normaliza cedulas y crea una proteccion unica", () => {
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "cedulaNormalizada"');
+    expect(sql).toContain("REGEXP_REPLACE");
+    expect(sql).toContain("uphone_solicitudes_cedula_normalizada_unique");
+  });
+
+  test("conserva las filas historicas", () => {
+    expect(sql).not.toMatch(/DROP\s+(TABLE|COLUMN)/i);
+    expect(sql).not.toMatch(/DELETE\s+FROM/i);
+  });
+});

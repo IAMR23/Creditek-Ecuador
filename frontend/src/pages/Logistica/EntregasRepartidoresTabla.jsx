@@ -1,5 +1,20 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useState, useCallback, useMemo } from "react";
+import {
+  CalendarDays,
+  ClipboardList,
+  ExternalLink,
+  Eye,
+  Gift,
+  Mail,
+  MapPin,
+  Package,
+  Phone,
+  UserRound,
+  X,
+} from "lucide-react";
 import Swal from "sweetalert2";
+import { API_URL } from "../../../config";
 import api from "../../api/client";
 import { getHoyLocal } from "../../utils/dateUtils";
 
@@ -24,6 +39,391 @@ const nuevaClaveOperacion = () =>
   globalThis.crypto?.randomUUID?.() ||
   `entrega-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+const mostrarValor = (value) => {
+  if (value === 0 || value === false) return String(value);
+  return value || "—";
+};
+
+const formatoDinero = (value) => {
+  const numero = Number(value);
+  return Number.isFinite(numero)
+    ? new Intl.NumberFormat("es-EC", {
+        style: "currency",
+        currency: "USD",
+      }).format(numero)
+    : "—";
+};
+
+const formatoFechaHora = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("es-EC", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+};
+
+const formatoFechaCorta = (value) => {
+  if (!value) return "—";
+  const text = String(value);
+  return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : text;
+};
+
+const resolverArchivoUrl = (value) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${API_URL || ""}${value}`;
+};
+
+const CampoDetalle = ({ label, value }) => (
+  <div className="rounded-lg bg-slate-50 px-3 py-2">
+    <dt className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+      {label}
+    </dt>
+    <dd className="mt-1 break-words text-sm text-slate-800">
+      {mostrarValor(value)}
+    </dd>
+  </div>
+);
+
+const EntregaDetalleModal = ({ entrega, onClose }) => {
+  if (!entrega) return null;
+
+  const asignacion = entrega.repartidores?.find(
+    (repartidor) => repartidor.UsuarioAgenciaEntrega?.activo !== false,
+  )?.UsuarioAgenciaEntrega || entrega.repartidores?.[0]?.UsuarioAgenciaEntrega;
+  const evidencias = [
+    { label: "Validación", value: entrega.fotoValidacion },
+    { label: "Fecha de llamada", value: entrega.fotoFechaLlamada },
+    { label: "Logística", value: entrega.fotoLogistica },
+  ].filter((item) => item.value);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-detalle-entrega"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h3 id="titulo-detalle-entrega" className="flex items-center gap-2 text-base font-bold text-slate-950">
+            <ClipboardList size={17} /> Entrega #{entrega.id}
+          </h3>
+          <div className="flex items-center gap-3">
+            <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+              entrega.estado === "Entregado"
+                ? "bg-emerald-100 text-emerald-700"
+                : entrega.estado === "Transito"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-rose-100 text-rose-700"
+            }`}>
+              {mostrarValor(entrega.estado)}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar detalle"
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </header>
+
+        <div className="space-y-5 overflow-y-auto p-5 text-sm text-slate-950">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-600">
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarDays size={14} /> Fecha: {formatoFechaCorta(entrega.fecha)}
+            </span>
+            <span>
+              Asignada: {formatoFechaCorta(entrega.fechaHoraAsignacion || asignacion?.fecha_asignacion)}
+            </span>
+          </div>
+
+          <section>
+            <h4 className="mb-1.5 flex items-center gap-2 font-bold text-slate-950">
+              <UserRound size={15} /> Cliente
+            </h4>
+            <div className="space-y-0.5">
+              <p className="font-medium uppercase">{mostrarValor(entrega.cliente?.cliente)}</p>
+              <p>Cédula: {mostrarValor(entrega.cliente?.cedula)}</p>
+              <p className="flex items-center gap-1.5">
+                <Phone size={13} /> {mostrarValor(entrega.cliente?.telefono)}
+              </p>
+              <p className="flex items-center gap-1.5">
+                <Mail size={13} /> {mostrarValor(entrega.cliente?.correo)}
+              </p>
+              <p className="flex items-start gap-1.5">
+                <MapPin size={13} className="mt-0.5 shrink-0" />
+                <span className="break-all">{mostrarValor(entrega.cliente?.direccion)}</span>
+              </p>
+              <p className="flex items-center gap-1.5">
+                <MapPin size={13} /> {mostrarValor(entrega.origen?.nombre)}
+              </p>
+              <p>Observación: {mostrarValor(entrega.observacion)}</p>
+              <p>Observación de Logística: {mostrarValor(entrega.observacionLogistica)}</p>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="mb-2 flex items-center gap-2 font-bold text-slate-950">
+              <Package size={15} /> Productos
+            </h4>
+            <div className="space-y-4">
+              {entrega.detalleEntregas?.length ? entrega.detalleEntregas.map((detalle, index) => (
+                <article
+                  key={detalle.id || index}
+                  className="border-l-[3px] border-blue-500 py-0.5 pl-3"
+                >
+                  <p className="font-bold">
+                    {detalle.dispositivoMarca?.dispositivo?.nombre || "Producto"}{" "}
+                    {detalle.dispositivoMarca?.marca?.nombre || ""}{" "}
+                    {detalle.modelo?.nombre ? `– ${detalle.modelo.nombre}` : ""}
+                  </p>
+                  <p>Contrato: {mostrarValor(detalle.contrato)}</p>
+                  <p>Forma de pago: {mostrarValor(detalle.formaPago?.nombre)}</p>
+                  <p>Precio: {formatoDinero(detalle.precioVendedor ?? detalle.precioUnitario)}</p>
+                  <p>Entrada: {formatoDinero(detalle.entrada)}</p>
+                  <p>Alcance: {formatoDinero(detalle.alcance)}</p>
+                  <p>Observación: {mostrarValor(detalle.observacionDetalle)}</p>
+                  {detalle.ubicacion && (
+                    <a
+                      href={detalle.ubicacion}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-blue-600 hover:underline"
+                    >
+                      Ver ubicación <ExternalLink size={13} />
+                    </a>
+                  )}
+                </article>
+              )) : <p className="text-slate-500">Sin productos registrados.</p>}
+            </div>
+          </section>
+
+          <section>
+            <h4 className="mb-1.5 flex items-center gap-2 font-bold text-slate-950">
+              <Gift size={15} /> Obsequios
+            </h4>
+            {entrega.obsequiosEntrega?.length ? (
+              <ul className="list-inside list-disc space-y-0.5">
+                {entrega.obsequiosEntrega.map((item, index) => (
+                  <li key={`${item.obsequio?.nombre}-${index}`}>
+                    {item.obsequio?.nombre || "Obsequio"} x{item.cantidad}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-slate-500">Sin obsequios.</p>}
+          </section>
+
+          <section className="border-t border-slate-200 pt-4">
+            <label className="font-bold text-slate-950" htmlFor={`observacion-repartidor-${entrega.id}`}>
+              Observaciones de Entrega (Repartidor)
+            </label>
+            <textarea
+              id={`observacion-repartidor-${entrega.id}`}
+              value={entrega.observacionEntrega || ""}
+              readOnly
+              rows={3}
+              placeholder="Ej: Cliente no se encontraba en domicilio, dirección incorrecta, entrega exitosa sin novedades..."
+              className="mt-2 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-800 outline-none placeholder:text-slate-400"
+            />
+          </section>
+
+          <div className="hidden">
+          <section>
+            <h4 className="mb-3 text-sm font-bold text-slate-900">Información general</h4>
+            <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <CampoDetalle label="Fecha" value={entrega.fecha} />
+              <CampoDetalle label="Semana" value={entrega.semana} />
+              <CampoDetalle label="Forma de entrega" value={entrega.tipoEntrega} />
+              <CampoDetalle label="Sector" value={entrega.sectorEntrega} />
+              <CampoDetalle label="Origen" value={entrega.origen?.nombre} />
+              <CampoDetalle label="Horario estimado" value={entrega.horaEstimadaEntrega} />
+              <CampoDetalle
+                label="Fecha de asignación"
+                value={formatoFechaHora(entrega.fechaHoraAsignacion || asignacion?.fecha_asignacion)}
+              />
+              <CampoDetalle
+                label="Fecha de finalización"
+                value={formatoFechaHora(asignacion?.fecha_finalizacion)}
+              />
+              <CampoDetalle
+                label="Fecha y hora de llamada"
+                value={formatoFechaHora(entrega.FechaHoraLlamada)}
+              />
+              <CampoDetalle label="Validada" value={entrega.validada ? "Sí" : "No"} />
+              <CampoDetalle label="Creada" value={formatoFechaHora(entrega.createdAt)} />
+              <CampoDetalle label="Última actualización" value={formatoFechaHora(entrega.updatedAt)} />
+            </dl>
+          </section>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section>
+              <h4 className="mb-3 text-sm font-bold text-slate-900">Cliente</h4>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <CampoDetalle label="Nombre" value={entrega.cliente?.cliente} />
+                <CampoDetalle label="Cédula" value={entrega.cliente?.cedula} />
+                <CampoDetalle label="Teléfono" value={entrega.cliente?.telefono} />
+                <CampoDetalle label="Correo" value={entrega.cliente?.correo} />
+                <div className="sm:col-span-2">
+                  <CampoDetalle label="Dirección" value={entrega.cliente?.direccion} />
+                </div>
+                <CampoDetalle
+                  label="Cliente Contífico"
+                  value={entrega.cliente?.clienteContifico}
+                />
+              </dl>
+            </section>
+
+            <section>
+              <h4 className="mb-3 text-sm font-bold text-slate-900">Responsables</h4>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <CampoDetalle label="Vendedor" value={entrega.vendedor} />
+                <CampoDetalle label="Agencia del vendedor" value={entrega.agenciaVendedor} />
+                <CampoDetalle label="Repartidor" value={entrega.motorizado} />
+                <CampoDetalle label="Agencia del repartidor" value={entrega.agenciaMotorizado} />
+                <CampoDetalle label="Estado de asignación" value={asignacion?.estado} />
+              </dl>
+            </section>
+          </div>
+
+          <section>
+            <h4 className="mb-3 text-sm font-bold text-slate-900">Observaciones</h4>
+            <div className="grid gap-3 lg:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Vendedor
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                  {mostrarValor(entrega.observacion)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Logística
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                  {mostrarValor(entrega.observacionLogistica)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-700">
+                  Repartidor
+                </p>
+                <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-blue-950">
+                  {mostrarValor(entrega.observacionEntrega)}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="mb-3 text-sm font-bold text-slate-900">Productos</h4>
+            <div className="space-y-3">
+              {entrega.detalleEntregas?.length ? entrega.detalleEntregas.map((detalle, index) => (
+                <article key={detalle.id || index} className="rounded-xl border border-slate-200 p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h5 className="font-bold text-slate-900">
+                      {detalle.dispositivoMarca?.dispositivo?.nombre || "Producto"}{" "}
+                      {detalle.dispositivoMarca?.marca?.nombre || ""}{" "}
+                      {detalle.modelo?.nombre ? `– ${detalle.modelo.nombre}` : ""}
+                    </h5>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      Cantidad: {mostrarValor(detalle.cantidad)}
+                    </span>
+                  </div>
+                  <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <CampoDetalle label="Precio unitario" value={formatoDinero(detalle.precioUnitario)} />
+                    <CampoDetalle label="Precio vendedor" value={formatoDinero(detalle.precioVendedor)} />
+                    <CampoDetalle label="Entrada" value={formatoDinero(detalle.entrada)} />
+                    <CampoDetalle label="Alcance" value={formatoDinero(detalle.alcance)} />
+                    <CampoDetalle label="Forma de pago" value={detalle.formaPago?.nombre} />
+                    <CampoDetalle label="Contrato" value={detalle.contrato} />
+                    <CampoDetalle label="Identificador del anuncio" value={detalle.identificadorAnuncio} />
+                    <CampoDetalle label="Observación del producto" value={detalle.observacionDetalle} />
+                  </dl>
+                  {(detalle.ubicacion || detalle.ubicacionDispositivo) && (
+                    <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                      {detalle.ubicacion && (
+                        <a href={detalle.ubicacion} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline">
+                          Ubicación del cliente <ExternalLink size={14} />
+                        </a>
+                      )}
+                      {detalle.ubicacionDispositivo && (
+                        <a href={detalle.ubicacionDispositivo} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline">
+                          Ubicación del dispositivo <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </article>
+              )) : (
+                <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                  Esta entrega no tiene productos registrados.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <div className="grid gap-5 lg:grid-cols-3">
+            <section>
+              <h4 className="mb-3 text-sm font-bold text-slate-900">Obsequios</h4>
+              {entrega.obsequiosEntrega?.length ? (
+                <ul className="space-y-2">
+                  {entrega.obsequiosEntrega.map((item, index) => (
+                    <li key={`${item.obsequio?.nombre}-${index}`} className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      {item.obsequio?.nombre || "Obsequio"} × {item.cantidad}
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-slate-500">Sin obsequios.</p>}
+            </section>
+
+            <section>
+              <h4 className="mb-3 text-sm font-bold text-slate-900">Errores registrados</h4>
+              {entrega.errores?.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {entrega.errores.map((error, index) => (
+                    <span key={`${error}-${index}`} className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
+                      {error}
+                    </span>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-slate-500">Sin errores registrados.</p>}
+            </section>
+
+            <section>
+              <h4 className="mb-3 text-sm font-bold text-slate-900">Evidencias</h4>
+              {evidencias.length ? (
+                <div className="flex flex-col items-start gap-2">
+                  {evidencias.map((evidencia) => (
+                    <a
+                      key={evidencia.label}
+                      href={resolverArchivoUrl(evidencia.value)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      Ver {evidencia.label.toLowerCase()} <ExternalLink size={14} />
+                    </a>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-slate-500">Sin evidencias adjuntas.</p>}
+            </section>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function EntregasRepartidoresTabla() {
   const [repartidores, setRepartidores] = useState([]);
   const [entregas, setEntregas] = useState([]);
@@ -43,6 +443,7 @@ export default function EntregasRepartidoresTabla() {
   const [erroresTemp, setErroresTemp] = useState({});
   const [guardandoErrores, setGuardandoErrores] = useState({});
   const [guardandoTipoEntrega, setGuardandoTipoEntrega] = useState({});
+  const [entregaDetalle, setEntregaDetalle] = useState(null);
   const [entregaReasignacion, setEntregaReasignacion] = useState(null);
   const [nuevoRepartidorId, setNuevoRepartidorId] = useState("");
   const [reasignando, setReasignando] = useState(false);
@@ -107,6 +508,22 @@ export default function EntregasRepartidoresTabla() {
   useEffect(() => {
     fetchEntregas();
   }, [fetchEntregas]);
+
+  useEffect(() => {
+    if (!entregaDetalle) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setEntregaDetalle(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [entregaDetalle]);
 
   const entregasFiltradas = useMemo(() => {
     const termino = normalizarTexto(busqueda);
@@ -405,17 +822,26 @@ export default function EntregasRepartidoresTabla() {
 
   const renderAcciones = (entrega) => {
     const editable = !["Entregado", "No Entregado"].includes(entrega.estado);
-    return editable ? (
+    return (
       <div className="flex min-w-40 flex-col gap-2">
-        <button type="button" onClick={() => cambiarEstado(entrega)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
-          Actualizar estado
+        <button
+          type="button"
+          onClick={() => setEntregaDetalle(entrega)}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+        >
+          <Eye size={15} /> Ver entrega
         </button>
-        <button type="button" onClick={() => abrirReasignacion(entrega)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
-          Cambiar responsable
-        </button>
+        {editable && (
+          <>
+            <button type="button" onClick={() => cambiarEstado(entrega)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+              Actualizar estado
+            </button>
+            <button type="button" onClick={() => abrirReasignacion(entrega)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+              Cambiar responsable
+            </button>
+          </>
+        )}
       </div>
-    ) : (
-      <span className="text-gray-400">—</span>
     );
   };
 
@@ -797,6 +1223,11 @@ export default function EntregasRepartidoresTabla() {
           </tbody>
         </table>
       </div>
+
+      <EntregaDetalleModal
+        entrega={entregaDetalle}
+        onClose={() => setEntregaDetalle(null)}
+      />
 
       {entregaReasignacion && (
         <div

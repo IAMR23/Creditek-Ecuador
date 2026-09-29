@@ -54,12 +54,33 @@ Parametros opcionales: `page`, `pageSize` (maximo 100), `q`, `estado`,
 zona horaria de Ecuador. Esta consulta sigue usando el token normal de RVE y
 requiere permiso `Gerencia`, `Administracion` o `Sistemas`.
 
+La respuesta incluye `dashboard`, un resumen independiente de la pagina y de
+los filtros de la tabla, con cantidad total, distribucion por estado,
+agencia con mas solicitudes y cantidades aprobadas, denegadas y restantes por
+agencia. Para clasificar aprobaciones y denegaciones se toma primero
+`estadoContrato` y, si no contiene un resultado reconocible, se usa `estado`.
+La agencia corresponde a `distribuidor`, con `matriz` como respaldo cuando el
+primero esta vacio.
+
+El periodo del resumen se controla con `dashboardFechaDesde` y
+`dashboardFechaHasta` en formato `YYYY-MM-DD`. Si no se envian, ambos toman la
+fecha actual de Ecuador, por lo que el dashboard es diario por defecto. La
+respuesta devuelve el rango aplicado en `dashboard.periodo`.
+
+Para los indicadores se identifica al cliente por su cedula normalizada. Si un
+cliente tiene uno o mas contratos aprobados en el historico, se conserva como
+valida solamente la aprobacion mas reciente; sus otras solicitudes se reportan
+como `INVALIDADA_POR_CONTRATO_APROBADO`. Los registros originales no se borran
+ni se actualizan. Las solicitudes sin una cedula utilizable se consideran
+clientes independientes para evitar unir personas por error.
+
 ## Migracion
 
 Ejecutar, en orden, las migraciones
-`202609280004-create-uphone-solicitudes.sql` y
-`202609280005-allow-uphone-api-key-imports.sql` en PostgreSQL. No eliminan datos
-y la segunda permite registrar una carga de integración sin asociarla
+`202609280004-create-uphone-solicitudes.sql`,
+`202609280005-allow-uphone-api-key-imports.sql`,
+`202609290002-add-uphone-cedula-unique.sql` en PostgreSQL. No eliminan datos.
+La segunda permite registrar una carga de integración sin asociarla
 artificialmente con un usuario RVE.
 
 Verificacion recomendada antes y despues:

@@ -282,11 +282,23 @@ router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
         "id",
         "version",
         "fecha",
+        "semana",
         "observacion",
+        "observacionLogistica",
+        "observacionEntrega",
         "estado",
         "sectorEntrega",
         "tipoEntrega",
+        "validada",
+        "fechaHoraAsignacion",
+        "horaEstimadaEntrega",
+        "FechaHoraLlamada",
+        "fotoValidacion",
+        "fotoFechaLlamada",
+        "fotoLogistica",
         "errores",
+        "createdAt",
+        "updatedAt",
       ],
       order: [["createdAt", "DESC"]],
 
@@ -320,7 +332,12 @@ router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
           attributes: ["id", "activo", "agenciaId"],
           required: !!(userId && userId !== "todos"), // fuerza INNER JOIN si hay filtro
           through: {
-            attributes: ["estado" , "activo"],
+            attributes: [
+              "estado",
+              "activo",
+              "fecha_asignacion",
+              "fecha_finalizacion",
+            ],
             where: criteriosAsignacionVigente({
               ...(userId &&
                 userId !== "todos" && {
@@ -346,14 +363,35 @@ router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
         {
           model: Cliente,
           as: "cliente",
-          attributes: ["cliente", "cedula"],
+          attributes: [
+            "cliente",
+            "cedula",
+            "telefono",
+            "correo",
+            "direccion",
+            "clienteContifico",
+          ],
         },
+
+        { model: Origen, as: "origen", attributes: ["id", "nombre"] },
 
         // 📦 DETALLE DE ENTREGA
         {
           model: DetalleEntrega,
           as: "detalleEntregas",
-          attributes: ["precioUnitario", "entrada", "alcance"],
+          attributes: [
+            "id",
+            "cantidad",
+            "precioUnitario",
+            "precioVendedor",
+            "contrato",
+            "identificadorAnuncio",
+            "entrada",
+            "alcance",
+            "ubicacion",
+            "ubicacionDispositivo",
+            "observacionDetalle",
+          ],
           include: [
             {
               model: Modelo,
@@ -367,6 +405,11 @@ router.get("/entregas", ...accesoInformeEntregas, async (req, res) => {
                 {
                   model: Dispositivo,
                   as: "dispositivo",
+                  attributes: ["nombre"],
+                },
+                {
+                  model: Marca,
+                  as: "marca",
                   attributes: ["nombre"],
                 },
               ],

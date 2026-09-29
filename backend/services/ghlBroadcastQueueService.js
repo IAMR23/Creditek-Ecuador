@@ -4,8 +4,8 @@ const Ejecucion = require("../models/GhlDifusionEjecucion");
 const Detalle = require("../models/GhlDifusionEjecucionDetalle");
 const {
   getMessageHubProvider,
+  normalizeMessages,
   previewBroadcast,
-  validateMessage,
 } = require("./ghlBroadcastService");
 const { requestGhl, toId } = require("./ghlService");
 
@@ -47,6 +47,47 @@ const normalizeRate = (input = {}) => ({
   ),
 });
 
+const selectBalancedBatchDetails = (details = [], instanceIndexes = [], batchSize = DEFAULT_BATCH_SIZE) => {
+  const configuredIndexes = [...new Set(
+    instanceIndexes
+      .map((value) => Number.parseInt(value, 10))
+      .filter((value) => Number.isInteger(value)),
+  )];
+  const pendingByInstance = new Map();
+  const processedByInstance = new Map();
+
+  for (const detail of details) {
+    const instanceIndex = Number.parseInt(detail?.instanceIndex, 10);
+    if (!Number.isInteger(instanceIndex)) continue;
+    if (!configuredIndexes.includes(instanceIndex)) configuredIndexes.push(instanceIndex);
+
+    if (detail.estado === "pending") {
+      const pending = pendingByInstance.get(instanceIndex) || [];
+      pending.push(detail);
+      pendingByInstance.set(instanceIndex, pending);
+    } else if (["processing", "sent", "failed"].includes(detail.estado)) {
+      processedByInstance.set(instanceIndex, (processedByInstance.get(instanceIndex) || 0) + 1);
+    }
+  }
+
+  const configuredOrder = new Map(configuredIndexes.map((instanceIndex, position) => [instanceIndex, position]));
+  const availableIndexes = configuredIndexes
+    .filter((instanceIndex) => pendingByInstance.get(instanceIndex)?.length)
+    .sort((left, right) => {
+      const processedDifference = (processedByInstance.get(left) || 0) - (processedByInstance.get(right) || 0);
+      return processedDifference || configuredOrder.get(left) - configuredOrder.get(right);
+    });
+  const limit = Number.isInteger(Number(batchSize)) && Number(batchSize) > 0
+    ? Number(batchSize)
+    : DEFAULT_BATCH_SIZE;
+
+  // Una extension participa como maximo una vez por intervalo. Si el lote
+  // solicitado supera las extensiones disponibles, prima la proteccion anti-spam.
+  return availableIndexes
+    .slice(0, limit)
+    .map((instanceIndex) => pendingByInstance.get(instanceIndex)[0]);
+};
+
 const serializeExecution = (row, { includeDetails = false } = {}) => {
   const value = row?.toJSON ? row.toJSON() : row;
   const result = {
@@ -55,6 +96,7 @@ const serializeExecution = (row, { includeDetails = false } = {}) => {
     batchSize: value.batchSize,
     intervalMinutes: value.intervalMinutes,
     tagName: value.tagName,
+    messageCount: Array.isArray(value.mensajes) && value.mensajes.length ? value.mensajes.length : 1,
     total: value.total,
     processed: value.processed,
     sent: value.sent,
@@ -95,7 +137,7 @@ async function createExecution(input, userId, dependencies = {}) {
   const previewer = dependencies.previewBroadcast || previewBroadcast;
   const rate = normalizeRate(input);
   const preview = await previewer(input);
-  const message = validateMessage(input.message);
+  const messages = normalizeMessages(input);
   const active = await executionModel.findOne({ where: { estado: { [Op.in]: ACTIVE_STATES } } });
   if (active) {
     throw serviceError(
@@ -112,7 +154,8 @@ async function createExecution(input, userId, dependencies = {}) {
     execution = await transactionRunner(async (transaction) => {
       const created = await executionModel.create({
         estado: "pending",
-        mensaje: message,
+        mensaje: messages[0],
+        mensajes: messages,
         instanceIndexes: preview.distribution.map((group) => group.instanceIndex),
         ...rate,
         tagName: "regestion",
@@ -121,14 +164,17 @@ async function createExecution(input, userId, dependencies = {}) {
         creadoPorId: userId,
         nextBatchAt: new Date(),
       }, { transaction });
-      const details = preview.distribution.flatMap((group) => group.contacts.map((contact) => ({
-        ejecucionId: created.id,
-        contactId: contact.id,
-        contactName: contact.name,
-        instanceIndex: group.instanceIndex,
-        estado: "pending",
-        tagStatus: "pending",
-      })));
+      const totalInstances = preview.distribution.length;
+      const details = preview.distribution.flatMap((group, instancePosition) =>
+        group.contacts.map((contact, contactPosition) => ({
+          ejecucionId: created.id,
+          contactId: contact.id,
+          contactName: contact.name,
+          instanceIndex: group.instanceIndex,
+          mensaje: messages[(contactPosition * totalInstances + instancePosition) % messages.length],
+          estado: "pending",
+          tagStatus: "pending",
+        })));
       await detailModel.bulkCreate(details, { transaction });
       return created;
     });
@@ -158,13 +204,17 @@ async function claimBatch(executionId, now = new Date(), dependencies = {}) {
     });
     if (!execution || !ACTIVE_STATES.includes(execution.estado)) return null;
     if (execution.nextBatchAt && new Date(execution.nextBatchAt) > now) return null;
-    const details = await detailModel.findAll({
-      where: { ejecucionId: execution.id, estado: "pending" },
+    const executionDetails = await detailModel.findAll({
+      where: { ejecucionId: execution.id },
       order: [["id", "ASC"]],
-      limit: execution.batchSize,
       transaction,
       lock: transaction.LOCK?.UPDATE,
     });
+    const details = selectBalancedBatchDetails(
+      executionDetails,
+      execution.instanceIndexes,
+      execution.batchSize,
+    );
     if (!details.length) return { execution, details: [] };
 
     await detailModel.update(
@@ -244,7 +294,7 @@ async function processBatch(executionId, now = new Date(), dependencies = {}) {
             type: "SMS",
             contactId: detail.contactId,
             conversationProviderId: providerId,
-            message: `${claimed.execution.mensaje}\n\n{ WA#${detail.instanceIndex} }`,
+            message: `${detail.mensaje || claimed.execution.mensaje}\n\n{ WA#${detail.instanceIndex} }`,
           },
           maxRetries: 0,
         });
@@ -370,5 +420,6 @@ module.exports = {
   processDueExecutions,
   recoverStaleExecutions,
   refreshExecution,
+  selectBalancedBatchDetails,
   serializeExecution,
 };

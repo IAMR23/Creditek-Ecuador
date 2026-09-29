@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const { Sequelize } = require("sequelize");
 
 const DB_NAME = process.env.DB_NAME || "CREDITEK";
@@ -247,12 +249,21 @@ const ensureGhlFlowScheduleSchema = async (queryInterface) => {
 const ensureGhlBroadcastQueueSchema = async (tables) => {
   if (!tables.includes("ghl_difusion_ejecuciones")) return;
   await sequelize.query(`
+    ALTER TABLE ghl_difusion_ejecuciones
+      ADD COLUMN IF NOT EXISTS mensajes JSONB NOT NULL DEFAULT '[]'::jsonb;
+    UPDATE ghl_difusion_ejecuciones
+    SET mensajes = jsonb_build_array(mensaje)
+    WHERE mensajes IS NULL
+       OR jsonb_typeof(mensajes) <> 'array'
+       OR jsonb_array_length(mensajes) = 0;
     CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_unique
     ON ghl_difusion_ejecuciones ((1))
     WHERE estado IN ('pending', 'running');
   `);
   if (!tables.includes("ghl_difusion_ejecucion_detalles")) return;
   await sequelize.query(`
+    ALTER TABLE ghl_difusion_ejecucion_detalles
+      ADD COLUMN IF NOT EXISTS mensaje TEXT;
     DO $$
     DECLARE
       tag_status_constraint TEXT;
@@ -271,6 +282,60 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
           CHECK ("tagStatus" IN ('pending', 'tagged', 'failed', 'skipped', 'cancelled'));
       END IF;
     END $$;
+  `);
+  if (tables.includes("ghl_difusion_mensajes")) {
+    await sequelize.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_mensajes_nombre_unique
+      ON ghl_difusion_mensajes (LOWER(TRIM(nombre)));
+      CREATE INDEX IF NOT EXISTS ghl_difusion_mensajes_updated_at_idx
+      ON ghl_difusion_mensajes ("updatedAt" DESC);
+    `);
+  }
+};
+
+const ensureUphoneCedulaSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("uphone_solicitudes")) return;
+
+  await addColumnIfMissing(queryInterface, "uphone_solicitudes", "cedulaNormalizada", {
+    type: Sequelize.STRING(30),
+    allowNull: true,
+  });
+  await sequelize.query(`
+    WITH cedulas_normalizadas AS (
+      SELECT
+        id,
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
+            THEN REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
+          ELSE NULL
+        END AS cedula_normalizada
+      FROM uphone_solicitudes
+    ), cedulas_ordenadas AS (
+      SELECT
+        id,
+        cedula_normalizada,
+        ROW_NUMBER() OVER (PARTITION BY cedula_normalizada ORDER BY id) AS posicion
+      FROM cedulas_normalizadas
+    )
+    UPDATE uphone_solicitudes AS solicitud
+    SET "cedulaNormalizada" = CASE
+      WHEN cedulas_ordenadas.cedula_normalizada IS NOT NULL
+       AND cedulas_ordenadas.posicion = 1
+        THEN cedulas_ordenadas.cedula_normalizada
+      ELSE NULL
+    END
+    FROM cedulas_ordenadas
+    WHERE solicitud.id = cedulas_ordenadas.id
+      AND solicitud."cedulaNormalizada" IS DISTINCT FROM CASE
+        WHEN cedulas_ordenadas.cedula_normalizada IS NOT NULL
+         AND cedulas_ordenadas.posicion = 1
+          THEN cedulas_ordenadas.cedula_normalizada
+        ELSE NULL
+      END;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uphone_solicitudes_cedula_normalizada_unique
+      ON uphone_solicitudes ("cedulaNormalizada");
   `);
 };
 
@@ -1049,6 +1114,17 @@ const ensureUsuariosSchema = async (queryInterface, tables) => {
     allowNull: true,
   });
 
+  await addColumnIfMissing(queryInterface, "usuarios", "usuarioUphone", {
+    type: Sequelize.STRING(100),
+    allowNull: true,
+  });
+
+  await sequelize.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS usuarios_usuario_uphone_lower_unique
+    ON usuarios (LOWER(BTRIM("usuarioUphone")))
+    WHERE NULLIF(BTRIM("usuarioUphone"), '') IS NOT NULL;
+  `);
+
   await sequelize.query(`
     WITH candidatos AS (
       SELECT
@@ -1252,6 +1328,53 @@ const ensureMapaComercialSchema = async (tables) => {
       CREATE INDEX IF NOT EXISTS mapa_ubicaciones_estado_idx
       ON mapa_ubicaciones_normalizadas ("estadoGeocodificacion");
     `);
+  }
+};
+
+const ensureRequiredFeatureTables = async (queryInterface) => {
+  const tables = new Set(await queryInterface.showAllTables());
+  const ejecutarMigraciones = async (migrationNames) => {
+    for (const migrationName of migrationNames) {
+      const sql = fs.readFileSync(
+        path.join(__dirname, "../migrations", migrationName),
+        "utf8",
+      );
+      await sequelize.query(sql);
+    }
+  };
+
+  if (
+    tables.has("agencias")
+    && (
+      !tables.has("mapa_comercial_zonas")
+      || !tables.has("mapa_ubicaciones_normalizadas")
+    )
+  ) {
+    await ejecutarMigraciones(["20260625_create_mapa_comercial.sql"]);
+  }
+
+  if (
+    tables.has("usuarios")
+    && (
+      !tables.has("ghl_difusion_listas")
+      || !tables.has("ghl_difusion_ejecuciones")
+      || !tables.has("ghl_difusion_ejecucion_detalles")
+      || !tables.has("ghl_difusion_mensajes")
+    )
+  ) {
+    await ejecutarMigraciones([
+      "202609280002-create-ghl-difusion-listas.sql",
+      "202609280003-create-ghl-difusion-ejecuciones.sql",
+      "202609290001-create-ghl-difusion-mensajes-y-variantes.sql",
+    ]);
+  }
+
+  if (tables.has("usuarios") && !tables.has("uphone_solicitudes")) {
+    await ejecutarMigraciones([
+      "202609280004-create-uphone-solicitudes.sql",
+      "202609280005-allow-uphone-api-key-imports.sql",
+      "202609290002-add-uphone-cedula-unique.sql",
+    ]);
   }
 };
 
@@ -2020,6 +2143,7 @@ const connectDB = async () => {
     console.log("Conectado a PostgreSQL exitosamente");
 
     const queryInterface = sequelize.getQueryInterface();
+    await ensureRequiredFeatureTables(queryInterface);
     await ensureGhlRepartoExecutionControlSchema(queryInterface);
     await ensureGhlRepartoCapacitySchema(queryInterface);
     await ensureGhlAdvisorAvailabilitySchema(queryInterface);
@@ -2032,6 +2156,7 @@ const connectDB = async () => {
     await ensureEntregaOperacionSchema(queryInterface);
     await ensureEntregaTipoSchema(queryInterface);
     await ensureTicketsTiPreSyncSchema(queryInterface);
+    await ensureUphoneCedulaSchema(queryInterface);
     await sequelize.sync({});
     await sequelize.query(require("fs").readFileSync(
       require("path").join(__dirname, "../migrations/202609050004-create-egresos-creditek-tipos.sql"), "utf8",
@@ -2265,5 +2390,7 @@ module.exports = {
   ensureGhlRepartoCapacitySchema,
   ensureGhlRepartoExecutionControlSchema,
   ensureGhlFlowScheduleSchema,
+  ensureRequiredFeatureTables,
   ensureTicketsTiPreSyncSchema,
+  ensureUphoneCedulaSchema,
 };

@@ -200,6 +200,46 @@ describe("POST /usuarios", () => {
       { usuarioId: 30, rolPagoId: 15 },
     ]);
   });
+
+  test("guarda el usuario de Uphone al crear un usuario", async () => {
+    Usuario.create.mockImplementation(async (data) => ({
+      id: 31,
+      ...data,
+      toJSON: () => ({ id: 31, ...data }),
+    }));
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send({
+        ...payloadValido,
+        usuarioUphone: "  asesor.uphone  ",
+      });
+
+    expect(response.status).toBe(201);
+    expect(Usuario.create).toHaveBeenCalledWith(
+      expect.objectContaining({ usuarioUphone: "asesor.uphone" }),
+    );
+  });
+
+  test("rechaza un usuario Uphone ya asignado", async () => {
+    Usuario.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 99, usuarioUphone: "ARI2028" });
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send({
+        ...payloadValido,
+        usuarioUphone: "ARI2028",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      "El usuario Uphone ya esta asignado a otro usuario.",
+    );
+    expect(Usuario.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("PUT /usuarios/:id", () => {
@@ -283,5 +323,45 @@ describe("PUT /usuarios/:id", () => {
       { usuarioId: 21, rolPagoId: 2 },
       { usuarioId: 21, rolPagoId: 16 },
     ]);
+  });
+
+  test("actualiza el usuario de Uphone y permite limpiarlo", async () => {
+    const usuario = {
+      id: 22,
+      usuarioUphone: "anterior",
+      save: jest.fn().mockResolvedValue(undefined),
+      toJSON() {
+        return { id: this.id, usuarioUphone: this.usuarioUphone };
+      },
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/22")
+      .send({ usuarioUphone: "   " });
+
+    expect(response.status).toBe(200);
+    expect(usuario.usuarioUphone).toBeNull();
+    expect(usuario.save).toHaveBeenCalled();
+  });
+
+  test("rechaza asignar en edicion un usuario Uphone usado por otra persona", async () => {
+    const usuario = {
+      id: 23,
+      usuarioUphone: null,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+    Usuario.findOne.mockResolvedValue({ id: 50, usuarioUphone: "FER2028" });
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/23")
+      .send({ usuarioUphone: "FER2028" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      "El usuario Uphone ya esta asignado a otro usuario.",
+    );
+    expect(usuario.save).not.toHaveBeenCalled();
   });
 });

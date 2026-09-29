@@ -5,6 +5,7 @@ const GhlDifusionEjecucion = sequelize.define("GhlDifusionEjecucion", {
   id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
   estado: { type: DataTypes.STRING(30), allowNull: false, defaultValue: "pending" },
   mensaje: { type: DataTypes.TEXT, allowNull: false },
+  mensajes: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
   instanceIndexes: { type: DataTypes.ARRAY(DataTypes.INTEGER), allowNull: false },
   batchSize: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 3 },
   intervalMinutes: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 5 },

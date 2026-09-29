@@ -69,4 +69,48 @@ const listar = async (req, res) => {
   }
 };
 
-module.exports = { importarApiKey, importarManual, listar };
+const exportar = async (req, res) => {
+  try {
+    const resultado = await service.exportarExcel(req.query);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${resultado.filename}"`,
+    );
+    res.setHeader("X-RVE-Registros", String(resultado.total));
+    return res.send(resultado.buffer);
+  } catch (error) {
+    uphoneLogger.error("exportacion fallida", error, {
+      requestId: req.uphoneRequestId,
+    });
+    return responderError(res, error);
+  }
+};
+
+const eliminar = async (req, res) => {
+  try {
+    const solicitud = await service.eliminarSolicitud(req.params.id);
+    uphoneLogger.info("solicitud eliminada", {
+      requestId: req.uphoneRequestId,
+      solicitudId: solicitud.id,
+      usuarioId: req.user?.id,
+    });
+    return res.json({
+      ok: true,
+      message: `Solicitud #${solicitud.numeroSolicitud} eliminada`,
+      solicitud,
+    });
+  } catch (error) {
+    uphoneLogger.error("eliminacion fallida", error, {
+      requestId: req.uphoneRequestId,
+      solicitudId: req.params.id,
+      usuarioId: req.user?.id,
+    });
+    return responderError(res, error);
+  }
+};
+
+module.exports = { eliminar, exportar, importarApiKey, importarManual, listar };

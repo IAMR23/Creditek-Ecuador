@@ -38,6 +38,13 @@ describe("ghlBroadcastService", () => {
     );
   });
 
+  test("valida hasta diez variantes para alternar", () => {
+    expect(service.normalizeMessages({ messages: ["Mensaje uno", "Mensaje dos"] }))
+      .toEqual(["Mensaje uno", "Mensaje dos"]);
+    expect(() => service.normalizeMessages({ messages: Array(11).fill("Mensaje") }))
+      .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_MESSAGE_VARIANT_LIMIT" }));
+  });
+
   test("selecciona Whatsapp y no el proveedor antiguo stevo", () => {
     const provider = service.selectMessageHubProvider([
       { _id: "old", name: "stevo", type: "SMS" },
@@ -95,6 +102,60 @@ describe("ghlBroadcastService", () => {
     expect(requestGhl.mock.calls[0][1].data.filters).toEqual([
       { field: "source", operator: "eq", value: "Facebook" },
       { field: "tags", operator: "contains", value: "prospecto" },
+    ]);
+  });
+
+  test("cruza la etapa del pipeline con los filtros del contacto", async () => {
+    const fetchOpportunitiesByStatus = jest.fn().mockResolvedValue([
+      { id: "opp-1", contactId: "1", source: "Facebook" },
+      { id: "opp-2", contactId: "2", source: "Facebook" },
+      { id: "opp-3", contactId: "1", source: "Facebook" },
+    ]);
+    const fetchContactsByIdsInBatches = jest.fn().mockResolvedValue(new Map([
+      ["1", contact("1", { tags: ["prospecto"] })],
+      ["2", contact("2", { tags: ["cliente"] })],
+    ]));
+
+    const result = await service.listContacts(
+      {
+        page: 1,
+        pageSize: 10,
+        filters: [
+          { field: "pipelineStageId", operator: "eq", pipelineId: "pipeline-1", value: "stage-2" },
+          { field: "tags", operator: "eq", value: "prospecto" },
+        ],
+      },
+      {
+        getGhlConfig: () => ({ locationId: "location" }),
+        createGhlClient: () => ({ client: true }),
+        fetchOpportunitiesByStatus,
+        fetchContactsByIdsInBatches,
+      },
+    );
+
+    expect(fetchOpportunitiesByStatus).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ pipelineId: "pipeline-1", pipelineStageId: "stage-2" }),
+      "",
+    );
+    expect(fetchContactsByIdsInBatches).toHaveBeenCalledWith(expect.objectContaining({
+      contactIds: ["1", "2"],
+    }));
+    expect(result.contacts.map((item) => item.id)).toEqual(["1"]);
+    expect(result.pagination.total).toBe(1);
+  });
+
+  test("obtiene pipelines y etapas disponibles", async () => {
+    const pipelines = await service.listPipelines({
+      getGhlConfig: () => ({ locationId: "location" }),
+      createGhlClient: () => ({ client: true }),
+      fetchPipelines: jest.fn().mockResolvedValue([
+        { id: "p-1", name: "Ventas", stages: [{ id: "s-1", name: "Nuevo" }] },
+      ]),
+    });
+
+    expect(pipelines).toEqual([
+      { id: "p-1", name: "Ventas", stages: [{ id: "s-1", name: "Nuevo" }] },
     ]);
   });
 

@@ -19,12 +19,14 @@ const FIELD_OPERATORS = Object.freeze({
   lastName: ["eq", "not_eq", "contains", "not_contains"],
   email: ["eq", "not_eq", "contains", "not_contains"],
   phone: ["eq", "not_eq", "contains", "not_contains"],
+  pipelineStageId: ["eq"],
 });
 
 const normalizeRule = (rule) => {
   const field = compactString(rule?.field);
   const operator = compactString(rule?.operator).toLowerCase();
   const value = compactString(rule?.value).slice(0, 150);
+  const pipelineId = compactString(rule?.pipelineId).slice(0, 150);
 
   if (!Object.prototype.hasOwnProperty.call(FIELD_OPERATORS, field)) {
     throw createError("El campo seleccionado no es valido", "GHL_SMART_LIST_FIELD_INVALID");
@@ -35,7 +37,18 @@ const normalizeRule = (rule) => {
   if (!value) {
     throw createError("Todos los filtros deben tener un valor", "GHL_SMART_LIST_VALUE_REQUIRED");
   }
-  return { field, operator, value };
+  if (field === "pipelineStageId" && !pipelineId) {
+    throw createError(
+      "Debe seleccionar el pipeline de la etapa",
+      "GHL_SMART_LIST_PIPELINE_REQUIRED",
+    );
+  }
+  return {
+    field,
+    operator,
+    value,
+    ...(field === "pipelineStageId" ? { pipelineId } : {}),
+  };
 };
 
 const normalizeFilters = (input = {}) => {
@@ -75,6 +88,12 @@ const normalizeFilters = (input = {}) => {
     throw createError(
       "Solo puede existir un filtro de busqueda general",
       "GHL_SMART_LIST_QUERY_LIMIT",
+    );
+  }
+  if (rules.filter((rule) => rule.field === "pipelineStageId").length > 1) {
+    throw createError(
+      "Solo puede existir un filtro de etapa del pipeline",
+      "GHL_SMART_LIST_PIPELINE_STAGE_LIMIT",
     );
   }
   return { logic: "AND", rules };
