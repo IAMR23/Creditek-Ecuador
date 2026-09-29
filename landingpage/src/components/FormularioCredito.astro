@@ -60,19 +60,19 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
           aria-hidden="true"
         ></div>
 
-        <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div class="max-w-2xl">
+        <div class="relative flex flex-col items-center gap-6 text-center sm:min-h-20 sm:justify-center">
+          <div class="mx-auto w-full max-w-2xl">
             <p class="mb-3 text-sm font-extrabold tracking-[0.18em] text-emerald-700">
-              SOLICITUD DE CRÉDITO
+              
             </p>
             <h1
               id="credit-form-title"
               class="text-3xl font-extrabold leading-tight text-gray-900 sm:text-4xl"
             >
-              Solicita tu crédito con Creditek
+              Aplica a Sierra Ecuatoriana 
             </h1>
             <p class="mt-3 text-base leading-relaxed text-gray-600 sm:text-lg">
-              Crédito Express
+              
             </p>
             <span
               class="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3.5 py-2 text-sm font-semibold text-emerald-800 shadow-sm"
@@ -83,7 +83,7 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
           </div>
 
           <div
-            class="flex h-20 w-36 shrink-0 items-center justify-center self-start rounded-2xl border border-white bg-white/90 p-3 shadow-md sm:self-center"
+            class="flex h-20 w-36 shrink-0 items-center justify-center rounded-2xl border border-white bg-white/90 p-3 shadow-md sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2"
           >
             <img
               src="/Creditek/logo.png"
@@ -111,7 +111,7 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
           autocomplete="off"
           aria-hidden="true"
         />
-        <div class="mb-8 flex items-center gap-4 border-b border-gray-100 pb-7">
+        <div class="mb-8 grid grid-cols-[3rem_minmax(0,1fr)_3rem] items-center gap-4 border-b border-gray-100 pb-7 text-center">
           <span
             class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-base font-extrabold text-white shadow-lg shadow-emerald-600/20"
             aria-hidden="true"
@@ -122,6 +122,7 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
             <h3 class="text-xl font-bold text-gray-900 sm:text-2xl">Completa tus datos</h3>
             <p class="mt-1 text-sm text-gray-500">Todos los campos son obligatorios</p>
           </div>
+          <span aria-hidden="true"></span>
         </div>
 
         <div class="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2">
