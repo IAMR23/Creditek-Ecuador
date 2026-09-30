@@ -11,6 +11,7 @@ import {
   Download,
   FileSpreadsheet,
   List,
+  PhoneOff,
   RefreshCw,
   Search,
   Trash2,
@@ -28,6 +29,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import Select from "react-select";
 import Swal from "sweetalert2";
 
 import api from "../../api/client";
@@ -37,13 +39,15 @@ const EMPTY_FILTERS = {
   estado: "",
   fechaDesde: "",
   fechaHasta: "",
-  usuarioUphone: "",
+  usuariosUphone: [],
+  agencia: "",
   preset: "all",
 };
 
 const EMPTY_DASHBOARD = {
   totalSolicitudes: 0,
   totalAprobadas: 0,
+  totalConcretadas: 0,
   totalDenegadas: 0,
   totalInvalidadas: 0,
   totalOtros: 0,
@@ -51,8 +55,37 @@ const EMPTY_DASHBOARD = {
   agencias: [],
   agenciaLider: null,
   vendedores: [],
+  telefonos099999: {
+    patron: "099999*",
+    cantidad: 0,
+    total: 0,
+    porcentaje: 0,
+    agencias: [],
+    vendedores: [],
+  },
   usuarios: [],
+  agenciasDisponibles: [],
   periodo: null,
+};
+
+const normalizarClaveUphone = (valor) => String(valor || "").trim().toUpperCase();
+
+const normalizarVendedoresSolicitudes = (solicitudes = [], usuarios = []) => {
+  const nombresPorClave = new Map(
+    usuarios
+      .map((usuario) => [
+        normalizarClaveUphone(usuario.usuarioUphone),
+        String(usuario.nombre || "").trim(),
+      ])
+      .filter(([clave, nombre]) => clave && nombre),
+  );
+
+  return solicitudes.map((solicitud) => ({
+    ...solicitud,
+    vendedor:
+      nombresPorClave.get(normalizarClaveUphone(solicitud.usuario))
+      || solicitud.vendedor,
+  }));
 };
 
 const DASHBOARD_PRESETS = [
@@ -87,7 +120,7 @@ const shiftIsoDate = (isoDate, days) => {
   return date.toISOString().slice(0, 10);
 };
 
-const createDashboardFilters = (preset = "today", usuarioUphone = "") => {
+const createDashboardFilters = (preset = "today", usuariosUphone = [], agencia = "") => {
   const today = getTodayInEcuador();
   let fechaDesde = today;
   if (preset === "last7") fechaDesde = shiftIsoDate(today, -6);
@@ -97,16 +130,16 @@ const createDashboardFilters = (preset = "today", usuarioUphone = "") => {
   }
   if (preset === "month") fechaDesde = `${today.slice(0, 7)}-01`;
   if (preset === "year") fechaDesde = `${today.slice(0, 4)}-01-01`;
-  return { preset, fechaDesde, fechaHasta: today, usuarioUphone };
+  return { preset, fechaDesde, fechaHasta: today, usuariosUphone, agencia };
 };
 
-const createSolicitudFilters = (preset = "all", usuarioUphone = "") => {
+const createSolicitudFilters = (preset = "all", usuariosUphone = [], agencia = "") => {
   if (preset === "all") {
-    return { ...EMPTY_FILTERS, preset, usuarioUphone };
+    return { ...EMPTY_FILTERS, preset, usuariosUphone, agencia };
   }
   return {
     ...EMPTY_FILTERS,
-    ...createDashboardFilters(preset, usuarioUphone),
+    ...createDashboardFilters(preset, usuariosUphone, agencia),
   };
 };
 
@@ -156,7 +189,57 @@ const statusBarClass = (value) => {
   return "bg-slate-500";
 };
 
-const DashboardDateFilters = ({ filters, onChange, onSubmit, onPreset, today, users }) => (
+const MULTI_SELECT_STYLES = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: 40,
+    borderRadius: 8,
+    borderColor: state.isFocused ? "#14b8a6" : "#cbd5e1",
+    boxShadow: state.isFocused ? "0 0 0 2px #ccfbf1" : "none",
+    fontSize: 14,
+    ":hover": { borderColor: state.isFocused ? "#14b8a6" : "#94a3b8" },
+  }),
+  multiValue: (base) => ({ ...base, borderRadius: 6, backgroundColor: "#ccfbf1" }),
+  multiValueLabel: (base) => ({ ...base, color: "#0f766e" }),
+  multiValueRemove: (base) => ({
+    ...base,
+    color: "#0f766e",
+    ":hover": { backgroundColor: "#99f6e4", color: "#115e59" },
+  }),
+  menu: (base) => ({ ...base, zIndex: 30 }),
+};
+
+const UserMultiSelect = ({ users, selected, onChange, inputId }) => {
+  const options = users.map((user) => ({
+    value: user.usuarioUphone,
+    label: `${user.nombre} · ${user.usuarioUphone}`,
+  }));
+  return (
+    <Select
+      inputId={inputId}
+      isMulti
+      isClearable
+      closeMenuOnSelect={false}
+      hideSelectedOptions={false}
+      options={options}
+      value={options.filter((option) => selected.includes(option.value))}
+      onChange={(selection) => onChange((selection || []).map((option) => option.value))}
+      placeholder="Todos los usuarios"
+      noOptionsMessage={() => "Sin usuarios disponibles"}
+      styles={MULTI_SELECT_STYLES}
+    />
+  );
+};
+
+const DashboardDateFilters = ({
+  filters,
+  onChange,
+  onSubmit,
+  onPreset,
+  today,
+  users,
+  agencies,
+}) => (
   <form
     onSubmit={onSubmit}
     className="space-y-4 rounded-xl border border-teal-200 bg-white p-4 shadow-sm"
@@ -166,7 +249,7 @@ const DashboardDateFilters = ({ filters, onChange, onSubmit, onPreset, today, us
         <span className="rounded-xl bg-teal-50 p-2.5 text-teal-600"><CalendarDays size={21} /></span>
         <div>
           <h2 className="text-sm font-bold text-slate-900">Filtros del dashboard</h2>
-          <p className="mt-0.5 text-xs text-slate-500">El periodo y el usuario se aplican a todos los indicadores y gráficas.</p>
+          <p className="mt-0.5 text-xs text-slate-500">El periodo, las agencias y los usuarios se aplican a todos los indicadores y gráficas.</p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -187,22 +270,29 @@ const DashboardDateFilters = ({ filters, onChange, onSubmit, onPreset, today, us
       </div>
     </div>
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_160px_160px_auto] xl:items-end">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(190px,0.8fr)_minmax(280px,1.2fr)_160px_160px_auto] xl:items-end">
       <label className="text-xs font-semibold text-slate-600">
-        Usuario
+        Agencia
         <select
-          value={filters.usuarioUphone}
-          onChange={(event) => onChange((current) => ({ ...current, usuarioUphone: event.target.value }))}
+          value={filters.agencia}
+          onChange={(event) => onChange((current) => ({ ...current, agencia: event.target.value }))}
           className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
         >
-          <option value="">Todos los usuarios</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.usuarioUphone}>
-              {user.nombre} · {user.usuarioUphone}
-            </option>
-          ))}
+          <option value="">Todas las agencias</option>
+          {agencies.map((agency) => <option key={agency} value={agency}>{agency}</option>)}
         </select>
       </label>
+      <div className="text-xs font-semibold text-slate-600">
+        <label htmlFor="dashboard-usuarios">Usuarios</label>
+        <div className="mt-1">
+          <UserMultiSelect
+            inputId="dashboard-usuarios"
+            users={users}
+            selected={filters.usuariosUphone}
+            onChange={(usuariosUphone) => onChange((current) => ({ ...current, usuariosUphone }))}
+          />
+        </div>
+      </div>
       <label className="text-xs font-semibold text-slate-600">
         Desde
         <input
@@ -238,6 +328,7 @@ const DashboardDateFilters = ({ filters, onChange, onSubmit, onPreset, today, us
 const DashboardPanel = ({ dashboard, loading }) => {
   const topAgencias = dashboard.agencias.slice(0, 8);
   const vendedores = dashboard.vendedores || [];
+  const telefonos099999 = dashboard.telefonos099999 || EMPTY_DASHBOARD.telefonos099999;
   const total = dashboard.totalSolicitudes || 0;
 
   if (loading) {
@@ -250,7 +341,7 @@ const DashboardPanel = ({ dashboard, loading }) => {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -281,16 +372,7 @@ const DashboardPanel = ({ dashboard, loading }) => {
             <span className="rounded-xl bg-rose-100 p-2.5 text-rose-700"><CircleX size={22} /></span>
           </div>
         </div>
-        <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">Invalidadas</p>
-              <p className="mt-2 text-3xl font-bold text-orange-800">{numberFormatter.format(dashboard.totalInvalidadas)}</p>
-              <p className="mt-1 text-xs font-medium text-orange-700">Por contrato aprobado</p>
-            </div>
-            <span className="rounded-xl bg-orange-100 p-2.5 text-orange-700"><Ban size={22} /></span>
-          </div>
-        </div>
+
         <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -305,7 +387,96 @@ const DashboardPanel = ({ dashboard, loading }) => {
             <span className="shrink-0 rounded-xl bg-amber-100 p-2.5 text-amber-700"><Trophy size={22} /></span>
           </div>
         </div>
+        <div className="rounded-xl border border-fuchsia-200 bg-fuchsia-50/50 p-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-fuchsia-700">Teléfonos 099999…</p>
+              <p className="mt-2 text-3xl font-bold text-fuchsia-900">
+                {Number(telefonos099999.porcentaje || 0).toFixed(1)}%
+              </p>
+              <p className="mt-1 text-xs font-medium text-fuchsia-700">
+                {numberFormatter.format(telefonos099999.cantidad || 0)} de {numberFormatter.format(telefonos099999.total || 0)}
+              </p>
+            </div>
+            <span className="rounded-xl bg-fuchsia-100 p-2.5 text-fuchsia-700"><PhoneOff size={22} /></span>
+          </div>
+        </div>
       </div>
+
+      <section className="overflow-hidden rounded-xl border border-fuchsia-200 bg-white shadow-sm">
+        <div className="border-b border-fuchsia-100 bg-fuchsia-50/50 px-4 py-4">
+          <div className="flex items-center gap-2">
+            <PhoneOff size={18} className="text-fuchsia-700" />
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Solicitudes con teléfono 099999…</h2>
+              <p className="text-xs text-slate-600">
+                Porcentaje de solicitudes cuyo teléfono, sin espacios ni símbolos, comienza con 099999.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="grid divide-y divide-slate-200 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+          {[
+            { titulo: "Por agencia", filas: telefonos099999.agencias || [], vendedor: false },
+            { titulo: "Por vendedor", filas: telefonos099999.vendedores || [], vendedor: true },
+          ].map(({ titulo, filas, vendedor }) => (
+            <div key={titulo} className="min-w-0">
+              <h3 className="border-b border-slate-100 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-600">
+                {titulo}
+              </h3>
+              <div className="max-h-[420px] overflow-auto">
+                <table className="w-full min-w-[520px] divide-y divide-slate-200 text-sm">
+                  <thead className="sticky top-0 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2.5">{vendedor ? "Vendedor" : "Agencia"}</th>
+                      <th className="px-3 py-2.5 text-right">099999…</th>
+                      <th className="px-3 py-2.5 text-right">Solicitudes</th>
+                      <th className="px-4 py-2.5 text-right">Porcentaje</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filas.length ? filas.map((item) => (
+                      <tr key={`${titulo}-${item.usuarioId || item.usuarioUphone || item.nombre}`} className="hover:bg-slate-50/70">
+                        <td className="px-4 py-3 font-semibold text-slate-800">
+                          {item.nombre}
+                          {vendedor && item.usuarioUphone && (
+                            <p className="text-[11px] font-normal text-slate-500">
+                              {item.usuarioUphone}{!item.vinculado ? " · Sin vínculo en RVE" : ""}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-right font-bold text-fuchsia-700">
+                          {numberFormatter.format(item.cantidad)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-700">
+                          {numberFormatter.format(item.total)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="ml-auto w-28">
+                            <div className="mb-1 text-right font-bold text-slate-800">
+                              {Number(item.porcentaje || 0).toFixed(1)}%
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-fuchsia-500"
+                                style={{ width: `${Math.min(100, Math.max(0, item.porcentaje || 0))}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-10 text-center text-slate-500">No hay datos para el periodo.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.4fr)]">
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -386,18 +557,18 @@ const DashboardPanel = ({ dashboard, loading }) => {
           <div>
             <h2 className="text-sm font-bold text-slate-900">Clientes por vendedor</h2>
             <p className="text-xs text-slate-500">
-              Clientes únicos del periodo, relacionando el usuario Uphone con el nombre registrado en RVE.
+              Solicitudes aprobadas y denegadas de clientes únicos, vinculadas con el usuario registrado en RVE.
             </p>
           </div>
         </div>
         {vendedores.length ? (
           <div className="mt-4 max-h-[560px] overflow-y-auto">
-            <div style={{ height: `${Math.max(300, vendedores.length * 38)}px` }}>
+            <div style={{ height: `${Math.max(320, vendedores.length * 56)}px` }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={vendedores}
                   layout="vertical"
-                  margin={{ top: 5, right: 35, left: 15, bottom: 5 }}
+                  margin={{ top: 5, right: 35, left: 15, bottom: 25 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
@@ -417,13 +588,21 @@ const DashboardPanel = ({ dashboard, loading }) => {
                         <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-lg">
                           <p className="font-bold text-slate-900">{item.vendedor}</p>
                           <p className="text-slate-500">Usuario Uphone: {item.usuarioUphone || "Sin asignar"}</p>
-                          <p className="mt-1 font-semibold text-teal-700">{numberFormatter.format(item.clientes)} clientes</p>
+                          <p className="mt-1 font-semibold text-slate-700">{numberFormatter.format(item.clientes)} clientes únicos</p>
+                          <p className="font-semibold text-emerald-700">{numberFormatter.format(item.aprobadas)} aprobadas</p>
+                          <p className="font-semibold text-sky-700">{numberFormatter.format(item.concretadas)} concretadas</p>
+                          <p className="font-semibold text-rose-700">{numberFormatter.format(item.denegadas)} denegadas</p>
+                          {item.otros > 0 && (
+                            <p className="font-semibold text-slate-500">{numberFormatter.format(item.otros)} en otros estados</p>
+                          )}
                           {!item.vinculado && <p className="mt-1 text-amber-700">Usuario Uphone no vinculado en RVE</p>}
                         </div>
                       );
                     }}
                   />
-                  <Bar dataKey="clientes" name="Clientes" fill="#0d9488" radius={[0, 5, 5, 0]} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="aprobadas" name="Aprobadas" fill="#10b981" radius={[0, 5, 5, 0]} />
+                  <Bar dataKey="denegadas" name="Denegadas" fill="#f43f5e" radius={[0, 5, 5, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -435,16 +614,66 @@ const DashboardPanel = ({ dashboard, loading }) => {
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-4 py-4">
-          <h2 className="text-sm font-bold text-slate-900">Detalle por agencia</h2>
-          <p className="text-xs text-slate-500">Totales y resultado de cada agencia registrada.</p>
+          <h2 className="text-sm font-bold text-slate-900">Cierre de ventas por vendedor</h2>
+          <p className="text-xs text-slate-500">
+            Una venta concretada conserva también su conteo como aprobada. El cierre se calcula sobre las aprobadas.
+          </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] divide-y divide-slate-200 text-sm">
+          <table className="w-full min-w-[900px] divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Vendedor</th>
+                <th className="px-4 py-3">Usuario Uphone</th>
+                <th className="px-4 py-3 text-right">Clientes</th>
+                <th className="px-4 py-3 text-right">Aprobadas</th>
+                <th className="px-4 py-3 text-right">Concretadas</th>
+                <th className="px-4 py-3 text-right">% cierre</th>
+                <th className="px-4 py-3 text-right">Denegadas</th>
+                <th className="px-4 py-3 text-right">Otros estados</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {vendedores.length ? vendedores.map((item) => (
+                <tr key={item.usuarioId || item.usuarioUphone || item.vendedor} className="hover:bg-slate-50/80">
+                  <td className="px-4 py-3 font-semibold text-slate-800">
+                    {item.vendedor}
+                    {!item.vinculado && <p className="text-[11px] font-medium text-amber-700">Sin vínculo en RVE</p>}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{item.usuarioUphone || "—"}</td>
+                  <td className="px-4 py-3 text-right font-bold text-slate-900">{numberFormatter.format(item.clientes)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-emerald-700">{numberFormatter.format(item.aprobadas)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-sky-700">{numberFormatter.format(item.concretadas)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-700">
+                    {item.aprobadas ? `${((item.concretadas / item.aprobadas) * 100).toFixed(1)}%` : "0.0%"}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-rose-700">{numberFormatter.format(item.denegadas)}</td>
+                  <td className="px-4 py-3 text-right text-slate-600">{numberFormatter.format(item.otros)}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-500">No hay datos por vendedor.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-4 py-4">
+          <h2 className="text-sm font-bold text-slate-900">Detalle por agencia</h2>
+          <p className="text-xs text-slate-500">
+            Totales y cierre de cada agencia. Las concretadas continúan incluidas en aprobadas.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1040px] divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">Agencia</th>
                 <th className="px-4 py-3 text-right">Solicitudes</th>
                 <th className="px-4 py-3 text-right">Aprobadas</th>
+                <th className="px-4 py-3 text-right">Concretadas</th>
+                <th className="px-4 py-3 text-right">% cierre</th>
                 <th className="px-4 py-3 text-right">Denegadas</th>
                 <th className="px-4 py-3 text-right">Invalidadas</th>
                 <th className="px-4 py-3 text-right">Otros estados</th>
@@ -457,6 +686,10 @@ const DashboardPanel = ({ dashboard, loading }) => {
                   <td className="px-4 py-3 font-semibold text-slate-800">{item.agencia}</td>
                   <td className="px-4 py-3 text-right font-bold text-slate-900">{numberFormatter.format(item.total)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-emerald-700">{numberFormatter.format(item.aprobadas)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-sky-700">{numberFormatter.format(item.concretadas)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-700">
+                    {item.aprobadas ? `${((item.concretadas / item.aprobadas) * 100).toFixed(1)}%` : "0.0%"}
+                  </td>
                   <td className="px-4 py-3 text-right font-semibold text-rose-700">{numberFormatter.format(item.denegadas)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-orange-700">{numberFormatter.format(item.invalidadas)}</td>
                   <td className="px-4 py-3 text-right text-slate-600">{numberFormatter.format(item.otros)}</td>
@@ -465,7 +698,7 @@ const DashboardPanel = ({ dashboard, loading }) => {
                   </td>
                 </tr>
               )) : (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500">No hay datos por agencia.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-500">No hay datos por agencia.</td></tr>
               )}
             </tbody>
           </table>
@@ -505,15 +738,25 @@ export default function SolicitudesUphone() {
           estado: appliedFilters.estado,
           fechaDesde: appliedFilters.fechaDesde,
           fechaHasta: appliedFilters.fechaHasta,
-          usuarioUphone: appliedFilters.usuarioUphone,
+          usuariosUphone: appliedFilters.usuariosUphone.join(","),
+          agencia: appliedFilters.agencia,
           dashboardFechaDesde: appliedDashboardFilters.fechaDesde,
           dashboardFechaHasta: appliedDashboardFilters.fechaHasta,
-          dashboardUsuarioUphone: appliedDashboardFilters.usuarioUphone,
+          dashboardUsuariosUphone: appliedDashboardFilters.usuariosUphone.join(","),
+          dashboardAgencia: appliedDashboardFilters.agencia,
           page,
           pageSize: 25,
         },
       });
-      setData({ ...response.data, dashboard: response.data.dashboard || EMPTY_DASHBOARD });
+      const dashboard = response.data.dashboard || EMPTY_DASHBOARD;
+      setData({
+        ...response.data,
+        solicitudes: normalizarVendedoresSolicitudes(
+          response.data.solicitudes,
+          dashboard.usuarios,
+        ),
+        dashboard,
+      });
     } catch (error) {
       Swal.fire(
         "No se pudo cargar",
@@ -555,7 +798,11 @@ export default function SolicitudesUphone() {
   };
 
   const applySolicitudPreset = (preset) => {
-    const presetFilters = createSolicitudFilters(preset, filters.usuarioUphone);
+    const presetFilters = createSolicitudFilters(
+      preset,
+      filters.usuariosUphone,
+      filters.agencia,
+    );
     const nextFilters = {
       ...filters,
       fechaDesde: presetFilters.fechaDesde,
@@ -576,7 +823,8 @@ export default function SolicitudesUphone() {
           estado: appliedFilters.estado,
           fechaDesde: appliedFilters.fechaDesde,
           fechaHasta: appliedFilters.fechaHasta,
-          usuarioUphone: appliedFilters.usuarioUphone,
+          usuariosUphone: appliedFilters.usuariosUphone.join(","),
+          agencia: appliedFilters.agencia,
         },
         responseType: "blob",
       });
@@ -655,7 +903,11 @@ export default function SolicitudesUphone() {
   };
 
   const applyDashboardPreset = (preset) => {
-    const nextFilters = createDashboardFilters(preset, dashboardFilters.usuarioUphone);
+    const nextFilters = createDashboardFilters(
+      preset,
+      dashboardFilters.usuariosUphone,
+      dashboardFilters.agencia,
+    );
     setDashboardFilters(nextFilters);
     setAppliedDashboardFilters(nextFilters);
   };
@@ -783,7 +1035,7 @@ export default function SolicitudesUphone() {
                 ))}
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-8">
               <label className="text-xs font-semibold text-slate-600 sm:col-span-2">
                 Buscar
                 <input
@@ -803,23 +1055,35 @@ export default function SolicitudesUphone() {
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
-                Usuario
+                Agencia
                 <select
-                  value={filters.usuarioUphone}
+                  value={filters.agencia}
                   onChange={(event) => setFilters((current) => ({
                     ...current,
-                    usuarioUphone: event.target.value,
+                    agencia: event.target.value,
                   }))}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 >
-                  <option value="">Todos los usuarios</option>
-                  {(data.dashboard?.usuarios || []).map((usuario) => (
-                    <option key={usuario.id} value={usuario.usuarioUphone}>
-                      {usuario.nombre} ({usuario.usuarioUphone})
-                    </option>
+                  <option value="">Todas las agencias</option>
+                  {(data.dashboard?.agenciasDisponibles || []).map((agencia) => (
+                    <option key={agencia} value={agencia}>{agencia}</option>
                   ))}
                 </select>
               </label>
+              <div className="text-xs font-semibold text-slate-600 xl:col-span-2">
+                <label htmlFor="solicitudes-usuarios">Usuarios</label>
+                <div className="mt-1">
+                  <UserMultiSelect
+                    inputId="solicitudes-usuarios"
+                    users={data.dashboard?.usuarios || []}
+                    selected={filters.usuariosUphone}
+                    onChange={(usuariosUphone) => setFilters((current) => ({
+                      ...current,
+                      usuariosUphone,
+                    }))}
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2 xl:col-span-2">
                 <label className="text-xs font-semibold text-slate-600">
                   Desde
@@ -1019,6 +1283,7 @@ export default function SolicitudesUphone() {
               onPreset={applyDashboardPreset}
               today={getTodayInEcuador()}
               users={data.dashboard?.usuarios || []}
+              agencies={data.dashboard?.agenciasDisponibles || []}
             />
             <DashboardPanel dashboard={data.dashboard || EMPTY_DASHBOARD} loading={loading} />
           </div>

@@ -124,6 +124,7 @@ export const ROUTE_PERMISSIONS = {
   "/sistemas/inventarios": ["Sistemas", "Administracion"],
   "/sistemas/personas": ["Sistemas", "Administracion"],
   "/sistemas/reportes-caja-agencias": ["Sistemas", "Administracion"],
+  "/sistemas/usuarios-uphone": ["Sistemas", "Administracion"],
 
   "/usuarios": "Administracion",
   "/rol": "Administracion",

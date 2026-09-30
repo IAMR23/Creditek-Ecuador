@@ -125,6 +125,18 @@ const normalizarFechaSolicitud = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const obtenerDiaSolicitudEcuador = (value) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const valueByType = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
+  return `${valueByType.year}-${valueByType.month}-${valueByType.day}`;
+};
+
 const obtenerMapaColumnas = (row) => {
   const encabezados = new Map();
   row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
@@ -220,6 +232,7 @@ const parsearExcel = async (buffer) => {
     }
 
     const cedula = normalizarTexto(get("cedula"), 30);
+    const fechaSolicitud = normalizarFechaSolicitud(get("fechaSolicitud"));
     records.push({
       filaExcel: rowNumber,
       numeroSolicitud,
@@ -229,10 +242,11 @@ const parsearExcel = async (buffer) => {
       usuario: normalizarTexto(get("usuario"), 100),
       cedula,
       cedulaNormalizada: normalizarCedula(cedula),
+      fechaSolicitudDia: obtenerDiaSolicitudEcuador(fechaSolicitud),
       cliente: normalizarTexto(get("cliente"), 220),
       telefonoSolicitud: normalizarTexto(get("telefonoSolicitud"), 30),
       telefonoContrato: normalizarTexto(get("telefonoContrato"), 30),
-      fechaSolicitud: normalizarFechaSolicitud(get("fechaSolicitud")),
+      fechaSolicitud,
       fechaContrato: normalizarTexto(get("fechaContrato"), 40),
       grupoArrendamiento: normalizarTexto(get("grupoArrendamiento"), 160),
       estado: normalizarTexto(get("estado"), 80),
@@ -261,13 +275,16 @@ const importarExcel = async ({ file, usuarioId, requestId }) => {
     throw error;
   }
   const seenNumbers = new Set();
-  const seenCedulas = new Set();
+  const seenCedulasPorDia = new Set();
   const uniqueRecords = [];
   for (const record of parsed.records) {
     if (seenNumbers.has(record.numeroSolicitud)) continue;
     seenNumbers.add(record.numeroSolicitud);
-    if (record.cedulaNormalizada && seenCedulas.has(record.cedulaNormalizada)) continue;
-    if (record.cedulaNormalizada) seenCedulas.add(record.cedulaNormalizada);
+    const claveCedulaDia = record.cedulaNormalizada
+      ? `${record.cedulaNormalizada}|${record.fechaSolicitudDia || "SIN_FECHA"}`
+      : null;
+    if (claveCedulaDia && seenCedulasPorDia.has(claveCedulaDia)) continue;
+    if (claveCedulaDia) seenCedulasPorDia.add(claveCedulaDia);
     uniqueRecords.push(record);
   }
 
@@ -334,11 +351,25 @@ const obtenerFechaActualEcuador = () => {
   return `${valueByType.year}-${valueByType.month}-${valueByType.day}`;
 };
 
+const normalizarListaFiltro = (value, maxLength = 100, maxItems = 100) => {
+  const values = Array.isArray(value) ? value : String(value || "").split(",");
+  return [...new Set(
+    values
+      .map((item) => normalizarTexto(item, maxLength))
+      .filter(Boolean),
+  )].slice(0, maxItems);
+};
+
 const crearWhereSolicitudes = (query = {}) => {
   const where = {};
+  const condicionesAnd = [];
   const q = normalizarTexto(query.q, 120);
   const estado = normalizarTexto(query.estado, 80);
-  const usuarioUphone = normalizarTexto(query.usuarioUphone, 100);
+  const usuariosUphone = normalizarListaFiltro(
+    query.usuariosUphone ?? query.usuarioUphone,
+    100,
+  );
+  const agencia = normalizarTexto(query.agencia, 180);
   const desde = parseDateBoundary(query.fechaDesde);
   const hasta = parseDateBoundary(query.fechaHasta, true);
 
@@ -362,13 +393,33 @@ const crearWhereSolicitudes = (query = {}) => {
     ].map((field) => ({ [field]: { [Op.iLike]: `%${q}%` } }));
   }
   if (estado) where.estado = { [Op.iLike]: estado };
-  if (usuarioUphone) where.usuario = { [Op.iLike]: usuarioUphone };
+  if (usuariosUphone.length) {
+    condicionesAnd.push({
+      [Op.or]: usuariosUphone.map((usuario) => ({
+        usuario: { [Op.iLike]: usuario },
+      })),
+    });
+  }
+  if (agencia) {
+    condicionesAnd.push({
+      [Op.or]: [
+        { distribuidor: { [Op.iLike]: agencia } },
+        {
+          [Op.and]: [
+            { [Op.or]: [{ distribuidor: null }, { distribuidor: "" }] },
+            { matriz: { [Op.iLike]: agencia } },
+          ],
+        },
+      ],
+    });
+  }
   if (desde || hasta) {
     where.fechaSolicitud = {
       ...(desde ? { [Op.gte]: desde } : {}),
       ...(hasta ? { [Op.lte]: hasta } : {}),
     };
   }
+  if (condicionesAnd.length) where[Op.and] = condicionesAnd;
 
   return where;
 };
@@ -399,6 +450,7 @@ const crearDashboard = (rows = [], totalSolicitudes = 0) => {
 
   rows.forEach((row) => {
     const cantidad = Number(row.cantidad) || 0;
+    const concretadas = Number(row.concretadas) || 0;
     const estado = normalizarEtiqueta(row.estado, "SIN ESTADO");
     const agencia = normalizarEtiqueta(
       row.distribuidor || row.matriz,
@@ -411,11 +463,13 @@ const crearDashboard = (rows = [], totalSolicitudes = 0) => {
       agencia,
       total: 0,
       aprobadas: 0,
+      concretadas: 0,
       denegadas: 0,
       invalidadas: 0,
       otros: 0,
     };
     acumulado.total += cantidad;
+    acumulado.concretadas += concretadas;
     acumulado[resultado] += cantidad;
     agencias.set(agencia, acumulado);
   });
@@ -429,16 +483,18 @@ const crearDashboard = (rows = [], totalSolicitudes = 0) => {
   const totales = detalleAgencias.reduce(
     (acc, item) => ({
       aprobadas: acc.aprobadas + item.aprobadas,
+      concretadas: acc.concretadas + item.concretadas,
       denegadas: acc.denegadas + item.denegadas,
       invalidadas: acc.invalidadas + item.invalidadas,
       otros: acc.otros + item.otros,
     }),
-    { aprobadas: 0, denegadas: 0, invalidadas: 0, otros: 0 },
+    { aprobadas: 0, concretadas: 0, denegadas: 0, invalidadas: 0, otros: 0 },
   );
 
   return {
     totalSolicitudes: Number(totalSolicitudes) || 0,
     totalAprobadas: totales.aprobadas,
+    totalConcretadas: totales.concretadas,
     totalDenegadas: totales.denegadas,
     totalInvalidadas: totales.invalidadas,
     totalOtros: totales.otros,
@@ -448,7 +504,17 @@ const crearDashboard = (rows = [], totalSolicitudes = 0) => {
   };
 };
 
-const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
+const crearReemplazosDashboard = ({ desde, hasta, usuariosUphone, agencia }) => ({
+  desde,
+  hasta,
+  filtrarUsuarios: usuariosUphone.length > 0,
+  usuariosUphone: usuariosUphone.length
+    ? usuariosUphone.map((usuario) => usuario.toLowerCase())
+    : [null],
+  agencia: agencia || null,
+});
+
+const obtenerResumenDashboard = async ({ desde, hasta, usuariosUphone, agencia }) =>
   UphoneSolicitud.sequelize.query(
     `
       WITH solicitudes_clasificadas AS (
@@ -459,6 +525,7 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
           usuario,
           estado,
           "estadoContrato",
+          "fechaContrato",
           "fechaSolicitud",
           CASE
             WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
@@ -469,16 +536,29 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
             WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
               THEN TRUE
             ELSE FALSE
-          END AS contrato_aprobado
+          END AS contrato_aprobado,
+          CASE
+            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
+              AND NULLIF(BTRIM("fechaContrato"), '') IS NOT NULL
+              AND UPPER(BTRIM("fechaContrato")) NOT IN (
+                'NO APLICA', 'N/A', 'NA', 'S/N', 'SIN FECHA', 'PENDIENTE', '-'
+              )
+              THEN TRUE
+            ELSE FALSE
+          END AS concretada
         FROM uphone_solicitudes
       ), solicitudes_priorizadas AS (
         SELECT
           *,
           COUNT(*) FILTER (WHERE contrato_aprobado) OVER (
-            PARTITION BY cliente_clave
+            PARTITION BY
+              cliente_clave,
+              ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date
           ) AS contratos_aprobados_cliente,
           ROW_NUMBER() OVER (
-            PARTITION BY cliente_clave
+            PARTITION BY
+              cliente_clave,
+              ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date
             ORDER BY contrato_aprobado DESC, "fechaSolicitud" DESC NULLS LAST, id DESC
           ) AS prioridad_cliente
         FROM solicitudes_clasificadas
@@ -490,8 +570,14 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
         FROM solicitudes_priorizadas
         WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
           AND (
-            :usuarioUphone IS NULL
-            OR LOWER(BTRIM(usuario)) = LOWER(:usuarioUphone)
+            :filtrarUsuarios = FALSE
+            OR LOWER(BTRIM(usuario)) IN (:usuariosUphone)
+          )
+          AND (
+            :agencia IS NULL
+            OR LOWER(
+              COALESCE(NULLIF(BTRIM(distribuidor), ''), BTRIM(matriz))
+            ) = LOWER(:agencia)
           )
       )
       SELECT
@@ -505,7 +591,10 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
           WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
           ELSE "estadoContrato"
         END AS "estadoContrato",
-        COUNT(*)::integer AS cantidad
+        COUNT(*)::integer AS cantidad,
+        COUNT(*) FILTER (
+          WHERE NOT invalidada AND concretada
+        )::integer AS concretadas
       FROM solicitudes_periodo
       GROUP BY
         distribuidor,
@@ -520,12 +609,17 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuarioUphone }) =>
         END
     `,
     {
-      replacements: { desde, hasta, usuarioUphone },
+      replacements: crearReemplazosDashboard({
+        desde,
+        hasta,
+        usuariosUphone,
+        agencia,
+      }),
       type: QueryTypes.SELECT,
     },
   );
 
-const obtenerClientesPorVendedor = async ({ desde, hasta, usuarioUphone }) =>
+const obtenerClientesPorVendedor = async ({ desde, hasta, usuariosUphone, agencia }) =>
   UphoneSolicitud.sequelize.query(
     `
       WITH solicitudes_periodo AS (
@@ -534,6 +628,28 @@ const obtenerClientesPorVendedor = async ({ desde, hasta, usuarioUphone }) =>
           "fechaSolicitud",
           UPPER(NULLIF(BTRIM(usuario), '')) AS usuario_uphone_clave,
           CASE
+            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
+              THEN 'aprobadas'
+            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%DENEG%'
+              OR UPPER(COALESCE("estadoContrato", '')) LIKE '%RECHAZ%'
+              THEN 'denegadas'
+            WHEN UPPER(COALESCE(estado, '')) LIKE '%APROBAD%'
+              THEN 'aprobadas'
+            WHEN UPPER(COALESCE(estado, '')) LIKE '%DENEG%'
+              OR UPPER(COALESCE(estado, '')) LIKE '%RECHAZ%'
+              THEN 'denegadas'
+            ELSE 'otros'
+          END AS resultado,
+          CASE
+            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
+              AND NULLIF(BTRIM("fechaContrato"), '') IS NOT NULL
+              AND UPPER(BTRIM("fechaContrato")) NOT IN (
+                'NO APLICA', 'N/A', 'NA', 'S/N', 'SIN FECHA', 'PENDIENTE', '-'
+              )
+              THEN TRUE
+            ELSE FALSE
+          END AS concretada,
+          CASE
             WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
               THEN 'CEDULA:' || REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
             ELSE 'SOLICITUD:' || id::text
@@ -541,15 +657,26 @@ const obtenerClientesPorVendedor = async ({ desde, hasta, usuarioUphone }) =>
         FROM uphone_solicitudes
         WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
           AND (
-            :usuarioUphone IS NULL
-            OR LOWER(BTRIM(usuario)) = LOWER(:usuarioUphone)
+            :filtrarUsuarios = FALSE
+            OR LOWER(BTRIM(usuario)) IN (:usuariosUphone)
+          )
+          AND (
+            :agencia IS NULL
+            OR LOWER(
+              COALESCE(NULLIF(BTRIM(distribuidor), ''), BTRIM(matriz))
+            ) = LOWER(:agencia)
           )
       ), clientes_priorizados AS (
         SELECT
           *,
           ROW_NUMBER() OVER (
-            PARTITION BY cliente_clave
-            ORDER BY "fechaSolicitud" DESC NULLS LAST, id DESC
+            PARTITION BY
+              cliente_clave,
+              ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date
+            ORDER BY
+              (resultado = 'aprobadas') DESC,
+              "fechaSolicitud" DESC NULLS LAST,
+              id DESC
           ) AS prioridad_cliente
         FROM solicitudes_periodo
       )
@@ -562,7 +689,13 @@ const obtenerClientesPorVendedor = async ({ desde, hasta, usuarioUphone }) =>
         COALESCE(NULLIF(BTRIM(u."usuarioUphone"), ''), s.usuario_uphone_clave) AS "usuarioUphone",
         u.id AS "usuarioId",
         (u.id IS NOT NULL) AS vinculado,
-        COUNT(*)::integer AS clientes
+        COUNT(*)::integer AS clientes,
+        COUNT(*) FILTER (WHERE s.resultado = 'aprobadas')::integer AS aprobadas,
+        COUNT(*) FILTER (
+          WHERE s.resultado = 'aprobadas' AND s.concretada
+        )::integer AS concretadas,
+        COUNT(*) FILTER (WHERE s.resultado = 'denegadas')::integer AS denegadas,
+        COUNT(*) FILTER (WHERE s.resultado = 'otros')::integer AS otros
       FROM clientes_priorizados s
       LEFT JOIN usuarios u
         ON LOWER(BTRIM(u."usuarioUphone")) = LOWER(s.usuario_uphone_clave)
@@ -575,7 +708,12 @@ const obtenerClientesPorVendedor = async ({ desde, hasta, usuarioUphone }) =>
       ORDER BY clientes DESC, vendedor ASC
     `,
     {
-      replacements: { desde, hasta, usuarioUphone },
+      replacements: crearReemplazosDashboard({
+        desde,
+        hasta,
+        usuariosUphone,
+        agencia,
+      }),
       type: QueryTypes.SELECT,
     },
   );
@@ -586,7 +724,150 @@ const crearResumenVendedores = (rows = []) => rows.map((row) => ({
   usuarioUphone: normalizarTexto(row.usuarioUphone, 100),
   vinculado: row.vinculado === true,
   clientes: Number(row.clientes) || 0,
+  aprobadas: Number(row.aprobadas) || 0,
+  concretadas: Number(row.concretadas) || 0,
+  denegadas: Number(row.denegadas) || 0,
+  otros: Number(row.otros) || 0,
 }));
+
+const crearResumenTelefonos099999 = (rows = [], totalSolicitudes = 0) => {
+  const convertirFila = (row) => {
+    const total = Number(row.total) || 0;
+    const cantidad = Number(row.cantidad) || 0;
+    return {
+      nombre: normalizarTexto(row.nombre, 220) || "SIN IDENTIFICAR",
+      usuarioUphone: normalizarTexto(row.usuarioUphone, 100),
+      usuarioId: row.usuarioId ? Number(row.usuarioId) : null,
+      vinculado: row.vinculado === true,
+      total,
+      cantidad,
+      porcentaje: total ? Number(((cantidad / total) * 100).toFixed(2)) : 0,
+    };
+  };
+
+  const ordenar = (items) => items.sort(
+    (a, b) => b.porcentaje - a.porcentaje
+      || b.cantidad - a.cantidad
+      || a.nombre.localeCompare(b.nombre),
+  );
+  const agencias = ordenar(
+    rows
+      .filter((row) => row.dimension === "agencia")
+      .map(convertirFila)
+      .map((item) => ({ ...item, nombre: normalizarEtiqueta(item.nombre, "SIN AGENCIA") })),
+  );
+  const vendedores = ordenar(
+    rows.filter((row) => row.dimension === "vendedor").map(convertirFila),
+  );
+  const cantidad = agencias.reduce((total, item) => total + item.cantidad, 0);
+  const total = Number(totalSolicitudes) || 0;
+
+  return {
+    patron: "099999*",
+    cantidad,
+    total,
+    porcentaje: total ? Number(((cantidad / total) * 100).toFixed(2)) : 0,
+    agencias,
+    vendedores,
+  };
+};
+
+const obtenerResumenTelefonos099999 = async ({
+  desde,
+  hasta,
+  usuariosUphone,
+  agencia,
+}) => UphoneSolicitud.sequelize.query(
+  `
+    WITH solicitudes_periodo AS (
+      SELECT
+        COALESCE(
+          NULLIF(BTRIM(distribuidor), ''),
+          NULLIF(BTRIM(matriz), ''),
+          'SIN AGENCIA'
+        ) AS agencia,
+        UPPER(NULLIF(BTRIM(usuario), '')) AS usuario_uphone_clave,
+        vendedor,
+        REGEXP_REPLACE(
+          COALESCE("telefonoSolicitud", ''),
+          '[^0-9]',
+          '',
+          'g'
+        ) LIKE '099999%' AS telefono_099999
+      FROM uphone_solicitudes
+      WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
+        AND (
+          :filtrarUsuarios = FALSE
+          OR LOWER(BTRIM(usuario)) IN (:usuariosUphone)
+        )
+        AND (
+          :agencia IS NULL
+          OR LOWER(
+            COALESCE(NULLIF(BTRIM(distribuidor), ''), BTRIM(matriz))
+          ) = LOWER(:agencia)
+        )
+    ), solicitudes_normalizadas AS (
+      SELECT
+        solicitudes_periodo.*,
+        u.id AS usuario_id,
+        u.nombre AS usuario_nombre,
+        u."usuarioUphone" AS usuario_uphone_rve
+      FROM solicitudes_periodo
+      LEFT JOIN usuarios u
+        ON LOWER(BTRIM(u."usuarioUphone"))
+          = LOWER(solicitudes_periodo.usuario_uphone_clave)
+    ), solicitudes_etiquetadas AS (
+      SELECT
+        solicitudes_normalizadas.*,
+        COALESCE(
+          NULLIF(BTRIM(usuario_nombre), ''),
+          NULLIF(BTRIM(vendedor), ''),
+          usuario_uphone_clave,
+          'SIN VENDEDOR'
+        ) AS vendedor_normalizado,
+        COALESCE(
+          NULLIF(BTRIM(usuario_uphone_rve), ''),
+          usuario_uphone_clave
+        ) AS usuario_uphone_normalizado
+      FROM solicitudes_normalizadas
+    )
+    SELECT
+      'agencia' AS dimension,
+      agencia AS nombre,
+      NULL::text AS "usuarioUphone",
+      NULL::integer AS "usuarioId",
+      FALSE AS vinculado,
+      COUNT(*)::integer AS total,
+      COUNT(*) FILTER (WHERE telefono_099999)::integer AS cantidad
+    FROM solicitudes_etiquetadas
+    GROUP BY agencia
+
+    UNION ALL
+
+    SELECT
+      'vendedor' AS dimension,
+      vendedor_normalizado AS nombre,
+      usuario_uphone_normalizado AS "usuarioUphone",
+      usuario_id AS "usuarioId",
+      (usuario_id IS NOT NULL) AS vinculado,
+      COUNT(*)::integer AS total,
+      COUNT(*) FILTER (WHERE telefono_099999)::integer AS cantidad
+    FROM solicitudes_etiquetadas
+    GROUP BY
+      usuario_id,
+      vendedor_normalizado,
+      usuario_uphone_normalizado
+  `,
+  {
+    replacements: crearReemplazosDashboard({
+      desde,
+      hasta,
+      usuariosUphone,
+      agencia,
+    }),
+    type: QueryTypes.SELECT,
+  },
+);
 
 const obtenerUsuariosUphone = async () =>
   UphoneSolicitud.sequelize.query(
@@ -608,6 +889,28 @@ const crearCatalogoUsuariosUphone = (rows = []) => rows.map((row) => ({
   usuarioUphone: normalizarTexto(row.usuarioUphone, 100),
 })).filter((row) => row.usuarioUphone);
 
+const obtenerAgenciasUphone = async () =>
+  UphoneSolicitud.sequelize.query(
+    `
+      SELECT DISTINCT
+        COALESCE(
+          NULLIF(BTRIM(distribuidor), ''),
+          NULLIF(BTRIM(matriz), '')
+        ) AS agencia
+      FROM uphone_solicitudes
+      WHERE COALESCE(
+        NULLIF(BTRIM(distribuidor), ''),
+        NULLIF(BTRIM(matriz), '')
+      ) IS NOT NULL
+      ORDER BY agencia ASC
+    `,
+    { type: QueryTypes.SELECT },
+  );
+
+const crearCatalogoAgenciasUphone = (rows = []) => rows
+  .map((row) => normalizarTexto(row.agencia, 180))
+  .filter(Boolean);
+
 const listar = async (query = {}) => {
   const page = normalizarEntero(query.page, 1, 1, Number.MAX_SAFE_INTEGER);
   const pageSize = normalizarEntero(query.pageSize, 25, 1, MAX_PAGE_SIZE);
@@ -621,7 +924,11 @@ const listar = async (query = {}) => {
     : fechaActual;
   const dashboardDesde = parseDateBoundary(dashboardFechaDesde);
   const dashboardHasta = parseDateBoundary(dashboardFechaHasta, true);
-  const dashboardUsuarioUphone = normalizarTexto(query.dashboardUsuarioUphone, 100);
+  const dashboardUsuariosUphone = normalizarListaFiltro(
+    query.dashboardUsuariosUphone ?? query.dashboardUsuarioUphone,
+    100,
+  );
+  const dashboardAgencia = normalizarTexto(query.dashboardAgencia, 180);
 
   if (dashboardDesde > dashboardHasta) {
     throw crearError(
@@ -636,11 +943,13 @@ const listar = async (query = {}) => {
     totalRegistradas,
     resumenAgrupado,
     clientesPorVendedor,
+    telefonos099999,
     usuariosUphone,
+    agenciasUphone,
   ] = await Promise.all([
     UphoneSolicitud.findAndCountAll({
       where,
-      attributes: { exclude: ["cedulaNormalizada"] },
+      attributes: { exclude: ["cedulaNormalizada", "fechaSolicitudDia"] },
       limit: pageSize,
       offset: (page - 1) * pageSize,
       order: [
@@ -652,14 +961,23 @@ const listar = async (query = {}) => {
     obtenerResumenDashboard({
       desde: dashboardDesde,
       hasta: dashboardHasta,
-      usuarioUphone: dashboardUsuarioUphone,
+      usuariosUphone: dashboardUsuariosUphone,
+      agencia: dashboardAgencia,
     }),
     obtenerClientesPorVendedor({
       desde: dashboardDesde,
       hasta: dashboardHasta,
-      usuarioUphone: dashboardUsuarioUphone,
+      usuariosUphone: dashboardUsuariosUphone,
+      agencia: dashboardAgencia,
+    }),
+    obtenerResumenTelefonos099999({
+      desde: dashboardDesde,
+      hasta: dashboardHasta,
+      usuariosUphone: dashboardUsuariosUphone,
+      agencia: dashboardAgencia,
     }),
     obtenerUsuariosUphone(),
+    obtenerAgenciasUphone(),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(result.count / pageSize));
@@ -677,11 +995,17 @@ const listar = async (query = {}) => {
     dashboard: {
       ...crearDashboard(resumenAgrupado, dashboardTotal),
       vendedores: crearResumenVendedores(clientesPorVendedor),
+      telefonos099999: crearResumenTelefonos099999(
+        telefonos099999,
+        dashboardTotal,
+      ),
       usuarios: crearCatalogoUsuariosUphone(usuariosUphone),
+      agenciasDisponibles: crearCatalogoAgenciasUphone(agenciasUphone),
       periodo: {
         fechaDesde: dashboardFechaDesde,
         fechaHasta: dashboardFechaHasta,
-        usuarioUphone: dashboardUsuarioUphone,
+        usuariosUphone: dashboardUsuariosUphone,
+        agencia: dashboardAgencia,
       },
     },
     paginacion: {
@@ -696,7 +1020,7 @@ const listar = async (query = {}) => {
 const exportarExcel = async (query = {}) => {
   const solicitudes = await UphoneSolicitud.findAll({
     where: crearWhereSolicitudes(query),
-    attributes: { exclude: ["cedulaNormalizada"] },
+    attributes: { exclude: ["cedulaNormalizada", "fechaSolicitudDia"] },
     order: [
       ["fechaSolicitud", "DESC NULLS LAST"],
       ["id", "DESC"],
@@ -807,8 +1131,10 @@ module.exports = {
   importarExcel,
   listar,
   crearDashboard,
+  crearCatalogoAgenciasUphone,
   crearCatalogoUsuariosUphone,
   crearResumenVendedores,
+  crearResumenTelefonos099999,
   normalizarCedula,
   parsearExcel,
 };

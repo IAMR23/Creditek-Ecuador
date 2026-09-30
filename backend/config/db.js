@@ -301,10 +301,17 @@ const ensureUphoneCedulaSchema = async (queryInterface) => {
     type: Sequelize.STRING(30),
     allowNull: true,
   });
+  await addColumnIfMissing(queryInterface, "uphone_solicitudes", "fechaSolicitudDia", {
+    type: Sequelize.DATEONLY,
+    allowNull: true,
+  });
   await sequelize.query(`
+    DROP INDEX IF EXISTS uphone_solicitudes_cedula_normalizada_unique;
+
     WITH cedulas_normalizadas AS (
       SELECT
         id,
+        ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date AS fecha_solicitud_dia,
         CASE
           WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
             THEN REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
@@ -314,28 +321,37 @@ const ensureUphoneCedulaSchema = async (queryInterface) => {
     ), cedulas_ordenadas AS (
       SELECT
         id,
+        fecha_solicitud_dia,
         cedula_normalizada,
-        ROW_NUMBER() OVER (PARTITION BY cedula_normalizada ORDER BY id) AS posicion
+        ROW_NUMBER() OVER (
+          PARTITION BY cedula_normalizada, fecha_solicitud_dia
+          ORDER BY id
+        ) AS posicion
       FROM cedulas_normalizadas
     )
     UPDATE uphone_solicitudes AS solicitud
-    SET "cedulaNormalizada" = CASE
-      WHEN cedulas_ordenadas.cedula_normalizada IS NOT NULL
-       AND cedulas_ordenadas.posicion = 1
-        THEN cedulas_ordenadas.cedula_normalizada
-      ELSE NULL
-    END
-    FROM cedulas_ordenadas
-    WHERE solicitud.id = cedulas_ordenadas.id
-      AND solicitud."cedulaNormalizada" IS DISTINCT FROM CASE
+    SET
+      "fechaSolicitudDia" = cedulas_ordenadas.fecha_solicitud_dia,
+      "cedulaNormalizada" = CASE
         WHEN cedulas_ordenadas.cedula_normalizada IS NOT NULL
          AND cedulas_ordenadas.posicion = 1
           THEN cedulas_ordenadas.cedula_normalizada
         ELSE NULL
-      END;
+      END
+    FROM cedulas_ordenadas
+    WHERE solicitud.id = cedulas_ordenadas.id
+      AND (
+        solicitud."fechaSolicitudDia" IS DISTINCT FROM cedulas_ordenadas.fecha_solicitud_dia
+        OR solicitud."cedulaNormalizada" IS DISTINCT FROM CASE
+          WHEN cedulas_ordenadas.cedula_normalizada IS NOT NULL
+           AND cedulas_ordenadas.posicion = 1
+            THEN cedulas_ordenadas.cedula_normalizada
+          ELSE NULL
+        END
+      );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS uphone_solicitudes_cedula_normalizada_unique
-      ON uphone_solicitudes ("cedulaNormalizada");
+    CREATE UNIQUE INDEX IF NOT EXISTS uphone_solicitudes_cedula_fecha_unique
+      ON uphone_solicitudes ("cedulaNormalizada", "fechaSolicitudDia");
   `);
 };
 
@@ -1374,6 +1390,7 @@ const ensureRequiredFeatureTables = async (queryInterface) => {
       "202609280004-create-uphone-solicitudes.sql",
       "202609280005-allow-uphone-api-key-imports.sql",
       "202609290002-add-uphone-cedula-unique.sql",
+      "202609300001-uphone-cedula-unique-por-dia.sql",
     ]);
   }
 };

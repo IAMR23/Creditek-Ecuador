@@ -58,3 +58,22 @@ describe("migracion de unicidad por cedula Uphone", () => {
     expect(sql).not.toMatch(/DELETE\s+FROM/i);
   });
 });
+
+describe("migracion de unicidad diaria por cedula Uphone", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "202609300001-uphone-cedula-unique-por-dia.sql"),
+    "utf8",
+  );
+
+  test("permite la misma cedula en fechas distintas", () => {
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "fechaSolicitudDia" DATE');
+    expect(sql).toContain("PARTITION BY cedula_normalizada, fecha_solicitud_dia");
+    expect(sql).toContain("uphone_solicitudes_cedula_fecha_unique");
+    expect(sql).toContain('("cedulaNormalizada", "fechaSolicitudDia")');
+  });
+
+  test("conserva las solicitudes existentes", () => {
+    expect(sql).not.toMatch(/DROP\s+(TABLE|COLUMN)/i);
+    expect(sql).not.toMatch(/DELETE\s+FROM/i);
+  });
+});

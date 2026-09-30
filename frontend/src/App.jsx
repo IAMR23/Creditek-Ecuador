@@ -87,6 +87,7 @@ import MapaComercial from "./pages/Sistemas/MapaComercial";
 import Inventarios from "./pages/Sistemas/Inventarios";
 import Personas from "./pages/Sistemas/Personas";
 import ConfiguracionReportesCaja from "./pages/Sistemas/ConfiguracionReportesCaja";
+import NormalizacionUsuariosUphone from "./pages/Sistemas/NormalizacionUsuariosUphone";
 import TicketsTI from "./pages/Sistemas/TicketsTI";
 import CapacitacionSistemas from "./pages/Sistemas/Capacitacion";
 import { registerSW } from "./utils/serviceWorker";
@@ -647,6 +648,13 @@ function App() {
                   element={protect(
                     <ConfiguracionReportesCaja />,
                     "/sistemas/reportes-caja-agencias",
+                  )}
+                />
+                <Route
+                  path="sistemas/usuarios-uphone"
+                  element={protect(
+                    <NormalizacionUsuariosUphone />,
+                    "/sistemas/usuarios-uphone",
                   )}
                 />
               </Route>

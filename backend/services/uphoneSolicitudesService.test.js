@@ -1,12 +1,15 @@
 const ExcelJS = require("exceljs");
+const { Op } = require("sequelize");
 
 jest.mock("../models/UphoneSolicitud", () => ({}));
 
 const UphoneSolicitud = require("../models/UphoneSolicitud");
 const {
   crearDashboard,
+  crearCatalogoAgenciasUphone,
   crearCatalogoUsuariosUphone,
   crearResumenVendedores,
+  crearResumenTelefonos099999,
   eliminarSolicitud,
   exportarExcel,
   importarExcel,
@@ -70,6 +73,7 @@ describe("uphoneSolicitudesService.parsearExcel", () => {
       vendedor: "VENDEDOR PRUEBA",
       cedula: "0123456789",
       cedulaNormalizada: "0123456789",
+      fechaSolicitudDia: "2026-09-28",
       estado: "PENDIENTE",
     });
     expect(parsed.records[0].fechaSolicitud.toISOString()).toBe("2026-09-28T14:17:01.000Z");
@@ -104,6 +108,37 @@ describe("uphoneSolicitudesService.parsearExcel", () => {
       }),
     ], expect.objectContaining({ ignoreDuplicates: true }));
     expect(result).toMatchObject({ insertadas: 1, omitidasDuplicadas: 1 });
+  });
+
+  test("conserva la misma cedula cuando aparece en un dia posterior", async () => {
+    UphoneSolicitud.bulkCreate = jest.fn(async (rows) =>
+      rows.map((item, index) => ({ ...item, id: index + 1 })));
+    const siguienteDia = [...BASE_ROW];
+    siguienteDia[3] = 4795153;
+    siguienteDia[6] = "CLIENTE DEL SIGUIENTE DIA";
+    siguienteDia[9] = new Date("2026-09-29T09:17:01.000Z");
+
+    const result = await importarExcel({
+      file: {
+        buffer: await crearExcel(HEADERS, [siguienteDia]),
+        originalname: "solicitudes.xlsx",
+      },
+      usuarioId: 8,
+    });
+
+    expect(UphoneSolicitud.bulkCreate).toHaveBeenCalledWith([
+      expect.objectContaining({
+        numeroSolicitud: "4795152",
+        cedulaNormalizada: "0123456789",
+        fechaSolicitudDia: "2026-09-28",
+      }),
+      expect.objectContaining({
+        numeroSolicitud: "4795153",
+        cedulaNormalizada: "0123456789",
+        fechaSolicitudDia: "2026-09-29",
+      }),
+    ], expect.objectContaining({ ignoreDuplicates: true }));
+    expect(result).toMatchObject({ insertadas: 2, omitidasDuplicadas: 0 });
   });
 
   test("reporta como duplicada una cedula que la base ya rechazo", async () => {
@@ -145,6 +180,7 @@ describe("uphoneSolicitudesService.crearDashboard", () => {
         estado: "PENDIENTE",
         estadoContrato: "SOLICITUD_APROBADA_AUTOMATICO",
         cantidad: "3",
+        concretadas: "2",
       },
       {
         distribuidor: "Agencia Norte",
@@ -165,12 +201,14 @@ describe("uphoneSolicitudesService.crearDashboard", () => {
     expect(dashboard).toMatchObject({
       totalSolicitudes: 6,
       totalAprobadas: 3,
+      totalConcretadas: 2,
       totalDenegadas: 3,
       totalOtros: 0,
       agenciaLider: {
         agencia: "AGENCIA NORTE",
         total: 5,
         aprobadas: 3,
+        concretadas: 2,
         denegadas: 2,
       },
     });
@@ -220,6 +258,10 @@ describe("uphoneSolicitudesService.crearResumenVendedores", () => {
         usuarioUphone: "ARI2028",
         vinculado: true,
         clientes: "7",
+        aprobadas: "3",
+        concretadas: "2",
+        denegadas: "2",
+        otros: "2",
       },
       {
         usuarioId: null,
@@ -227,6 +269,10 @@ describe("uphoneSolicitudesService.crearResumenVendedores", () => {
         usuarioUphone: "SINMAPEO",
         vinculado: false,
         clientes: "2",
+        aprobadas: "0",
+        concretadas: "0",
+        denegadas: "1",
+        otros: "1",
       },
     ])).toEqual([
       {
@@ -235,6 +281,10 @@ describe("uphoneSolicitudesService.crearResumenVendedores", () => {
         usuarioUphone: "ARI2028",
         vinculado: true,
         clientes: 7,
+        aprobadas: 3,
+        concretadas: 2,
+        denegadas: 2,
+        otros: 2,
       },
       {
         usuarioId: null,
@@ -242,8 +292,57 @@ describe("uphoneSolicitudesService.crearResumenVendedores", () => {
         usuarioUphone: "SINMAPEO",
         vinculado: false,
         clientes: 2,
+        aprobadas: 0,
+        concretadas: 0,
+        denegadas: 1,
+        otros: 1,
       },
     ]);
+  });
+});
+
+describe("uphoneSolicitudesService.crearResumenTelefonos099999", () => {
+  test("calcula el porcentaje general, por agencia y por vendedor", () => {
+    const resumen = crearResumenTelefonos099999([
+      {
+        dimension: "agencia",
+        nombre: "Agencia Norte",
+        total: "10",
+        cantidad: "2",
+      },
+      {
+        dimension: "vendedor",
+        nombre: "Raúl",
+        usuarioUphone: "PABLO2027",
+        usuarioId: "44",
+        vinculado: true,
+        total: "5",
+        cantidad: "2",
+      },
+    ], 10);
+
+    expect(resumen).toMatchObject({
+      patron: "099999*",
+      cantidad: 2,
+      total: 10,
+      porcentaje: 20,
+      agencias: [
+        expect.objectContaining({
+          nombre: "AGENCIA NORTE",
+          total: 10,
+          cantidad: 2,
+          porcentaje: 20,
+        }),
+      ],
+      vendedores: [
+        expect.objectContaining({
+          nombre: "Raúl",
+          usuarioUphone: "PABLO2027",
+          usuarioId: 44,
+          porcentaje: 40,
+        }),
+      ],
+    });
   });
 });
 
@@ -255,6 +354,16 @@ describe("uphoneSolicitudesService.crearCatalogoUsuariosUphone", () => {
     ])).toEqual([
       { id: 5, nombre: "María López", usuarioUphone: "MARIA2026" },
     ]);
+  });
+});
+
+describe("uphoneSolicitudesService.crearCatalogoAgenciasUphone", () => {
+  test("normaliza y omite agencias vacias", () => {
+    expect(crearCatalogoAgenciasUphone([
+      { agencia: " Agencia Norte " },
+      { agencia: null },
+      { agencia: "Matriz" },
+    ])).toEqual(["Agencia Norte", "Matriz"]);
   });
 });
 
@@ -270,6 +379,7 @@ describe("uphoneSolicitudesService.listar", () => {
           estado: "FINALIZADA",
           estadoContrato: "SOLICITUD_APROBADA",
           cantidad: "2",
+          concretadas: "1",
         },
       ])
       .mockResolvedValueOnce([
@@ -279,48 +389,118 @@ describe("uphoneSolicitudesService.listar", () => {
           usuarioUphone: "MARIA2026",
           vinculado: true,
           clientes: "2",
+          aprobadas: "1",
+          concretadas: "1",
+          denegadas: "1",
+          otros: "0",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          dimension: "agencia",
+          nombre: "Agencia Centro",
+          usuarioUphone: null,
+          usuarioId: null,
+          vinculado: false,
+          total: "2",
+          cantidad: "1",
+        },
+        {
+          dimension: "vendedor",
+          nombre: "María López",
+          usuarioUphone: "MARIA2026",
+          usuarioId: 5,
+          vinculado: true,
+          total: "2",
+          cantidad: "1",
         },
       ])
       .mockResolvedValueOnce([
         { id: 5, nombre: "María López", usuarioUphone: "MARIA2026" },
+        { id: 8, nombre: "Juan Pérez", usuarioUphone: "JUAN2026" },
+      ])
+      .mockResolvedValueOnce([
+        { agencia: "AGENCIA CENTRO" },
+        { agencia: "AGENCIA NORTE" },
       ]) };
 
     const response = await listar({
       dashboardFechaDesde: "2026-09-10",
       dashboardFechaHasta: "2026-09-11",
-      dashboardUsuarioUphone: " MARIA2026 ",
+      dashboardUsuariosUphone: " MARIA2026 , JUAN2026 ",
+      dashboardAgencia: " AGENCIA CENTRO ",
     });
 
     const [dashboardSql, dashboardOptions] = UphoneSolicitud.sequelize.query.mock.calls[0];
     expect(dashboardSql).toContain("INVALIDADA_POR_CONTRATO_APROBADO");
+    expect(dashboardSql).toContain("AS concretadas");
+    expect(dashboardSql).toContain("AT TIME ZONE 'America/Guayaquil'");
     const [vendedoresSql, vendedoresOptions] = UphoneSolicitud.sequelize.query.mock.calls[1];
     expect(vendedoresSql).toContain('LOWER(BTRIM(u."usuarioUphone"))');
-    expect(vendedoresSql).toContain("PARTITION BY cliente_clave");
+    expect(vendedoresSql).toMatch(
+      /PARTITION BY\s+cliente_clave,\s+\("fechaSolicitud"/,
+    );
+    expect(vendedoresSql).toContain("AT TIME ZONE 'America/Guayaquil'");
+    expect(vendedoresSql).toContain("FILTER (WHERE s.resultado = 'aprobadas')");
+    expect(vendedoresSql).toContain("FILTER (WHERE s.resultado = 'denegadas')");
+    expect(vendedoresSql).toContain("s.resultado = 'aprobadas' AND s.concretada");
     expect(dashboardOptions.replacements.desde.toISOString())
       .toBe("2026-09-10T05:00:00.000Z");
     expect(dashboardOptions.replacements.hasta.toISOString())
       .toBe("2026-09-12T04:59:59.999Z");
-    expect(dashboardOptions.replacements.usuarioUphone).toBe("MARIA2026");
+    expect(dashboardOptions.replacements).toMatchObject({
+      filtrarUsuarios: true,
+      usuariosUphone: ["maria2026", "juan2026"],
+      agencia: "AGENCIA CENTRO",
+    });
     expect(vendedoresOptions.replacements).toEqual(dashboardOptions.replacements);
+    const [telefonosSql, telefonosOptions] = UphoneSolicitud.sequelize.query.mock.calls[2];
+    expect(telefonosSql).toContain("LIKE '099999%'");
+    expect(telefonosSql).toContain('LOWER(BTRIM(u."usuarioUphone"))');
+    expect(telefonosOptions.replacements).toEqual(dashboardOptions.replacements);
     expect(response.dashboard).toMatchObject({
       totalSolicitudes: 2,
       totalAprobadas: 2,
+      totalConcretadas: 1,
       periodo: {
         fechaDesde: "2026-09-10",
         fechaHasta: "2026-09-11",
-        usuarioUphone: "MARIA2026",
+        usuariosUphone: ["MARIA2026", "JUAN2026"],
+        agencia: "AGENCIA CENTRO",
       },
       usuarios: [
         { id: 5, nombre: "María López", usuarioUphone: "MARIA2026" },
+        { id: 8, nombre: "Juan Pérez", usuarioUphone: "JUAN2026" },
       ],
+      agenciasDisponibles: ["AGENCIA CENTRO", "AGENCIA NORTE"],
       vendedores: [
         expect.objectContaining({
           vendedor: "María López",
           usuarioUphone: "MARIA2026",
           clientes: 2,
+          aprobadas: 1,
+          concretadas: 1,
+          denegadas: 1,
+          otros: 0,
           vinculado: true,
         }),
       ],
+      telefonos099999: {
+        patron: "099999*",
+        cantidad: 1,
+        total: 2,
+        porcentaje: 50,
+        agencias: [
+          expect.objectContaining({ nombre: "AGENCIA CENTRO", porcentaje: 50 }),
+        ],
+        vendedores: [
+          expect.objectContaining({
+            nombre: "María López",
+            usuarioUphone: "MARIA2026",
+            porcentaje: 50,
+          }),
+        ],
+      },
     });
   });
 
@@ -359,7 +539,8 @@ describe("uphoneSolicitudesService.exportarExcel", () => {
 
     const result = await exportarExcel({
       estado: " PENDIENTE ",
-      usuarioUphone: " USER2026 ",
+      usuariosUphone: " USER2026,OTRO2026 ",
+      agencia: " AGENCIA NORTE ",
       fechaDesde: "2026-09-28",
       fechaHasta: "2026-09-29",
     });
@@ -376,10 +557,13 @@ describe("uphoneSolicitudesService.exportarExcel", () => {
       raw: true,
       where: expect.objectContaining({
         estado: expect.any(Object),
-        usuario: expect.any(Object),
         fechaSolicitud: expect.any(Object),
       }),
     }));
+    const exportWhere = UphoneSolicitud.findAll.mock.calls[0][0].where;
+    expect(exportWhere[Op.and]).toHaveLength(2);
+    expect(exportWhere[Op.and][0][Op.or]).toHaveLength(2);
+    expect(exportWhere[Op.and][1][Op.or]).toHaveLength(2);
   });
 
   test("rechaza un rango invertido antes de consultar la base", async () => {

@@ -386,6 +386,11 @@ export default function Sidebar({ auth }) {
             path: "/sistemas/personas",
           },
           {
+            label: "Usuarios Uphone",
+            icon: <Link2 size={20} />,
+            path: "/sistemas/usuarios-uphone",
+          },
+          {
             label: "Agencias reportes caja",
             icon: <Settings2 size={20} />,
             path: "/sistemas/reportes-caja-agencias",
