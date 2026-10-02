@@ -59,7 +59,9 @@ export default function Sidebar({ auth }) {
     jefesComerciales: location.pathname.startsWith("/uphone/"),
     ghl: location.pathname.startsWith("/ghl/"),
     Marketing: false,
-    logistica: false,
+    logistica:
+      location.pathname.startsWith("/logistica/") ||
+      location.pathname.startsWith("/entregas"),
     contabilidad:
       location.pathname === "/contabilidad/pagos-comisiones" ||
       location.pathname === "/contabilidad/descuentos-decimos" ||
@@ -229,6 +231,11 @@ export default function Sidebar({ auth }) {
             label: "Informe de Entregas",
             icon: <PackageCheck size={20} />,
             path: "/entregas-repartidores-tabla",
+          },
+          {
+            label: "Stock Contífico",
+            icon: <Boxes size={20} />,
+            path: "/logistica/stock-contifico",
           },
         ],
       },

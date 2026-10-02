@@ -251,6 +251,10 @@ connectDB()
     app.use("/api/sistemas/capacitacion", require("./routes/Sistemas/capacitacionRoutes"));
     app.use("/api/sistemas/mapa-comercial", require("./routes/Sistemas/mapaComercialRoutes"));
     app.use("/api/sistemas/inventarios", require("./routes/Sistemas/inventariosRoutes"));
+    app.use(
+      "/api/logistica/stock-contifico",
+      require("./routes/Logistica/stockContificoRoutes"),
+    );
     app.use("/api/sistemas/personas", require("./routes/Sistemas/personasRoutes"));
     app.use("/api/sistemas/reportes-caja-agencias", require("./routes/Sistemas/reporteCajaAgenciasRoutes"));
     app.use("/api/sistemas/uphone-usuarios", require("./routes/Sistemas/uphoneUsuariosNormalizacionRoutes"));

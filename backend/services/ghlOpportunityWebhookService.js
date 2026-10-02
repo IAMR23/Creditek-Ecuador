@@ -110,6 +110,12 @@ async function processWebhookEvent(eventId, normalized) {
   }
   try {
     const result = await distribution.executeWebhookOpportunity(normalized);
+    let review = null;
+    if (!result.assigned && result.deferredToScheduler) {
+      review = await distribution.scheduleRealtimeQueueReview({
+        trigger: "webhook-deferred",
+      });
+    }
     await WebhookEvento.update({
       estado: result.assigned ? "completed" : "ignored",
       resultCode: result.code,
@@ -126,7 +132,7 @@ async function processWebhookEvent(eventId, normalized) {
         motivo: result.tracePersisted === false ? "GHL_REALTIME_TRACE_ERROR" : result.code,
       });
     }
-    return result;
+    return review ? { ...result, review } : result;
   } catch (error) {
     await WebhookEvento.update({
       estado: "failed",

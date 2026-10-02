@@ -2,7 +2,12 @@
 
 ## Importar un reporte
 
-`POST /api/uphone/solicitudes/importar`
+`POST https://api.creditek-ecuador.com/api/uphone/solicitudes/importar`
+
+La integracion debe apuntar directamente al dominio del backend
+(`api.creditek-ecuador.com`), no al dominio del frontend
+(`rve.creditek-ecuador.com`). La ruta y el contrato HTTP se mantienen sin
+cambios.
 
 - Autenticacion: encabezado `X-API-Key`.
 - No requiere ni acepta el token JWT como reemplazo de la API key.
@@ -14,7 +19,7 @@
 Ejemplo:
 
 ```bash
-curl -X POST "https://rve.creditek-ecuador.com/api/uphone/solicitudes/importar" \
+curl -X POST "https://api.creditek-ecuador.com/api/uphone/solicitudes/importar" \
   -H "X-API-Key: API_KEY_UPHONE" \
   -F "archivo=@Solicitudes-Uphone.xlsx"
 ```
@@ -22,7 +27,7 @@ curl -X POST "https://rve.creditek-ecuador.com/api/uphone/solicitudes/importar" 
 Desde una computadora Windows con PowerShell:
 
 ```powershell
-curl.exe -X POST "https://rve.creditek-ecuador.com/api/uphone/solicitudes/importar" `
+curl.exe -X POST "https://api.creditek-ecuador.com/api/uphone/solicitudes/importar" `
   -H "X-API-Key: API_KEY_UPHONE" `
   -F "archivo=@C:\Reportes\Solicitudes-Uphone.xlsx"
 ```
@@ -30,6 +35,9 @@ curl.exe -X POST "https://rve.creditek-ecuador.com/api/uphone/solicitudes/import
 La clave se configura en el servidor como `API_KEY_RVE` y debe tener
 al menos 32 caracteres. Debe guardarse solo en el servidor RVE y en la
 computadora integradora; nunca debe incluirse en el frontend ni en Git.
+`docker-compose.yml` entrega esta variable exclusivamente al contenedor
+`backend`; antes de recrearlo, se debe definir `API_KEY_RVE` en el archivo
+`.env` privado del despliegue.
 
 Para generar una clave aleatoria:
 

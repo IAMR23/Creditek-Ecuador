@@ -1,7 +1,9 @@
+/* eslint-disable react/prop-types */
 import { jwtDecode } from "jwt-decode";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  MdInventory2,
   MdPointOfSale,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
@@ -33,6 +35,13 @@ function LogisticaPanel() {
       title: "Revisa tus entregas realizadas",
       icon: <MdPointOfSale className="w-10 h-10 text-green-600" />,
       path: "/mis-entregas-realizadas",
+    },
+    {
+      label: "Logistica",
+      title: "Stock Contífico",
+      desc: "Consulta existencias generales y por bodega",
+      icon: <MdInventory2 className="h-10 w-10 text-green-600" />,
+      path: "/logistica/stock-contifico",
     },
   ];
 

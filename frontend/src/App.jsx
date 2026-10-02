@@ -77,6 +77,7 @@ import EditarGestion from "./pages/Vendedores/EditarGestion";
 import Caja from "./pages/Vendedores/Caja";
 import MisCierresCaja from "./pages/Vendedores/MisCierresCaja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
+import StockContifico from "./pages/Logistica/StockContifico";
 import BDDVentas from "./pages/Admin/BDDVentas";
 import VentasConEntrega from "./pages/Gerencia/VentasConEntrega";
 import GestionTickets from "./pages/Gerencia/GestionTickets";
@@ -471,6 +472,10 @@ function App() {
                 <Route
                   path="entregas-repartidores-tabla"
                   element={protect(<EntregasRepartidoresTabla />, "/entregas-repartidores-tabla")}
+                />
+                <Route
+                  path="logistica/stock-contifico"
+                  element={protect(<StockContifico />, "/logistica/stock-contifico")}
                 />
                 <Route path="rol" element={protect(<AdminUsuariosRoles />, "/rol")} />
                 <Route path="dispositivos" element={protect(<Dispositivos />, "/dispositivos")} />

@@ -90,6 +90,7 @@ export const ROUTE_PERMISSIONS = {
   "/entregas-repartidores-tabla": "Logistica",
   "/mis-entregas-pendientes": "Logistica",
   "/mis-entregas-realizadas": "Logistica",
+  "/logistica/stock-contifico": "Logistica",
 
   "/revisar-cajas": ["Contabilidad", "Administracion"],
   "/revisar-cajas2": ["Contabilidad", "Administracion"],

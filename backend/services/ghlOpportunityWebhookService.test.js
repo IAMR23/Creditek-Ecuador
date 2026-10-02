@@ -5,6 +5,7 @@ jest.mock("../models/GhlRepartoWebhookEvento", () => ({
 }));
 jest.mock("./ghlOpportunityDistributionService", () => ({
   executeWebhookOpportunity: jest.fn(),
+  scheduleRealtimeQueueReview: jest.fn(),
 }));
 
 const WebhookEvento = require("../models/GhlRepartoWebhookEvento");
@@ -14,7 +15,13 @@ const service = require("./ghlOpportunityWebhookService");
 describe("webhook de reparto GHL", () => {
   const previousSecret = process.env.GHL_REPARTO_WEBHOOK_SECRET;
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    distribution.scheduleRealtimeQueueReview.mockResolvedValue({
+      code: "REVIEW_PENDING",
+      requestedVersion: 1,
+    });
+  });
 
   afterEach(() => {
     if (previousSecret === undefined) delete process.env.GHL_REPARTO_WEBHOOK_SECRET;
@@ -70,11 +77,15 @@ describe("webhook de reparto GHL", () => {
     expect(distribution.executeWebhookOpportunity).not.toHaveBeenCalled();
   });
 
-  test("oportunidad inexistente queda ignorada de forma controlada para el scheduler", async () => {
+  test("oportunidad aun no visible solicita una revision inmediata de la cola", async () => {
     WebhookEvento.update.mockResolvedValueOnce([1]).mockResolvedValueOnce([1]);
     distribution.executeWebhookOpportunity.mockResolvedValue({ code: "OPPORTUNITY_NOT_FOUND", assigned: false, deferredToScheduler: true });
     const result = await service.processWebhookEvent(10, { contactId: "contact-1" });
     expect(result.code).toBe("OPPORTUNITY_NOT_FOUND");
+    expect(result.review).toEqual({ code: "REVIEW_PENDING", requestedVersion: 1 });
+    expect(distribution.scheduleRealtimeQueueReview).toHaveBeenCalledWith({
+      trigger: "webhook-deferred",
+    });
     expect(WebhookEvento.update).toHaveBeenLastCalledWith(expect.objectContaining({ estado: "ignored", resultCode: "OPPORTUNITY_NOT_FOUND" }), expect.anything());
   });
 
@@ -82,7 +93,28 @@ describe("webhook de reparto GHL", () => {
     WebhookEvento.update.mockResolvedValueOnce([1]).mockResolvedValueOnce([1]);
     distribution.executeWebhookOpportunity.mockResolvedValue({ code: "NO_CAPACITY", assigned: false, deferredToScheduler: true });
     await service.processWebhookEvent(11, { opportunityId: "opp-1" });
+    expect(distribution.scheduleRealtimeQueueReview).toHaveBeenCalledWith({
+      trigger: "webhook-deferred",
+    });
     expect(WebhookEvento.update).toHaveBeenLastCalledWith(expect.objectContaining({ estado: "ignored", resultCode: "NO_CAPACITY", lastError: null }), expect.anything());
+  });
+
+  test("una asignacion inmediata no dispara un barrido adicional", async () => {
+    WebhookEvento.update.mockResolvedValueOnce([1]).mockResolvedValueOnce([1]);
+    distribution.executeWebhookOpportunity.mockResolvedValue({
+      code: "ASSIGNED",
+      assigned: true,
+      deferredToScheduler: false,
+    });
+
+    const result = await service.processWebhookEvent(13, { opportunityId: "opp-1" });
+
+    expect(result).toMatchObject({ code: "ASSIGNED", assigned: true });
+    expect(distribution.scheduleRealtimeQueueReview).not.toHaveBeenCalled();
+    expect(WebhookEvento.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ estado: "completed", resultCode: "ASSIGNED" }),
+      expect.anything(),
+    );
   });
 
   test("los fallos no persisten telefonos, tokens ni secretos del mensaje", async () => {

@@ -130,6 +130,14 @@ test("repartidor conserva acceso implicito a Logistica", () => {
     }),
     true,
   );
+  assert.equal(
+    hasRouteAccess({
+      rol: "repartidor",
+      permisos: [],
+      path: "/logistica/stock-contifico",
+    }),
+    true,
+  );
 });
 
 test("ruta inicial respeta permisos explicitos de administrador", () => {

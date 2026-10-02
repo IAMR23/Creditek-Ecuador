@@ -61,7 +61,7 @@ Antes de cada PUT se consulta nuevamente la oportunidad. Si GHL aplico una asign
 - `401 Unauthorized`: falta el encabezado secreto, el valor es incorrecto o la variable de entorno no esta configurada.
 - `500 Internal Server Error`: no fue posible registrar el evento para procesamiento.
 
-El acuse no significa necesariamente que la oportunidad fue asignada. Si aun no existe, tiene propietario, esta fuera de las etapas seleccionadas, no hay asesores en Play/capacidad, la configuracion esta inactiva o existe otra ejecucion activa, queda intacta. Al pulsar Play se revisa inmediatamente la cola acumulada y el scheduler la vuelve a revisar cada minuto como respaldo, sin depender de una configuracion horaria activa.
+El acuse no significa necesariamente que la oportunidad fue asignada. Si aun no existe, no hay capacidad o existe otra ejecucion activa, el webhook registra de inmediato una revision persistente de la cola; no espera al siguiente minuto del scheduler. Si tiene propietario, esta fuera de las etapas seleccionadas o la configuracion esta inactiva, queda intacta. Al pulsar Play tambien se revisa inmediatamente la cola acumulada y el scheduler la vuelve a revisar cada minuto como respaldo, sin depender de una configuracion horaria activa.
 
 ## Seguridad y operacion
 
