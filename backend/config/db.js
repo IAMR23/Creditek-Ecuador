@@ -250,7 +250,13 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
   if (!tables.includes("ghl_difusion_ejecuciones")) return;
   await sequelize.query(`
     ALTER TABLE ghl_difusion_ejecuciones
-      ADD COLUMN IF NOT EXISTS mensajes JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ADD COLUMN IF NOT EXISTS mensajes JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS "scheduledAt" TIMESTAMPTZ;
+    UPDATE ghl_difusion_ejecuciones
+    SET "scheduledAt" = COALESCE("scheduledAt", "createdAt");
+    ALTER TABLE ghl_difusion_ejecuciones
+      ALTER COLUMN "scheduledAt" SET DEFAULT NOW(),
+      ALTER COLUMN "scheduledAt" SET NOT NULL;
     UPDATE ghl_difusion_ejecuciones
     SET mensajes = jsonb_build_array(mensaje)
     WHERE mensajes IS NULL
@@ -259,6 +265,8 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
     CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_unique
     ON ghl_difusion_ejecuciones ((1))
     WHERE estado IN ('pending', 'running');
+    CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_programada_idx
+    ON ghl_difusion_ejecuciones ("scheduledAt" DESC);
   `);
   if (!tables.includes("ghl_difusion_ejecucion_detalles")) return;
   await sequelize.query(`
@@ -2174,6 +2182,7 @@ const connectDB = async () => {
     await ensureEntregaTipoSchema(queryInterface);
     await ensureTicketsTiPreSyncSchema(queryInterface);
     await ensureUphoneCedulaSchema(queryInterface);
+    await ensureGhlBroadcastQueueSchema(await queryInterface.showAllTables());
     await sequelize.sync({});
     await sequelize.query(require("fs").readFileSync(
       require("path").join(__dirname, "../migrations/202609050004-create-egresos-creditek-tipos.sql"), "utf8",

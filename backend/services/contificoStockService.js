@@ -415,6 +415,12 @@ const createContificoStockService = ({
     warning = null,
   }) => {
     const warehouseCatalogIds = new Set(catalog.bodegas.map((warehouse) => warehouse.id));
+    const stockRowsByWarehouse = entry.stocks.reduce((rowsByWarehouse, stock) => {
+      const rows = rowsByWarehouse.get(stock.bodegaId) || [];
+      rows.push(stock);
+      rowsByWarehouse.set(stock.bodegaId, rows);
+      return rowsByWarehouse;
+    }, new Map());
     const warehouseIdCounts = entry.stocks.reduce((counts, stock) => {
       counts.set(stock.bodegaId, (counts.get(stock.bodegaId) || 0) + 1);
       return counts;
@@ -444,10 +450,49 @@ const createContificoStockService = ({
     const difference = comparable
       ? Number((warehouseSum - product.cantidadStock).toFixed(6))
       : null;
+    const buildCombinedWarehouse = ({ warehouse, stockRows, inCatalog }) => {
+      const uniqueStock = stockRows.length === 1 ? stockRows[0] : null;
+      const duplicated = stockRows.length > 1;
+      const reportedByStock = stockRows.length > 0;
+
+      return {
+        bodegaId: warehouse?.id || uniqueStock?.bodegaId || stockRows[0]?.bodegaId,
+        bodegaCodigo: warehouse?.codigo || null,
+        bodegaNombre:
+          warehouse?.nombre || uniqueStock?.bodegaNombre || stockRows[0]?.bodegaNombre || null,
+        cantidad: duplicated ? null : uniqueStock?.cantidad ?? null,
+        cantidadValida: duplicated ? false : uniqueStock?.cantidadValida ?? false,
+        reportadaEnStock: reportedByStock,
+        incluidaEnCatalogo: inCatalog,
+        registrosStock: stockRows.length,
+        estadoCobertura: duplicated
+          ? "REGISTROS_DUPLICADOS"
+          : inCatalog && reportedByStock
+            ? "CATALOGO_Y_STOCK"
+            : inCatalog
+              ? "SOLO_CATALOGO"
+              : "SOLO_STOCK",
+      };
+    };
+    const warehousesForProduct = [
+      ...catalog.bodegas.map((warehouse) =>
+        buildCombinedWarehouse({
+          warehouse,
+          stockRows: stockRowsByWarehouse.get(warehouse.id) || [],
+          inCatalog: true,
+        }),
+      ),
+      ...Array.from(stockRowsByWarehouse.entries())
+        .filter(([warehouseId]) => !warehouseCatalogIds.has(warehouseId))
+        .map(([, stockRows]) =>
+          buildCombinedWarehouse({ warehouse: null, stockRows, inCatalog: false }),
+        ),
+    ];
 
     return {
       producto: product,
       existenciasPorBodega: entry.stocks,
+      bodegasProducto: warehousesForProduct,
       comparacion: {
         cantidadStockProducto: product.cantidadStock,
         cantidadStockProductoValida: product.cantidadStockValida,
@@ -558,7 +603,26 @@ const createContificoStockService = ({
     }
 
     const catalog = await getCatalog();
-    const warehouse = catalog.bodegas.find((item) => item.id === normalizedWarehouseId);
+    let warehouse = catalog.bodegas.find((item) => item.id === normalizedWarehouseId);
+    if (!warehouse) {
+      for (const cachedStock of stockCache.values()) {
+        const discovered = cachedStock.stocks.find(
+          (item) => item.bodegaId === normalizedWarehouseId,
+        );
+        if (discovered) {
+          warehouse = {
+            id: discovered.bodegaId,
+            codigo: null,
+            nombre: discovered.bodegaNombre,
+            venta: null,
+            compra: null,
+            produccion: null,
+            descubiertaEnStock: true,
+          };
+          break;
+        }
+      }
+    }
     if (!warehouse) {
       throw new ContificoStockError(
         "CONTIFICO_WAREHOUSE_NOT_FOUND",
@@ -650,9 +714,101 @@ const createContificoStockService = ({
     };
   };
 
+  const getProductWarehouseCoverage = async ({
+    offset = 0,
+    limit = 20,
+    forceRefresh = false,
+  } = {}) => {
+    const catalog = await getCatalog();
+    const physicalProducts = catalog.productos.filter((product) => product.tipo === "PRO");
+    const warehouseCatalog = new Map(
+      catalog.bodegas.map((warehouse) => [warehouse.id, warehouse]),
+    );
+    const safeOffset = Math.max(0, Number.isInteger(offset) ? offset : 0);
+    const safeLimit = Math.min(
+      MAX_BATCH_SIZE,
+      Math.max(1, Number.isInteger(limit) ? limit : 20),
+    );
+    const batch = physicalProducts.slice(safeOffset, safeOffset + safeLimit);
+
+    const products = await mapWithConcurrency(batch, concurrency, async (product) => {
+      try {
+        const detail = await getProductStock(product.id, { forceRefresh });
+        return {
+          productoId: product.id,
+          codigo: product.codigo,
+          nombre: product.nombre,
+          bodegasReportadas: detail.existenciasPorBodega.map((stock) => ({
+            ...stock,
+            bodegaCodigo: warehouseCatalog.get(stock.bodegaId)?.codigo || null,
+            incluidaEnCatalogo: warehouseCatalog.has(stock.bodegaId),
+          })),
+          estadoConsulta: detail.meta.stale ? "CACHE_DESACTUALIZADA" : "COMPLETA",
+          stale: Boolean(detail.meta.stale),
+          warning: detail.meta.warning,
+          consultedAt: detail.meta.consultedAt,
+        };
+      } catch (error) {
+        const normalizedError = integrationErrorFrom(error);
+        return {
+          productoId: product.id,
+          codigo: product.codigo,
+          nombre: product.nombre,
+          bodegasReportadas: [],
+          estadoConsulta: "ERROR",
+          stale: false,
+          warning: normalizedError.message,
+          consultedAt: null,
+        };
+      }
+    });
+
+    const discoveredWarehouses = Array.from(
+      new Map(
+        products.flatMap((product) =>
+          product.bodegasReportadas.map((stock) => [
+            stock.bodegaId,
+            {
+              id: stock.bodegaId,
+              codigo: stock.bodegaCodigo,
+              nombre: stock.bodegaNombre,
+              incluidaEnCatalogo: stock.incluidaEnCatalogo,
+            },
+          ]),
+        ),
+      ).values(),
+    );
+    const failedUpdates = products.filter(
+      (product) => product.estadoConsulta === "ERROR" || product.stale,
+    ).length;
+    const nextOffset = safeOffset + batch.length;
+
+    return {
+      productos: products,
+      bodegasDescubiertas: discoveredWarehouses,
+      progreso: {
+        offset: safeOffset,
+        procesados: batch.length,
+        total: physicalProducts.length,
+        siguienteOffset: nextOffset < physicalProducts.length ? nextOffset : null,
+      },
+      meta: {
+        consultedAt:
+          failedUpdates === 0 && batch.length > 0
+            ? new Date(now()).toISOString()
+            : null,
+        failedUpdates,
+        concurrency,
+        batchLimit: safeLimit,
+        stockCoverageNote: STOCK_COVERAGE_NOTE,
+      },
+    };
+  };
+
   return {
     getCatalog,
     getProductStock,
+    getProductWarehouseCoverage,
     getWarehouseStock,
   };
 };

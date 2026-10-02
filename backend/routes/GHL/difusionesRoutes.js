@@ -29,6 +29,7 @@ router.delete("/listas/:id", controller.deleteSmartList);
 router.post("/vista-previa", controller.preview);
 router.post("/enviar", controller.send);
 router.get("/ejecuciones/activa", controller.activeExecution);
+router.get("/ejecuciones", controller.executions);
 router.get("/ejecuciones/:id", controller.execution);
 router.post("/ejecuciones/:id/cancelar", controller.cancelExecution);
 

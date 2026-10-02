@@ -47,6 +47,23 @@ const normalizeRate = (input = {}) => ({
   ),
 });
 
+const normalizeScheduledAt = (value, now = new Date()) => {
+  const current = new Date(now);
+  if (Number.isNaN(current.getTime())) {
+    throw serviceError("No se pudo determinar la fecha actual", "GHL_BROADCAST_SCHEDULE_INVALID");
+  }
+  if (value === undefined || value === null || value === "") return current;
+
+  const scheduledAt = new Date(value);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw serviceError("La fecha y hora programada no es valida", "GHL_BROADCAST_SCHEDULE_INVALID");
+  }
+  if (scheduledAt.getTime() < current.getTime() - 60 * 1000) {
+    throw serviceError("La fecha y hora programada debe ser actual o futura", "GHL_BROADCAST_SCHEDULE_PAST");
+  }
+  return scheduledAt < current ? current : scheduledAt;
+};
+
 const selectBalancedBatchDetails = (details = [], instanceIndexes = [], batchSize = DEFAULT_BATCH_SIZE) => {
   const configuredIndexes = [...new Set(
     instanceIndexes
@@ -104,10 +121,16 @@ const serializeExecution = (row, { includeDetails = false } = {}) => {
     tagged: value.tagged,
     tagFailed: value.tagFailed,
     excluded: value.excluded || [],
+    instanceIndexes: value.instanceIndexes || [],
+    scheduledAt: value.scheduledAt || value.createdAt,
     startedAt: value.startedAt,
     finishedAt: value.finishedAt,
     nextBatchAt: value.nextBatchAt,
     createdAt: value.createdAt,
+    creadoPor: value.creadoPor ? {
+      id: value.creadoPor.id,
+      nombre: value.creadoPor.nombre,
+    } : null,
   };
   if (includeDetails) {
     result.details = (value.detalles || []).map((detail) => ({
@@ -136,12 +159,16 @@ async function createExecution(input, userId, dependencies = {}) {
   const detailModel = dependencies.Detalle || Detalle;
   const previewer = dependencies.previewBroadcast || previewBroadcast;
   const rate = normalizeRate(input);
+  const currentTime = typeof dependencies.now === "function"
+    ? dependencies.now()
+    : dependencies.now || new Date();
+  const scheduledAt = normalizeScheduledAt(input?.scheduledAt, currentTime);
   const preview = await previewer(input);
   const messages = normalizeMessages(input);
   const active = await executionModel.findOne({ where: { estado: { [Op.in]: ACTIVE_STATES } } });
   if (active) {
     throw serviceError(
-      "Ya existe una difusion en curso. Espere a que termine o cancelela.",
+      "Ya existe una difusion activa o programada. Espere a que termine o cancelela.",
       "GHL_BROADCAST_ACTIVE_EXISTS",
       409,
     );
@@ -162,7 +189,8 @@ async function createExecution(input, userId, dependencies = {}) {
         total: preview.totalEligible,
         excluded: preview.excluded,
         creadoPorId: userId,
-        nextBatchAt: new Date(),
+        scheduledAt,
+        nextBatchAt: scheduledAt,
       }, { transaction });
       const totalInstances = preview.distribution.length;
       const details = preview.distribution.flatMap((group, instancePosition) =>
@@ -181,7 +209,7 @@ async function createExecution(input, userId, dependencies = {}) {
   } catch (error) {
     if (error.name === "SequelizeUniqueConstraintError") {
       throw serviceError(
-        "Ya existe una difusion en curso. Espere a que termine o cancelela.",
+        "Ya existe una difusion activa o programada. Espere a que termine o cancelela.",
         "GHL_BROADCAST_ACTIVE_EXISTS",
         409,
       );
@@ -391,6 +419,33 @@ async function getActiveExecution(dependencies = {}) {
   return row ? serializeExecution(row) : null;
 }
 
+async function listExecutions(query = {}, dependencies = {}) {
+  const executionModel = dependencies.Ejecucion || Ejecucion;
+  const page = integerInRange(query.page, 1, 1, 1000000, "La pagina");
+  const pageSize = integerInRange(query.pageSize, 10, 1, 50, "El tamano de pagina");
+  const result = await executionModel.findAndCountAll({
+    include: [{
+      association: "creadoPor",
+      attributes: ["id", "nombre"],
+      required: false,
+    }],
+    order: [["createdAt", "DESC"]],
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    distinct: true,
+  });
+  const total = Number(result.count) || 0;
+  return {
+    executions: result.rows.map((row) => serializeExecution(row)),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    },
+  };
+}
+
 async function cancelExecution(id, dependencies = {}) {
   const executionModel = dependencies.Ejecucion || Ejecucion;
   const detailModel = dependencies.Detalle || Detalle;
@@ -415,7 +470,9 @@ module.exports = {
   createExecution,
   getActiveExecution,
   getExecution,
+  listExecutions,
   normalizeRate,
+  normalizeScheduledAt,
   processBatch,
   processDueExecutions,
   recoverStaleExecutions,

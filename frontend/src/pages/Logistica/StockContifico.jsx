@@ -66,7 +66,7 @@ function StockContifico() {
   const [refreshing, setRefreshing] = useState(false);
   const [catalogError, setCatalogError] = useState("");
   const [search, setSearch] = useState("");
-  const [stockFilter, setStockFilter] = useState("todos");
+  const [stockFilter, setStockFilter] = useState("positivo");
   const [typeFilter, setTypeFilter] = useState("PRO");
   const [tablePage, setTablePage] = useState(1);
   const [warehouseId, setWarehouseId] = useState("");
@@ -75,10 +75,20 @@ function StockContifico() {
   const [warehouseProgress, setWarehouseProgress] = useState({ processed: 0, total: 0 });
   const [warehouseError, setWarehouseError] = useState("");
   const [warehouseUpdatedAt, setWarehouseUpdatedAt] = useState(null);
+  const [positiveWarehouses, setPositiveWarehouses] = useState([]);
+  const [positiveWarehousesLoading, setPositiveWarehousesLoading] = useState(false);
+  const [positiveWarehousesProgress, setPositiveWarehousesProgress] = useState({
+    processed: 0,
+    total: 0,
+  });
+  const [positiveWarehousesError, setPositiveWarehousesError] = useState("");
   const [details, setDetails] = useState({});
 
   const warehouseRequestRef = useRef(0);
   const warehouseSnapshotsRef = useRef({});
+  const positiveWarehousesRequestRef = useRef(0);
+  const positiveWarehousesSnapshotRef = useRef(null);
+  const positiveWarehousesAutoStartedRef = useRef(false);
 
   const loadCatalog = useCallback(async (forceRefresh = false) => {
     setCatalogError("");
@@ -105,6 +115,7 @@ function StockContifico() {
     loadCatalog(false);
     return () => {
       warehouseRequestRef.current += 1;
+      positiveWarehousesRequestRef.current += 1;
     };
   }, [loadCatalog]);
 
@@ -194,6 +205,105 @@ function StockContifico() {
     }
   }, []);
 
+  const loadPositiveWarehouses = useCallback(async (forceRefresh = false) => {
+    const requestId = positiveWarehousesRequestRef.current + 1;
+    positiveWarehousesRequestRef.current = requestId;
+    const previous = positiveWarehousesSnapshotRef.current;
+    const warehousesById = new Map();
+    let offset = 0;
+    let total = 0;
+    let failedUpdates = 0;
+
+    setPositiveWarehousesLoading(true);
+    setPositiveWarehousesError("");
+    setPositiveWarehousesProgress({ processed: 0, total: 0 });
+    setPositiveWarehouses(previous?.warehouses || []);
+
+    try {
+      do {
+        const response = await api.get(
+          "/api/logistica/stock-contifico/cobertura-bodegas",
+          {
+            params: {
+              offset,
+              limit: 20,
+              ...(forceRefresh ? { actualizar: true } : {}),
+            },
+          },
+        );
+        if (positiveWarehousesRequestRef.current !== requestId) return null;
+
+        for (const product of response.data.productos || []) {
+          for (const stock of product.bodegasReportadas || []) {
+            if (!stock.cantidadValida || typeof stock.cantidad !== "number" || stock.cantidad <= 0) {
+              continue;
+            }
+            warehousesById.set(stock.bodegaId, {
+              id: stock.bodegaId,
+              codigo: stock.bodegaCodigo,
+              nombre: stock.bodegaNombre,
+              incluidaEnCatalogo: stock.incluidaEnCatalogo,
+            });
+          }
+        }
+
+        failedUpdates += response.data.meta?.failedUpdates || 0;
+        total = response.data.progreso?.total || 0;
+        offset = response.data.progreso?.siguienteOffset;
+        setPositiveWarehousesProgress({
+          processed: response.data.progreso?.offset + response.data.progreso?.procesados || 0,
+          total,
+        });
+      } while (offset !== null && offset !== undefined);
+
+      if (positiveWarehousesRequestRef.current !== requestId) return null;
+
+      const warehouses = Array.from(warehousesById.values()).sort((left, right) =>
+        String(left.nombre || left.codigo || left.id).localeCompare(
+          String(right.nombre || right.codigo || right.id),
+          "es",
+        ),
+      );
+
+      if (failedUpdates > 0 && previous) {
+        setPositiveWarehouses(previous.warehouses);
+        setPositiveWarehousesError(
+          `No se pudieron verificar ${failedUpdates} productos. Se conserva el último listado completo de bodegas con stock positivo.`,
+        );
+        return previous.warehouses;
+      }
+
+      setPositiveWarehouses(warehouses);
+      if (failedUpdates === 0) {
+        positiveWarehousesSnapshotRef.current = { warehouses };
+      } else {
+        setPositiveWarehousesError(
+          `El listado puede estar incompleto: ${failedUpdates} productos no pudieron consultarse. Solo se muestran bodegas con stock positivo confirmado.`,
+        );
+      }
+      return warehouses;
+    } catch (error) {
+      if (positiveWarehousesRequestRef.current !== requestId) return null;
+      setPositiveWarehouses(previous?.warehouses || []);
+      setPositiveWarehousesError(
+        `${getErrorMessage(error, "No fue posible identificar las bodegas con stock positivo.")}${
+          previous ? " Se conserva el último listado válido." : ""
+        }`,
+      );
+      return previous?.warehouses || null;
+    } finally {
+      if (positiveWarehousesRequestRef.current === requestId) {
+        setPositiveWarehousesLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!catalog || positiveWarehousesAutoStartedRef.current) return;
+    positiveWarehousesAutoStartedRef.current = true;
+    loadPositiveWarehouses(false);
+  }, [catalog, loadPositiveWarehouses]);
+
   const handleWarehouseChange = (event) => {
     const selectedId = event.target.value;
     setWarehouseId(selectedId);
@@ -213,7 +323,18 @@ function StockContifico() {
   const handleRefresh = async () => {
     setDetails({});
     const refreshed = await loadCatalog(true);
-    if (refreshed && warehouseId) await loadWarehouseStock(warehouseId, true);
+    if (!refreshed) return;
+
+    const availableWarehouses = await loadPositiveWarehouses(true);
+    if (!warehouseId) return;
+
+    if (availableWarehouses?.some((warehouse) => warehouse.id === warehouseId)) {
+      await loadWarehouseStock(warehouseId, false);
+    } else {
+      setWarehouseId("");
+      setWarehouseStocks({});
+      setWarehouseUpdatedAt(null);
+    }
   };
 
   const toggleProductDetail = async (productId) => {
@@ -258,7 +379,7 @@ function StockContifico() {
     }
   };
 
-  const selectedWarehouse = catalog?.bodegas?.find((item) => item.id === warehouseId);
+  const selectedWarehouse = positiveWarehouses.find((item) => item.id === warehouseId);
   const products = useMemo(() => catalog?.productos || [], [catalog?.productos]);
   const physicalProducts = useMemo(
     () => products.filter((product) => product.tipo === "PRO"),
@@ -371,11 +492,13 @@ function StockContifico() {
             <button
               type="button"
               onClick={handleRefresh}
-              disabled={refreshing || warehouseLoading}
+              disabled={refreshing || warehouseLoading || positiveWarehousesLoading}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RefreshCw className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
-              {refreshing ? "Actualizando..." : "Actualizar datos"}
+              <RefreshCw
+                className={`h-5 w-5 ${refreshing || positiveWarehousesLoading ? "animate-spin" : ""}`}
+              />
+              {refreshing || positiveWarehousesLoading ? "Actualizando..." : "Actualizar datos"}
             </button>
           </div>
 
@@ -464,10 +587,15 @@ function StockContifico() {
               <select
                 value={warehouseId}
                 onChange={handleWarehouseChange}
+                disabled={positiveWarehousesLoading}
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
               >
-                <option value="">Cantidad general reportada por Contífico</option>
-                {(catalog.bodegas || []).map((warehouseItem) => (
+                <option value="">
+                  {positiveWarehousesLoading
+                    ? "Identificando bodegas con stock positivo..."
+                    : "Cantidad general reportada por Contífico"}
+                </option>
+                {positiveWarehouses.map((warehouseItem) => (
                   <option key={warehouseItem.id} value={warehouseItem.id}>
                     {warehouseItem.codigo ? `${warehouseItem.codigo} - ` : ""}
                     {warehouseItem.nombre || "Bodega sin nombre"}
@@ -475,6 +603,38 @@ function StockContifico() {
                 ))}
               </select>
             </label>
+
+            {positiveWarehousesLoading && (
+              <div className="mt-4">
+                <div className="mb-2 flex justify-between text-sm text-slate-600">
+                  <span>Verificando bodegas con existencias mayores a cero...</span>
+                  <span>
+                    {positiveWarehousesProgress.processed} / {positiveWarehousesProgress.total || "..."}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-green-600 transition-all"
+                    style={{
+                      width: positiveWarehousesProgress.total
+                        ? `${Math.min(100, (positiveWarehousesProgress.processed / positiveWarehousesProgress.total) * 100)}%`
+                        : "8%",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {!positiveWarehousesLoading && positiveWarehouses.length === 0 && !positiveWarehousesError && (
+              <p className="mt-3 text-sm text-slate-600">
+                Contífico no reportó bodegas con existencias mayores a cero.
+              </p>
+            )}
+            {positiveWarehousesError && (
+              <div className="mt-3 flex items-start gap-2 text-sm text-amber-800">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{positiveWarehousesError}</span>
+              </div>
+            )}
 
             {warehouseLoading && (
               <div className="mt-4">
@@ -555,6 +715,11 @@ function StockContifico() {
                     const stockValue = getVisibleStock(product);
                     const warehouseStock = warehouseStocks[product.id];
                     const detail = details[product.id];
+                    const positiveDetailWarehouses = (
+                      detail?.data?.existenciasPorBodega || []
+                    ).filter(
+                      (item) => item.cantidadValida && typeof item.cantidad === "number" && item.cantidad > 0,
+                    );
                     const stockClass =
                       typeof stockValue !== "number"
                         ? "text-slate-500"
@@ -588,20 +753,18 @@ function StockContifico() {
                                       {detail.data.meta.warning}
                                     </p>
                                   )}
-                                  {(detail.data?.existenciasPorBodega || []).length === 0 ? (
+                                  {positiveDetailWarehouses.length === 0 ? (
                                     <p className="text-slate-600">
-                                      Contífico no reportó bodegas para este producto. Esto no se
-                                      interpreta como cero.
+                                      Contífico no reportó bodegas con stock mayor a cero para este
+                                      producto.
                                     </p>
                                   ) : (
                                     <div className="space-y-2">
-                                      {detail.data.existenciasPorBodega.map((item) => (
+                                      {positiveDetailWarehouses.map((item) => (
                                         <div key={item.bodegaId} className="flex justify-between gap-4">
                                           <span>{item.bodegaNombre || item.bodegaId}</span>
-                                          <strong className={item.cantidad < 0 ? "text-red-700" : "text-slate-900"}>
-                                            {item.cantidadValida
-                                              ? formatQuantity(item.cantidad)
-                                              : "Cantidad invalida"}
+                                          <strong className="text-green-700">
+                                            {formatQuantity(item.cantidad)}
                                           </strong>
                                         </div>
                                       ))}
@@ -612,7 +775,7 @@ function StockContifico() {
                                       Cantidad general: {formatQuantity(detail.data?.comparacion?.cantidadStockProducto)}
                                     </p>
                                     <p>
-                                      Suma aritmetica del desglose: {formatQuantity(detail.data?.comparacion?.sumaDesgloseBodegas)}
+                                      Suma aritmetica del desglose completo: {formatQuantity(detail.data?.comparacion?.sumaDesgloseBodegas)}
                                     </p>
                                     {detail.data?.comparacion?.coincide === false && (
                                       <p className="mt-1 font-semibold text-amber-800">

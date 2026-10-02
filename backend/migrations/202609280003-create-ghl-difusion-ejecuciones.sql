@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS ghl_difusion_ejecuciones (
   "tagFailed" INTEGER NOT NULL DEFAULT 0,
   excluded JSONB NOT NULL DEFAULT '[]'::jsonb,
   "creadoPorId" INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+  "scheduledAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "startedAt" TIMESTAMPTZ,
   "finishedAt" TIMESTAMPTZ,
   "nextBatchAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -49,6 +50,8 @@ CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_due_idx
   ON ghl_difusion_ejecuciones (estado, "nextBatchAt");
 CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_usuario_idx
   ON ghl_difusion_ejecuciones ("creadoPorId", "createdAt" DESC);
+CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_programada_idx
+  ON ghl_difusion_ejecuciones ("scheduledAt" DESC);
 CREATE INDEX IF NOT EXISTS ghl_difusion_detalle_estado_idx
   ON ghl_difusion_ejecucion_detalles ("ejecucionId", estado);
 

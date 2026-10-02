@@ -168,11 +168,101 @@ describe("contificoStockService", () => {
     expect(detail.cobertura.bodegasNoReportadas).toEqual([
       expect.objectContaining({ id: secondWarehouse.id }),
     ]);
+    expect(detail.bodegasProducto).toEqual([
+      expect.objectContaining({
+        bodegaId: warehouse().id,
+        cantidad: -1.75,
+        reportadaEnStock: true,
+        incluidaEnCatalogo: true,
+        estadoCobertura: "CATALOGO_Y_STOCK",
+      }),
+      expect.objectContaining({
+        bodegaId: secondWarehouse.id,
+        cantidad: null,
+        cantidadValida: false,
+        reportadaEnStock: false,
+        incluidaEnCatalogo: true,
+        estadoCobertura: "SOLO_CATALOGO",
+      }),
+    ]);
     expect(warehouseResult.productos[0]).toMatchObject({
       cantidad: null,
       cantidadValida: false,
       reportado: false,
       estadoConsulta: "NO_REPORTADO",
+    });
+  });
+
+  test("incluye bodegas reportadas por stock aunque no aparezcan en el catalogo", async () => {
+    const stockOnlyWarehouse = {
+      bodega_id: "BODSTOCKONLY001",
+      bodega_nombre: "Bodega solo stock",
+      cantidad: "2.50",
+    };
+    const client = createClient(async (path) => {
+      if (path === "/producto/") return { data: [product()] };
+      if (path === "/bodega/") return { data: [warehouse()] };
+      if (path.includes("/stock/")) return { data: [stockOnlyWarehouse] };
+      throw new Error(`Ruta inesperada: ${path}`);
+    });
+    const service = createContificoStockService({
+      client,
+      getApiKey: () => "clave-prueba",
+      maxRetries: 0,
+    });
+
+    const coverage = await service.getProductWarehouseCoverage();
+    const detail = await service.getProductStock(product().id);
+    const stockOnlySelection = await service.getWarehouseStock(
+      stockOnlyWarehouse.bodega_id,
+    );
+
+    expect(detail.bodegasProducto).toEqual([
+      expect.objectContaining({
+        bodegaId: warehouse().id,
+        reportadaEnStock: false,
+        incluidaEnCatalogo: true,
+        estadoCobertura: "SOLO_CATALOGO",
+      }),
+      expect.objectContaining({
+        bodegaId: stockOnlyWarehouse.bodega_id,
+        bodegaNombre: stockOnlyWarehouse.bodega_nombre,
+        cantidad: 2.5,
+        reportadaEnStock: true,
+        incluidaEnCatalogo: false,
+        estadoCobertura: "SOLO_STOCK",
+      }),
+    ]);
+    expect(coverage.productos[0]).toMatchObject({
+      productoId: product().id,
+      estadoConsulta: "COMPLETA",
+      bodegasReportadas: [
+        expect.objectContaining({
+          bodegaId: stockOnlyWarehouse.bodega_id,
+          cantidad: 2.5,
+          incluidaEnCatalogo: false,
+        }),
+      ],
+    });
+    expect(coverage.bodegasDescubiertas).toEqual([
+      expect.objectContaining({
+        id: stockOnlyWarehouse.bodega_id,
+        incluidaEnCatalogo: false,
+      }),
+    ]);
+    expect(stockOnlySelection).toMatchObject({
+      bodega: {
+        id: stockOnlyWarehouse.bodega_id,
+        nombre: stockOnlyWarehouse.bodega_nombre,
+        descubiertaEnStock: true,
+      },
+      productos: [
+        expect.objectContaining({
+          productoId: product().id,
+          cantidad: 2.5,
+          estadoConsulta: "REPORTADO",
+        }),
+      ],
     });
   });
 

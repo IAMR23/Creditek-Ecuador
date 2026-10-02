@@ -87,4 +87,29 @@ const stockBodega = async (req, res) => {
   }
 };
 
-module.exports = { catalogo, stockBodega, stockProducto };
+const coberturaBodegas = async (req, res) => {
+  try {
+    const offset = parseIntegerQuery(req.query.offset, {
+      name: "offset",
+      fallback: 0,
+      minimum: 0,
+      maximum: 100000,
+    });
+    const limit = parseIntegerQuery(req.query.limit, {
+      name: "limit",
+      fallback: 20,
+      minimum: 1,
+      maximum: stockService.MAX_BATCH_SIZE,
+    });
+    const data = await stockService.getProductWarehouseCoverage({
+      offset,
+      limit,
+      forceRefresh: parseRefresh(req.query.actualizar),
+    });
+    return res.json({ ok: true, ...data });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+module.exports = { catalogo, coberturaBodegas, stockBodega, stockProducto };

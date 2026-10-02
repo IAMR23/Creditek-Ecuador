@@ -90,6 +90,14 @@ async function execution(req, res) {
   }
 }
 
+async function executions(req, res) {
+  try {
+    return res.json({ ok: true, ...await queueService.listExecutions(req.query || {}) });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
 async function cancelExecution(req, res) {
   try {
     return res.json({ ok: true, execution: await queueService.cancelExecution(req.params.id) });
@@ -186,6 +194,7 @@ module.exports = {
   deleteSmartList,
   deleteSavedMessage,
   execution,
+  executions,
   pipelines,
   preview,
   savedMessages,

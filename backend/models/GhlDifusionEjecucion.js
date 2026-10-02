@@ -18,6 +18,7 @@ const GhlDifusionEjecucion = sequelize.define("GhlDifusionEjecucion", {
   tagFailed: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   excluded: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
   creadoPorId: { type: DataTypes.INTEGER, allowNull: false },
+  scheduledAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   startedAt: { type: DataTypes.DATE, allowNull: true },
   finishedAt: { type: DataTypes.DATE, allowNull: true },
   nextBatchAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },

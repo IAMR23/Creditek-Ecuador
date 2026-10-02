@@ -19,6 +19,7 @@ jest.mock("../../middleware/authMiddleware", () => ({
 
 jest.mock("../../controllers/Logistica/stockContificoController", () => ({
   catalogo: (_req, res) => res.json({ ok: true, productos: [] }),
+  coberturaBodegas: (_req, res) => res.json({ ok: true, productos: [] }),
   stockProducto: (req, res) => res.json({ ok: true, id: req.params.productoId }),
   stockBodega: (req, res) => res.json({ ok: true, id: req.params.bodegaId }),
 }));
@@ -45,6 +46,18 @@ describe("rutas de stock Contifico", () => {
   test("rechaza usuarios sin permisos de Logistica", async () => {
     await request(createApp())
       .get("/api/logistica/stock-contifico/catalogo")
+      .set("x-test-permisos", "Ventas")
+      .expect(403);
+  });
+
+  test("protege la cobertura producto-bodega con el mismo permiso", async () => {
+    await request(createApp())
+      .get("/api/logistica/stock-contifico/cobertura-bodegas")
+      .set("x-test-permisos", "Logistica")
+      .expect(200);
+
+    await request(createApp())
+      .get("/api/logistica/stock-contifico/cobertura-bodegas")
       .set("x-test-permisos", "Ventas")
       .expect(403);
   });

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
+  CalendarClock,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Eye,
+  History,
   ListFilter,
   LoaderCircle,
   MessageSquareText,
@@ -50,6 +52,13 @@ const EXECUTION_STATUS = {
   partial: "Completada con novedades",
   cancelled: "Cancelada",
 };
+const DETAIL_STATUS = {
+  pending: "Pendiente",
+  processing: "Procesando",
+  sent: "Enviado",
+  failed: "Fallido",
+  cancelled: "Cancelado",
+};
 let filterRuleSequence = 0;
 let messageVariantSequence = 0;
 
@@ -71,6 +80,29 @@ const newMessageVariant = (content = "") => ({
   content,
 });
 const emptySavedMessageForm = () => ({ nombre: "", contenido: "" });
+const toDateTimeLocal = (date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(date));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
+};
+const parseEcuadorDateTime = (value) => new Date(`${value}${String(value).length === 16 ? ":00" : ""}-05:00`);
+const formatDateTime = (value) => value
+  ? new Date(value).toLocaleString("es-EC", { dateStyle: "short", timeStyle: "short", timeZone: "America/Guayaquil" })
+  : "-";
+const executionStatusLabel = (item) => {
+  if (item?.estado === "pending" && item?.scheduledAt && new Date(item.scheduledAt) > new Date()) {
+    return "Programada";
+  }
+  return EXECUTION_STATUS[item?.estado] || item?.estado || "-";
+};
 
 const contactStatus = (contact) => {
   if (contact.canSend) {
@@ -112,6 +144,13 @@ export default function Difusiones() {
   const [execution, setExecution] = useState(null);
   const [batchSize, setBatchSize] = useState(3);
   const [intervalMinutes, setIntervalMinutes] = useState(5);
+  const [sendMode, setSendMode] = useState("immediate");
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [executionHistory, setExecutionHistory] = useState([]);
+  const [historyDetail, setHistoryDetail] = useState(null);
+  const [historyPagination, setHistoryPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [previewing, setPreviewing] = useState(false);
@@ -145,6 +184,8 @@ export default function Difusiones() {
   const estimatedMinutes = estimatedBatches > 0
     ? Math.max(0, estimatedBatches - 1) * intervalMinutes
     : 0;
+  const scheduleIsValid = sendMode === "immediate"
+    || (scheduledAt && parseEcuadorDateTime(scheduledAt).getTime() >= Date.now() - 60 * 1000);
 
   const invalidatePreview = () => {
     setPreview(null);
@@ -250,6 +291,27 @@ export default function Difusiones() {
     }
   }, [isAdmin]);
 
+  const loadExecutionHistory = useCallback(async () => {
+    if (!isAdmin) return;
+    setHistoryLoading(true);
+    try {
+      const response = await api.get("/api/ghl/difusiones/ejecuciones", {
+        params: { page: historyPage, pageSize: 10 },
+      });
+      setExecutionHistory(response.data.executions || []);
+      setHistoryPagination(response.data.pagination || {
+        page: historyPage,
+        pageSize: 10,
+        total: 0,
+        totalPages: 1,
+      });
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyPage, isAdmin]);
+
   useEffect(() => {
     loadStatus();
   }, [loadStatus]);
@@ -279,12 +341,22 @@ export default function Difusiones() {
   }, [loadActiveExecution]);
 
   useEffect(() => {
+    loadExecutionHistory();
+  }, [loadExecutionHistory]);
+
+  useEffect(() => {
     if (!execution?.id || !["pending", "running"].includes(execution.estado)) return undefined;
     let active = true;
     const refresh = async () => {
       try {
         const response = await api.get(`/api/ghl/difusiones/ejecuciones/${execution.id}`);
-        if (active) setExecution(response.data.execution || null);
+        if (active) {
+          const nextExecution = response.data.execution || null;
+          setExecution(nextExecution);
+          if (nextExecution && !["pending", "running"].includes(nextExecution.estado)) {
+            loadExecutionHistory();
+          }
+        }
       } catch (requestError) {
         if (active) setError(errorMessage(requestError));
       }
@@ -295,7 +367,7 @@ export default function Difusiones() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [execution?.estado, execution?.id]);
+  }, [execution?.estado, execution?.id, loadExecutionHistory]);
 
   const toggleContact = (contact) => {
     if (!contact.canSend) return;
@@ -336,6 +408,9 @@ export default function Difusiones() {
     messages: messageContents,
     batchSize,
     intervalMinutes,
+    scheduledAt: sendMode === "scheduled" && scheduledAt
+      ? parseEcuadorDateTime(scheduledAt).toISOString()
+      : undefined,
   });
 
   const runPreview = async () => {
@@ -354,8 +429,15 @@ export default function Difusiones() {
 
   const sendBroadcast = async () => {
     if (!preview || executionActive) return;
+    if (!scheduleIsValid) {
+      setError("Seleccione una fecha y hora actual o futura para programar la difusion.");
+      return;
+    }
+    const scheduleDescription = sendMode === "scheduled"
+      ? `Se iniciara el ${formatDateTime(parseEcuadorDateTime(scheduledAt).toISOString())}`
+      : "Se iniciara inmediatamente";
     const confirmed = window.confirm(
-      `Se programaran ${preview.totalEligible} mensajes en lotes de hasta ${effectiveBatchSize} cada ${intervalMinutes} minutos, con maximo uno por extension. A los contactos se agregara la etiqueta regestion. ¿Desea continuar?`,
+      `${scheduleDescription}. Se enviaran ${preview.totalEligible} mensajes en lotes de hasta ${effectiveBatchSize} cada ${intervalMinutes} minutos, con maximo uno por extension. A los contactos se agregara la etiqueta regestion. ¿Desea continuar?`,
     );
     if (!confirmed) return;
 
@@ -368,6 +450,8 @@ export default function Difusiones() {
       });
       setExecution(response.data.execution || null);
       setPreview(null);
+      setHistoryPage(1);
+      await loadExecutionHistory();
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -381,6 +465,16 @@ export default function Difusiones() {
     try {
       const response = await api.post(`/api/ghl/difusiones/ejecuciones/${execution.id}/cancelar`);
       setExecution(response.data.execution || null);
+      await loadExecutionHistory();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    }
+  };
+
+  const viewExecution = async (id) => {
+    try {
+      const response = await api.get(`/api/ghl/difusiones/ejecuciones/${id}`);
+      setHistoryDetail(response.data.execution || null);
     } catch (requestError) {
       setError(errorMessage(requestError));
     }
@@ -993,6 +1087,41 @@ export default function Difusiones() {
 
           <section className="rounded-xl border bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2"><Timer size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Cadencia de envio</h2></div>
+            <div className="mb-4 grid gap-2 sm:grid-cols-2">
+              <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${sendMode === "immediate" ? "border-green-400 bg-green-50" : "border-gray-200"}`}>
+                <input
+                  type="radio"
+                  name="sendMode"
+                  value="immediate"
+                  checked={sendMode === "immediate"}
+                  onChange={() => { setSendMode("immediate"); invalidatePreview(); }}
+                />
+                <span><strong className="block text-sm text-gray-800">Enviar ahora</strong><span className="text-xs text-gray-500">Inicia al confirmar.</span></span>
+              </label>
+              <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${sendMode === "scheduled" ? "border-green-400 bg-green-50" : "border-gray-200"}`}>
+                <input
+                  type="radio"
+                  name="sendMode"
+                  value="scheduled"
+                  checked={sendMode === "scheduled"}
+                  onChange={() => { setSendMode("scheduled"); invalidatePreview(); }}
+                />
+                <span><strong className="block text-sm text-gray-800">Programar fecha y hora</strong><span className="text-xs text-gray-500">La cola iniciara en el momento indicado.</span></span>
+              </label>
+            </div>
+            {sendMode === "scheduled" && (
+              <label className="mb-4 block text-xs font-bold text-gray-600">
+                Fecha y hora de inicio (Ecuador)
+                <input
+                  type="datetime-local"
+                  min={toDateTimeLocal(new Date())}
+                  value={scheduledAt}
+                  onChange={(event) => { setScheduledAt(event.target.value); invalidatePreview(); }}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-green-500"
+                />
+                {!scheduleIsValid && <span className="mt-1 block font-medium text-red-600">Seleccione una fecha y hora actual o futura.</span>}
+              </label>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs font-bold text-gray-600">
                 Max. mensajes por lote
@@ -1018,7 +1147,7 @@ export default function Difusiones() {
             <button
               type="button"
               onClick={runPreview}
-              disabled={previewing || sending || !allMessagesValid || !selectedList.length || !selectedInstances.length || !messageHub?.configured || batchSize < 1 || intervalMinutes < 1}
+              disabled={previewing || sending || !allMessagesValid || !selectedList.length || !selectedInstances.length || !messageHub?.configured || batchSize < 1 || intervalMinutes < 1 || !scheduleIsValid}
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               {previewing ? <LoaderCircle size={17} className="animate-spin" /> : <Eye size={17} />} Generar vista previa
@@ -1034,6 +1163,9 @@ export default function Difusiones() {
               <h2 className="font-bold text-blue-950">Vista previa del reparto</h2>
               <p className="text-sm text-blue-800">{preview.totalEligible} envios · {preview.totalExcluded} excluidos · reparto equilibrado entre {preview.distribution.length} numeros.</p>
               <p className="mt-1 text-xs font-semibold text-blue-700">{preview.messageCount || messages.length} variantes alternadas · hasta {effectiveBatchSize} envios cada {intervalMinutes} minutos · maximo uno por extension · etiqueta regestion.</p>
+              <p className="mt-1 text-xs font-semibold text-blue-700">
+                {sendMode === "scheduled" ? `Inicio programado: ${formatDateTime(parseEcuadorDateTime(scheduledAt).toISOString())}` : "Inicio inmediato al confirmar."}
+              </p>
             </div>
             <button type="button" onClick={() => setPreview(null)} className="text-blue-900"><X size={19} /></button>
           </div>
@@ -1055,7 +1187,7 @@ export default function Difusiones() {
           )}
           <div className="mt-4 flex justify-end">
             <button type="button" onClick={sendBroadcast} disabled={sending || executionActive} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50">
-              {sending ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={18} />} {sending ? "Programando..." : executionActive ? "Ya existe una difusion en curso" : `Programar ${preview.totalEligible} envios`}
+              {sending ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={18} />} {sending ? "Guardando..." : executionActive ? "Ya existe una difusion activa o programada" : sendMode === "scheduled" ? `Programar ${preview.totalEligible} envios` : `Enviar ahora a ${preview.totalEligible}`}
             </button>
           </div>
         </section>
@@ -1065,10 +1197,11 @@ export default function Difusiones() {
         <section className={`rounded-xl border p-4 shadow-sm ${execution.estado === "partial" ? "border-amber-200 bg-amber-50" : execution.estado === "cancelled" ? "border-gray-300 bg-gray-50" : "border-green-200 bg-green-50"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2"><CheckCircle2 size={20} className={execution.estado === "partial" ? "text-amber-700" : "text-green-700"} /><h2 className="font-bold text-gray-900">Difusion #{execution.id} · {EXECUTION_STATUS[execution.estado] || execution.estado}</h2></div>
+              <div className="flex items-center gap-2"><CheckCircle2 size={20} className={execution.estado === "partial" ? "text-amber-700" : "text-green-700"} /><h2 className="font-bold text-gray-900">Difusion #{execution.id} · {executionStatusLabel(execution)}</h2></div>
               <p className="mt-1 text-sm text-gray-700">{execution.processed || 0} de {execution.total || 0} procesados · {execution.sent || 0} enviados · {execution.failed || 0} fallidos.</p>
               <p className="mt-1 text-xs text-gray-600">Etiqueta regestion: {execution.tagged || 0} aplicadas · {execution.tagFailed || 0} fallidas.</p>
-              {executionActive && execution.nextBatchAt && <p className="mt-1 text-xs font-semibold text-green-800">Siguiente lote: {new Date(execution.nextBatchAt).toLocaleString("es-EC")}</p>}
+              {execution.scheduledAt && <p className="mt-1 text-xs text-gray-600">Inicio solicitado: {formatDateTime(execution.scheduledAt)}</p>}
+              {executionActive && execution.nextBatchAt && <p className="mt-1 text-xs font-semibold text-green-800">{execution.estado === "pending" ? "Inicio o siguiente lote" : "Siguiente lote"}: {formatDateTime(execution.nextBatchAt)}</p>}
             </div>
             {executionActive && <button type="button" onClick={cancelBroadcast} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600">Cancelar pendientes</button>}
           </div>
@@ -1081,6 +1214,93 @@ export default function Difusiones() {
             </div>
           )}
         </section>
+      )}
+
+      <section className="rounded-xl border bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+          <div>
+            <div className="flex items-center gap-2"><History size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Historial de difusiones</h2></div>
+            <p className="mt-1 text-xs text-gray-500">Ejecuciones inmediatas y programadas, con sus resultados y canales utilizados.</p>
+          </div>
+          <button type="button" onClick={loadExecutionHistory} disabled={historyLoading} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold text-gray-700 disabled:opacity-50">
+            <RefreshCcw size={15} className={historyLoading ? "animate-spin" : ""} /> Actualizar
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr><th className="px-4 py-3">Difusion</th><th className="px-4 py-3">Inicio</th><th className="px-4 py-3">Configuracion</th><th className="px-4 py-3">Resultado</th><th className="px-4 py-3">Usuario</th><th className="px-4 py-3 text-right">Accion</th></tr>
+            </thead>
+            <tbody className="divide-y">
+              {executionHistory.map((item) => (
+                <tr key={item.id} className="align-top hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="font-bold text-gray-900">#{item.id}</div>
+                    <span className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-bold ${item.estado === "completed" ? "bg-green-100 text-green-800" : item.estado === "partial" ? "bg-amber-100 text-amber-800" : item.estado === "cancelled" ? "bg-gray-100 text-gray-700" : "bg-blue-100 text-blue-800"}`}>{executionStatusLabel(item)}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 font-semibold text-gray-800"><CalendarClock size={14} /> {formatDateTime(item.scheduledAt)}</div>
+                    <div className="mt-1 text-xs text-gray-500">Creada: {formatDateTime(item.createdAt)}</div>
+                    {item.finishedAt && <div className="mt-1 text-xs text-gray-500">Finalizada: {formatDateTime(item.finishedAt)}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    <div>{item.total || 0} clientes · {item.messageCount || 1} variantes</div>
+                    <div className="mt-1 text-xs text-gray-500">Hasta {Math.min(item.batchSize || 0, (item.instanceIndexes || []).length)} por lote · cada {item.intervalMinutes} min</div>
+                    <div className="mt-1 text-xs text-gray-500">{(item.instanceIndexes || []).map((index) => `WA#${index}`).join(", ") || "Sin canales"}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    <div>{item.sent || 0} enviados · {item.failed || 0} fallidos</div>
+                    <div className="mt-1 text-xs text-gray-500">{item.processed || 0}/{item.total || 0} procesados · {item.tagged || 0} etiquetados</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700">{item.creadoPor?.nombre || "-"}</td>
+                  <td className="px-4 py-3 text-right"><button type="button" onClick={() => viewExecution(item.id)} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100"><Eye size={14} /> Ver</button></td>
+                </tr>
+              ))}
+              {!historyLoading && !executionHistory.length && <tr><td colSpan="6" className="px-4 py-10 text-center text-sm text-gray-500">Todavia no hay difusiones registradas.</td></tr>}
+              {historyLoading && <tr><td colSpan="6" className="px-4 py-10 text-center text-sm text-gray-500"><LoaderCircle size={18} className="mr-2 inline animate-spin" />Cargando historial...</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-xs text-gray-600">
+          <span>{historyPagination.total || 0} difusiones registradas</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setHistoryPage((current) => Math.max(1, current - 1))} disabled={historyPage <= 1 || historyLoading} className="rounded border p-1.5 disabled:opacity-40" aria-label="Pagina anterior del historial"><ChevronLeft size={16} /></button>
+            <span>Pagina {historyPagination.page || historyPage} de {historyPagination.totalPages || 1}</span>
+            <button type="button" onClick={() => setHistoryPage((current) => Math.min(historyPagination.totalPages || 1, current + 1))} disabled={historyPage >= (historyPagination.totalPages || 1) || historyLoading} className="rounded border p-1.5 disabled:opacity-40" aria-label="Pagina siguiente del historial"><ChevronRight size={16} /></button>
+          </div>
+        </div>
+      </section>
+
+      {historyDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 cursor-default bg-black/45" onClick={() => setHistoryDetail(null)} aria-label="Cerrar detalle" />
+          <section className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b px-5 py-4">
+              <div>
+                <h2 className="font-bold text-gray-900">Difusion #{historyDetail.id} · {executionStatusLabel(historyDetail)}</h2>
+                <p className="mt-1 text-sm text-gray-600">Inicio solicitado: {formatDateTime(historyDetail.scheduledAt)}</p>
+              </div>
+              <button type="button" onClick={() => setHistoryDetail(null)} className="rounded-lg bg-gray-100 p-2 text-gray-600 hover:bg-gray-200" aria-label="Cerrar"><X size={18} /></button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 border-b p-5 text-center sm:grid-cols-4">
+              <div className="rounded-lg bg-gray-50 p-3"><div className="text-xl font-bold text-gray-900">{historyDetail.total || 0}</div><div className="text-xs text-gray-500">Clientes</div></div>
+              <div className="rounded-lg bg-green-50 p-3"><div className="text-xl font-bold text-green-800">{historyDetail.sent || 0}</div><div className="text-xs text-green-700">Enviados</div></div>
+              <div className="rounded-lg bg-red-50 p-3"><div className="text-xl font-bold text-red-700">{historyDetail.failed || 0}</div><div className="text-xs text-red-600">Fallidos</div></div>
+              <div className="rounded-lg bg-blue-50 p-3"><div className="text-xl font-bold text-blue-800">{historyDetail.tagged || 0}</div><div className="text-xs text-blue-700">Etiquetados</div></div>
+            </div>
+            <div className="max-h-[55vh] overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase text-gray-500"><tr><th className="px-4 py-3">Cliente</th><th className="px-4 py-3">Canal</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Novedad</th></tr></thead>
+                <tbody className="divide-y">
+                  {(historyDetail.details || []).map((detail) => (
+                    <tr key={detail.id}><td className="px-4 py-3 text-gray-800">{detail.contactName}</td><td className="px-4 py-3 text-gray-600">WA#{detail.instanceIndex}</td><td className="px-4 py-3 font-semibold text-gray-700">{DETAIL_STATUS[detail.estado] || detail.estado}</td><td className="px-4 py-3 text-red-700">{[detail.sendError, detail.tagError].filter(Boolean).join(" · ") || "-"}</td></tr>
+                  ))}
+                  {!(historyDetail.details || []).length && <tr><td colSpan="4" className="px-4 py-8 text-center text-gray-500">No hay detalles disponibles.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );

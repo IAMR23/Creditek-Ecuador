@@ -2,6 +2,8 @@ const {
   sequelize,
   ensureRequiredFeatureTables,
 } = require("./db");
+const fs = require("fs");
+const path = require("path");
 
 describe("esquemas requeridos por funcionalidades RVE", () => {
   afterEach(() => jest.restoreAllMocks());
@@ -52,5 +54,12 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
     await ensureRequiredFeatureTables(queryInterface);
 
     expect(query).not.toHaveBeenCalled();
+  });
+
+  test("prepara el esquema de difusiones antes de sincronizar los modelos", () => {
+    const source = fs.readFileSync(path.join(__dirname, "db.js"), "utf8");
+    const connectDbSource = source.slice(source.indexOf("const connectDB = async"));
+    expect(connectDbSource.indexOf("await ensureGhlBroadcastQueueSchema"))
+      .toBeLessThan(connectDbSource.indexOf("await sequelize.sync({})"));
   });
 });

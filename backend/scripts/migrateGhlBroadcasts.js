@@ -10,6 +10,7 @@ async function run() {
     "202609280002-create-ghl-difusion-listas.sql",
     "202609280003-create-ghl-difusion-ejecuciones.sql",
     "202609290001-create-ghl-difusion-mensajes-y-variantes.sql",
+    "202610020001-add-ghl-difusion-scheduled-at.sql",
   ];
   for (const migration of migrations) {
     const sql = fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8");

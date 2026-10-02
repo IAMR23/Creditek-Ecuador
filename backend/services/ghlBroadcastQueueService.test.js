@@ -15,7 +15,9 @@ const executionRow = (values = {}) => ({
   tagged: 0,
   tagFailed: 0,
   excluded: [],
+  scheduledAt: new Date("2026-09-28T15:00:00.000Z"),
   nextBatchAt: new Date("2026-09-28T15:00:00.000Z"),
+  createdAt: new Date("2026-09-28T14:55:00.000Z"),
   startedAt: null,
   update: jest.fn(async function update(changes) {
     Object.assign(this, changes);
@@ -32,6 +34,17 @@ describe("ghlBroadcastQueueService", () => {
       .toEqual({ batchSize: 5, intervalMinutes: 7 });
     expect(() => service.normalizeRate({ batchSize: 0, intervalMinutes: 5 }))
       .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_RATE_INVALID" }));
+  });
+
+  test("valida la fecha programada y permite ejecucion inmediata", () => {
+    const now = new Date("2026-10-02T15:00:00.000Z");
+    expect(service.normalizeScheduledAt(undefined, now)).toEqual(now);
+    expect(service.normalizeScheduledAt("2026-10-02T16:30:00.000Z", now))
+      .toEqual(new Date("2026-10-02T16:30:00.000Z"));
+    expect(() => service.normalizeScheduledAt("2026-10-02T14:00:00.000Z", now))
+      .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_SCHEDULE_PAST" }));
+    expect(() => service.normalizeScheduledAt("fecha-invalida", now))
+      .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_SCHEDULE_INVALID" }));
   });
 
   test("selecciona como maximo un mensaje por extension en cada lote", () => {
@@ -86,11 +99,13 @@ describe("ghlBroadcastQueueService", () => {
       messages: ["Hola cliente", "Seguimos atentos"],
       batchSize: 5,
       intervalMinutes: 7,
+      scheduledAt: "2026-10-02T16:30:00.000Z",
     }, 9, {
       Ejecucion,
       Detalle,
       previewBroadcast,
       transaction: (callback) => callback({}),
+      now: new Date("2026-10-02T15:00:00.000Z"),
     });
 
     expect(Ejecucion.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -100,12 +115,53 @@ describe("ghlBroadcastQueueService", () => {
       creadoPorId: 9,
       mensaje: "Hola cliente",
       mensajes: ["Hola cliente", "Seguimos atentos"],
+      scheduledAt: new Date("2026-10-02T16:30:00.000Z"),
+      nextBatchAt: new Date("2026-10-02T16:30:00.000Z"),
     }), expect.anything());
     expect(Detalle.bulkCreate).toHaveBeenCalledWith([
       expect.objectContaining({ contactId: "c1", instanceIndex: 1, mensaje: "Hola cliente" }),
       expect.objectContaining({ contactId: "c2", instanceIndex: 2, mensaje: "Seguimos atentos" }),
     ], expect.anything());
     expect(result).toMatchObject({ id: "12", batchSize: 5, intervalMinutes: 7 });
+  });
+
+  test("lista el historial paginado con usuario y fecha programada", async () => {
+    const row = executionRow({ creadoPor: { id: 9, nombre: "Administrador" } });
+    const Ejecucion = {
+      findAndCountAll: jest.fn().mockResolvedValue({ count: 1, rows: [row] }),
+    };
+
+    const result = await service.listExecutions({ page: 1, pageSize: 10 }, { Ejecucion });
+
+    expect(Ejecucion.findAndCountAll).toHaveBeenCalledWith(expect.objectContaining({
+      limit: 10,
+      offset: 0,
+      order: [["createdAt", "DESC"]],
+    }));
+    expect(result).toMatchObject({
+      executions: [expect.objectContaining({
+        id: "12",
+        scheduledAt: new Date("2026-09-28T15:00:00.000Z"),
+        creadoPor: { id: 9, nombre: "Administrador" },
+      })],
+      pagination: { page: 1, pageSize: 10, total: 1, totalPages: 1 },
+    });
+  });
+
+  test("no reclama lotes antes de la fecha programada", async () => {
+    const now = new Date("2026-10-02T15:00:00.000Z");
+    const execution = executionRow({ nextBatchAt: new Date("2026-10-02T16:00:00.000Z") });
+    const Ejecucion = { findByPk: jest.fn().mockResolvedValue(execution) };
+    const Detalle = { findAll: jest.fn() };
+
+    const result = await service.claimBatch(12, now, {
+      Ejecucion,
+      Detalle,
+      transaction: (callback) => callback({ LOCK: { UPDATE: "UPDATE" } }),
+    });
+
+    expect(result).toBeNull();
+    expect(Detalle.findAll).not.toHaveBeenCalled();
   });
 
   test("envia y agrega regestion a cada contacto reclamado", async () => {

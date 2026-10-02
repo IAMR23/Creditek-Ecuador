@@ -20,6 +20,7 @@ describe("rutas de difusiones GHL", () => {
     expect(source).toContain('router.post("/vista-previa"');
     expect(source).toContain('router.post("/enviar"');
     expect(source).toContain('router.get("/ejecuciones/activa"');
+    expect(source).toContain('router.get("/ejecuciones", controller.executions)');
     expect(source).toContain('router.get("/ejecuciones/:id"');
     expect(source).toContain('router.post("/ejecuciones/:id/cancelar"');
   });
