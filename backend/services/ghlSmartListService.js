@@ -20,12 +20,42 @@ const FIELD_OPERATORS = Object.freeze({
   email: ["eq", "not_eq", "contains", "not_contains"],
   phone: ["eq", "not_eq", "contains", "not_contains"],
   pipelineStageId: ["eq"],
+  dateAdded: ["range"],
 });
+
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const isValidDateOnly = (value) => {
+  const match = compactString(value).match(DATE_ONLY_PATTERN);
+  if (!match) return false;
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+};
+
+const normalizeDateRange = (value) => {
+  const from = compactString(value?.from);
+  const to = compactString(value?.to);
+  if (!isValidDateOnly(from) || !isValidDateOnly(to)) {
+    throw createError(
+      "Seleccione una fecha inicial y final validas",
+      "GHL_SMART_LIST_DATE_RANGE_REQUIRED",
+    );
+  }
+  if (from > to) {
+    throw createError(
+      "La fecha inicial no puede ser posterior a la fecha final",
+      "GHL_SMART_LIST_DATE_RANGE_INVALID",
+    );
+  }
+  return { from, to };
+};
 
 const normalizeRule = (rule) => {
   const field = compactString(rule?.field);
   const operator = compactString(rule?.operator).toLowerCase();
-  const value = compactString(rule?.value).slice(0, 150);
   const pipelineId = compactString(rule?.pipelineId).slice(0, 150);
 
   if (!Object.prototype.hasOwnProperty.call(FIELD_OPERATORS, field)) {
@@ -34,6 +64,11 @@ const normalizeRule = (rule) => {
   if (!FIELD_OPERATORS[field].includes(operator)) {
     throw createError("El operador seleccionado no es valido", "GHL_SMART_LIST_OPERATOR_INVALID");
   }
+  if (field === "dateAdded") {
+    return { field, operator, value: normalizeDateRange(rule?.value) };
+  }
+
+  const value = compactString(rule?.value).slice(0, 150);
   if (!value) {
     throw createError("Todos los filtros deben tener un valor", "GHL_SMART_LIST_VALUE_REQUIRED");
   }
@@ -94,6 +129,12 @@ const normalizeFilters = (input = {}) => {
     throw createError(
       "Solo puede existir un filtro de etapa del pipeline",
       "GHL_SMART_LIST_PIPELINE_STAGE_LIMIT",
+    );
+  }
+  if (rules.filter((rule) => rule.field === "dateAdded").length > 1) {
+    throw createError(
+      "Solo puede existir un filtro de fecha de creacion",
+      "GHL_SMART_LIST_DATE_RANGE_LIMIT",
     );
   }
   return { logic: "AND", rules };

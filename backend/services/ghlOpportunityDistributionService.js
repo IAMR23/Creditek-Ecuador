@@ -92,6 +92,7 @@ function buildCapacityAssignments(
   maxPending,
   startIndex = 0,
   priorityLoads = currentLoads,
+  { strategy = "weighted" } = {},
 ) {
   const validUsers = uniqueUsers(users);
   if (!validUsers.length) throw serviceError("GHL_USERS_REQUIRED", "No hay asesores activos para el reparto", 409);
@@ -117,14 +118,17 @@ function buildCapacityAssignments(
   }));
   let cursor = ((Number(startIndex) || 0) % validUsers.length + validUsers.length) % validUsers.length;
   const assignments = [];
+  const balanceExistingLoads = strategy === "balanced";
 
   for (const opportunity of sorted) {
     const candidates = advisorStates.filter((advisor) => advisor.cargaProvisional < limit);
     if (!candidates.length) break;
-    const weightedLoad = (advisor) => advisor.cargaPrioridad / advisor.nivelFlujo;
-    const minimumLoad = Math.min(...candidates.map(weightedLoad));
+    const distributionLoad = (advisor) => balanceExistingLoads
+      ? advisor.cargaProvisional
+      : advisor.cargaPrioridad / advisor.nivelFlujo;
+    const minimumLoad = Math.min(...candidates.map(distributionLoad));
     const tiedIds = new Set(candidates
-      .filter((advisor) => Math.abs(weightedLoad(advisor) - minimumLoad) < 1e-9)
+      .filter((advisor) => Math.abs(distributionLoad(advisor) - minimumLoad) < 1e-9)
       .map((advisor) => advisor.id));
     let selected;
     for (let offset = 0; offset < advisorStates.length; offset += 1) {
@@ -140,6 +144,7 @@ function buildCapacityAssignments(
 
   return {
     assignments,
+    strategy: balanceExistingLoads ? "balanced" : "weighted",
     nextUserIndex: cursor,
     totalPendientesCapacidad: sorted.length - assignments.length,
     advisors: advisorStates.map(({ index, cargaProvisional, ...advisor }) => ({
@@ -501,6 +506,7 @@ async function getFlowScheduleConfiguration() {
       pipelineNombre: configuracion.pipelineNombre,
       stageIds: configuracion.stageIds || [],
       stageNombres: configuracion.stageNombres || [],
+      maxPendientesPorAsesor: realtimeMaxPendingPerAdvisor(configuracion),
       horariosFlujoActivo: configuracion.horariosFlujoActivo === true,
       horariosFlujo,
       nivelesFlujo: normalizeFlowLevels(configuracion.nivelesFlujo || {}, scheduledUserIds),
@@ -523,6 +529,18 @@ async function validateFlowScheduleConfigurationInput(input = {}) {
       .map((stageId) => String(stageId || "").trim())
       .filter(Boolean),
   )];
+  const maxPendientesPorAsesor = Number(
+    input.maxPendientesPorAsesor ?? realtimeMaxPendingPerAdvisor(),
+  );
+  if (!Number.isInteger(maxPendientesPorAsesor)
+    || maxPendientesPorAsesor < 1
+    || maxPendientesPorAsesor > MAX_PENDING_PER_ADVISOR) {
+    throw serviceError(
+      "INVALID_MAX_PENDING",
+      `El limite por asesor debe ser un entero entre 1 y ${MAX_PENDING_PER_ADVISOR}`,
+      400,
+    );
+  }
   if (!ID_RE.test(pipelineId)) {
     throw serviceError("INVALID_REALTIME_PIPELINE", "Seleccione un pipeline valido", 400);
   }
@@ -576,6 +594,7 @@ async function validateFlowScheduleConfigurationInput(input = {}) {
       const stage = stagesById.get(stageId);
       return String(stage?.name || stage?.title || stage?.label || "Etapa").slice(0, 200);
     }),
+    maxPendientesPorAsesor,
     horariosFlujoActivo,
     horariosFlujo,
     nivelesFlujo,
@@ -1523,6 +1542,9 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
       realtimePriorityLoads(advisors.active, now),
       lock.controller.signal,
     );
+    // La cola representa inventario acumulado: primero nivela la carga abierta
+    // entre quienes estan en turno. El webhook conserva la estrategia ponderada
+    // para que los clientes nuevos sigan la intensidad configurada.
     const capacityPlan = buildCapacityAssignments(
       pending,
       advisors.active,
@@ -1530,6 +1552,7 @@ async function executeRealtimeQueue({ trigger = "scheduler", quietIfBusy = false
       limit,
       Number(realtimeConfiguration.indiceSiguienteUsuario) || 0,
       priorityLoads,
+      { strategy: "balanced" },
     );
     summary.capacidadDisponibleTotal = capacityPlan.advisors.reduce(
       (total, advisor) => total + Number(advisor.capacidadDisponible || 0),

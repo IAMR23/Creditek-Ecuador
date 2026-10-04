@@ -13,6 +13,7 @@ import {
   MdFlag,
   MdFactCheck,
   MdSchool,
+  MdInventory2,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
 import AsesorDisponibilidadCard from "../../components/GHL/AsesorDisponibilidadCard";
@@ -99,6 +100,12 @@ function VendedorPanel() {
           desc: "Consulta todas tus entregas",
           icon: <MdList />,
           path: "/mis-entregas",
+        },
+        {
+          title: "Stock por agencias",
+          desc: "Consulta productos y cantidades por bodega",
+          icon: <MdInventory2 />,
+          path: "/vendedor/stock-por-agencias",
         },
         /*    {
           title: "Crear Traslado",

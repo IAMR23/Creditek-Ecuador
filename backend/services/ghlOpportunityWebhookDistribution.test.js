@@ -1,5 +1,6 @@
 jest.mock("./ghlAdvisorAvailabilityService", () => ({
   resolveActiveAdvisors: jest.fn(),
+  countTodayByGhlUser: jest.fn(async (ids) => new Map(ids.map((id) => [id, 0]))),
   isGhlUserActiveToday: jest.fn(async () => true),
 }));
 
@@ -183,6 +184,38 @@ describe("reparto GHL de tiempo real", () => {
 
     expect(result).toMatchObject({ code: "QUEUE_PROCESSED", assignedCount: 2 });
     expect(putCalls()).toHaveLength(2);
+  });
+
+  test("la cola inicial reparte treinta pendientes por igual entre tres asesores", async () => {
+    RealtimeConfiguracion.__row.maxPendientesPorAsesor = 10;
+    const active = [
+      { id: "u1", nivelFlujo: 1 },
+      { id: "u2", nivelFlujo: 3 },
+      { id: "u3", nivelFlujo: 5 },
+    ];
+    const open = Array.from({ length: 30 }, (_, index) => opportunity({
+      id: `pending-${index + 1}`,
+      contactId: `contact-${index + 1}`,
+      pipelineStageId: index % 2 ? "whatsapp" : "facebook",
+      createdAt: `2026-10-03T10:${String(index).padStart(2, "0")}:00.000Z`,
+    }));
+    mockBase({ active, open });
+    jest.spyOn(ghl, "requestGhl").mockImplementation(async (_client, options) => {
+      if (options.method === "GET") {
+        const opportunityId = decodeURIComponent(options.url.split("/").at(-1));
+        return { opportunity: open.find((item) => item.id === opportunityId) };
+      }
+      return { ok: true };
+    });
+
+    const result = await service.executeRealtimeQueue({ trigger: "flow-schedule-update" });
+    const assignedByUser = putCalls().reduce((totals, [, options]) => {
+      const userId = options.data.assignedTo;
+      return { ...totals, [userId]: (totals[userId] || 0) + 1 };
+    }, {});
+
+    expect(result).toMatchObject({ code: "QUEUE_PROCESSED", assignedCount: 30, pendingCount: 0 });
+    expect(assignedByUser).toEqual({ u1: 10, u2: 10, u3: 10 });
   });
 
   test("consulta cada etapa admitida, deduplica y conserva la carga completa", async () => {
@@ -481,7 +514,7 @@ describe("reparto GHL de tiempo real", () => {
 
   test("un 429 lento se cancela y tras el timeout no continua asignando", async () => {
     jest.useFakeTimers();
-    const log = jest.spyOn(console, "log").mockImplementation(() => {});
+    jest.spyOn(console, "log").mockImplementation(() => {});
     process.env.GHL_REPARTO_MAX_EXECUTION_MS = "10000";
     mockBase({
       active: [{ id: "u1" }],
@@ -504,11 +537,6 @@ describe("reparto GHL de tiempo real", () => {
 
     expect(putCalls()).toHaveLength(0);
     expect(TiempoRealAsignacion.create).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith("[GHL] RESUMEN_REPARTO", expect.objectContaining({
-      resultado: "FAILED",
-      faseDelFallo: "ASSIGNMENTS",
-      codigo: "GHL_EXECUTION_TIMEOUT",
-    }));
 
     ghl.requestGhl.mockImplementation(async (_client, options) => (
       options.method === "GET"

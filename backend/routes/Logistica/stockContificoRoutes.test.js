@@ -5,6 +5,7 @@ jest.mock("../../middleware/authMiddleware", () => ({
   authenticate: (req, _res, next) => {
     req.user = {
       id: 9,
+      rol: req.headers["x-test-rol"] || "Otro",
       permisos: String(req.headers["x-test-permisos"] || "")
         .split(",")
         .filter(Boolean),
@@ -59,6 +60,36 @@ describe("rutas de stock Contifico", () => {
     await request(createApp())
       .get("/api/logistica/stock-contifico/cobertura-bodegas")
       .set("x-test-permisos", "Ventas")
+      .expect(403);
+  });
+
+  test("el vendedor solo puede consultar la cobertura por bodegas", async () => {
+    const app = createApp();
+
+    await request(app)
+      .get("/api/logistica/stock-contifico/cobertura-bodegas")
+      .set("x-test-rol", "Vendedor")
+      .expect(200);
+
+    for (const path of ["/catalogo", "/productos/123/stock", "/bodegas/456/stock"]) {
+      await request(app)
+        .get(`/api/logistica/stock-contifico${path}`)
+        .set("x-test-rol", "Vendedor")
+        .expect(403);
+    }
+  });
+
+  test("el permiso Vendedor da acceso a la cobertura sin abrir los otros endpoints", async () => {
+    const app = createApp();
+
+    await request(app)
+      .get("/api/logistica/stock-contifico/cobertura-bodegas")
+      .set("x-test-permisos", "Vendedor")
+      .expect(200);
+
+    await request(app)
+      .get("/api/logistica/stock-contifico/catalogo")
+      .set("x-test-permisos", "Vendedor")
       .expect(403);
   });
 });

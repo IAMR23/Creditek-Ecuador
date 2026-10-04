@@ -21,11 +21,17 @@ import {
   Smartphone,
   Timer,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react";
 import api from "../../api/client";
 import { useAuthUser } from "../../utils/useAuthUser";
+import {
+  nationalPhone,
+  normalizeEcuadorMobilePhone,
+  parseExternalPhoneValues,
+} from "../../utils/ghlBroadcastPhones";
 
 const PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 15, 25, 50];
@@ -38,6 +44,7 @@ const FILTER_FIELDS = [
   { value: "email", label: "Correo electronico" },
   { value: "phone", label: "Telefono" },
   { value: "pipelineStageId", label: "Etapa del pipeline" },
+  { value: "dateAdded", label: "Fecha de creacion en GHL" },
 ];
 const FILTER_OPERATORS = [
   { value: "eq", label: "Es" },
@@ -45,6 +52,7 @@ const FILTER_OPERATORS = [
   { value: "contains", label: "Contiene" },
   { value: "not_contains", label: "No contiene" },
 ];
+const DATE_RANGE_OPERATOR = { value: "range", label: "Entre" };
 const EXECUTION_STATUS = {
   pending: "Pendiente",
   running: "En curso",
@@ -97,6 +105,9 @@ const parseEcuadorDateTime = (value) => new Date(`${value}${String(value).length
 const formatDateTime = (value) => value
   ? new Date(value).toLocaleString("es-EC", { dateStyle: "short", timeStyle: "short", timeZone: "America/Guayaquil" })
   : "-";
+const keepExternalSelections = (contacts) => Object.fromEntries(
+  Object.entries(contacts).filter(([, contact]) => contact.external),
+);
 const executionStatusLabel = (item) => {
   if (item?.estado === "pending" && item?.scheduledAt && new Date(item.scheduledAt) > new Date()) {
     return "Programada";
@@ -134,6 +145,9 @@ export default function Difusiones() {
   const [smartListForm, setSmartListForm] = useState(emptySmartListForm);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [selectedContacts, setSelectedContacts] = useState({});
+  const [externalPhoneDraft, setExternalPhoneDraft] = useState("");
+  const [externalPhoneNotice, setExternalPhoneNotice] = useState("");
+  const [phoneFileLoading, setPhoneFileLoading] = useState(false);
   const [instances, setInstances] = useState(initialInstances);
   const [messages, setMessages] = useState(() => [newMessageVariant()]);
   const [savedMessages, setSavedMessages] = useState([]);
@@ -164,6 +178,10 @@ export default function Difusiones() {
   const [error, setError] = useState("");
 
   const selectedList = useMemo(() => Object.values(selectedContacts), [selectedContacts]);
+  const externalSelectedList = useMemo(
+    () => selectedList.filter((contact) => contact.external),
+    [selectedList],
+  );
   const selectedInstances = useMemo(
     () => instances.filter((instance) => instance.selected),
     [instances],
@@ -375,7 +393,15 @@ export default function Difusiones() {
     setSelectedContacts((current) => {
       const next = { ...current };
       if (next[contact.id]) delete next[contact.id];
-      else next[contact.id] = contact;
+      else {
+        const phone = normalizeEcuadorMobilePhone(contact.phone);
+        if (phone) {
+          Object.entries(next).forEach(([id, selected]) => {
+            if (selected.external && normalizeEcuadorMobilePhone(selected.phone) === phone) delete next[id];
+          });
+        }
+        next[contact.id] = contact;
+      }
       return next;
     });
   };
@@ -395,6 +421,93 @@ export default function Difusiones() {
     });
   };
 
+  const addExternalPhoneValues = (values) => {
+    const phoneNumbers = parseExternalPhoneValues(values);
+    if (!phoneNumbers.length) {
+      setExternalPhoneNotice("No se encontraron numeros moviles ecuatorianos validos en formato 09... o +593...");
+      return;
+    }
+
+    const next = { ...selectedContacts };
+    const existingPhones = new Set(
+      Object.values(next).map((contact) => normalizeEcuadorMobilePhone(contact.phone)).filter(Boolean),
+    );
+    let added = 0;
+    let duplicates = 0;
+    let omitted = 0;
+    phoneNumbers.forEach((phone) => {
+      if (existingPhones.has(phone)) {
+        duplicates += 1;
+        return;
+      }
+      if (Object.keys(next).length >= 100) {
+        omitted += 1;
+        return;
+      }
+      const id = `external:${phone}`;
+      next[id] = {
+        id,
+        name: `Numero externo ${nationalPhone(phone)}`,
+        phone,
+        source: "Carga manual",
+        canSend: true,
+        external: true,
+      };
+      existingPhones.add(phone);
+      added += 1;
+    });
+
+    invalidatePreview();
+    setSelectedContacts(next);
+    setExternalPhoneDraft("");
+    setExternalPhoneNotice([
+      `${added} numero${added === 1 ? "" : "s"} agregado${added === 1 ? "" : "s"}`,
+      duplicates ? `${duplicates} repetido${duplicates === 1 ? "" : "s"}` : "",
+      omitted ? `${omitted} omitido${omitted === 1 ? "" : "s"} por el limite de 100` : "",
+    ].filter(Boolean).join(" · "));
+  };
+
+  const addExternalPhoneDraft = (event) => {
+    event.preventDefault();
+    addExternalPhoneValues(externalPhoneDraft);
+  };
+
+  const importExternalPhoneFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhoneFileLoading(true);
+    setExternalPhoneNotice("");
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      if (["xlsx", "xls"].includes(extension)) {
+        const XLSX = await import("xlsx");
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const values = workbook.SheetNames.flatMap((sheetName) => (
+          XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: false }).flat()
+        ));
+        addExternalPhoneValues(values);
+      } else if (["csv", "txt"].includes(extension)) {
+        addExternalPhoneValues(await file.text());
+      } else {
+        setExternalPhoneNotice("Use un archivo .xlsx, .xls, .csv o .txt.");
+      }
+    } catch (fileError) {
+      setExternalPhoneNotice(`No se pudo leer el archivo: ${fileError.message}`);
+    } finally {
+      setPhoneFileLoading(false);
+      event.target.value = "";
+    }
+  };
+
+  const removeExternalPhone = (id) => {
+    invalidatePreview();
+    setSelectedContacts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  };
+
   const updateInstance = (index, patch) => {
     invalidatePreview();
     setInstances((current) => current.map(
@@ -403,7 +516,8 @@ export default function Difusiones() {
   };
 
   const payload = () => ({
-    contactIds: selectedList.map((contact) => contact.id),
+    contactIds: selectedList.filter((contact) => !contact.external).map((contact) => contact.id),
+    phoneNumbers: externalSelectedList.map((contact) => contact.phone),
     instanceIndexes: selectedInstances.map((instance) => instance.index),
     messages: messageContents,
     batchSize,
@@ -436,8 +550,11 @@ export default function Difusiones() {
     const scheduleDescription = sendMode === "scheduled"
       ? `Se iniciara el ${formatDateTime(parseEcuadorDateTime(scheduledAt).toISOString())}`
       : "Se iniciara inmediatamente";
+    const externalDescription = externalSelectedList.length
+      ? ` ${externalSelectedList.length} numero${externalSelectedList.length === 1 ? "" : "s"} externo${externalSelectedList.length === 1 ? "" : "s"} se reutilizara${externalSelectedList.length === 1 ? "" : "n"} o creara${externalSelectedList.length === 1 ? "" : "n"} como contacto minimo en GHL.`
+      : "";
     const confirmed = window.confirm(
-      `${scheduleDescription}. Se enviaran ${preview.totalEligible} mensajes en lotes de hasta ${effectiveBatchSize} cada ${intervalMinutes} minutos, con maximo uno por extension. A los contactos se agregara la etiqueta regestion. ¿Desea continuar?`,
+      `${scheduleDescription}. Se enviaran ${preview.totalEligible} mensajes en lotes de hasta ${effectiveBatchSize} cada ${intervalMinutes} minutos, con maximo uno por extension.${externalDescription} A los contactos se agregara la etiqueta regestion. ¿Desea continuar?`,
     );
     if (!confirmed) return;
 
@@ -483,14 +600,14 @@ export default function Difusiones() {
   const searchContacts = (event) => {
     event.preventDefault();
     setActiveSmartListId(null);
-    setSelectedContacts({});
+    setSelectedContacts(keepExternalSelections);
     setPage(1);
     setQuery(searchDraft.trim());
   };
 
   const applySmartList = (list) => {
     invalidatePreview();
-    setSelectedContacts({});
+    setSelectedContacts(keepExternalSelections);
     setSearchDraft("");
     setQuery("");
     setPage(1);
@@ -500,7 +617,7 @@ export default function Difusiones() {
 
   const clearSmartList = () => {
     invalidatePreview();
-    setSelectedContacts({});
+    setSelectedContacts(keepExternalSelections);
     setActiveSmartListId(null);
     setPage(1);
   };
@@ -535,6 +652,12 @@ export default function Difusiones() {
         const next = { ...rule, ...patch };
         if (patch.field === "query") next.operator = "contains";
         if (patch.field === "pipelineStageId") next.operator = "eq";
+        if (patch.field === "dateAdded") {
+          next.operator = "range";
+          next.value = { from: "", to: "" };
+        } else if (patch.field) {
+          next.value = "";
+        }
         if (patch.field) next.pipelineId = "";
         return next;
       }),
@@ -786,11 +909,13 @@ export default function Difusiones() {
                           <select value={rule.field} onChange={(event) => updateFilterRule(rule.key, { field: event.target.value, value: "" })} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500">
                             {FILTER_FIELDS.map((field) => <option key={field.value} value={field.value}>{field.label}</option>)}
                           </select>
-                          <select value={rule.field === "query" ? "contains" : rule.field === "pipelineStageId" ? "eq" : rule.operator} onChange={(event) => updateFilterRule(rule.key, { operator: event.target.value })} disabled={rule.field === "query" || rule.field === "pipelineStageId"} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500 disabled:bg-gray-100">
+                          <select value={rule.field === "query" ? "contains" : rule.field === "pipelineStageId" ? "eq" : rule.field === "dateAdded" ? "range" : rule.operator} onChange={(event) => updateFilterRule(rule.key, { operator: event.target.value })} disabled={rule.field === "query" || rule.field === "pipelineStageId" || rule.field === "dateAdded"} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-green-500 disabled:bg-gray-100">
                             {(rule.field === "query"
                               ? FILTER_OPERATORS.filter((operator) => operator.value === "contains")
                               : rule.field === "pipelineStageId"
                                 ? FILTER_OPERATORS.filter((operator) => operator.value === "eq")
+                                : rule.field === "dateAdded"
+                                  ? [DATE_RANGE_OPERATOR]
                                 : FILTER_OPERATORS).map((operator) => <option key={operator.value} value={operator.value}>{operator.label}</option>)}
                           </select>
                           <button type="button" onClick={() => removeFilterRule(rule.key)} className="rounded-lg border border-gray-300 bg-white p-2.5 text-gray-500 hover:border-red-200 hover:text-red-600" aria-label="Eliminar filtro"><Trash2 size={17} /></button>
@@ -830,6 +955,43 @@ export default function Difusiones() {
                                 <option key={stage.id} value={stage.id}>{stage.name}</option>
                               ))}
                             </select>
+                          </div>
+                        ) : rule.field === "dateAdded" ? (
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <label className="text-xs font-bold text-gray-600">
+                              Desde
+                              <input
+                                type="date"
+                                value={typeof rule.value === "object" ? rule.value?.from || "" : ""}
+                                onChange={(event) => updateFilterRule(rule.key, {
+                                  value: {
+                                    ...(typeof rule.value === "object" ? rule.value : {}),
+                                    from: event.target.value,
+                                  },
+                                })}
+                                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-green-500"
+                                required
+                              />
+                            </label>
+                            <label className="text-xs font-bold text-gray-600">
+                              Hasta
+                              <input
+                                type="date"
+                                min={typeof rule.value === "object" ? rule.value?.from || undefined : undefined}
+                                value={typeof rule.value === "object" ? rule.value?.to || "" : ""}
+                                onChange={(event) => updateFilterRule(rule.key, {
+                                  value: {
+                                    ...(typeof rule.value === "object" ? rule.value : {}),
+                                    to: event.target.value,
+                                  },
+                                })}
+                                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-normal outline-none focus:border-green-500"
+                                required
+                              />
+                            </label>
+                            <p className="text-xs font-medium text-green-700 sm:col-span-2">
+                              El rango se aplica directamente al consultar los contactos en GHL.
+                            </p>
                           </div>
                         ) : (
                           <input
@@ -923,7 +1085,7 @@ export default function Difusiones() {
           <div className="border-b p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2"><Users size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Clientes de GHL</h2></div>
+                <div className="flex items-center gap-2"><Users size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Destinatarios</h2></div>
                 <p className="mt-1 text-xs text-gray-500">{selectedList.length} seleccionados · maximo 100 por difusion</p>
                 {activeSmartList && (
                   <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800">
@@ -947,6 +1109,73 @@ export default function Difusiones() {
             </div>
           </div>
 
+          <div className="border-b bg-green-50/40 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-bold text-gray-900"><Smartphone size={17} className="text-green-700" />Agregar numeros externos</div>
+                <p className="mt-1 max-w-2xl text-xs text-gray-600">
+                  Pegue numeros 09... o +593... (tambien con espacios), separados por comas o lineas, o cargue un Excel, CSV o TXT. No necesitan existir previamente en el CRM.
+                </p>
+                <p className="mt-1 max-w-2xl text-[11px] text-gray-500">
+                  Por requisito de GHL, al confirmar se reutiliza o crea automaticamente un contacto minimo; la vista previa no crea registros.
+                </p>
+              </div>
+              {externalSelectedList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    invalidatePreview();
+                    setSelectedContacts((current) => Object.fromEntries(
+                      Object.entries(current).filter(([, contact]) => !contact.external),
+                    ));
+                    setExternalPhoneNotice("");
+                  }}
+                  className="text-xs font-bold text-red-600 hover:text-red-700"
+                >
+                  Quitar externos
+                </button>
+              )}
+            </div>
+            <form onSubmit={addExternalPhoneDraft} className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-stretch">
+              <textarea
+                value={externalPhoneDraft}
+                onChange={(event) => setExternalPhoneDraft(event.target.value)}
+                rows="2"
+                placeholder={"0999001413\n+593 999 900 1413"}
+                className="min-h-16 resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              />
+              <button
+                type="submit"
+                disabled={!externalPhoneDraft.trim() || selectedList.length >= 100}
+                className="rounded-lg bg-green-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+              >
+                Agregar
+              </button>
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-green-700 bg-white px-4 py-2 text-sm font-bold text-green-800 hover:bg-green-50">
+                {phoneFileLoading ? <LoaderCircle size={17} className="animate-spin" /> : <Upload size={17} />}
+                {phoneFileLoading ? "Leyendo..." : "Cargar archivo"}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.txt"
+                  disabled={phoneFileLoading || selectedList.length >= 100}
+                  onChange={importExternalPhoneFile}
+                  className="sr-only"
+                />
+              </label>
+            </form>
+            {externalPhoneNotice && <p className="mt-2 text-xs font-semibold text-gray-600">{externalPhoneNotice}</p>}
+            {externalSelectedList.length > 0 && (
+              <div className="mt-3 flex max-h-28 flex-wrap gap-2 overflow-y-auto">
+                {externalSelectedList.map((contact) => (
+                  <span key={contact.id} className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-white px-2.5 py-1 text-xs font-bold text-green-800">
+                    {nationalPhone(contact.phone)}
+                    <button type="button" onClick={() => removeExternalPhone(contact.id)} aria-label={`Quitar ${nationalPhone(contact.phone)}`} className="rounded-full hover:bg-green-100"><X size={13} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="max-h-[560px] overflow-auto">
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 z-10 bg-gray-50 text-left text-xs uppercase text-gray-500">
@@ -957,6 +1186,7 @@ export default function Difusiones() {
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3">Telefono</th>
                   <th className="px-4 py-3">Origen</th>
+                  <th className="px-4 py-3">Creado en GHL</th>
                   <th className="px-4 py-3">Estado</th>
                 </tr>
               </thead>
@@ -967,7 +1197,17 @@ export default function Difusiones() {
                       <input
                         type="checkbox"
                         checked={Boolean(selectedContacts[contact.id])}
-                        disabled={!contact.canSend || (selectedList.length >= 100 && !selectedContacts[contact.id])}
+                        disabled={
+                          !contact.canSend
+                          || (
+                            selectedList.length >= 100
+                            && !selectedContacts[contact.id]
+                            && !externalSelectedList.some((selected) => (
+                              normalizeEcuadorMobilePhone(selected.phone)
+                              === normalizeEcuadorMobilePhone(contact.phone)
+                            ))
+                          )
+                        }
                         onChange={() => toggleContact(contact)}
                         aria-label={`Seleccionar ${contact.name}`}
                       />
@@ -975,11 +1215,12 @@ export default function Difusiones() {
                     <td className="px-4 py-3"><div className="font-semibold text-gray-900">{contact.name}</div><div className="text-xs text-gray-500">{contact.email || "Sin correo"}</div></td>
                     <td className="whitespace-nowrap px-4 py-3">{contact.phone || "—"}</td>
                     <td className="px-4 py-3 text-xs">{contact.source || "Sin origen"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs">{formatDateTime(contact.dateAdded)}</td>
                     <td className="px-4 py-3">{contactStatus(contact)}{contact.blockedReason && <div className="mt-1 max-w-[180px] text-xs text-red-600">{contact.blockedReason}</div>}</td>
                   </tr>
                 ))}
-                {contactsLoading && <tr><td colSpan="5" className="p-10 text-center text-gray-500"><LoaderCircle size={20} className="mr-2 inline animate-spin" />Cargando clientes...</td></tr>}
-                {!contactsLoading && !contacts.length && <tr><td colSpan="5" className="p-10 text-center text-gray-500">No se encontraron clientes.</td></tr>}
+                {contactsLoading && <tr><td colSpan="6" className="p-10 text-center text-gray-500"><LoaderCircle size={20} className="mr-2 inline animate-spin" />Cargando clientes...</td></tr>}
+                {!contactsLoading && !contacts.length && <tr><td colSpan="6" className="p-10 text-center text-gray-500">No se encontraron clientes.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1140,7 +1381,7 @@ export default function Difusiones() {
 
           <section className="rounded-xl border bg-white p-4 shadow-sm">
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg bg-gray-50 p-3"><div className="text-xl font-bold text-gray-900">{selectedList.length}</div><div className="text-xs text-gray-500">Clientes</div></div>
+              <div className="rounded-lg bg-gray-50 p-3"><div className="text-xl font-bold text-gray-900">{selectedList.length}</div><div className="text-xs text-gray-500">Destinatarios</div></div>
               <div className="rounded-lg bg-gray-50 p-3"><div className="text-xl font-bold text-gray-900">{selectedInstances.length}</div><div className="text-xs text-gray-500">Numeros</div></div>
               <div className="rounded-lg bg-gray-50 p-3"><div className="text-xl font-bold text-gray-900">{selectedInstances.length ? Math.ceil(selectedList.length / selectedInstances.length) : 0}</div><div className="text-xs text-gray-500">Max. por numero</div></div>
             </div>

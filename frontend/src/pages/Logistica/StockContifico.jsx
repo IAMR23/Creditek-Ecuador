@@ -10,6 +10,7 @@ import {
   Warehouse,
 } from "lucide-react";
 import { api } from "../../api/client";
+import AgenciasBodegasCards from "../../components/StockContifico/AgenciasBodegasCards";
 
 const STOCK_FILTERS = [
   { value: "todos", label: "Todos los stocks" },
@@ -65,6 +66,8 @@ function StockContifico() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [catalogError, setCatalogError] = useState("");
+  const [activeTab, setActiveTab] = useState("productos");
+  const [agencySearch, setAgencySearch] = useState("");
   const [search, setSearch] = useState("");
   const [stockFilter, setStockFilter] = useState("positivo");
   const [typeFilter, setTypeFilter] = useState("PRO");
@@ -76,6 +79,7 @@ function StockContifico() {
   const [warehouseError, setWarehouseError] = useState("");
   const [warehouseUpdatedAt, setWarehouseUpdatedAt] = useState(null);
   const [positiveWarehouses, setPositiveWarehouses] = useState([]);
+  const [agencyProducts, setAgencyProducts] = useState([]);
   const [positiveWarehousesLoading, setPositiveWarehousesLoading] = useState(false);
   const [positiveWarehousesProgress, setPositiveWarehousesProgress] = useState({
     processed: 0,
@@ -210,6 +214,7 @@ function StockContifico() {
     positiveWarehousesRequestRef.current = requestId;
     const previous = positiveWarehousesSnapshotRef.current;
     const warehousesById = new Map();
+    const collectedProducts = [];
     let offset = 0;
     let total = 0;
     let failedUpdates = 0;
@@ -218,6 +223,7 @@ function StockContifico() {
     setPositiveWarehousesError("");
     setPositiveWarehousesProgress({ processed: 0, total: 0 });
     setPositiveWarehouses(previous?.warehouses || []);
+    setAgencyProducts(previous?.products || []);
 
     try {
       do {
@@ -234,6 +240,7 @@ function StockContifico() {
         if (positiveWarehousesRequestRef.current !== requestId) return null;
 
         for (const product of response.data.productos || []) {
+          collectedProducts.push(product);
           for (const stock of product.bodegasReportadas || []) {
             if (!stock.cantidadValida || typeof stock.cantidad !== "number" || stock.cantidad <= 0) {
               continue;
@@ -267,6 +274,7 @@ function StockContifico() {
 
       if (failedUpdates > 0 && previous) {
         setPositiveWarehouses(previous.warehouses);
+        setAgencyProducts(previous.products);
         setPositiveWarehousesError(
           `No se pudieron verificar ${failedUpdates} productos. Se conserva el último listado completo de bodegas con stock positivo.`,
         );
@@ -274,8 +282,9 @@ function StockContifico() {
       }
 
       setPositiveWarehouses(warehouses);
+      setAgencyProducts(collectedProducts);
       if (failedUpdates === 0) {
-        positiveWarehousesSnapshotRef.current = { warehouses };
+        positiveWarehousesSnapshotRef.current = { warehouses, products: collectedProducts };
       } else {
         setPositiveWarehousesError(
           `El listado puede estar incompleto: ${failedUpdates} productos no pudieron consultarse. Solo se muestran bodegas con stock positivo confirmado.`,
@@ -285,6 +294,7 @@ function StockContifico() {
     } catch (error) {
       if (positiveWarehousesRequestRef.current !== requestId) return null;
       setPositiveWarehouses(previous?.warehouses || []);
+      setAgencyProducts(previous?.products || []);
       setPositiveWarehousesError(
         `${getErrorMessage(error, "No fue posible identificar las bodegas con stock positivo.")}${
           previous ? " Se conserva el último listado válido." : ""
@@ -484,10 +494,7 @@ function StockContifico() {
                   <h1 className="text-3xl font-bold text-slate-900">Stock Contífico</h1>
                 </div>
               </div>
-              <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
-                Existencias reportadas por Contífico. La cantidad general y el desglose por
-                bodega se muestran por separado porque no necesariamente coinciden.
-              </p>
+
             </div>
             <button
               type="button"
@@ -521,6 +528,43 @@ function StockContifico() {
           </div>
         )}
 
+        <nav aria-label="Vistas de stock" className="flex flex-col gap-3 border-b border-slate-200 md:flex-row md:items-end md:justify-between">
+          <div className="flex gap-2">
+            {[
+              ["productos", "Por productos"],
+              ["agencias", "Por agencias / bodegas"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setActiveTab(value)}
+                aria-current={activeTab === value ? "page" : undefined}
+                className={`rounded-t-xl px-5 py-3 text-sm font-semibold transition ${
+                  activeTab === value
+                    ? "border border-b-white border-slate-200 bg-white text-green-700"
+                    : "text-slate-600 hover:bg-white hover:text-slate-900"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {activeTab === "agencias" && (
+            <label className="relative mb-2 block w-full md:max-w-xs">
+              <span className="sr-only">Buscar agencia o producto</span>
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                value={agencySearch}
+                onChange={(event) => setAgencySearch(event.target.value)}
+                placeholder="Buscar agencia o producto"
+                className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              />
+            </label>
+          )}
+        </nav>
+
+        {activeTab === "productos" && (
+          <>
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
             ["Productos fisicos", summary.total, "text-slate-900"],
@@ -669,14 +713,6 @@ function StockContifico() {
           </div>
         </section>
 
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
-          <strong>Como leer estas cifras:</strong> “Distintos con stock” cuenta referencias de
-          productos, no suma unidades. No se agregan cantidades entre productos porque pueden
-          usar unidades de medida diferentes. “Cantidad general” es el campo {" "}
-          <code>cantidad_stock</code> reportado por Contífico y no se presenta como disponibilidad
-          para vender. {catalog.meta?.stockCoverageNote}
-        </div>
-
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -770,31 +806,21 @@ function StockContifico() {
                                       ))}
                                     </div>
                                   )}
-                                  <div className="border-t border-slate-200 pt-3 text-slate-700">
-                                    <p>
-                                      Cantidad general: {formatQuantity(detail.data?.comparacion?.cantidadStockProducto)}
+                                  {(detail.data?.cobertura?.bodegasNoReportadas?.length > 0 ||
+                                    detail.data?.cobertura?.bodegasFueraCatalogo?.length > 0 ||
+                                    detail.data?.cobertura?.bodegasConRegistrosDuplicados?.length > 0) && (
+                                    <p className="text-xs leading-5 text-slate-500">
+                                      {detail.data?.cobertura?.bodegasNoReportadas?.length > 0 && (
+                                        <>No aparecen {detail.data.cobertura.bodegasNoReportadas.length} de {detail.data.cobertura.bodegasCatalogo} bodegas del catalogo. </>
+                                      )}
+                                      {detail.data?.cobertura?.bodegasFueraCatalogo?.length > 0 && (
+                                        <>El desglose tambien contiene {detail.data.cobertura.bodegasFueraCatalogo.length} bodegas que no aparecen en el listado general de bodegas. </>
+                                      )}
+                                      {detail.data?.cobertura?.bodegasConRegistrosDuplicados?.length > 0 && (
+                                        <>Hay identificadores de bodega repetidos; por seguridad no se calcula una suma del desglose.</>
+                                      )}
                                     </p>
-                                    <p>
-                                      Suma aritmetica del desglose completo: {formatQuantity(detail.data?.comparacion?.sumaDesgloseBodegas)}
-                                    </p>
-                                    {detail.data?.comparacion?.coincide === false && (
-                                      <p className="mt-1 font-semibold text-amber-800">
-                                        El desglose difiere de la cantidad general en {formatQuantity(detail.data.comparacion.diferencia)}.
-                                      </p>
-                                    )}
-                                  </div>
-                                  <p className="text-xs leading-5 text-slate-500">
-                                    {detail.data?.cobertura?.note}
-                                    {detail.data?.cobertura?.bodegasNoReportadas?.length > 0 && (
-                                      <> No aparecen {detail.data.cobertura.bodegasNoReportadas.length} de {detail.data.cobertura.bodegasCatalogo} bodegas del catalogo.</>
-                                    )}
-                                    {detail.data?.cobertura?.bodegasFueraCatalogo?.length > 0 && (
-                                      <> El desglose tambien contiene {detail.data.cobertura.bodegasFueraCatalogo.length} bodegas que no aparecen en el listado general de bodegas.</>
-                                    )}
-                                    {detail.data?.cobertura?.bodegasConRegistrosDuplicados?.length > 0 && (
-                                      <> Hay identificadores de bodega repetidos; por seguridad no se calcula una suma del desglose.</>
-                                    )}
-                                  </p>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -876,6 +902,18 @@ function StockContifico() {
             </div>
           )}
         </section>
+          </>
+        )}
+
+        {activeTab === "agencias" && (
+          <AgenciasBodegasCards
+            products={agencyProducts}
+            search={agencySearch}
+            loading={positiveWarehousesLoading}
+            progress={positiveWarehousesProgress}
+            error={positiveWarehousesError}
+          />
+        )}
       </div>
     </div>
   );

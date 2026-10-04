@@ -45,6 +45,7 @@ const FLOW_LEVELS = [
 const emptyConfiguration = {
   pipelineId: "",
   stageIds: [],
+  maxPendientesPorAsesor: 2,
   horariosFlujoActivo: false,
   horariosFlujo: [],
   nivelesFlujo: {},
@@ -189,6 +190,11 @@ export default function HorariosFlujo() {
 
   const validationMessage = useMemo(() => {
     if (!configuration.pipelineId) return "Seleccione un pipeline.";
+    if (!Number.isInteger(Number(configuration.maxPendientesPorAsesor))
+      || Number(configuration.maxPendientesPorAsesor) < 1
+      || Number(configuration.maxPendientesPorAsesor) > 1000) {
+      return "El limite pendiente por asesor debe ser un entero entre 1 y 1000.";
+    }
     if (configuration.horariosFlujoActivo && !configuration.stageIds.length) {
       return "Seleccione al menos una etapa.";
     }
@@ -471,7 +477,7 @@ export default function HorariosFlujo() {
       {success && <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 shadow-sm"><span className="flex items-center gap-2"><CheckCircle2 size={18} />{success}</span><button type="button" onClick={() => setSuccess("")} className="rounded p-1 hover:bg-emerald-100"><X size={16} /></button></div>}
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-950 shadow-sm">
-        <div className="flex min-w-0 flex-1 items-start gap-3"><span className="rounded-lg bg-indigo-100 p-2 text-indigo-700"><Gauge size={18} /></span><p><b>Distribución inteligente.</b> La carga diaria se equilibra según el nivel de cada asesor: nivel 1 recibe menor flujo y nivel 5 mayor flujo. Quien ingresa más tarde recupera su proporción sin superar el límite de pendientes.</p></div>
+        <div className="flex min-w-0 flex-1 items-start gap-3"><span className="rounded-lg bg-indigo-100 p-2 text-indigo-700"><Gauge size={18} /></span><p><b>Distribución inteligente.</b> Al iniciar un turno, los clientes pendientes se nivelan por partes iguales entre los asesores activos. Después, los clientes nuevos se entregan progresivamente según el nivel de flujo; quien ingresa más tarde recibe prioridad hasta recuperar su proporción diaria, siempre respetando el límite de pendientes.</p></div>
         <button type="button" onClick={() => setShowLevelManual(true)} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-100"><BookOpen size={16} />Manual de niveles</button>
       </section>
 
@@ -488,6 +494,25 @@ export default function HorariosFlujo() {
             <option value="">Seleccione...</option>
             {pipelines.map((pipeline) => <option key={pipeline.id || pipeline._id} value={pipeline.id || pipeline._id}>{pipeline.name || pipeline.title}</option>)}
           </select>
+        </label>
+        <label className="block text-sm font-semibold text-gray-700 md:max-w-sm">
+          Máximo de clientes pendientes por asesor
+          <input
+            type="number"
+            min="1"
+            max="1000"
+            step="1"
+            value={configuration.maxPendientesPorAsesor}
+            onChange={(event) => setField(
+              "maxPendientesPorAsesor",
+              event.target.value === "" ? "" : Number(event.target.value),
+            )}
+            className="mt-1 h-11 w-full rounded border border-gray-300 bg-white px-3"
+            disabled={loading}
+          />
+          <span className="mt-1 block text-xs font-normal text-slate-500">
+            Para repartir 30 pendientes entre 3 asesores, configure al menos 10.
+          </span>
         </label>
         <div>
           <div className="mb-2 text-sm font-semibold text-gray-700">Etapas (por ejemplo, WhatsApp y Facebook)</div>
@@ -927,16 +952,16 @@ export default function HorariosFlujo() {
 
               <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <h3 className="flex items-center gap-2 font-bold text-emerald-900"><Info size={18} />Ejemplo práctico</h3>
-                <p className="mt-2 text-sm leading-6 text-emerald-900">Si cinco asesores, uno de cada nivel, están disponibles al mismo tiempo y entran 30 clientes, la proporción aproximada sería: nivel 1 recibe 2, nivel 2 recibe 4, nivel 3 recibe 6, nivel 4 recibe 8 y nivel 5 recibe 10.</p>
+                <p className="mt-2 text-sm leading-6 text-emerald-900">Si tres asesores comienzan al mismo tiempo y existen 30 clientes sin propietario, cada uno recibe 10 de inmediato, siempre que su límite de pendientes lo permita. Desde el siguiente cliente nuevo se aplica progresivamente el nivel de flujo configurado.</p>
               </section>
 
               <section>
                 <h3 className="font-bold text-slate-900">Reglas importantes</h3>
                 <ul className="mt-2 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
-                  <li className="rounded-lg bg-slate-50 p-3">La proporción es aproximada y se equilibra durante el día.</li>
+                  <li className="rounded-lg bg-slate-50 p-3">El inventario pendiente se reparte primero por partes iguales.</li>
                   <li className="rounded-lg bg-slate-50 p-3">Solo participan asesores dentro de su turno programado.</li>
                   <li className="rounded-lg bg-slate-50 p-3">Ningún nivel supera el límite máximo de clientes pendientes.</li>
-                  <li className="rounded-lg bg-slate-50 p-3">Quien entra más tarde recupera únicamente la proporción que corresponde a su nivel.</li>
+                  <li className="rounded-lg bg-slate-50 p-3">Quien entra más tarde recibe prioridad hasta recuperar la proporción diaria correspondiente a su nivel.</li>
                   <li className="rounded-lg bg-slate-50 p-3">Los clientes que ya tienen propietario no se reasignan.</li>
                   <li className="rounded-lg bg-slate-50 p-3">Los asesores no necesitan activar Play ni realizar acciones manuales.</li>
                 </ul>

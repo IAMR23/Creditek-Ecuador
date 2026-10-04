@@ -6,6 +6,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import LoginForm from "./components/LoginForm";
 import VendedorPanel from "./pages/Vendedores/VendedoresPanel";
+import StockPorAgencias from "./pages/Vendedores/StockPorAgencias";
 import Usuarios from "./pages/Admin/Usuarios";
 import SidebarLayout from "./components/SidebarLayout";
 import Agencias from "./pages/Admin/Agencias";
@@ -693,6 +694,10 @@ function App() {
 
               <Route path="logistica-panel" element={protect(<LogisticaPanel />, "/logistica-panel")} />
               <Route path="vendedor-panel" element={protect(<VendedorPanel />, "/vendedor-panel")} />
+              <Route
+                path="vendedor/stock-por-agencias"
+                element={protect(<StockPorAgencias />, "/vendedor/stock-por-agencias")}
+              />
               <Route
                 path="capacitacion"
                 element={protect(<CapacitacionVendedores />, "/capacitacion")}

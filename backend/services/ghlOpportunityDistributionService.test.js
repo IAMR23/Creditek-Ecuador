@@ -163,6 +163,53 @@ describe("reparto determinista de oportunidades GHL", () => {
     );
     expect(counts(result.assignments, weightedUsers)).toEqual([10, 30]);
   });
+  test("el lote pendiente inicial se reparte por partes iguales antes de aplicar intensidad", () => {
+    const weightedUsers = [
+      { ...users[0], nivelFlujo: 1 },
+      { ...users[1], nivelFlujo: 3 },
+      { ...users[2], nivelFlujo: 5 },
+    ];
+    const result = buildCapacityAssignments(
+      opportunities(30),
+      weightedUsers,
+      new Map(),
+      10,
+      0,
+      new Map(),
+      { strategy: "balanced" },
+    );
+
+    expect(result.strategy).toBe("balanced");
+    expect(counts(result.assignments, weightedUsers)).toEqual([10, 10, 10]);
+  });
+  test("un asesor que ingresa mas tarde recibe primero hasta recuperar el equilibrio", () => {
+    const result = buildCapacityAssignments(
+      opportunities(10),
+      users.slice(0, 3),
+      new Map([["u1", 10], ["u2", 10], ["u3", 0]]),
+      20,
+      0,
+      new Map([["u1", 10], ["u2", 10], ["u3", 0]]),
+      { strategy: "balanced" },
+    );
+
+    expect(counts(result.assignments, users.slice(0, 3))).toEqual([0, 0, 10]);
+    expect(result.advisors.map((advisor) => advisor.cargaResultante)).toEqual([10, 10, 10]);
+  });
+  test("el equilibrio inicial sigue respetando el maximo pendiente por asesor", () => {
+    const result = buildCapacityAssignments(
+      opportunities(30),
+      users.slice(0, 3),
+      new Map(),
+      2,
+      0,
+      new Map(),
+      { strategy: "balanced" },
+    );
+
+    expect(counts(result.assignments, users.slice(0, 3))).toEqual([2, 2, 2]);
+    expect(result.totalPendientesCapacidad).toBe(24);
+  });
   test("asigna nivel medio por defecto y rechaza niveles fuera de 1 a 5", () => {
     expect(normalizeFlowLevels({}, ["u1", "u2"])).toEqual({ u1: 3, u2: 3 });
     expect(() => normalizeFlowLevels({ u1: 6 }, ["u1"])).toThrow("entre 1 y 5");
@@ -192,6 +239,7 @@ describe("reparto determinista de oportunidades GHL", () => {
     const result = await validateFlowScheduleConfigurationInput({
       pipelineId: "pipeline",
       stageIds: ["stage"],
+      maxPendientesPorAsesor: 10,
       horariosFlujoActivo: true,
       horariosFlujo: [
         { diaSemana: 1, horaInicio: "09:00", horaFin: "17:00", usuariosGhl: ["u1"] },
@@ -202,6 +250,7 @@ describe("reparto determinista de oportunidades GHL", () => {
 
     expect(result).not.toHaveProperty("horaInicioPlay");
     expect(result).not.toHaveProperty("horaPausaAutomatica");
+    expect(result.maxPendientesPorAsesor).toBe(10);
     expect(result.nivelesFlujo).toEqual({ u1: 1, u2: 5 });
     jest.restoreAllMocks();
   });

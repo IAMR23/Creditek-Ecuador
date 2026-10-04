@@ -4,8 +4,10 @@ const Ejecucion = require("../models/GhlDifusionEjecucion");
 const Detalle = require("../models/GhlDifusionEjecucionDetalle");
 const {
   getMessageHubProvider,
+  normalizeInstanceIndexes,
   normalizeMessages,
   previewBroadcast,
+  resolveExternalRecipients,
 } = require("./ghlBroadcastService");
 const { requestGhl, toId } = require("./ghlService");
 
@@ -158,13 +160,14 @@ async function createExecution(input, userId, dependencies = {}) {
   const executionModel = dependencies.Ejecucion || Ejecucion;
   const detailModel = dependencies.Detalle || Detalle;
   const previewer = dependencies.previewBroadcast || previewBroadcast;
+  const recipientResolver = dependencies.resolveExternalRecipients || resolveExternalRecipients;
   const rate = normalizeRate(input);
   const currentTime = typeof dependencies.now === "function"
     ? dependencies.now()
     : dependencies.now || new Date();
   const scheduledAt = normalizeScheduledAt(input?.scheduledAt, currentTime);
-  const preview = await previewer(input);
   const messages = normalizeMessages(input);
+  normalizeInstanceIndexes(input?.instanceIndexes);
   const active = await executionModel.findOne({ where: { estado: { [Op.in]: ACTIVE_STATES } } });
   if (active) {
     throw serviceError(
@@ -173,6 +176,8 @@ async function createExecution(input, userId, dependencies = {}) {
       409,
     );
   }
+  const resolvedInput = await recipientResolver(input, dependencies);
+  const preview = await previewer(resolvedInput, dependencies);
 
   const transactionRunner = dependencies.transaction
     || ((callback) => sequelize.transaction(callback));

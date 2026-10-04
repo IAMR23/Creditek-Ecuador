@@ -125,6 +125,27 @@ describe("ghlBroadcastQueueService", () => {
     expect(result).toMatchObject({ id: "12", batchSize: 5, intervalMinutes: 7 });
   });
 
+  test("no crea contactos externos cuando ya existe una difusion activa", async () => {
+    const resolveExternalRecipients = jest.fn();
+    const Ejecucion = {
+      findOne: jest.fn().mockResolvedValue(executionRow({ estado: "running" })),
+    };
+
+    await expect(service.createExecution({
+      confirmation: "ENVIAR",
+      contactIds: [],
+      phoneNumbers: ["0991234567"],
+      instanceIndexes: [1],
+      messages: ["Hola cliente"],
+    }, 9, {
+      Ejecucion,
+      resolveExternalRecipients,
+      now: new Date("2026-10-02T15:00:00.000Z"),
+    })).rejects.toMatchObject({ code: "GHL_BROADCAST_ACTIVE_EXISTS" });
+
+    expect(resolveExternalRecipients).not.toHaveBeenCalled();
+  });
+
   test("lista el historial paginado con usuario y fecha programada", async () => {
     const row = executionRow({ creadoPor: { id: 9, nombre: "Administrador" } });
     const Ejecucion = {

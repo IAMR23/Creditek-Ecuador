@@ -67,6 +67,46 @@ describe("ghlSmartListService", () => {
     });
   });
 
+  test("normaliza un rango de fecha de creacion del contacto", () => {
+    expect(service.normalizeFilters({
+      rules: [
+        {
+          field: "dateAdded",
+          operator: "range",
+          value: { from: "2026-09-01", to: "2026-09-30" },
+        },
+      ],
+    })).toEqual({
+      logic: "AND",
+      rules: [
+        {
+          field: "dateAdded",
+          operator: "range",
+          value: { from: "2026-09-01", to: "2026-09-30" },
+        },
+      ],
+    });
+  });
+
+  test("rechaza rangos de fecha incompletos, invertidos o duplicados", () => {
+    expect(() => service.normalizeRule({
+      field: "dateAdded",
+      operator: "range",
+      value: { from: "2026-09-01", to: "" },
+    })).toThrow(expect.objectContaining({ code: "GHL_SMART_LIST_DATE_RANGE_REQUIRED" }));
+    expect(() => service.normalizeRule({
+      field: "dateAdded",
+      operator: "range",
+      value: { from: "2026-09-30", to: "2026-09-01" },
+    })).toThrow(expect.objectContaining({ code: "GHL_SMART_LIST_DATE_RANGE_INVALID" }));
+    expect(() => service.normalizeFilters({
+      rules: [
+        { field: "dateAdded", operator: "range", value: { from: "2026-09-01", to: "2026-09-15" } },
+        { field: "dateAdded", operator: "range", value: { from: "2026-09-16", to: "2026-09-30" } },
+      ],
+    })).toThrow(expect.objectContaining({ code: "GHL_SMART_LIST_DATE_RANGE_LIMIT" }));
+  });
+
   test("exige el pipeline y solo permite una etapa por lista", () => {
     expect(() => service.normalizeRule({
       field: "pipelineStageId",

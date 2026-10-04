@@ -45,6 +45,73 @@ describe("ghlBroadcastService", () => {
       .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_MESSAGE_VARIANT_LIMIT" }));
   });
 
+  test("normaliza numeros moviles ecuatorianos cargados sin duplicados", () => {
+    expect(service.normalizeExternalPhoneNumbers([
+      "0991234567",
+      "+593 99 123 4567",
+      "987654321",
+    ])).toEqual(["+593991234567", "+593987654321"]);
+    expect(service.normalizeExternalPhoneNumbers([
+      "0999001413",
+      "+593 999 900 1413",
+      "+593 999 001 413",
+    ])).toEqual(["+593999001413"]);
+    expect(() => service.normalizeExternalPhoneNumbers(["022345678"]))
+      .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_EXTERNAL_PHONES_INVALID" }));
+    expect(() => service.normalizeExternalPhoneNumbers(["+593 912 345 6789"]))
+      .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_EXTERNAL_PHONES_INVALID" }));
+  });
+
+  test("incluye numeros externos en la vista previa sin consultar ni crear contactos", async () => {
+    const requestGhl = jest.fn();
+    const result = await service.previewBroadcast({
+      contactIds: [],
+      phoneNumbers: ["0991234567", "+593987654321"],
+      instanceIndexes: [1, 2],
+      messages: ["Hola"],
+    }, { requestGhl });
+
+    expect(requestGhl).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ totalSelected: 2, totalEligible: 2, totalExcluded: 0 });
+    expect(result.distribution.flatMap((group) => group.contacts)).toEqual([
+      expect.objectContaining({ id: "external:+593991234567", phone: "+593991234567", external: true }),
+      expect.objectContaining({ id: "external:+593987654321", phone: "+593987654321", external: true }),
+    ]);
+  });
+
+  test("reutiliza o crea el contacto minimo de los numeros externos al confirmar", async () => {
+    const requestGhl = jest.fn(async (_client, options) => ({
+      contact: {
+        id: `contact-${options.data.phone.slice(-4)}`,
+        phone: options.data.phone,
+      },
+    }));
+
+    const result = await service.resolveExternalRecipients({
+      contactIds: ["crm-1"],
+      phoneNumbers: ["+593 999 900 1413", "0987654321"],
+    }, {
+      getGhlConfig: () => ({ locationId: "location" }),
+      createGhlClient: () => ({ client: true }),
+      requestGhl,
+    });
+
+    expect(requestGhl).toHaveBeenCalledTimes(2);
+    expect(requestGhl).toHaveBeenNthCalledWith(1, expect.anything(), expect.objectContaining({
+      method: "POST",
+      url: "/contacts/upsert",
+      data: {
+        locationId: "location",
+        phone: "+593999001413",
+        country: "EC",
+        createNewIfDuplicateAllowed: false,
+      },
+    }));
+    expect(result.contactIds).toEqual(["crm-1", "contact-1413", "contact-4321"]);
+    expect(result.phoneNumbers).toEqual([]);
+    expect(result.preloadedContacts.get("contact-1413")).toMatchObject({ phone: "+593999001413" });
+  });
+
   test("selecciona Whatsapp y no el proveedor antiguo stevo", () => {
     const provider = service.selectMessageHubProvider([
       { _id: "old", name: "stevo", type: "SMS" },
@@ -89,6 +156,7 @@ describe("ghlBroadcastService", () => {
         filters: [
           { field: "source", operator: "eq", value: "Facebook" },
           { field: "tags", operator: "contains", value: "prospecto" },
+          { field: "source", operator: "range", value: { from: "2026-09-01", to: "2026-09-30" } },
           { field: "unsafe", operator: "eq", value: "ignorar" },
         ],
       },
@@ -102,6 +170,38 @@ describe("ghlBroadcastService", () => {
     expect(requestGhl.mock.calls[0][1].data.filters).toEqual([
       { field: "source", operator: "eq", value: "Facebook" },
       { field: "tags", operator: "contains", value: "prospecto" },
+    ]);
+  });
+
+  test("envia el rango de creacion a GHL con limites de dias de Ecuador", async () => {
+    const requestGhl = jest.fn().mockResolvedValue({ contacts: [], total: 0 });
+    await service.listContacts(
+      {
+        page: 1,
+        filters: [
+          {
+            field: "dateAdded",
+            operator: "range",
+            value: { from: "2026-09-01", to: "2026-09-30" },
+          },
+        ],
+      },
+      {
+        getGhlConfig: () => ({ locationId: "location" }),
+        createGhlClient: () => ({ client: true }),
+        requestGhl,
+      },
+    );
+
+    expect(requestGhl.mock.calls[0][1].data.filters).toEqual([
+      {
+        field: "dateAdded",
+        operator: "range",
+        value: {
+          gt: "2026-09-01T04:59:59.999Z",
+          lt: "2026-10-01T05:00:00.000Z",
+        },
+      },
     ]);
   });
 
@@ -143,6 +243,132 @@ describe("ghlBroadcastService", () => {
     }));
     expect(result.contacts.map((item) => item.id)).toEqual(["1"]);
     expect(result.pagination.total).toBe(1);
+  });
+
+  test("filtra por fecha en GHL antes de cruzar una etapa del pipeline", async () => {
+    const fetchOpportunitiesByStatus = jest.fn().mockResolvedValue([
+      { id: "opp-1", contactId: "1", source: "Facebook" },
+      { id: "opp-2", contactId: "2", source: "Referido" },
+    ]);
+    const fetchContactsByIdsInBatches = jest.fn();
+    const requestGhl = jest.fn().mockResolvedValue({
+      contacts: [contact("2", { dateAdded: "2026-09-15T14:00:00.000Z" })],
+      total: 1,
+    });
+
+    const result = await service.listContacts(
+      {
+        page: 1,
+        pageSize: 10,
+        filters: [
+          { field: "pipelineStageId", operator: "eq", pipelineId: "pipeline-1", value: "stage-2" },
+          { field: "dateAdded", operator: "range", value: { from: "2026-09-01", to: "2026-09-30" } },
+        ],
+      },
+      {
+        getGhlConfig: () => ({ locationId: "location" }),
+        createGhlClient: () => ({ client: true }),
+        fetchOpportunitiesByStatus,
+        fetchContactsByIdsInBatches,
+        requestGhl,
+      },
+    );
+
+    expect(requestGhl).toHaveBeenCalledTimes(1);
+    expect(requestGhl.mock.calls[0][1].data.filters).toEqual([
+      expect.objectContaining({ field: "dateAdded", operator: "range" }),
+    ]);
+    expect(fetchContactsByIdsInBatches).not.toHaveBeenCalled();
+    expect(result.contacts).toEqual([
+      expect.objectContaining({ id: "2", source: "Referido", dateAdded: "2026-09-15T14:00:00.000Z" }),
+    ]);
+    expect(result.pagination.total).toBe(1);
+  });
+
+  test("exige acortar el rango si GHL supera su ventana segura de busqueda", async () => {
+    const requestGhl = jest.fn().mockResolvedValue({
+      contacts: Array.from({ length: 100 }, (_, index) => contact(String(index + 1))),
+      total: 10001,
+    });
+
+    await expect(service.listContacts(
+      {
+        filters: [
+          { field: "pipelineStageId", operator: "eq", pipelineId: "pipeline-1", value: "stage-2" },
+          { field: "dateAdded", operator: "range", value: { from: "2026-01-01", to: "2026-09-30" } },
+        ],
+      },
+      {
+        getGhlConfig: () => ({ locationId: "location" }),
+        createGhlClient: () => ({ client: true }),
+        fetchOpportunitiesByStatus: jest.fn().mockResolvedValue([{ id: "opp-1", contactId: "1" }]),
+        requestGhl,
+      },
+    )).rejects.toMatchObject({ code: "GHL_BROADCAST_DATE_RANGE_TOO_BROAD", statusCode: 422 });
+    expect(requestGhl).toHaveBeenCalledTimes(1);
+  });
+
+  test("consulta en paralelo las paginas restantes del rango y cruza la etapa", async () => {
+    const requestGhl = jest.fn(async (_client, options) => {
+      const searchPage = options.data.page;
+      const firstId = (searchPage - 1) * 100 + 1;
+      const quantity = searchPage < 3 ? 100 : 50;
+      return {
+        contacts: Array.from({ length: quantity }, (_, index) => contact(String(firstId + index))),
+        total: 250,
+      };
+    });
+
+    const result = await service.listContacts(
+      {
+        page: 1,
+        pageSize: 25,
+        filters: [
+          { field: "pipelineStageId", operator: "eq", pipelineId: "pipeline-1", value: "stage-2" },
+          { field: "dateAdded", operator: "range", value: { from: "2026-09-01", to: "2026-09-30" } },
+        ],
+      },
+      {
+        getGhlConfig: () => ({ locationId: "location-pages" }),
+        createGhlClient: () => ({ client: true }),
+        fetchOpportunitiesByStatus: jest.fn().mockResolvedValue([{ id: "opp-225", contactId: "225" }]),
+        requestGhl,
+      },
+    );
+
+    expect(requestGhl).toHaveBeenCalledTimes(3);
+    expect(requestGhl.mock.calls.map((call) => call[1].data.page).sort()).toEqual([1, 2, 3]);
+    expect(result.contacts).toEqual([expect.objectContaining({ id: "225" })]);
+  });
+
+  test("reutiliza brevemente el cruce de fecha y etapa al cambiar de pagina", async () => {
+    const fetchOpportunitiesByStatus = jest.fn().mockResolvedValue([
+      { id: "opp-1", contactId: "1" },
+      { id: "opp-2", contactId: "2" },
+    ]);
+    const requestGhl = jest.fn().mockResolvedValue({
+      contacts: [contact("1"), contact("2")],
+      total: 2,
+    });
+    const dependencies = {
+      getGhlConfig: () => ({ locationId: "location-cache" }),
+      createGhlClient: () => ({ client: true }),
+      fetchOpportunitiesByStatus,
+      requestGhl,
+      enablePipelineDateCache: true,
+    };
+    const filters = [
+      { field: "pipelineStageId", operator: "eq", pipelineId: "pipeline-cache", value: "stage-cache" },
+      { field: "dateAdded", operator: "range", value: { from: "2026-09-01", to: "2026-09-30" } },
+    ];
+
+    const firstPage = await service.listContacts({ page: 1, pageSize: 1, filters }, dependencies);
+    const secondPage = await service.listContacts({ page: 2, pageSize: 1, filters }, dependencies);
+
+    expect(firstPage.contacts[0].id).toBe("1");
+    expect(secondPage.contacts[0].id).toBe("2");
+    expect(fetchOpportunitiesByStatus).toHaveBeenCalledTimes(1);
+    expect(requestGhl).toHaveBeenCalledTimes(1);
   });
 
   test("obtiene pipelines y etapas disponibles", async () => {

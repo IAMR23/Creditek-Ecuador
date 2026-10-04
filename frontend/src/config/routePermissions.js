@@ -148,6 +148,7 @@ export const ROUTE_PERMISSIONS = {
   "/estado-entrega": "Catalogos",
 
   "/vendedor-panel": VENDEDOR_PERMISSION,
+  "/vendedor/stock-por-agencias": VENDEDOR_PERMISSION,
   "/capacitacion": VENDEDOR_PERMISSION,
   "/mis-ventas": VENDEDOR_PERMISSION,
   "/registrar-clientes-venta": VENDEDOR_PERMISSION,
