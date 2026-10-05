@@ -64,6 +64,20 @@ describe("uphoneSolicitudesController", () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
+  test("informa actualizaciones de contrato aunque no haya solicitudes nuevas", async () => {
+    service.importarExcel.mockResolvedValue({
+      insertadas: 0, actualizadas: 1, omitidasDuplicadas: 0,
+    });
+    const res = createResponse();
+    await controller.importarApiKey({ file: { originalname: "uphone.xlsx" } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      message: "0 solicitud(es) nueva(s) y 1 actualizada(s) con contrato aprobado",
+      resultado: expect.objectContaining({ actualizadas: 1 }),
+    }));
+  });
+
   test("exporta el Excel con los filtros y encabezados de descarga", async () => {
     const res = createResponse();
     const query = { estado: "PENDIENTE", usuarioUphone: "USER2026" };

@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
-  Ban,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -938,9 +937,9 @@ export default function SolicitudesUphone() {
       setPage(1);
       await loadData({ silent: true });
       await Swal.fire({
-        icon: result.insertadas > 0 ? "success" : "info",
+        icon: result.insertadas > 0 || result.actualizadas > 0 ? "success" : "info",
         title: response.data.message,
-        html: `<b>${result.insertadas}</b> nuevas · <b>${result.omitidasDuplicadas}</b> duplicadas por cédula o solicitud · <b>${result.omitidasInvalidas}</b> inválidas`,
+        html: `<b>${result.insertadas}</b> nuevas · <b>${result.actualizadas || 0}</b> actualizadas con contrato aprobado · <b>${result.omitidasDuplicadas}</b> duplicadas por cédula o solicitud · <b>${result.omitidasInvalidas}</b> inválidas`,
       });
     } catch (error) {
       Swal.fire(
@@ -1137,7 +1136,7 @@ export default function SolicitudesUphone() {
               <UploadCloud size={18} className="text-teal-600" /> Carga manual
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              Para contingencias. No se importan cédulas ni números de solicitud ya registrados. Archivo .xlsx, máximo 10 MB y 25.000 filas.
+              Para contingencias. El contrato aprobado prevalece sobre las otras solicitudes del cliente y actualiza los registros repetidos. Archivo .xlsx, máximo 10 MB y 25.000 filas.
             </p>
             <input
               ref={fileInputRef}
@@ -1170,7 +1169,7 @@ export default function SolicitudesUphone() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Última carga manual</p>
             <p className="mt-1 text-sm font-bold text-slate-900">
               {lastImport
-                ? `${lastImport.insertadas} nuevas · ${lastImport.omitidasDuplicadas} duplicadas`
+                ? `${lastImport.insertadas} nuevas · ${lastImport.actualizadas || 0} actualizadas · ${lastImport.omitidasDuplicadas} duplicadas`
                 : "Sin carga en esta sesión"}
             </p>
             {lastImport && (

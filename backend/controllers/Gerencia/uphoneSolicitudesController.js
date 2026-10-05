@@ -23,20 +23,23 @@ const ejecutarImportacion = async (req, res, usuarioId) => {
       requestId: req.uphoneRequestId,
     });
     const status = resultado.insertadas > 0 ? 201 : 200;
+    const actualizadas = resultado.actualizadas || 0;
     uphoneLogger.info("importacion completada", {
       requestId: req.uphoneRequestId,
       source,
       durationMs: Date.now() - startedAt,
       filasLeidas: resultado.filasLeidas,
       insertadas: resultado.insertadas,
+      actualizadas,
       duplicadas: resultado.omitidasDuplicadas,
       invalidas: resultado.omitidasInvalidas,
       vacias: resultado.omitidasVacias,
     });
     return res.status(status).json({
       ok: true,
-      message:
-        resultado.insertadas > 0
+      message: actualizadas > 0
+        ? `${resultado.insertadas} solicitud(es) nueva(s) y ${actualizadas} actualizada(s) con contrato aprobado`
+        : resultado.insertadas > 0
           ? `${resultado.insertadas} solicitud(es) nueva(s) importada(s)`
           : "El archivo no contiene solicitudes nuevas",
       resultado,

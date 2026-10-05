@@ -19,6 +19,7 @@ const { sequelize } = require("../config/db");
 const ControlFinancieroCarga = require("../models/ControlFinancieroCarga");
 const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro");
 const {
+  construirFechasCarga,
   construirCoberturaReportes,
   extraerFechaIso,
   guardarCargaControlFinanciero,
@@ -464,6 +465,50 @@ describe("controlFinancieroService", () => {
         { FECHA: "7/21/26 11:00 AM" },
       ]),
     ).toBe("2026-07-21");
+  });
+
+  test("describe los dias reales de TV aunque la caja corresponda a otra fecha", () => {
+    expect(construirFechasCarga([
+      { tipoRegistro: "CAJA", fecha: "9/30/26 10:00 AM" },
+      { tipoRegistro: "VENTA_TV", fecha: "9/25/26 7:02 PM" },
+      { tipoRegistro: "VENTA_TV", fecha: "9/29/26 9:59 PM" },
+      { tipoRegistro: "VENTA_TV", fecha: "9/29/26 6:40 PM" },
+      { tipoRegistro: "VENTA_CELULAR", fecha: "30/09/26 9:00 AM" },
+    ])).toEqual({
+      desde: "2026-09-25",
+      hasta: "2026-09-30",
+      dias: [
+        { fecha: "2026-09-25", caja: 0, tv: 1, celular: 0 },
+        { fecha: "2026-09-29", caja: 0, tv: 2, celular: 0 },
+        { fecha: "2026-09-30", caja: 1, tv: 0, celular: 1 },
+      ],
+      sinFecha: { caja: 0, tv: 0, celular: 0 },
+    });
+  });
+
+  test("no atribuye fechas invalidas al dia predominante de la carga", () => {
+    expect(construirFechasCarga([
+      { tipoRegistro: "VENTA_TV", fecha: "2/30/26 10:00 AM" },
+      { tipoRegistro: "CAJA", fecha: null },
+    ])).toEqual({
+      desde: null, hasta: null, dias: [], sinFecha: { caja: 1, tv: 1, celular: 0 },
+    });
+  });
+
+  test("el reporte TV de varias fechas conserva el dia de cada una de sus diez ventas", () => {
+    const fechas = [
+      "9/25/26 7:02 PM", "9/26/26 12:23 PM", "9/29/26 9:59 PM", "9/30/26 2:25 PM",
+      "9/29/26 6:40 PM", "9/29/26 5:55 PM", "9/30/26 12:41 PM", "9/30/26 4:15 PM",
+      "9/26/26 4:56 PM", "9/30/26 1:23 PM",
+    ];
+    const resumen = construirFechasCarga(fechas.map((fecha) => ({ tipoRegistro: "VENTA_TV", fecha })));
+    expect(resumen.dias).toEqual([
+      { fecha: "2026-09-25", caja: 0, tv: 1, celular: 0 },
+      { fecha: "2026-09-26", caja: 0, tv: 2, celular: 0 },
+      { fecha: "2026-09-29", caja: 0, tv: 3, celular: 0 },
+      { fecha: "2026-09-30", caja: 0, tv: 4, celular: 0 },
+    ]);
+    expect(resumen).toMatchObject({ desde: "2026-09-25", hasta: "2026-09-30" });
   });
 
   test("identifica dias sin reportes de TV o celular", () => {

@@ -17,6 +17,7 @@ const {
   obtenerConciliacionCajaCarga,
 } = require("../../services/conciliacionCuotasCajaService");
 const {
+  construirFechasCarga,
   construirCoberturaReportes,
   obtenerFechaActualEcuadorIso,
 } = require("../../services/controlFinancieroService");
@@ -155,10 +156,30 @@ exports.listarCargas = async (req, res) => {
       offset: (pagina - 1) * limite,
       order: [["fechaReporte", "DESC"], ["createdAt", "DESC"], ["id", "DESC"]],
     });
+    const cargaIds = rows.map((registro) => serializarCarga(registro).id);
+    const fechas = cargaIds.length
+      ? await ControlFinancieroRegistro.findAll({
+          where: { cargaId: { [Op.in]: cargaIds } },
+          attributes: ["cargaId", "tipoRegistro", "fecha"],
+          raw: true,
+        })
+      : [];
+    const registrosPorCarga = new Map();
+    for (const registro of fechas) {
+      const items = registrosPorCarga.get(registro.cargaId) || [];
+      items.push(registro);
+      registrosPorCarga.set(registro.cargaId, items);
+    }
 
     return res.json({
       ok: true,
-      cargas: rows.map(serializarCarga),
+      cargas: rows.map((registro) => {
+        const carga = serializarCarga(registro);
+        return {
+          ...carga,
+          fechasRegistros: construirFechasCarga(registrosPorCarga.get(carga.id) || []),
+        };
+      }),
       paginacion: {
         pagina,
         limite,

@@ -45,12 +45,27 @@ Para generar una clave aleatoria:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-La respuesta informa `insertadas`, `omitidasDuplicadas`, `omitidasInvalidas` y
-`omitidasVacias`. El campo `numeroSolicitud` tiene un indice unico en PostgreSQL;
-por ello una solicitud existente se omite incluso si dos cargas coinciden en el
-tiempo. La cedula normalizada tambien evita duplicados, pero solo dentro del
-mismo dia de solicitud en Ecuador: una aparicion en una fecha posterior se
-conserva. No se actualiza ni reemplaza la fila anterior.
+La respuesta informa `insertadas`, `actualizadas`, `omitidasDuplicadas`,
+`omitidasInvalidas` y `omitidasVacias`. `CONTRATO_APROBADO` tiene prioridad sobre
+`SOLICITUD_APROBADA`, `SOLICITUD_APROBADA_AUTOMATICO`, `SOLICITUD_DENEGADA`,
+`SOLICITUD_LLAMADA`, `SOLICITUD_LLAMADA_APROBADA` y
+`SOLICITUD_LLAMADA_DENEGADA`. Aprobar una solicitud no equivale a aprobar un
+contrato.
+
+Si primero se importa una solicitud y despues llega su contrato aprobado, se
+actualiza la fila existente, identificada por numero de solicitud o por cedula
+normalizada y dia de solicitud en Ecuador. Si cambia el numero dentro del mismo
+dia, se conserva el numero y los datos del contrato aprobado. La fila mantiene
+su `id` y fecha de creacion. Esa actualizacion se informa en `actualizadas` y no
+se cuenta como duplicada. Un contrato aprobado ya guardado no se reemplaza por
+estados anteriores ni por volver a importar el mismo archivo.
+
+Dentro de un archivo, el contrato aprobado se elige antes de descartar filas
+repetidas, independientemente de su orden. Los indices unicos existentes por
+numero de solicitud y por cedula/dia se mantienen. Las cargas automaticas y
+manuales comparten una transaccion y un bloqueo de importacion para evitar
+regresiones durante cargas simultaneas. Si falla una escritura, se revierte toda
+la carga. No se requiere una migracion adicional para esta prioridad.
 
 Se acepta el encabezado original `NUMERO DE SOLICTUD` y tambien la escritura
 corregida `NUMERO DE SOLICITUD` (con o sin tildes).
@@ -92,15 +107,23 @@ cuando tiene una fecha de contrato util, distinta de valores como `NO APLICA`,
 `N/A`, `S/N`, `SIN FECHA` o `PENDIENTE`. El mismo conteo se incluye en cada
 elemento de `dashboard.agencias`.
 
-Para los indicadores se identifica al cliente por su cedula normalizada y por
-el dia de la solicitud en Ecuador. Si un cliente tiene uno o mas contratos
-aprobados dentro del mismo dia, se conserva como valida solamente la aprobacion
-mas reciente de ese dia; sus otras solicitudes de la misma fecha se reportan
-como `INVALIDADA_POR_CONTRATO_APROBADO`. Si vuelve a aparecer en una fecha
-distinta, la nueva solicitud se conserva y contabiliza. Los registros
-originales no se borran ni se actualizan. Las solicitudes sin una cedula
-utilizable se consideran clientes independientes para evitar unir personas por
-error.
+La tabla, los totales, el dashboard (incluidos vendedores y telefonos) y la
+exportacion aplican la misma prioridad por cedula normalizada. Si un cliente
+tiene un contrato aprobado, solo se muestra y contabiliza ese contrato; las
+otras solicitudes quedan fuera incluso si tienen otra fecha, agencia o usuario
+Uphone. La prioridad se resuelve sobre todo el historico antes de aplicar los
+filtros, de modo que filtrar por una agencia anterior no recupera solicitudes
+que ya fueron reemplazadas por una venta. Si hay varios contratos aprobados de
+la misma cedula, se elige el de fecha de solicitud mas reciente; a igual fecha,
+el de mayor `id`.
+
+Las filas historicas de otras fechas o duplicados antiguos se conservan en la
+base de datos. Sin contrato aprobado, se mantiene el comportamiento de
+solicitudes por dia; para vendedores se cuenta un cliente por cedula y dia.
+Las solicitudes sin una cedula utilizable se consideran clientes independientes
+para evitar unir personas por error. Si una carga anterior omitio el contrato
+como duplicado, debe volver a enviarse el reporte que contiene el contrato
+aprobado para actualizar el registro guardado.
 
 ## Migracion
 
@@ -134,5 +157,27 @@ La pantalla `Jefes comerciales > Uphone` permite seleccionar el mismo archivo
 
 Este endpoint no usa la API key: requiere la sesion JWT normal de RVE y uno de
 los permisos `Gerencia`, `Administracion` o `Sistemas`. La persona que realiza
-la carga queda registrada en `importadoPorId`. La misma restriccion unica por
-numero de solicitud protege tanto las cargas automaticas como las manuales.
+la carga queda registrada en `importadoPorId`. Las restricciones unicas y la
+prioridad de `CONTRATO_APROBADO` se aplican tanto en cargas automaticas como
+manuales. La interfaz informa por separado las solicitudes nuevas y las
+actualizadas con contrato aprobado.
+
+## Verificar la prioridad
+
+Prueba manual: cargar una cedula con `SOLICITUD_APROBADA_AUTOMATICO`; enviar
+despues el mismo cliente con `CONTRATO_APROBADO` (tambien con otro numero del
+mismo dia); comprobar que aparece el contrato en la tabla, exportacion e
+indicadores. Reenviar el archivo anterior no debe rebajar el contrato. Repetir
+con otra fecha, agencia y usuario para verificar que solo cuenta la venta.
+
+Pruebas unitarias desde `backend/`:
+
+```bash
+npm test -- --runInBand --silent services/uphoneSolicitudesService.test.js controllers/Gerencia/uphoneSolicitudesController.test.js routes/Gerencia/uphoneSolicitudesRoutes.test.js
+```
+
+Las pruebas PostgreSQL de `services/uphoneSolicitudesService.integration.test.js`
+requieren `UPHONE_TEST_DATABASE_URL` apuntando a una base temporal en
+`127.0.0.1`, llamada `rve_uphone_test`, con usuario `uphone_test`. Se ejecutan
+con `npm test -- --runInBand --silent services/uphoneSolicitudesService.integration.test.js`.
+La suite omite estas pruebas si la variable no esta definida.

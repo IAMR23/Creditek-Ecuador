@@ -103,6 +103,38 @@ describe("controlFinancieroController", () => {
     );
   });
 
+  test("las tarjetas reciben las fechas reales de sus documentos por tipo", async () => {
+    ControlFinancieroCarga.findAndCountAll.mockResolvedValue({
+      rows: [{ id: 92, fechaReporte: "2026-09-30", registrosVentasTv: 10 }], count: 1,
+    });
+    ControlFinancieroRegistro.findAll.mockResolvedValue([
+      { cargaId: 92, tipoRegistro: "CAJA", fecha: "9/30/26 10:00 AM" },
+      { cargaId: 92, tipoRegistro: "VENTA_TV", fecha: "9/25/26 7:02 PM" },
+      { cargaId: 92, tipoRegistro: "VENTA_TV", fecha: "9/30/26 2:25 PM" },
+    ]);
+    const res = crearRes();
+    await controller.listarCargas({ query: {} }, res);
+
+    expect(ControlFinancieroRegistro.findAll).toHaveBeenCalledWith({
+      where: { cargaId: { [Op.in]: [92] } },
+      attributes: ["cargaId", "tipoRegistro", "fecha"], raw: true,
+    });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      cargas: [expect.objectContaining({
+        id: 92, fechaReporte: "2026-09-30", registrosVentasTv: 10,
+        fechasRegistros: {
+          desde: "2026-09-25", hasta: "2026-09-30",
+          dias: [
+            { fecha: "2026-09-25", caja: 0, tv: 1, celular: 0 },
+            { fecha: "2026-09-30", caja: 1, tv: 1, celular: 0 },
+          ],
+          sinFecha: { caja: 0, tv: 0, celular: 0 },
+        },
+      })],
+    }));
+    expect(ControlFinancieroCarga.findByPk).not.toHaveBeenCalled();
+  });
+
   test("calcula cobertura diaria usando solo cargas activas", async () => {
     ControlFinancieroCarga.findAll.mockResolvedValue([
       {

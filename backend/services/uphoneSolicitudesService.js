@@ -1,5 +1,5 @@
 const ExcelJS = require("exceljs");
-const { Op, QueryTypes } = require("sequelize");
+const { literal, Op, QueryTypes } = require("sequelize");
 
 const UphoneSolicitud = require("../models/UphoneSolicitud");
 
@@ -262,6 +262,90 @@ const parsearExcel = async (buffer) => {
   };
 };
 
+const tieneContratoAprobado = (record) =>
+  normalizarEncabezado(record.estadoContrato).replace(/[\s_-]+/g, "_")
+    === "CONTRATO_APROBADO";
+
+const claveCedulaDia = (record) => {
+  const cedula = normalizarCedula(record.cedula);
+  return cedula ? `${cedula}|${record.fechaSolicitudDia || "SIN_FECHA"}` : null;
+};
+
+// La prioridad se resuelve con todo el historico antes de aplicar filtros.
+// Sin cedula utilizable, cada solicitud conserva su identidad independiente.
+const SOLICITUDES_VIGENTES_CTE = `
+  WITH solicitudes_clasificadas AS (
+    SELECT
+      s.*,
+      CASE
+        WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
+          THEN 'CEDULA:' || REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
+        ELSE 'SOLICITUD:' || id::text
+      END AS cliente_clave,
+      REGEXP_REPLACE(
+        UPPER(BTRIM(COALESCE("estadoContrato", ''))), '[[:space:]_-]+', '_', 'g'
+      ) = 'CONTRATO_APROBADO' AS contrato_aprobado
+    FROM uphone_solicitudes s
+  ), solicitudes_priorizadas AS (
+    SELECT
+      *,
+      COUNT(*) FILTER (WHERE contrato_aprobado) OVER (
+        PARTITION BY cliente_clave
+      ) AS contratos_aprobados_cliente,
+      ROW_NUMBER() OVER (
+        PARTITION BY cliente_clave
+        ORDER BY contrato_aprobado DESC, "fechaSolicitud" DESC NULLS LAST, id DESC
+      ) AS prioridad_contrato
+    FROM solicitudes_clasificadas
+  ), solicitudes_vigentes AS (
+    SELECT *
+    FROM solicitudes_priorizadas
+    WHERE contratos_aprobados_cliente = 0
+      OR (contrato_aprobado AND prioridad_contrato = 1)
+  )
+`;
+
+const actualizarContratosAprobados = async (records, transaction) => {
+  if (!records.length) return 0;
+  const [actualizadas] = await UphoneSolicitud.sequelize.query(
+    `
+      UPDATE uphone_solicitudes AS solicitud
+      SET
+        "numeroSolicitud" = carga."numeroSolicitud",
+        distribuidor = carga.distribuidor,
+        matriz = carga.matriz,
+        vendedor = carga.vendedor,
+        usuario = carga.usuario,
+        cedula = carga.cedula,
+        "cedulaNormalizada" = carga."cedulaNormalizada",
+        "fechaSolicitudDia" = carga."fechaSolicitudDia",
+        cliente = carga.cliente,
+        "telefonoSolicitud" = carga."telefonoSolicitud",
+        "telefonoContrato" = carga."telefonoContrato",
+        "fechaSolicitud" = carga."fechaSolicitud",
+        "fechaContrato" = carga."fechaContrato",
+        "grupoArrendamiento" = carga."grupoArrendamiento",
+        estado = carga.estado,
+        "estadoContrato" = carga."estadoContrato",
+        "archivoOrigen" = carga."archivoOrigen",
+        "importadoPorId" = carga."importadoPorId",
+        "updatedAt" = NOW()
+      FROM JSONB_TO_RECORDSET(CAST(:records AS jsonb)) AS carga (
+        id bigint, "numeroSolicitud" text, distribuidor text, matriz text,
+        vendedor text, usuario text, cedula text, "cedulaNormalizada" text,
+        "fechaSolicitudDia" date, cliente text, "telefonoSolicitud" text,
+        "telefonoContrato" text, "fechaSolicitud" timestamptz,
+        "fechaContrato" text, "grupoArrendamiento" text, estado text,
+        "estadoContrato" text, "archivoOrigen" text, "importadoPorId" integer
+      )
+      WHERE solicitud.id = carga.id
+      RETURNING solicitud.id
+    `,
+    { replacements: { records: JSON.stringify(records) }, transaction },
+  );
+  return actualizadas.length;
+};
+
 const importarExcel = async ({ file, usuarioId, requestId }) => {
   if (!file?.buffer) {
     throw crearError("Debes adjuntar el Excel en el campo archivo", 400, "ARCHIVO_REQUERIDO");
@@ -277,14 +361,20 @@ const importarExcel = async ({ file, usuarioId, requestId }) => {
   const seenNumbers = new Set();
   const seenCedulasPorDia = new Set();
   const uniqueRecords = [];
-  for (const record of parsed.records) {
+  // El contrato cerrado gana aunque su fila aparezca despues de una aprobacion
+  // de solicitud. Las otras solicitudes mantienen su orden de importacion.
+  const prioritizedRecords = [...parsed.records].sort((a, b) => {
+    const prioridad = Number(tieneContratoAprobado(b)) - Number(tieneContratoAprobado(a));
+    if (prioridad || !tieneContratoAprobado(a)) return prioridad;
+    return (b.fechaSolicitud?.getTime() || 0) - (a.fechaSolicitud?.getTime() || 0)
+      || b.filaExcel - a.filaExcel;
+  });
+  for (const record of prioritizedRecords) {
     if (seenNumbers.has(record.numeroSolicitud)) continue;
+    const clave = claveCedulaDia(record);
+    if (clave && seenCedulasPorDia.has(clave)) continue;
     seenNumbers.add(record.numeroSolicitud);
-    const claveCedulaDia = record.cedulaNormalizada
-      ? `${record.cedulaNormalizada}|${record.fechaSolicitudDia || "SIN_FECHA"}`
-      : null;
-    if (claveCedulaDia && seenCedulasPorDia.has(claveCedulaDia)) continue;
-    if (claveCedulaDia) seenCedulasPorDia.add(claveCedulaDia);
+    if (clave) seenCedulasPorDia.add(clave);
     uniqueRecords.push(record);
   }
 
@@ -294,34 +384,110 @@ const importarExcel = async ({ file, usuarioId, requestId }) => {
     importadoPorId: usuarioId || null,
   }));
 
-  const inserted = [];
-  for (let index = 0; index < candidates.length; index += INSERT_CHUNK_SIZE) {
-    const chunk = candidates.slice(index, index + INSERT_CHUNK_SIZE);
-    let created;
-    try {
-      created = await UphoneSolicitud.bulkCreate(chunk, {
-        ignoreDuplicates: true,
-        returning: ["id", "numeroSolicitud"],
-      });
-    } catch (error) {
-      error.uphoneStage = "insertar_postgresql";
-      error.uphoneChunk = {
-        index: Math.floor(index / INSERT_CHUNK_SIZE) + 1,
-        rows: chunk.length,
-        requestId,
-      };
-      throw error;
-    }
-    inserted.push(...created.filter((item) => item?.id));
-  }
+  const { insertadas, actualizadas } = await UphoneSolicitud.sequelize.transaction(
+    async (transaction) => {
+      // API y carga manual comparten el bloqueo: un reporte antiguo no puede
+      // adelantarse a un contrato aprobado durante dos cargas simultaneas.
+      await UphoneSolicitud.sequelize.query(
+        "SELECT pg_advisory_xact_lock(hashtext('uphone_solicitudes_importar'))",
+        { transaction },
+      );
+      let insertadas = 0;
+      let actualizadas = 0;
+      const idsActualizados = new Set();
+      for (let index = 0; index < candidates.length; index += INSERT_CHUNK_SIZE) {
+        const chunk = candidates.slice(index, index + INSERT_CHUNK_SIZE);
+        try {
+          const aprobadas = chunk.filter(tieneContratoAprobado);
+          const existentes = aprobadas.length
+            ? await UphoneSolicitud.sequelize.query(
+              `
+                SELECT id, "numeroSolicitud", cedula, "cedulaNormalizada", "estadoContrato",
+                  ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date
+                    AS "fechaSolicitudDia"
+                FROM uphone_solicitudes
+                WHERE "numeroSolicitud" IN (:numeros)
+                  OR REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')
+                    IN (:cedulas)
+                ORDER BY id
+                FOR UPDATE
+              `,
+              {
+                replacements: {
+                  numeros: aprobadas.map((record) => record.numeroSolicitud),
+                  cedulas: aprobadas.map((record) => record.cedulaNormalizada).filter(Boolean)
+                    .concat([null]),
+                },
+                type: QueryTypes.SELECT,
+                transaction,
+              },
+            ) : [];
+          const porNumero = new Map(existentes.map((record) => [record.numeroSolicitud, record]));
+          const porCedulaDia = new Map();
+          const llavesNormalizadas = new Map();
+          for (const record of existentes) {
+            const clave = claveCedulaDia(record);
+            if (!clave) continue;
+            if (record.cedulaNormalizada) llavesNormalizadas.set(clave, record.id);
+            const anterior = porCedulaDia.get(clave);
+            if (!anterior || tieneContratoAprobado(record)
+              || (!tieneContratoAprobado(anterior) && record.cedulaNormalizada)) {
+              porCedulaDia.set(clave, record);
+            }
+          }
+          const updates = [];
+          const nuevas = [];
+          for (const record of chunk) {
+            const porDia = porCedulaDia.get(claveCedulaDia(record));
+            const existente = porNumero.get(record.numeroSolicitud) || porDia;
+            if (!tieneContratoAprobado(record) || !existente) {
+              nuevas.push(record);
+              continue;
+            }
+            if (tieneContratoAprobado(existente) || tieneContratoAprobado(porDia || {})) continue;
+            if (idsActualizados.has(existente.id)) continue;
+            idsActualizados.add(existente.id);
+            const idLlave = llavesNormalizadas.get(claveCedulaDia(record));
+            updates.push({
+              ...record,
+              id: existente.id,
+              // El historico puede contener dos filas del mismo cliente/dia.
+              // Su llave unica sigue perteneciendo a la otra fila.
+              cedulaNormalizada: idLlave && idLlave !== existente.id
+                ? null : record.cedulaNormalizada,
+            });
+          }
+          actualizadas += await actualizarContratosAprobados(updates, transaction);
+          if (nuevas.length) {
+            const created = await UphoneSolicitud.bulkCreate(nuevas, {
+              ignoreDuplicates: true,
+              returning: ["id", "numeroSolicitud"],
+              transaction,
+            });
+            insertadas += created.filter((item) => item?.id).length;
+          }
+        } catch (error) {
+          error.uphoneStage = "insertar_postgresql";
+          error.uphoneChunk = {
+            index: Math.floor(index / INSERT_CHUNK_SIZE) + 1,
+            rows: chunk.length,
+            requestId,
+          };
+          throw error;
+        }
+      }
+      return { insertadas, actualizadas };
+    },
+  );
 
   return {
     archivo: normalizarTexto(file.originalname, 255),
     hoja: parsed.sheetName,
     filasLeidas: parsed.records.length + parsed.invalidRows.length,
     solicitudesValidas: parsed.records.length,
-    insertadas: inserted.length,
-    omitidasDuplicadas: parsed.records.length - inserted.length,
+    insertadas,
+    actualizadas,
+    omitidasDuplicadas: parsed.records.length - insertadas - actualizadas,
     omitidasInvalidas: parsed.invalidRows.length,
     omitidasVacias: parsed.emptyRows,
     errores: parsed.invalidRows.slice(0, 20),
@@ -361,7 +527,9 @@ const normalizarListaFiltro = (value, maxLength = 100, maxItems = 100) => {
 };
 
 const crearWhereSolicitudes = (query = {}) => {
-  const where = {};
+  const where = {
+    id: { [Op.in]: literal(`(${SOLICITUDES_VIGENTES_CTE} SELECT id FROM solicitudes_vigentes)`) },
+  };
   const condicionesAnd = [];
   const q = normalizarTexto(query.q, 120);
   const estado = normalizarTexto(query.estado, 80);
@@ -517,57 +685,15 @@ const crearReemplazosDashboard = ({ desde, hasta, usuariosUphone, agencia }) => 
 const obtenerResumenDashboard = async ({ desde, hasta, usuariosUphone, agencia }) =>
   UphoneSolicitud.sequelize.query(
     `
-      WITH solicitudes_clasificadas AS (
-        SELECT
-          id,
-          distribuidor,
-          matriz,
-          usuario,
-          estado,
-          "estadoContrato",
-          "fechaContrato",
-          "fechaSolicitud",
-          CASE
-            WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
-              THEN 'CEDULA:' || REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
-            ELSE 'SOLICITUD:' || id::text
-          END AS cliente_clave,
-          CASE
-            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
-              THEN TRUE
-            ELSE FALSE
-          END AS contrato_aprobado,
-          CASE
-            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
-              AND NULLIF(BTRIM("fechaContrato"), '') IS NOT NULL
-              AND UPPER(BTRIM("fechaContrato")) NOT IN (
-                'NO APLICA', 'N/A', 'NA', 'S/N', 'SIN FECHA', 'PENDIENTE', '-'
-              )
-              THEN TRUE
-            ELSE FALSE
-          END AS concretada
-        FROM uphone_solicitudes
-      ), solicitudes_priorizadas AS (
+      ${SOLICITUDES_VIGENTES_CTE}, solicitudes_periodo AS (
         SELECT
           *,
-          COUNT(*) FILTER (WHERE contrato_aprobado) OVER (
-            PARTITION BY
-              cliente_clave,
-              ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date
-          ) AS contratos_aprobados_cliente,
-          ROW_NUMBER() OVER (
-            PARTITION BY
-              cliente_clave,
-              ("fechaSolicitud" AT TIME ZONE 'America/Guayaquil')::date
-            ORDER BY contrato_aprobado DESC, "fechaSolicitud" DESC NULLS LAST, id DESC
-          ) AS prioridad_cliente
-        FROM solicitudes_clasificadas
-      ), solicitudes_periodo AS (
-        SELECT
-          *,
-          contratos_aprobados_cliente > 0
-            AND NOT (contrato_aprobado AND prioridad_cliente = 1) AS invalidada
-        FROM solicitudes_priorizadas
+          contrato_aprobado
+            AND NULLIF(BTRIM("fechaContrato"), '') IS NOT NULL
+            AND UPPER(BTRIM("fechaContrato")) NOT IN (
+              'NO APLICA', 'N/A', 'NA', 'S/N', 'SIN FECHA', 'PENDIENTE', '-'
+            ) AS concretada
+        FROM solicitudes_vigentes
         WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
           AND (
             :filtrarUsuarios = FALSE
@@ -583,30 +709,12 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuariosUphone, agencia }
       SELECT
         distribuidor,
         matriz,
-        CASE
-          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
-          ELSE estado
-        END AS estado,
-        CASE
-          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
-          ELSE "estadoContrato"
-        END AS "estadoContrato",
+        estado,
+        "estadoContrato",
         COUNT(*)::integer AS cantidad,
-        COUNT(*) FILTER (
-          WHERE NOT invalidada AND concretada
-        )::integer AS concretadas
+        COUNT(*) FILTER (WHERE concretada)::integer AS concretadas
       FROM solicitudes_periodo
-      GROUP BY
-        distribuidor,
-        matriz,
-        CASE
-          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
-          ELSE estado
-        END,
-        CASE
-          WHEN invalidada THEN 'INVALIDADA_POR_CONTRATO_APROBADO'
-          ELSE "estadoContrato"
-        END
+      GROUP BY distribuidor, matriz, estado, "estadoContrato"
     `,
     {
       replacements: crearReemplazosDashboard({
@@ -622,7 +730,7 @@ const obtenerResumenDashboard = async ({ desde, hasta, usuariosUphone, agencia }
 const obtenerClientesPorVendedor = async ({ desde, hasta, usuariosUphone, agencia }) =>
   UphoneSolicitud.sequelize.query(
     `
-      WITH solicitudes_periodo AS (
+      ${SOLICITUDES_VIGENTES_CTE}, solicitudes_periodo AS (
         SELECT
           id,
           "fechaSolicitud",
@@ -641,7 +749,7 @@ const obtenerClientesPorVendedor = async ({ desde, hasta, usuariosUphone, agenci
             ELSE 'otros'
           END AS resultado,
           CASE
-            WHEN UPPER(COALESCE("estadoContrato", '')) LIKE '%APROBAD%'
+            WHEN contrato_aprobado
               AND NULLIF(BTRIM("fechaContrato"), '') IS NOT NULL
               AND UPPER(BTRIM("fechaContrato")) NOT IN (
                 'NO APLICA', 'N/A', 'NA', 'S/N', 'SIN FECHA', 'PENDIENTE', '-'
@@ -649,12 +757,8 @@ const obtenerClientesPorVendedor = async ({ desde, hasta, usuariosUphone, agenci
               THEN TRUE
             ELSE FALSE
           END AS concretada,
-          CASE
-            WHEN LENGTH(REGEXP_REPLACE(COALESCE(cedula, ''), '[^0-9]', '', 'g')) >= 6
-              THEN 'CEDULA:' || REGEXP_REPLACE(cedula, '[^0-9]', '', 'g')
-            ELSE 'SOLICITUD:' || id::text
-          END AS cliente_clave
-        FROM uphone_solicitudes
+          cliente_clave
+        FROM solicitudes_vigentes
         WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
           AND (
             :filtrarUsuarios = FALSE
@@ -779,7 +883,7 @@ const obtenerResumenTelefonos099999 = async ({
   agencia,
 }) => UphoneSolicitud.sequelize.query(
   `
-    WITH solicitudes_periodo AS (
+    ${SOLICITUDES_VIGENTES_CTE}, solicitudes_periodo AS (
       SELECT
         COALESCE(
           NULLIF(BTRIM(distribuidor), ''),
@@ -794,7 +898,7 @@ const obtenerResumenTelefonos099999 = async ({
           '',
           'g'
         ) LIKE '099999%' AS telefono_099999
-      FROM uphone_solicitudes
+      FROM solicitudes_vigentes
       WHERE "fechaSolicitud" BETWEEN :desde AND :hasta
         AND (
           :filtrarUsuarios = FALSE
@@ -957,7 +1061,7 @@ const listar = async (query = {}) => {
         ["id", "DESC"],
       ],
     }),
-    UphoneSolicitud.count(),
+    UphoneSolicitud.count({ where: crearWhereSolicitudes() }),
     obtenerResumenDashboard({
       desde: dashboardDesde,
       hasta: dashboardHasta,

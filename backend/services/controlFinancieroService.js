@@ -132,6 +132,36 @@ const obtenerFechaReporte = (registros = []) => {
   return [...frecuencias.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 };
 
+const construirFechasCarga = (registros = []) => {
+  const dias = new Map();
+  const sinFecha = { caja: 0, tv: 0, celular: 0 };
+  const tipos = { CAJA: "caja", VENTA_TV: "tv", VENTA_CELULAR: "celular" };
+
+  for (const item of registros) {
+    const registro = item?.get ? item.get({ plain: true }) : item;
+    const tipo = tipos[registro?.tipoRegistro];
+    if (!tipo) continue;
+    // La fecha escrita en el documento es la referencia de calendario;
+    // no se usa la fecha predominante de la carga ni la fecha de subida.
+    const fecha = extraerFechaIso(registro.fecha);
+    if (!fecha) {
+      sinFecha[tipo] += 1;
+      continue;
+    }
+    const dia = dias.get(fecha) || { fecha, caja: 0, tv: 0, celular: 0 };
+    dia[tipo] += 1;
+    dias.set(fecha, dia);
+  }
+
+  const detalle = [...dias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  return {
+    desde: detalle[0]?.fecha || null,
+    hasta: detalle.at(-1)?.fecha || null,
+    dias: detalle,
+    sinFecha,
+  };
+};
+
 const fechaUtcDesdeIso = (value) => {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
@@ -642,6 +672,7 @@ const guardarCargaControlFinanciero = async ({
 module.exports = {
   MAX_REGISTROS_POR_CARGA,
   calcularTotales,
+  construirFechasCarga,
   construirCoberturaReportes,
   extraerFechaIso,
   filtrarArchivosNuevos,

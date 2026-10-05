@@ -63,6 +63,15 @@ const crearExcel = async (headers = HEADERS, additionalRows = []) => {
 };
 
 describe("uphoneSolicitudesService.parsearExcel", () => {
+  beforeEach(() => {
+    UphoneSolicitud.sequelize = {
+      transaction: jest.fn(async (callback) => callback({ id: "importacion" })),
+      query: jest.fn().mockResolvedValue([]),
+    };
+    UphoneSolicitud.bulkCreate = jest.fn(async (rows) =>
+      rows.map((item, index) => ({ ...item, id: index + 1 })));
+  });
+
   test("lee el formato real y normaliza el numero de solicitud", async () => {
     const parsed = await parsearExcel(await crearExcel());
 
@@ -153,6 +162,106 @@ describe("uphoneSolicitudesService.parsearExcel", () => {
     });
 
     expect(result).toMatchObject({ insertadas: 0, omitidasDuplicadas: 1 });
+  });
+
+  test.each([4795152, 4795153])(
+    "prioriza CONTRATO_APROBADO sobre aprobacion automatica para la solicitud %s",
+    async (numeroSolicitud) => {
+      const contrato = [...BASE_ROW];
+      contrato[3] = numeroSolicitud;
+      contrato[13] = "CONTRATO_APROBADO";
+      const result = await importarExcel({
+        file: { buffer: await crearExcel(HEADERS, [contrato]), originalname: "uphone.xlsx" },
+      });
+
+      expect(UphoneSolicitud.bulkCreate).toHaveBeenCalledWith([
+        expect.objectContaining({
+          numeroSolicitud: String(numeroSolicitud),
+          estadoContrato: "CONTRATO_APROBADO",
+        }),
+      ], expect.objectContaining({ ignoreDuplicates: true, transaction: expect.any(Object) }));
+      expect(result).toMatchObject({ insertadas: 1, actualizadas: 0, omitidasDuplicadas: 1 });
+    },
+  );
+
+  test.each([4795152, 4795153])(
+    "actualiza una solicitud guardada cuando llega contrato aprobado con numero %s",
+    async (numeroSolicitud) => {
+      UphoneSolicitud.sequelize.query
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{
+          id: "15",
+          numeroSolicitud: "4795152",
+          cedula: "0123456789",
+          cedulaNormalizada: "0123456789",
+          fechaSolicitudDia: "2026-09-28",
+          estadoContrato: "SOLICITUD_APROBADA_AUTOMATICO",
+        }])
+        .mockResolvedValueOnce([[{ id: "15" }], {}]);
+      const contrato = [...BASE_ROW];
+      contrato[3] = numeroSolicitud;
+      contrato[5] = "01-234-56789";
+      contrato[13] = " contrato aprobado ";
+      const result = await importarExcel({
+        file: { buffer: await crearExcel(HEADERS, [contrato]), originalname: "uphone.xlsx" },
+        usuarioId: 8,
+      });
+
+      const [sql, options] = UphoneSolicitud.sequelize.query.mock.calls[2];
+      expect(sql).toContain("UPDATE uphone_solicitudes");
+      expect(JSON.parse(options.replacements.records)).toEqual([
+        expect.objectContaining({
+          id: "15",
+          numeroSolicitud: String(numeroSolicitud),
+          estadoContrato: "contrato aprobado",
+          cedulaNormalizada: "0123456789",
+          importadoPorId: 8,
+        }),
+      ]);
+      expect(UphoneSolicitud.bulkCreate).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ insertadas: 0, actualizadas: 1, omitidasDuplicadas: 1 });
+    },
+  );
+
+  test("no reemplaza un contrato ya aprobado al cargar nuevamente el archivo", async () => {
+    UphoneSolicitud.sequelize.query
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        id: "15",
+        numeroSolicitud: "4795152",
+        cedula: "0123456789",
+        cedulaNormalizada: "0123456789",
+        fechaSolicitudDia: "2026-09-28",
+        estadoContrato: "CONTRATO_APROBADO",
+      }]);
+    const contrato = [...BASE_ROW];
+    contrato[13] = "CONTRATO_APROBADO";
+    const result = await importarExcel({
+      file: { buffer: await crearExcel(HEADERS, [contrato]), originalname: "uphone.xlsx" },
+    });
+
+    expect(UphoneSolicitud.bulkCreate).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ insertadas: 0, actualizadas: 0, omitidasDuplicadas: 2 });
+  });
+
+  test("revierte toda la importacion si falla una actualizacion", async () => {
+    const error = new Error("error de PostgreSQL");
+    UphoneSolicitud.sequelize.query
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        id: "15", numeroSolicitud: "4795152", estadoContrato: "SOLICITUD_APROBADA_AUTOMATICO",
+      }])
+      .mockRejectedValueOnce(error);
+    const contrato = [...BASE_ROW];
+    contrato[13] = "CONTRATO_APROBADO";
+    await expect(importarExcel({
+      file: { buffer: await crearExcel(HEADERS, [contrato]), originalname: "uphone.xlsx" },
+      requestId: "prueba-importacion",
+    })).rejects.toMatchObject({
+      uphoneStage: "insertar_postgresql",
+      uphoneChunk: { index: 1, rows: 1, requestId: "prueba-importacion" },
+    });
+    expect(UphoneSolicitud.bulkCreate).not.toHaveBeenCalled();
   });
 
   test("acepta el encabezado SOLICITUD escrito correctamente", async () => {
@@ -432,9 +541,10 @@ describe("uphoneSolicitudesService.listar", () => {
     });
 
     const [dashboardSql, dashboardOptions] = UphoneSolicitud.sequelize.query.mock.calls[0];
-    expect(dashboardSql).toContain("INVALIDADA_POR_CONTRATO_APROBADO");
+    expect(dashboardSql).toContain("FROM solicitudes_vigentes");
+    expect(dashboardSql).toContain("= 'CONTRATO_APROBADO'");
+    expect(dashboardSql).toMatch(/PARTITION BY cliente_clave\s*\)/);
     expect(dashboardSql).toContain("AS concretadas");
-    expect(dashboardSql).toContain("AT TIME ZONE 'America/Guayaquil'");
     const [vendedoresSql, vendedoresOptions] = UphoneSolicitud.sequelize.query.mock.calls[1];
     expect(vendedoresSql).toContain('LOWER(BTRIM(u."usuarioUphone"))');
     expect(vendedoresSql).toMatch(

@@ -132,6 +132,31 @@ const formatFechaCorta = (value) => {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : "-";
 };
 
+const formatFechasCarga = (carga) => {
+  const fechas = carga.fechasRegistros;
+  if (!fechas) return formatFechaReporte(carga.fechaReporte);
+  if (!fechas.desde) return "Fecha del PDF no disponible";
+  return fechas.desde === fechas.hasta
+    ? formatFechaReporte(fechas.desde)
+    : `${formatFechaCorta(fechas.desde)} al ${formatFechaCorta(fechas.hasta)}`;
+};
+
+const FechasTipoCarga = ({ fechas, tipo }) => {
+  if (!fechas) return null;
+  const dias = (fechas.dias || []).filter((dia) => Number(dia[tipo]) > 0);
+  const sinFecha = Number(fechas.sinFecha?.[tipo] || 0);
+  if (!dias.length && !sinFecha) return null;
+
+  return (
+    <p className="mt-1 break-words text-xs leading-relaxed text-slate-500">
+      {[
+        ...dias.map((dia) => `${formatFechaCorta(dia.fecha)} (${dia[tipo]})`),
+        ...(sinFecha ? [`${sinFecha} sin fecha válida`] : []),
+      ].join(" · ")}
+    </p>
+  );
+};
+
 const redondearMoneda = (value) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
@@ -2857,7 +2882,7 @@ export default function ControlFinanciero() {
                       <EstadoBadge estado={carga.estado} />
                     </div>
                     <p className="mt-1 text-sm font-medium text-green-700">
-                      {formatFechaReporte(carga.fechaReporte)}
+                      {formatFechasCarga(carga)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       Cargado: {formatFechaHora(carga.createdAt)}
@@ -2871,29 +2896,42 @@ export default function ControlFinanciero() {
                         carga.registrosVentasCelular}{" "}
                       registros
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                          Number(carga.registrosVentasTv || 0) > 0
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        TV: {Number(carga.registrosVentasTv || 0) > 0
-                          ? `cargado (${carga.registrosVentasTv})`
-                          : "faltante"}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                          Number(carga.registrosVentasCelular || 0) > 0
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        Celular: {Number(carga.registrosVentasCelular || 0) > 0
-                          ? `cargado (${carga.registrosVentasCelular})`
-                          : "faltante"}
-                      </span>
+                    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                      {(carga.fechasRegistros?.dias?.some((dia) => dia.caja > 0)
+                        || carga.fechasRegistros?.sinFecha?.caja > 0) && (
+                        <div>
+                          <span className="text-xs font-semibold text-slate-600">Caja</span>
+                          <FechasTipoCarga fechas={carga.fechasRegistros} tipo="caja" />
+                        </div>
+                      )}
+                      <div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                            Number(carga.registrosVentasTv || 0) > 0
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          TV: {Number(carga.registrosVentasTv || 0) > 0
+                            ? `cargado (${carga.registrosVentasTv})`
+                            : "faltante"}
+                        </span>
+                        <FechasTipoCarga fechas={carga.fechasRegistros} tipo="tv" />
+                      </div>
+                      <div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                            Number(carga.registrosVentasCelular || 0) > 0
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          Celular: {Number(carga.registrosVentasCelular || 0) > 0
+                            ? `cargado (${carga.registrosVentasCelular})`
+                            : "faltante"}
+                        </span>
+                        <FechasTipoCarga fechas={carga.fechasRegistros} tipo="celular" />
+                      </div>
                     </div>
                   </button>
                 );
