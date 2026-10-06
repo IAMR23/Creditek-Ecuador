@@ -13,6 +13,8 @@ const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_CONCURRENCY = 4;
 const MAX_PAGES = 100;
 const MAX_BATCH_SIZE = 50;
+const CATALOG_CACHE_KEY = "catalogo";
+const productStockCacheKey = (productId) => `producto:${productId}`;
 
 class ContificoStockError extends Error {
   constructor(code, message, httpStatus = 502) {
@@ -260,11 +262,99 @@ const createContificoStockService = ({
     DEFAULT_CONCURRENCY,
     8,
   ),
+  persistentCacheStore = null,
 } = {}) => {
   let catalogCache = null;
   let catalogInFlight = null;
   const stockCache = new Map();
   const stockInFlight = new Map();
+  const backgroundStockQueue = [];
+  let activeBackgroundStockRequests = 0;
+
+  const drainBackgroundStockQueue = () => {
+    while (
+      activeBackgroundStockRequests < concurrency &&
+      backgroundStockQueue.length > 0
+    ) {
+      const { task, resolve, reject } = backgroundStockQueue.shift();
+      activeBackgroundStockRequests += 1;
+      Promise.resolve()
+        .then(task)
+        .then(resolve, reject)
+        .finally(() => {
+          activeBackgroundStockRequests -= 1;
+          drainBackgroundStockQueue();
+        });
+    }
+  };
+
+  const scheduleBackgroundStockRefresh = (task) =>
+    new Promise((resolve, reject) => {
+      backgroundStockQueue.push({ task, resolve, reject });
+      drainBackgroundStockQueue();
+    });
+
+  const readPersistentEntry = async (cacheKey, expectedType, isValid) => {
+    if (!persistentCacheStore?.read) return null;
+    try {
+      const stored = await persistentCacheStore.read(cacheKey);
+      if (
+        !stored ||
+        stored.type !== expectedType ||
+        !Number.isFinite(stored.fetchedAtMs) ||
+        !isValid(stored.value)
+      ) {
+        return null;
+      }
+      return {
+        ...stored.value,
+        fetchedAtMs: stored.fetchedAtMs,
+        consultedAt: stored.consultedAt,
+        origin: "persistencia",
+      };
+    } catch (error) {
+      console.error("No se pudo leer la caché persistente de Contífico", {
+        cacheKey,
+        code: error.original?.code || error.code || "CONTIFICO_CACHE_READ_ERROR",
+      });
+      return null;
+    }
+  };
+
+  const writePersistentEntry = async (cacheKey, type, entry, value) => {
+    if (!persistentCacheStore?.write) return;
+    try {
+      await persistentCacheStore.write({
+        cacheKey,
+        type,
+        value,
+        fetchedAtMs: entry.fetchedAtMs,
+      });
+    } catch (error) {
+      console.error("No se pudo guardar la caché persistente de Contífico", {
+        cacheKey,
+        code: error.original?.code || error.code || "CONTIFICO_CACHE_WRITE_ERROR",
+      });
+    }
+  };
+
+  const loadPersistentCatalog = () =>
+    readPersistentEntry(
+      CATALOG_CACHE_KEY,
+      "CATALOGO",
+      (value) =>
+        Array.isArray(value?.products) &&
+        Array.isArray(value?.warehouses) &&
+        value?.pagination &&
+        value?.counts,
+    );
+
+  const loadPersistentProductStock = (productId) =>
+    readPersistentEntry(
+      productStockCacheKey(productId),
+      "STOCK_PRODUCTO",
+      (value) => Array.isArray(value?.stocks) && Boolean(value?.pagination),
+    );
 
   const ensureCredentials = () => {
     if (!normalizeString(getApiKey())) {
@@ -373,18 +463,20 @@ const createContificoStockService = ({
         ).length,
         bodegas: warehouses.length,
       },
+      origin: "contifico",
     };
     catalogCache = entry;
+    await writePersistentEntry(CATALOG_CACHE_KEY, "CATALOGO", entry, {
+      products: entry.products,
+      warehouses: entry.warehouses,
+      pagination: entry.pagination,
+      counts: entry.counts,
+    });
     return buildCatalogResponse(entry, { source: "contifico" });
   };
 
-  const getCatalog = async ({ forceRefresh = false } = {}) => {
-    if (!forceRefresh && isFresh(catalogCache, catalogTtlMs, now)) {
-      return buildCatalogResponse(catalogCache, { source: "cache" });
-    }
-
+  const startCatalogRefresh = () => {
     if (catalogInFlight) return catalogInFlight;
-
     catalogInFlight = (async () => {
       try {
         return await refreshCatalog();
@@ -392,7 +484,7 @@ const createContificoStockService = ({
         const normalizedError = integrationErrorFrom(error);
         if (catalogCache) {
           return buildCatalogResponse(catalogCache, {
-            source: "cache",
+            source: catalogCache.origin === "persistencia" ? "persistencia" : "cache",
             stale: true,
             warning: `No se pudo actualizar el catalogo. ${normalizedError.message}`,
           });
@@ -402,8 +494,27 @@ const createContificoStockService = ({
         catalogInFlight = null;
       }
     })();
-
     return catalogInFlight;
+  };
+
+  const getCatalog = async ({ forceRefresh = false } = {}) => {
+    if (!forceRefresh && !catalogCache) catalogCache = await loadPersistentCatalog();
+    if (!forceRefresh && isFresh(catalogCache, catalogTtlMs, now)) {
+      return buildCatalogResponse(catalogCache, {
+        source: catalogCache.origin === "persistencia" ? "persistencia" : "cache",
+      });
+    }
+
+    if (!forceRefresh && catalogCache) {
+      void startCatalogRefresh();
+      return buildCatalogResponse(catalogCache, {
+        source: catalogCache.origin === "persistencia" ? "persistencia" : "cache",
+        stale: true,
+        warning: "Se muestran los datos guardados mientras Contífico se actualiza en segundo plano.",
+      });
+    }
+
+    return startCatalogRefresh();
   };
 
   const buildProductStockResponse = ({
@@ -533,19 +644,38 @@ const createContificoStockService = ({
       );
     }
 
-    const cached = stockCache.get(normalizedId);
+    let cached = stockCache.get(normalizedId);
+    if (!forceRefresh && !cached) {
+      cached = await loadPersistentProductStock(normalizedId);
+      if (cached) stockCache.set(normalizedId, cached);
+    }
     if (!forceRefresh && isFresh(cached, stockTtlMs, now)) {
       return buildProductStockResponse({
         entry: cached,
         product,
         catalog,
-        source: "cache",
+        source: cached.origin === "persistencia" ? "persistencia" : "cache",
       });
     }
 
-    if (stockInFlight.has(normalizedId)) return stockInFlight.get(normalizedId);
+    const buildStaleResponse = () =>
+      buildProductStockResponse({
+        entry: cached,
+        product,
+        catalog,
+        source: cached.origin === "persistencia" ? "persistencia" : "cache",
+        stale: true,
+        warning:
+          "Se muestra el stock guardado mientras Contífico se actualiza en segundo plano.",
+      });
 
-    const request = (async () => {
+    if (stockInFlight.has(normalizedId)) {
+      return !forceRefresh && cached
+        ? buildStaleResponse()
+        : stockInFlight.get(normalizedId);
+    }
+
+    const refreshStock = async () => {
       try {
         const collection = await readCollection(
           `/producto/${encodeURIComponent(normalizedId)}/stock/`,
@@ -559,8 +689,15 @@ const createContificoStockService = ({
             detected: collection.paginationDetected,
             pages: collection.pages,
           },
+          origin: "contifico",
         };
         stockCache.set(normalizedId, entry);
+        await writePersistentEntry(
+          productStockCacheKey(normalizedId),
+          "STOCK_PRODUCTO",
+          entry,
+          { stocks: entry.stocks, pagination: entry.pagination },
+        );
         return buildProductStockResponse({
           entry,
           product,
@@ -574,7 +711,7 @@ const createContificoStockService = ({
             entry: cached,
             product,
             catalog,
-            source: "cache",
+            source: cached.origin === "persistencia" ? "persistencia" : "cache",
             stale: true,
             warning: `No se pudo actualizar el desglose. ${normalizedError.message}`,
           });
@@ -583,9 +720,23 @@ const createContificoStockService = ({
       } finally {
         stockInFlight.delete(normalizedId);
       }
-    })();
+    };
+
+    const request =
+      !forceRefresh && cached
+        ? scheduleBackgroundStockRefresh(refreshStock)
+        : refreshStock();
 
     stockInFlight.set(normalizedId, request);
+    if (!forceRefresh && cached) {
+      void request.catch((error) => {
+        console.error("No se pudo actualizar el stock de Contífico en segundo plano", {
+          productId: normalizedId,
+          code: error.code || "CONTIFICO_BACKGROUND_REFRESH_ERROR",
+        });
+      });
+      return buildStaleResponse();
+    }
     return request;
   };
 
@@ -813,7 +964,9 @@ const createContificoStockService = ({
   };
 };
 
-const contificoStockService = createContificoStockService();
+const contificoStockService = createContificoStockService({
+  persistentCacheStore: require("./contificoStockCacheStore"),
+});
 
 module.exports = {
   MAX_BATCH_SIZE,

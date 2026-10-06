@@ -1,3 +1,18 @@
+#solicitud-credito.credit-application-section {
+  background-color: #f7f7f3;
+  background-image: radial-gradient(circle, rgb(15 23 42 / 0.12) 0.75px, transparent 0.75px);
+  background-size: 22px 22px;
+}
+
+#solicitud-credito .credit-form-hero {
+  background: #fff;
+  border-top: 7px solid #f4d000;
+}
+
+#solicitud-credito .credit-form-hero__logo {
+  filter: drop-shadow(0 7px 12px rgb(15 23 42 / 0.12));
+}
+
 #solicitud-credito .form-control {
   width: 100%;
   border: 1px solid rgb(209 213 219);

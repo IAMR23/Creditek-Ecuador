@@ -510,9 +510,18 @@ function StockContifico() {
           </div>
 
           <div className="mt-5 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Ultima consulta exitosa del catalogo: {formatDateTime(catalog.meta?.consultedAt)}
-            </span>
+            <div className="flex flex-col gap-1">
+              <span>
+                Ultima consulta exitosa del catalogo: {formatDateTime(catalog.meta?.consultedAt)}
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                Fuente: {catalog.meta?.source === "contifico"
+                  ? "Contífico"
+                  : catalog.meta?.source === "persistencia"
+                    ? "base persistente"
+                    : "memoria del servidor"}
+              </span>
+            </div>
             <span className="font-medium text-slate-500">
               {catalog.meta?.pagination?.productos?.detected
                 ? `${catalog.meta.pagination.productos.pages} paginas recibidas`

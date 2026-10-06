@@ -168,59 +168,39 @@ async function createExecution(input, userId, dependencies = {}) {
   const scheduledAt = normalizeScheduledAt(input?.scheduledAt, currentTime);
   const messages = normalizeMessages(input);
   normalizeInstanceIndexes(input?.instanceIndexes);
-  const active = await executionModel.findOne({ where: { estado: { [Op.in]: ACTIVE_STATES } } });
-  if (active) {
-    throw serviceError(
-      "Ya existe una difusion activa o programada. Espere a que termine o cancelela.",
-      "GHL_BROADCAST_ACTIVE_EXISTS",
-      409,
-    );
-  }
   const resolvedInput = await recipientResolver(input, dependencies);
   const preview = await previewer(resolvedInput, dependencies);
 
   const transactionRunner = dependencies.transaction
     || ((callback) => sequelize.transaction(callback));
-  let execution;
-  try {
-    execution = await transactionRunner(async (transaction) => {
-      const created = await executionModel.create({
+  const execution = await transactionRunner(async (transaction) => {
+    const created = await executionModel.create({
+      estado: "pending",
+      mensaje: messages[0],
+      mensajes: messages,
+      instanceIndexes: preview.distribution.map((group) => group.instanceIndex),
+      ...rate,
+      tagName: "regestion",
+      total: preview.totalEligible,
+      excluded: preview.excluded,
+      creadoPorId: userId,
+      scheduledAt,
+      nextBatchAt: scheduledAt,
+    }, { transaction });
+    const totalInstances = preview.distribution.length;
+    const details = preview.distribution.flatMap((group, instancePosition) =>
+      group.contacts.map((contact, contactPosition) => ({
+        ejecucionId: created.id,
+        contactId: contact.id,
+        contactName: contact.name,
+        instanceIndex: group.instanceIndex,
+        mensaje: messages[(contactPosition * totalInstances + instancePosition) % messages.length],
         estado: "pending",
-        mensaje: messages[0],
-        mensajes: messages,
-        instanceIndexes: preview.distribution.map((group) => group.instanceIndex),
-        ...rate,
-        tagName: "regestion",
-        total: preview.totalEligible,
-        excluded: preview.excluded,
-        creadoPorId: userId,
-        scheduledAt,
-        nextBatchAt: scheduledAt,
-      }, { transaction });
-      const totalInstances = preview.distribution.length;
-      const details = preview.distribution.flatMap((group, instancePosition) =>
-        group.contacts.map((contact, contactPosition) => ({
-          ejecucionId: created.id,
-          contactId: contact.id,
-          contactName: contact.name,
-          instanceIndex: group.instanceIndex,
-          mensaje: messages[(contactPosition * totalInstances + instancePosition) % messages.length],
-          estado: "pending",
-          tagStatus: "pending",
-        })));
-      await detailModel.bulkCreate(details, { transaction });
-      return created;
-    });
-  } catch (error) {
-    if (error.name === "SequelizeUniqueConstraintError") {
-      throw serviceError(
-        "Ya existe una difusion activa o programada. Espere a que termine o cancelela.",
-        "GHL_BROADCAST_ACTIVE_EXISTS",
-        409,
-      );
-    }
-    throw error;
-  }
+        tagStatus: "pending",
+      })));
+    await detailModel.bulkCreate(details, { transaction });
+    return created;
+  });
 
   return serializeExecution(execution);
 }
@@ -368,6 +348,14 @@ async function processBatch(executionId, now = new Date(), dependencies = {}) {
 
 async function processDueExecutions(now = new Date(), dependencies = {}) {
   const executionModel = dependencies.Ejecucion || Ejecucion;
+  const batchProcessor = dependencies.processBatch || processBatch;
+  const reportError = dependencies.onExecutionError || ((error, row) => {
+    console.error("[GHL_BROADCAST] EXECUTION_ERROR", {
+      executionId: String(row.id),
+      code: error.code || "GHL_BROADCAST_EXECUTION_ERROR",
+      message: error.message,
+    });
+  });
   const rows = await executionModel.findAll({
     where: {
       estado: { [Op.in]: ACTIVE_STATES },
@@ -377,7 +365,13 @@ async function processDueExecutions(now = new Date(), dependencies = {}) {
     limit: 10,
   });
   const results = [];
-  for (const row of rows) results.push(await processBatch(row.id, now, dependencies));
+  for (const row of rows) {
+    try {
+      results.push(await batchProcessor(row.id, now, dependencies));
+    } catch (error) {
+      reportError(error, row);
+    }
+  }
   return results.filter(Boolean);
 }
 
@@ -416,12 +410,17 @@ async function getExecution(id, dependencies = {}) {
 }
 
 async function getActiveExecution(dependencies = {}) {
+  const rows = await getActiveExecutions(dependencies);
+  return rows[0] || null;
+}
+
+async function getActiveExecutions(dependencies = {}) {
   const executionModel = dependencies.Ejecucion || Ejecucion;
-  const row = await executionModel.findOne({
+  const rows = await executionModel.findAll({
     where: { estado: { [Op.in]: ACTIVE_STATES } },
-    order: [["createdAt", "DESC"]],
+    order: [["nextBatchAt", "ASC"], ["createdAt", "ASC"]],
   });
-  return row ? serializeExecution(row) : null;
+  return rows.map((row) => serializeExecution(row));
 }
 
 async function listExecutions(query = {}, dependencies = {}) {
@@ -474,6 +473,7 @@ module.exports = {
   claimBatch,
   createExecution,
   getActiveExecution,
+  getActiveExecutions,
   getExecution,
   listExecutions,
   normalizeRate,

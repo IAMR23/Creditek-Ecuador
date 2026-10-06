@@ -35,6 +35,7 @@ import {
   Clock3,
   CalendarClock,
   Send,
+  Fuel,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -213,8 +214,13 @@ export default function Sidebar({ auth }) {
 
       logistica: {
         title: "Logística",
-        permission: "Logistica",
+        permission: ["Logistica", "Administracion"],
         items: [
+          {
+            label: "Gasto combustible",
+            icon: <Fuel size={20} />,
+            path: "/logistica/gasto-combustible",
+          },
           {
             label: "Costo por Entrega",
             icon: <PackageCheck size={20} />,

@@ -55,9 +55,8 @@ CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_programada_idx
 CREATE INDEX IF NOT EXISTS ghl_difusion_detalle_estado_idx
   ON ghl_difusion_ejecucion_detalles ("ejecucionId", estado);
 
--- Una sola difusion activa evita que dos campanas compitan por las instancias.
-CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_unique
-  ON ghl_difusion_ejecuciones ((1))
+CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_fecha_idx
+  ON ghl_difusion_ejecuciones ("nextBatchAt", id)
   WHERE estado IN ('pending', 'running');
 
 -- Reversion manual omitida deliberadamente para conservar el historial.

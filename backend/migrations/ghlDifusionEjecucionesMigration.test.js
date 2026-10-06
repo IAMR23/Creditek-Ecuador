@@ -10,6 +10,10 @@ describe("migracion de ejecuciones de difusion GHL", () => {
     path.join(__dirname, "202610020001-add-ghl-difusion-scheduled-at.sql"),
     "utf8",
   );
+  const multipleExecutionsSql = fs.readFileSync(
+    path.join(__dirname, "202610060005-allow-multiple-ghl-broadcasts.sql"),
+    "utf8",
+  );
 
   test("crea ejecuciones y detalles con cadencia por defecto", () => {
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ghl_difusion_ejecuciones");
@@ -29,9 +33,21 @@ describe("migracion de ejecuciones de difusion GHL", () => {
     expect(schedulingSql).not.toMatch(/DELETE\s+FROM/i);
   });
 
-  test("impide dos difusiones activas y no contiene operaciones destructivas", () => {
-    expect(sql).toContain("ghl_difusion_ejecucion_activa_unique");
+  test("la instalacion inicial permite varias difusiones activas", () => {
+    expect(sql).toContain("ghl_difusion_ejecucion_activa_fecha_idx");
+    expect(sql).not.toContain("CREATE UNIQUE INDEX");
     expect(sql).not.toMatch(/DROP\s+(TABLE|COLUMN)/i);
     expect(sql).not.toMatch(/DELETE\s+FROM/i);
+  });
+
+  test("habilita varias difusiones sin borrar campañas ni detalles", () => {
+    expect(multipleExecutionsSql).toContain(
+      "DROP INDEX IF EXISTS ghl_difusion_ejecucion_activa_unique",
+    );
+    expect(multipleExecutionsSql).toContain(
+      "ghl_difusion_ejecucion_activa_fecha_idx",
+    );
+    expect(multipleExecutionsSql).not.toMatch(/DROP\s+(TABLE|COLUMN)/i);
+    expect(multipleExecutionsSql).not.toMatch(/DELETE\s+FROM/i);
   });
 });

@@ -155,7 +155,7 @@ export default function Difusiones() {
   const [editingSavedMessageId, setEditingSavedMessageId] = useState(null);
   const [savedMessageEditorOpen, setSavedMessageEditorOpen] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [execution, setExecution] = useState(null);
+  const [activeExecutions, setActiveExecutions] = useState([]);
   const [batchSize, setBatchSize] = useState(3);
   const [intervalMinutes, setIntervalMinutes] = useState(5);
   const [sendMode, setSendMode] = useState("immediate");
@@ -191,7 +191,6 @@ export default function Difusiones() {
     () => smartLists.find((list) => String(list.id) === String(activeSmartListId)) || null,
     [activeSmartListId, smartLists],
   );
-  const executionActive = ["pending", "running"].includes(execution?.estado);
   const messageContents = messages.map((item) => item.content);
   const allMessagesValid = messageContents.length > 0
     && messageContents.every((content) => content.trim());
@@ -303,7 +302,9 @@ export default function Difusiones() {
     if (!isAdmin) return;
     try {
       const response = await api.get("/api/ghl/difusiones/ejecuciones/activa");
-      if (response.data.execution) setExecution(response.data.execution);
+      const executions = response.data.executions
+        || (response.data.execution ? [response.data.execution] : []);
+      setActiveExecutions(executions);
     } catch (requestError) {
       setError(errorMessage(requestError));
     }
@@ -363,29 +364,14 @@ export default function Difusiones() {
   }, [loadExecutionHistory]);
 
   useEffect(() => {
-    if (!execution?.id || !["pending", "running"].includes(execution.estado)) return undefined;
-    let active = true;
-    const refresh = async () => {
-      try {
-        const response = await api.get(`/api/ghl/difusiones/ejecuciones/${execution.id}`);
-        if (active) {
-          const nextExecution = response.data.execution || null;
-          setExecution(nextExecution);
-          if (nextExecution && !["pending", "running"].includes(nextExecution.estado)) {
-            loadExecutionHistory();
-          }
-        }
-      } catch (requestError) {
-        if (active) setError(errorMessage(requestError));
-      }
+    if (!activeExecutions.length) return undefined;
+    const refresh = () => {
+      loadActiveExecution();
+      loadExecutionHistory();
     };
-    refresh();
     const timer = window.setInterval(refresh, 5000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [execution?.estado, execution?.id, loadExecutionHistory]);
+    return () => window.clearInterval(timer);
+  }, [activeExecutions.length, loadActiveExecution, loadExecutionHistory]);
 
   const toggleContact = (contact) => {
     if (!contact.canSend) return;
@@ -542,7 +528,7 @@ export default function Difusiones() {
   };
 
   const sendBroadcast = async () => {
-    if (!preview || executionActive) return;
+    if (!preview) return;
     if (!scheduleIsValid) {
       setError("Seleccione una fecha y hora actual o futura para programar la difusion.");
       return;
@@ -565,9 +551,15 @@ export default function Difusiones() {
         ...payload(),
         confirmation: "ENVIAR",
       });
-      setExecution(response.data.execution || null);
+      if (response.data.execution) {
+        setActiveExecutions((current) => [
+          response.data.execution,
+          ...current.filter((item) => item.id !== response.data.execution.id),
+        ]);
+      }
       setPreview(null);
       setHistoryPage(1);
+      await loadActiveExecution();
       await loadExecutionHistory();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -576,12 +568,12 @@ export default function Difusiones() {
     }
   };
 
-  const cancelBroadcast = async () => {
-    if (!executionActive || !execution?.id) return;
+  const cancelBroadcast = async (executionId) => {
+    if (!executionId) return;
     if (!window.confirm("Se cancelaran los contactos que aun no han sido procesados. ¿Desea continuar?")) return;
     try {
-      const response = await api.post(`/api/ghl/difusiones/ejecuciones/${execution.id}/cancelar`);
-      setExecution(response.data.execution || null);
+      await api.post(`/api/ghl/difusiones/ejecuciones/${executionId}/cancelar`);
+      await loadActiveExecution();
       await loadExecutionHistory();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -1427,33 +1419,47 @@ export default function Difusiones() {
             </div>
           )}
           <div className="mt-4 flex justify-end">
-            <button type="button" onClick={sendBroadcast} disabled={sending || executionActive} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50">
-              {sending ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={18} />} {sending ? "Guardando..." : executionActive ? "Ya existe una difusion activa o programada" : sendMode === "scheduled" ? `Programar ${preview.totalEligible} envios` : `Enviar ahora a ${preview.totalEligible}`}
+            <button type="button" onClick={sendBroadcast} disabled={sending} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm disabled:opacity-50">
+              {sending ? <LoaderCircle size={18} className="animate-spin" /> : <Send size={18} />} {sending ? "Guardando..." : sendMode === "scheduled" ? `Programar ${preview.totalEligible} envios` : `Enviar ahora a ${preview.totalEligible}`}
             </button>
           </div>
         </section>
       )}
 
-      {execution && (
-        <section className={`rounded-xl border p-4 shadow-sm ${execution.estado === "partial" ? "border-amber-200 bg-amber-50" : execution.estado === "cancelled" ? "border-gray-300 bg-gray-50" : "border-green-200 bg-green-50"}`}>
+      {activeExecutions.length > 0 && (
+        <section className="rounded-xl border border-green-200 bg-green-50 p-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2"><CheckCircle2 size={20} className={execution.estado === "partial" ? "text-amber-700" : "text-green-700"} /><h2 className="font-bold text-gray-900">Difusion #{execution.id} · {executionStatusLabel(execution)}</h2></div>
-              <p className="mt-1 text-sm text-gray-700">{execution.processed || 0} de {execution.total || 0} procesados · {execution.sent || 0} enviados · {execution.failed || 0} fallidos.</p>
-              <p className="mt-1 text-xs text-gray-600">Etiqueta regestion: {execution.tagged || 0} aplicadas · {execution.tagFailed || 0} fallidas.</p>
-              {execution.scheduledAt && <p className="mt-1 text-xs text-gray-600">Inicio solicitado: {formatDateTime(execution.scheduledAt)}</p>}
-              {executionActive && execution.nextBatchAt && <p className="mt-1 text-xs font-semibold text-green-800">{execution.estado === "pending" ? "Inicio o siguiente lote" : "Siguiente lote"}: {formatDateTime(execution.nextBatchAt)}</p>}
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={20} className="text-green-700" />
+                <h2 className="font-bold text-gray-900">Difusiones activas y programadas</h2>
+              </div>
+              <p className="mt-1 text-sm text-gray-700">
+                {activeExecutions.length} {activeExecutions.length === 1 ? "difusión pendiente" : "difusiones pendientes"}. Puedes programar otra o ejecutar una nueva ahora.
+              </p>
             </div>
-            {executionActive && <button type="button" onClick={cancelBroadcast} className="rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-600">Cancelar pendientes</button>}
+            <button type="button" onClick={loadActiveExecution} className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-white px-3 py-2 text-xs font-bold text-green-700">
+              <RefreshCcw size={14} /> Actualizar
+            </button>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
-            <div className="h-full bg-green-600 transition-all" style={{ width: `${execution.total ? Math.min(100, ((execution.processed || 0) / execution.total) * 100) : 0}%` }} />
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {activeExecutions.map((item) => (
+              <article key={item.id} className="rounded-lg border border-green-100 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-gray-900">Difusión #{item.id} · {executionStatusLabel(item)}</h3>
+                    <p className="mt-1 text-sm text-gray-700">{item.processed || 0} de {item.total || 0} procesados · {item.sent || 0} enviados · {item.failed || 0} fallidos.</p>
+                    <p className="mt-1 text-xs text-gray-600">Inicio solicitado: {formatDateTime(item.scheduledAt)}</p>
+                    {item.nextBatchAt && <p className="mt-1 text-xs font-semibold text-green-800">{item.estado === "pending" ? "Inicio o siguiente lote" : "Siguiente lote"}: {formatDateTime(item.nextBatchAt)}</p>}
+                  </div>
+                  <button type="button" onClick={() => cancelBroadcast(item.id)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600">Cancelar pendientes</button>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-green-100">
+                  <div className="h-full bg-green-600 transition-all" style={{ width: `${item.total ? Math.min(100, ((item.processed || 0) / item.total) * 100) : 0}%` }} />
+                </div>
+              </article>
+            ))}
           </div>
-          {(execution.details || []).some((item) => item.estado === "failed" || item.tagStatus === "failed") && (
-            <div className="mt-3 overflow-x-auto rounded-lg border bg-white">
-              <table className="min-w-full text-sm"><thead className="bg-gray-50 text-left text-xs uppercase text-gray-500"><tr><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Canal</th><th className="px-3 py-2">Novedad</th></tr></thead><tbody className="divide-y">{execution.details.filter((item) => item.estado === "failed" || item.tagStatus === "failed").map((item) => <tr key={item.id}><td className="px-3 py-2">{item.contactName}</td><td className="px-3 py-2">{instanceLabel(item.instanceIndex)}</td><td className="px-3 py-2 text-red-700">{[item.sendError, item.tagError].filter(Boolean).join(" · ")}</td></tr>)}</tbody></table>
-            </div>
-          )}
         </section>
       )}
 

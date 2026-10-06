@@ -22,6 +22,7 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
       .toBeLessThan(sql.indexOf("CREATE TABLE IF NOT EXISTS mapa_ubicaciones_normalizadas"));
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ghl_difusion_ejecuciones");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS uphone_solicitudes");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS logistica_contifico_cache");
   });
 
   test("no ejecuta migraciones cuando todas las tablas ya existen", async () => {
@@ -37,6 +38,7 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
         "ghl_difusion_ejecucion_detalles",
         "ghl_difusion_mensajes",
         "uphone_solicitudes",
+        "logistica_contifico_cache",
       ]),
     };
 

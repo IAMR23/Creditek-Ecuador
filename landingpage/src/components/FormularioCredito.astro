@@ -36,7 +36,7 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
 
 <section
   id="solicitud-credito"
-  class="relative isolate overflow-hidden bg-gradient-to-b from-gray-50 via-white to-gray-50 px-4 py-20 sm:px-6 lg:py-28"
+  class="credit-application-section relative isolate overflow-hidden px-4 py-20 sm:px-6 lg:py-28"
   aria-labelledby="credit-form-title"
 >
   <div
@@ -44,7 +44,7 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
     aria-hidden="true"
   ></div>
   <div
-    class="pointer-events-none absolute -right-24 bottom-10 -z-10 h-72 w-72 rounded-full bg-orange-200/40 blur-3xl"
+    class="pointer-events-none absolute -right-24 bottom-10 -z-10 h-72 w-72 rounded-full bg-green-200/40 blur-3xl"
     aria-hidden="true"
   ></div>
 
@@ -53,46 +53,53 @@ const creditApplicationEndpoint = `${backendApiUrl}/api/public/solicitudes-credi
       class="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl shadow-emerald-950/10"
     >
       <header
-        class="relative overflow-hidden border-b border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-orange-50 px-5 py-8 sm:px-10 sm:py-10"
+        class="credit-form-hero relative overflow-hidden border-b border-gray-200 px-5 py-10 sm:px-10 sm:py-12"
       >
-        <div
-          class="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-orange-500"
-          aria-hidden="true"
-        ></div>
+        <div class="credit-form-hero__content relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
+          <img
+            src="/Creditek/logo.png"
+            alt="Creditek"
+            width="794"
+            height="266"
+            class="credit-form-hero__logo h-auto w-[250px] object-contain sm:w-[310px]"
+            loading="eager"
+            decoding="async"
+          />
 
-        <div class="relative flex flex-col items-center gap-6 text-center sm:min-h-20 sm:justify-center">
-          <div class="mx-auto w-full max-w-2xl">
-            <p class="mb-3 text-sm font-extrabold tracking-[0.18em] text-emerald-700">
-              
+          <div class="mt-7 flex w-full items-center justify-center gap-3 sm:gap-4">
+            <span class="h-0.5 w-9 bg-green-400 sm:w-12" aria-hidden="true"></span>
+            <p class="text-xs font-black uppercase tracking-[0.22em] text-gray-950 sm:text-sm">
+              Cr&eacute;dito directo
             </p>
-            <h1
-              id="credit-form-title"
-              class="text-3xl font-extrabold leading-tight text-gray-900 sm:text-4xl"
-            >
-              Aplica a Sierra Ecuatoriana 
-            </h1>
-            <p class="mt-3 text-base leading-relaxed text-gray-600 sm:text-lg">
-              
-            </p>
-            <span
-              class="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3.5 py-2 text-sm font-semibold text-emerald-800 shadow-sm"
-            >
-              <span aria-hidden="true">🇪🇨</span>
-              Aplica solo para Ecuador
-            </span>
+            <span class="h-0.5 w-9 bg-green-400 sm:w-12" aria-hidden="true"></span>
           </div>
 
-          <div
-            class="flex h-20 w-36 shrink-0 items-center justify-center rounded-2xl border border-white bg-white/90 p-3 shadow-md sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2"
-          >
-            <img
-              src="/Creditek/logo.png"
-              alt="Creditek"
-              width="794"
-              height="266"
-              class="max-h-full w-auto object-contain"
-              loading="lazy"
-            />
+          <div class="mx-auto mt-4 w-full max-w-3xl">
+            <h1
+              id="credit-form-title"
+              class="text-4xl font-black leading-[0.98] tracking-tight text-gray-950 sm:text-5xl lg:text-6xl"
+            >
+              Celulares y televisores a cr&eacute;dito
+            </h1>
+            <p class="mt-6 text-base font-medium leading-relaxed text-gray-600 sm:text-xl">
+              Envios a Quito y toda la Sierra Ecuatoriana.
+            </p>
+            <span
+              class="mt-4 inline-flex items-center gap-2 rounded-full bg-green-200 px-4 py-2 text-sm font-extrabold text-gray-950 shadow-sm sm:px-5"
+            >
+              Aplica solo para Ecuador
+              <svg
+                class="h-4 w-6 overflow-hidden rounded-[2px] shadow-sm"
+                viewBox="0 0 24 16"
+                role="img"
+                aria-label="Bandera de Ecuador"
+              >
+                <rect width="24" height="8" fill="#FFD100"></rect>
+                <rect y="8" width="24" height="4" fill="#0057B8"></rect>
+                <rect y="12" width="24" height="4" fill="#EF3340"></rect>
+                <circle cx="12" cy="8" r="1.7" fill="#F4D35E" stroke="#7A4E00" stroke-width="0.45"></circle>
+              </svg>
+            </span>
           </div>
         </div>
       </header>

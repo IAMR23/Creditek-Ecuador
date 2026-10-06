@@ -1,5 +1,6 @@
 const {
   esEnlaceOneDrive,
+  esEnlaceVideoPermitido,
   validarVideoCapacitacion,
 } = require("./capacitacionRules");
 
@@ -14,8 +15,18 @@ describe("reglas de videos de capacitación", () => {
   });
 
   test.each([
+    "https://drive.google.com/file/d/1AbC_def-123/view?usp=sharing",
+    "https://drive.google.com/open?id=1AbC_def-123",
+    "https://docs.google.com/file/d/1AbC_def-123/view",
+  ])("acepta enlaces de archivo de Google Drive: %s", (enlace) => {
+    expect(esEnlaceVideoPermitido(enlace)).toBe(true);
+  });
+
+  test.each([
     "http://1drv.ms/v/inseguro",
     "https://example.com/video",
+    "https://drive.google.com/drive/folders/1AbC_def-123",
+    "https://falso-drive.google.com/file/d/1AbC_def-123/view",
     "javascript:alert(1)",
     "",
   ])("rechaza enlaces ajenos o inseguros: %s", (enlace) => {
@@ -26,12 +37,12 @@ describe("reglas de videos de capacitación", () => {
     expect(
       validarVideoCapacitacion({
         titulo: "  Introducción a ventas  ",
-        enlace: " https://1drv.ms/v/demo ",
+        enlace: " https://drive.google.com/file/d/1AbC_def-123/view ",
         descripcion: "  Contenido inicial.  ",
       }),
     ).toEqual({
       titulo: "Introducción a ventas",
-      enlace: "https://1drv.ms/v/demo",
+      enlace: "https://drive.google.com/file/d/1AbC_def-123/view",
       descripcion: "Contenido inicial.",
     });
   });

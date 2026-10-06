@@ -262,8 +262,9 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
     WHERE mensajes IS NULL
        OR jsonb_typeof(mensajes) <> 'array'
        OR jsonb_array_length(mensajes) = 0;
-    CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_unique
-    ON ghl_difusion_ejecuciones ((1))
+    DROP INDEX IF EXISTS ghl_difusion_ejecucion_activa_unique;
+    CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_activa_fecha_idx
+    ON ghl_difusion_ejecuciones ("nextBatchAt", id)
     WHERE estado IN ('pending', 'running');
     CREATE INDEX IF NOT EXISTS ghl_difusion_ejecucion_programada_idx
     ON ghl_difusion_ejecuciones ("scheduledAt" DESC);
@@ -1401,6 +1402,12 @@ const ensureRequiredFeatureTables = async (queryInterface) => {
       "202609300001-uphone-cedula-unique-por-dia.sql",
     ]);
   }
+
+  if (tables.has("usuarios") && !tables.has("logistica_contifico_cache")) {
+    await ejecutarMigraciones([
+      "202610060004-create-logistica-contifico-cache.sql",
+    ]);
+  }
 };
 
 const ensureDetalleEntregasUbicacionSchema = async (queryInterface, tables) => {
@@ -2184,6 +2191,15 @@ const connectDB = async () => {
     await ensureUphoneCedulaSchema(queryInterface);
     await ensureGhlBroadcastQueueSchema(await queryInterface.showAllTables());
     await sequelize.sync({});
+    for (const migration of [
+      "202610060001-create-logistica-combustible.sql",
+      "202610060002-combustible-vehiculo-sin-consumo.sql",
+      "202610060003-combustible-catalogo-vehiculos.sql",
+    ]) {
+      await sequelize.query(
+        fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8"),
+      );
+    }
     await sequelize.query(require("fs").readFileSync(
       require("path").join(__dirname, "../migrations/202609050004-create-egresos-creditek-tipos.sql"), "utf8",
     ));

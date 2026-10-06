@@ -255,6 +255,7 @@ connectDB()
       "/api/logistica/stock-contifico",
       require("./routes/Logistica/stockContificoRoutes"),
     );
+    app.use("/api/logistica/combustible", require("./routes/Logistica/combustibleRoutes"));
     app.use("/api/sistemas/personas", require("./routes/Sistemas/personasRoutes"));
     app.use("/api/sistemas/reportes-caja-agencias", require("./routes/Sistemas/reporteCajaAgenciasRoutes"));
     app.use("/api/sistemas/uphone-usuarios", require("./routes/Sistemas/uphoneUsuariosNormalizacionRoutes"));

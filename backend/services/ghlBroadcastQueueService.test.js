@@ -125,25 +125,82 @@ describe("ghlBroadcastQueueService", () => {
     expect(result).toMatchObject({ id: "12", batchSize: 5, intervalMinutes: 7 });
   });
 
-  test("no crea contactos externos cuando ya existe una difusion activa", async () => {
-    const resolveExternalRecipients = jest.fn();
+  test("crea otra difusion aunque ya exista una activa o programada", async () => {
+    const execution = executionRow({ id: 13, estado: "pending" });
+    const resolveExternalRecipients = jest.fn().mockResolvedValue({
+      contactIds: ["c2"],
+      instanceIndexes: [1],
+      messages: ["Segunda campaña"],
+    });
     const Ejecucion = {
       findOne: jest.fn().mockResolvedValue(executionRow({ estado: "running" })),
+      create: jest.fn().mockResolvedValue(execution),
     };
+    const Detalle = { bulkCreate: jest.fn().mockResolvedValue([]) };
+    const previewBroadcast = jest.fn().mockResolvedValue({
+      totalEligible: 1,
+      excluded: [],
+      distribution: [
+        { instanceIndex: 1, contacts: [{ id: "c2", name: "Dos" }] },
+      ],
+    });
 
     await expect(service.createExecution({
       confirmation: "ENVIAR",
-      contactIds: [],
-      phoneNumbers: ["0991234567"],
+      contactIds: ["c2"],
       instanceIndexes: [1],
-      messages: ["Hola cliente"],
+      messages: ["Segunda campaña"],
+      scheduledAt: "2026-10-02T17:00:00.000Z",
     }, 9, {
       Ejecucion,
+      Detalle,
       resolveExternalRecipients,
+      previewBroadcast,
+      transaction: (callback) => callback({}),
       now: new Date("2026-10-02T15:00:00.000Z"),
-    })).rejects.toMatchObject({ code: "GHL_BROADCAST_ACTIVE_EXISTS" });
+    })).resolves.toMatchObject({ id: "13", estado: "pending" });
 
-    expect(resolveExternalRecipients).not.toHaveBeenCalled();
+    expect(Ejecucion.findOne).not.toHaveBeenCalled();
+    expect(resolveExternalRecipients).toHaveBeenCalled();
+    expect(Ejecucion.create).toHaveBeenCalled();
+  });
+
+  test("devuelve todas las difusiones activas ordenadas por su siguiente lote", async () => {
+    const Ejecucion = {
+      findAll: jest.fn().mockResolvedValue([
+        executionRow({ id: 21, scheduledAt: new Date("2026-10-02T15:00:00.000Z") }),
+        executionRow({ id: 22, scheduledAt: new Date("2026-10-02T16:00:00.000Z") }),
+      ]),
+    };
+
+    const result = await service.getActiveExecutions({ Ejecucion });
+
+    expect(result.map((item) => item.id)).toEqual(["21", "22"]);
+    expect(Ejecucion.findAll).toHaveBeenCalledWith(expect.objectContaining({
+      order: [["nextBatchAt", "ASC"], ["createdAt", "ASC"]],
+    }));
+  });
+
+  test("procesa varias difusiones vencidas aunque una falle", async () => {
+    const rows = [{ id: 31 }, { id: 32 }, { id: 33 }];
+    const Ejecucion = { findAll: jest.fn().mockResolvedValue(rows) };
+    const processBatch = jest.fn()
+      .mockResolvedValueOnce({ id: 31 })
+      .mockRejectedValueOnce(new Error("fallo aislado"))
+      .mockResolvedValueOnce({ id: 33 });
+    const onExecutionError = jest.fn();
+
+    const result = await service.processDueExecutions(
+      new Date("2026-10-02T15:00:00.000Z"),
+      { Ejecucion, processBatch, onExecutionError },
+    );
+
+    expect(processBatch).toHaveBeenCalledTimes(3);
+    expect(onExecutionError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "fallo aislado" }),
+      rows[1],
+    );
+    expect(result).toEqual([{ id: 31 }, { id: 33 }]);
   });
 
   test("lista el historial paginado con usuario y fecha programada", async () => {

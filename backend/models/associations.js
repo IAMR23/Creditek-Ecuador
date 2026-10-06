@@ -1,5 +1,9 @@
 // associations.js
 const Usuario = require('./Usuario');
+const LogisticaCombustibleRegistro = require('./LogisticaCombustibleRegistro');
+require('./LogisticaContificoCache');
+LogisticaCombustibleRegistro.belongsTo(Usuario, { foreignKey: 'userId', as: 'repartidor' });
+Usuario.hasMany(LogisticaCombustibleRegistro, { foreignKey: 'userId', as: 'registrosCombustible' });
 const Rol = require('./Rol');
 const Agencia = require('./Agencia');
 const UsuarioAgencia = require('./UsuarioAgencia');

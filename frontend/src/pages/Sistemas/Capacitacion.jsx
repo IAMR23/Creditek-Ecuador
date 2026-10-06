@@ -145,7 +145,7 @@ export default function Capacitacion() {
               </p>
               <h1 className="mt-1 text-2xl font-bold">Capacitación</h1>
               <p className="mt-1 text-sm text-slate-500">
-                Administra los videos de OneDrive disponibles para el panel de vendedores.
+                Administra los videos de Google Drive disponibles para el panel de vendedores.
               </p>
             </div>
           </div>
@@ -162,7 +162,7 @@ export default function Capacitacion() {
                   {editandoId ? "Editar video" : "Agregar video"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Usa un enlace compartido de OneDrive o SharePoint.
+                  Usa un enlace compartido de Google Drive.
                 </p>
               </div>
               {editandoId && (
@@ -202,13 +202,13 @@ export default function Capacitacion() {
                     name="enlace"
                     value={form.enlace}
                     onChange={actualizar}
-                    placeholder="https://1drv.ms/..."
+                    placeholder="https://drive.google.com/file/d/.../view"
                     className="w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   />
                 </div>
                 <span className="mt-1.5 block text-xs leading-5 text-slate-500">
-                  Para una reproducción más confiable, usa la URL <strong>src</strong> de
-                  Compartir → Insertar en OneDrive. También se admiten enlaces compartidos.
+                  En Google Drive selecciona Compartir, habilita el acceso para quienes tengan
+                  el enlace y pega aquí la URL del archivo.
                 </span>
               </label>
 
@@ -312,7 +312,7 @@ export default function Capacitacion() {
                           className="mt-2 inline-flex max-w-full items-center gap-1.5 text-sm font-semibold text-blue-700 hover:underline"
                         >
                           <ExternalLink size={15} />
-                          <span className="truncate">Abrir enlace de OneDrive</span>
+                          <span className="truncate">Abrir enlace del video</span>
                         </a>
                       </div>
                       <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">

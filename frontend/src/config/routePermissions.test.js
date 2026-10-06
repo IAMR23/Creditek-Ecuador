@@ -7,6 +7,23 @@ import {
 } from "./routePermissions.js";
 import { getDefaultRoute } from "../utils/getDefaultRoute.js";
 
+test("combustible propio es exclusivo de repartidores", () => {
+  assert.equal(hasRouteAccess({ rol: "REPARTIDOR", permisos: [], path: "/logistica-panel/combustible" }), true);
+  for (const rol of ["admin", "administrador", "vendedor", "logistica"]) {
+    assert.equal(hasRouteAccess({ rol, permisos: ["Logistica", "Administracion"], path: "/logistica-panel/combustible" }), false);
+  }
+});
+
+test("dashboard de combustible exige administrador y permiso explícito", () => {
+  const path = "/logistica/gasto-combustible";
+  for (const rol of ["admin", "administrador"]) {
+    for (const permiso of ["Logistica", "Administracion"]) assert.equal(hasRouteAccess({ rol, permisos: [permiso], path }), true);
+    assert.equal(hasRouteAccess({ rol, permisos: [], path }), false);
+  }
+  assert.equal(hasRouteAccess({ rol: "repartidor", permisos: ["Administracion"], path }), false);
+  assert.equal(hasRouteAccess({ rol: "vendedor", permisos: ["Logistica"], path }), false);
+});
+
 test("administrador sin Administracion no accede a rutas administrativas", () => {
   assert.equal(
     hasRouteAccess({

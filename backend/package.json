@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "migrate:logistica-combustible": "node scripts/migrateLogisticaCombustible.js",
+    "migrate:contifico-stock-cache": "node scripts/migrateContificoStockCache.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "migrate:tickets-ti": "node scripts/migrateTicketsTi.js",
     "migrate:capacitacion": "node scripts/migrateCapacitacionVideos.js",

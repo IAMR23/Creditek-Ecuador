@@ -76,7 +76,12 @@ async function send(req, res) {
 
 async function activeExecution(_req, res) {
   try {
-    return res.json({ ok: true, execution: await queueService.getActiveExecution() });
+    const executions = await queueService.getActiveExecutions();
+    return res.json({
+      ok: true,
+      execution: executions[0] || null,
+      executions,
+    });
   } catch (error) {
     return respondError(res, error);
   }

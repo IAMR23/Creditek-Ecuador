@@ -38,14 +38,14 @@ describe("servicio de capacitación", () => {
     );
   });
 
-  test("registra los usuarios de creación y actualización", async () => {
+  test("registra un enlace de Google Drive con los usuarios de auditoría", async () => {
     SistemaCapacitacionVideo.create.mockResolvedValue({ id: 1 });
 
     await capacitacionService.crear({
       user: { id: 12, permisos: ["Sistemas"] },
       data: {
         titulo: "Proceso comercial",
-        enlace: "https://1drv.ms/v/demo",
+        enlace: "https://drive.google.com/file/d/1AbC_def-123/view?usp=sharing",
         descripcion: "Descripción del proceso",
       },
     });
@@ -55,6 +55,7 @@ describe("servicio de capacitación", () => {
         creadoPorId: 12,
         actualizadoPorId: 12,
         activo: true,
+        enlace: "https://drive.google.com/file/d/1AbC_def-123/view?usp=sharing",
       }),
     );
   });

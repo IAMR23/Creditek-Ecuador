@@ -84,6 +84,8 @@ export const ROUTE_PERMISSIONS = {
   "/marketing/pautas": "Marketing",
 
   "/logistica-panel": "Logistica",
+  "/logistica-panel/combustible": "Logistica",
+  "/logistica/gasto-combustible": ["Logistica", "Administracion"],
   "/entregas": "Logistica",
   "/entrega-logistica": "Logistica",
   "/entregas-pendientes": "Logistica",
@@ -172,6 +174,12 @@ export const ROUTE_PERMISSIONS = {
 
 export const SYSTEM_ROUTES = SIDEBAR_SECTION_PERMISSIONS;
 
+// El permiso de sección no sustituye el rol requerido por estas pantallas.
+export const ROUTE_ALLOWED_ROLES = {
+  "/logistica-panel/combustible": ["repartidor"],
+  "/logistica/gasto-combustible": ["admin", "administrador"],
+};
+
 export const ROUTE_REDIRECT_ORDER = [
   "/dashboard",
   "/supervisores",
@@ -205,6 +213,8 @@ export const normalizePermissions = (permisos = []) =>
 
 export const hasRouteAccess = ({ rol, permisos = [], path, permission }) => {
   const rolNormalizado = normalizeRole(rol);
+  const rolesPermitidos = ROUTE_ALLOWED_ROLES[path];
+  if (rolesPermitidos && !rolesPermitidos.includes(rolNormalizado)) return false;
   const permisoRequerido = permission || ROUTE_PERMISSIONS[path];
   const permisosRequeridos = Array.isArray(permisoRequerido)
     ? permisoRequerido

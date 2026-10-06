@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MdInventory2,
+  MdLocalGasStation,
   MdPointOfSale,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
@@ -25,6 +26,13 @@ function LogisticaPanel() {
   }, []);
 
   const options = [
+    {
+      label: "Logística",
+      title: "Kilometraje y combustible",
+      desc: "Registra el gasto, el kilometraje y el vehículo utilizado",
+      icon: <MdLocalGasStation className="w-10 h-10 text-green-600" />,
+      path: "/logistica-panel/combustible",
+    },
     {
       label: "Logística",
       title: "Revisa tus entregas pendientes",

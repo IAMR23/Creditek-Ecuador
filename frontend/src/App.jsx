@@ -123,7 +123,7 @@ import SancionesConfiguracion from "./pages/Contabilidad/SancionesConfiguracion"
 import SancionesVentas from "./pages/Contabilidad/SancionesVentas";
 import ExtraccionReportesCaja from "./pages/Contabilidad/ExtraccionReportesCaja";
 import ControlFinanciero from "./pages/Contabilidad/ControlFinanciero";
-import { ROUTE_PERMISSIONS } from "./config/routePermissions";
+import { ROUTE_ALLOWED_ROLES, ROUTE_PERMISSIONS } from "./config/routePermissions";
 import { getDefaultRoute } from "./utils/getDefaultRoute";
 import {
   clearAccessToken,
@@ -142,6 +142,7 @@ const GhlHorariosFlujo = lazy(() => import("./pages/GHL/HorariosFlujo"));
 const GhlWorkflowsProgramados = lazy(() => import("./pages/GHL/WorkflowsProgramados"));
 const GhlDifusiones = lazy(() => import("./pages/GHL/Difusiones"));
 const SolicitudesUphone = lazy(() => import("./pages/Uphone/SolicitudesUphone"));
+const GastoCombustible = lazy(() => import("./pages/Logistica/GastoCombustible"));
 const ReporteGestionesSupervisores = lazy(() => import("./pages/Supervisores/ReporteGestiones"));
 
 const emptyAuth = {
@@ -280,7 +281,7 @@ function App() {
     );
   }
 
-  const protect = (element, path, allowedRoles = []) => (
+  const protect = (element, path, allowedRoles = ROUTE_ALLOWED_ROLES[path] || []) => (
     <ProtectedRoute
       isAuthenticated={auth.isAuthenticated}
       rol={auth.rol}
@@ -477,6 +478,13 @@ function App() {
                 <Route
                   path="logistica/stock-contifico"
                   element={protect(<StockContifico />, "/logistica/stock-contifico")}
+                />
+                <Route
+                  path="logistica/gasto-combustible"
+                  element={protect(
+                    <Suspense fallback={<div className="p-4">Cargando...</div>}><GastoCombustible auth={auth} /></Suspense>,
+                    "/logistica/gasto-combustible",
+                  )}
                 />
                 <Route path="rol" element={protect(<AdminUsuariosRoles />, "/rol")} />
                 <Route path="dispositivos" element={protect(<Dispositivos />, "/dispositivos")} />
@@ -693,6 +701,13 @@ function App() {
               />
 
               <Route path="logistica-panel" element={protect(<LogisticaPanel />, "/logistica-panel")} />
+              <Route
+                path="logistica-panel/combustible"
+                element={protect(
+                  <Suspense fallback={<div className="p-4">Cargando...</div>}><GastoCombustible auth={auth} modoRepartidor /></Suspense>,
+                  "/logistica-panel/combustible",
+                )}
+              />
               <Route path="vendedor-panel" element={protect(<VendedorPanel />, "/vendedor-panel")} />
               <Route
                 path="vendedor/stock-por-agencias"
