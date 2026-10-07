@@ -1,12 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  calcularBaseIessNomina,
+  calcularIessNomina,
   calcularEgresosNomina,
   aplicarCalculoNovedad,
   moverPrioridadNomina,
   normalizarIdsNomina,
   ordenarFilasNomina,
 } from "./rolesCreditekNomina.js";
+
+test('excluye fondos de reserva de la base y del calculo del IESS', () => {
+  const valores = { sueldoAPagar: 482, sueldosExtras: 0, comisionVenta: 20, fondosReserva: 100 };
+  assert.equal(calcularBaseIessNomina(valores), 502);
+  assert.equal(calcularIessNomina(valores), 47.44);
+});
 
 test('maternidad usa el cálculo del servidor y separa el subsidio del pago de Creditek', () => {
   const row = { fondosReservaManual: 40.15, totalAnticipos: 183.5, prestamosEgresos: 50,

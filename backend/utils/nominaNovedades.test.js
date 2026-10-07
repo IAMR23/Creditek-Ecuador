@@ -5,7 +5,16 @@ const madre = (extra = {}) => ({ usuarioId: 10, tipo: 'MATERNIDAD', fechaInicio:
 const datos = { usuarioId: 10, tipo: 'MATERNIDAD', fechaInicio: '2026-08-01', fechaFin: '2026-08-31', ...periodo };
 test('empleado sin novedad: 30 días y sueldo completo con comportamiento previo', () => {
   expect(calcularNominaPeriodo({}, periodo)).toMatchObject({ diasTrabajados: 30, sueldoAPagar: 482, iess: 45.55, valorRecibir: 436.45 });
-  expect(calcularNominaPeriodo({ fondoReservaActivo: true, ingresosComisiones: 20 }, periodo)).toMatchObject({ fondosReserva: 40.17, totalIngresos: 542.17, iess: 51.24, valorRecibir: 490.93 });
+  expect(calcularNominaPeriodo({ fondoReservaActivo: true, ingresosComisiones: 20 }, periodo)).toMatchObject({
+    fondosReserva: 40.17, totalIngresos: 542.17, baseIess: 502, iess: 47.44, valorRecibir: 494.73,
+  });
+});
+test('fondos de reserva son netos y no cambian el aporte personal al IESS', () => {
+  const sinFondos = calcularNominaPeriodo({ fondosReservaManual: 0, ingresosComisiones: 20 }, periodo);
+  const conFondos = calcularNominaPeriodo({ fondosReservaManual: 100, ingresosComisiones: 20 }, periodo);
+  expect(conFondos).toMatchObject({ fondosReserva: 100, baseIess: 502, iess: 47.44 });
+  expect(conFondos.iess).toBe(sinFondos.iess);
+  expect(conFondos.valorRecibir - sinFondos.valorRecibir).toBeCloseTo(100, 2);
 });
 test('maternidad completa: 30 días al 25%, IESS sobre 482', () => {
   expect(calcularNominaPeriodo({}, periodo, [madre()])).toMatchObject({ diasMaternidad25: 30, diasSueldoCompleto: 0, sueldoAPagar: 120.5, subsidioIessInformativo: 361.5, iess: 45.55 });

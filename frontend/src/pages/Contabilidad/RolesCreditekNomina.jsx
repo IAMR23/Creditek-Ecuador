@@ -18,7 +18,9 @@ import { api } from "../../api/client";
 import { useAuthUser } from "../../utils/useAuthUser";
 import NominaNovedadModal from './NominaNovedadModal';
 import {
+  calcularBaseIessNomina,
   calcularEgresosNomina,
+  calcularIessNomina,
   aplicarCalculoNovedad,
   moverPrioridadNomina,
   normalizarIdsNomina,
@@ -26,7 +28,6 @@ import {
 } from "../../utils/rolesCreditekNomina";
 
 const ahora = new Date();
-const IESS_RATE = 0.0945;
 const SALARIO_BASE_NOMINA = 482;
 const MESES = [
   "Enero",
@@ -134,7 +135,8 @@ const calcularFila = (row, anio, mes) => {
   const totalIngresos = redondear(
     sueldoAPagar + fondosReserva + sueldosExtras + comisionVenta,
   );
-  const iess = redondear(totalIngresos * IESS_RATE);
+  const baseIess = calcularBaseIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta });
+  const iess = calcularIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta });
   const { anticipo, prestamo, sancionMeta, totalEgresos } = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - totalEgresos);
 
@@ -147,6 +149,7 @@ const calcularFila = (row, anio, mes) => {
     sueldosExtras,
     comisionVenta,
     totalIngresos,
+    baseIess,
     iess,
     anticipo,
     prestamo,

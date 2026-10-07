@@ -112,7 +112,8 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
     : row.fondoReservaActivo ? redondear(((tieneMaternidad ? sueldoMensual : sueldoAPagar) + sueldosExtras) / 12) : 0;
   const comisionVenta = numero(row.ingresosComisiones);
   const totalIngresos = redondear(sueldoAPagar + sueldosExtras + fondosReserva + comisionVenta);
-  const baseIess = tieneMaternidad ? sueldoMensual : totalIngresos;
+  // Los fondos de reserva son un valor neto para el empleado y no forman parte de la base del IESS.
+  const baseIess = tieneMaternidad ? sueldoMensual : redondear(sueldoAPagar + sueldosExtras + comisionVenta);
   const iess = redondear(baseIess * 0.0945);
   const anticipo = redondear(numero(row.totalAnticipos) - numero(row.descuentosMeta));
   const prestamo = redondear(numero(row.sumanPrestamos) + numero(row.prestamosEgresos));

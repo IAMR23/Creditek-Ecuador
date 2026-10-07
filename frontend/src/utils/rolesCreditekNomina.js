@@ -3,6 +3,13 @@ const numero = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 const redondear = (value) => Number(value.toFixed(2));
+const IESS_RATE = 0.0945;
+
+export const calcularBaseIessNomina = ({ sueldoAPagar, sueldosExtras, comisionVenta }) =>
+  redondear(numero(sueldoAPagar) + numero(sueldosExtras) + numero(comisionVenta));
+
+export const calcularIessNomina = (valores) =>
+  redondear(calcularBaseIessNomina(valores) * IESS_RATE);
 
 export const normalizarIdsNomina = (ids) => Array.isArray(ids)
   ? [...new Set(ids.filter((id) => ["string", "number"].includes(typeof id)).map(String))]
@@ -52,10 +59,16 @@ export const aplicarCalculoNovedad = (row) => {
   const sueldosExtras = row.sueldosExtrasManual != null ? redondear(numero(row.sueldosExtrasManual)) : calculo.sueldosExtras;
   const fondosReserva = row.fondosReservaManual != null ? redondear(numero(row.fondosReservaManual))
     : row.fondoReservaActivo ? redondear(((calculo.tieneMaternidad ? calculo.salario : calculo.sueldoAPagar) + sueldosExtras) / 12) : 0;
-  const totalIngresos = redondear(calculo.sueldoAPagar + sueldosExtras + fondosReserva + numero(row.ingresosComisiones));
-  const iess = calculo.tieneMaternidad ? calculo.iess : redondear(totalIngresos * 0.0945);
+  const comisionVenta = numero(row.ingresosComisiones);
+  const totalIngresos = redondear(calculo.sueldoAPagar + sueldosExtras + fondosReserva + comisionVenta);
+  const baseIess = calculo.tieneMaternidad
+    ? numero(calculo.baseIess ?? calculo.salario)
+    : calcularBaseIessNomina({ sueldoAPagar: calculo.sueldoAPagar, sueldosExtras, comisionVenta });
+  const iess = calculo.tieneMaternidad
+    ? calculo.iess
+    : calcularIessNomina({ sueldoAPagar: calculo.sueldoAPagar, sueldosExtras, comisionVenta });
   const egresos = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - egresos.totalEgresos);
-  return { ...row, ...calculo, ...egresos, fondosReserva, sueldosExtras, totalIngresos,
+  return { ...row, ...calculo, ...egresos, fondosReserva, sueldosExtras, totalIngresos, baseIess,
     totalIngresosEmpresa: totalIngresos, iess, valorRecibir, valorRecibirEmpresa: valorRecibir };
 };
