@@ -21,6 +21,7 @@ import {
   calcularBaseIessNomina,
   calcularEgresosNomina,
   calcularIessNomina,
+  calcularValorPorJornada,
   aplicarCalculoNovedad,
   moverPrioridadNomina,
   normalizarIdsNomina,
@@ -118,9 +119,15 @@ const diasTrabajadosPeriodo = (row, anio, mes) => {
 const calcularFila = (row, anio, mes) => {
   const conNovedad = aplicarCalculoNovedad(row);
   if (conNovedad) return conNovedad;
-  const salario = SALARIO_BASE_NOMINA;
-  const sueldoBase = SALARIO_BASE_NOMINA;
-  const sueldoExtra = numero(row.rolPagoSueldoExtra);
+  const salario = calcularValorPorJornada(
+    SALARIO_BASE_NOMINA,
+    row.jornadaLaboral,
+  );
+  const sueldoBase = salario;
+  const sueldoExtra = calcularValorPorJornada(
+    row.rolPagoSueldoExtra,
+    row.jornadaLaboral,
+  );
   const diasTrabajados = diasTrabajadosPeriodo(row, anio, mes);
   const sueldoAPagar = redondear((sueldoBase * diasTrabajados) / 30);
   const sueldosExtras = row.sueldosExtrasManual != null
@@ -135,8 +142,15 @@ const calcularFila = (row, anio, mes) => {
   const totalIngresos = redondear(
     sueldoAPagar + fondosReserva + sueldosExtras + comisionVenta,
   );
-  const baseIess = calcularBaseIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta });
-  const iess = calcularIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta });
+  const baseIess = row.afiliadoIess === false
+    ? 0
+    : calcularBaseIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta });
+  const iess = calcularIessNomina({
+    sueldoAPagar,
+    sueldosExtras,
+    comisionVenta,
+    afiliadoIess: row.afiliadoIess !== false,
+  });
   const { anticipo, prestamo, sancionMeta, totalEgresos } = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - totalEgresos);
 
@@ -632,7 +646,25 @@ export default function RolesCreditekNomina() {
                         </div>
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 font-semibold uppercase">
-                        {row.cargo || "-"}
+                        <div>{row.cargo || "-"}</div>
+                        <div className="mt-1 flex flex-wrap gap-1 text-[10px] normal-case">
+                          <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-800">
+                            {row.jornadaLaboral === "medio_tiempo"
+                              ? "Medio tiempo"
+                              : "Tiempo completo"}
+                          </span>
+                          <span
+                            className={`rounded px-1.5 py-0.5 ${
+                              row.afiliadoIess !== false
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {row.afiliadoIess !== false
+                              ? "Afiliado IESS"
+                              : "No afiliado"}
+                          </span>
+                        </div>
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
                         {formatoNumero(row.salario)}

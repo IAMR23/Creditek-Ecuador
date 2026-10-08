@@ -9,6 +9,39 @@ test('empleado sin novedad: 30 días y sueldo completo con comportamiento previo
     fondosReserva: 40.17, totalIngresos: 542.17, baseIess: 502, iess: 47.44, valorRecibir: 494.73,
   });
 });
+test('medio tiempo prorratea sueldo, extras y fondos al 50%', () => {
+  expect(calcularNominaPeriodo({
+    jornadaLaboral: 'medio_tiempo',
+    rolPagoSueldoExtra: 68,
+    fondoReservaActivo: true,
+  }, periodo)).toMatchObject({
+    salario: 241,
+    sueldoAPagar: 241,
+    sueldosExtras: 34,
+    fondosReserva: 22.92,
+    baseIess: 275,
+    iess: 25.99,
+  });
+});
+test('usuario no afiliado no tiene descuento ni subsidio del IESS', () => {
+  expect(calcularNominaPeriodo({ afiliadoIess: false }, periodo)).toMatchObject({
+    salario: 482,
+    sueldoAPagar: 482,
+    baseIess: 0,
+    iess: 0,
+    valorRecibir: 482,
+  });
+  expect(calcularNominaPeriodo(
+    { afiliadoIess: false },
+    periodo,
+    [madre()],
+  )).toMatchObject({
+    sueldoMaternidadEmpresa: 482,
+    subsidioIessInformativo: 0,
+    sueldoAPagar: 482,
+    iess: 0,
+  });
+});
 test('fondos de reserva son netos y no cambian el aporte personal al IESS', () => {
   const sinFondos = calcularNominaPeriodo({ fondosReservaManual: 0, ingresosComisiones: 20 }, periodo);
   const conFondos = calcularNominaPeriodo({ fondosReservaManual: 100, ingresosComisiones: 20 }, periodo);

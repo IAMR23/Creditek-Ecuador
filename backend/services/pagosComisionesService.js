@@ -317,16 +317,20 @@ const getUsuarioPayload = (usuarioAgencia) => {
   const usuario = usuarioAgencia?.usuario || {};
   const nominaEmpleado = usuarioAgencia?.nominaEmpleado || null;
   const posicionesPago = getDistinctPaidPositions([
-    buildPaidPosition({
-      rolPago: nominaEmpleado?.rolPago,
-      rolPagoId: nominaEmpleado?.rolPagoId,
-      cargo: nominaEmpleado?.cargo,
-      sueldo: nominaEmpleado?.sueldo,
-    }),
-    buildPaidPosition({ rolPago: usuario.rolPago }),
-    ...(usuario.rolesPago || []).map((rolPago) =>
-      buildPaidPosition({ rolPago }),
-    ),
+    nominaEmpleado?.rolPago?.activo === false
+      ? null
+      : buildPaidPosition({
+          rolPago: nominaEmpleado?.rolPago,
+          rolPagoId: nominaEmpleado?.rolPagoId,
+          cargo: nominaEmpleado?.cargo,
+          sueldo: nominaEmpleado?.sueldo,
+        }),
+    usuario.rolPago?.activo === false
+      ? null
+      : buildPaidPosition({ rolPago: usuario.rolPago }),
+    ...(usuario.rolesPago || [])
+      .filter((rolPago) => rolPago?.activo !== false)
+      .map((rolPago) => buildPaidPosition({ rolPago })),
   ]);
   const cargoPrincipal = selectHighestPaidPosition(posicionesPago);
   const rol = usuario.rol || null;
@@ -557,6 +561,28 @@ const isIndividualSellerPosition = (position) => {
   );
 };
 
+const isCallCenterSeller = (person = {}) =>
+  (person.posicionesPago?.length
+    ? person.posicionesPago
+    : person.cargosPago?.length
+      ? person.cargosPago
+      : [person]
+  ).some((position) => {
+    const cargo = normalizeText(position?.cargo);
+    return isIndividualSellerPosition(position) && cargo.includes("CALL CENTER");
+  });
+
+const isCallCenterSupervisor = (person = {}) =>
+  (person.posicionesPago?.length
+    ? person.posicionesPago
+    : person.cargosPago?.length
+      ? person.cargosPago
+      : [person]
+  ).some((position) => {
+    const cargo = normalizeText(position?.cargo);
+    return cargo.includes("SUPERVISOR") && cargo.includes("CALL CENTER");
+  });
+
 const getLeaderCommissionMembers = ({ leader, juniors }) => {
   const membersByUser = new Map(
     juniors
@@ -665,14 +691,16 @@ const getLeaderMembersForWeek = ({
   const selectedSellerIds = weeklyTeam
     ? normalizeWeeklySellerIds(weeklyTeam.vendedorIds)
     : defaultJuniors.map((seller) => Number(seller.usuarioId));
+  const restringirACallCenter = isCallCenterSupervisor(leader);
   const juniors = selectedSellerIds
     .filter((sellerId) => sellerId !== Number(leader.usuarioId))
     .map((sellerId) => sellersById.get(sellerId))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((seller) => !restringirACallCenter || isCallCenterSeller(seller));
 
   return {
     configured: Boolean(weeklyTeam),
-    selectedSellerIds,
+    selectedSellerIds: juniors.map((seller) => Number(seller.usuarioId)),
     members: getLeaderCommissionMembers({ leader, juniors }),
   };
 };
@@ -1722,6 +1750,7 @@ const buildIncludeUsuarioAgencia = () => ({
             "sueldoBase",
             "sueldoExtra",
             "ingresoMax",
+            "activo",
           ],
         },
         {
@@ -1734,6 +1763,7 @@ const buildIncludeUsuarioAgencia = () => ({
             "sueldoBase",
             "sueldoExtra",
             "ingresoMax",
+            "activo",
           ],
           through: { attributes: [] },
         },
@@ -1757,6 +1787,7 @@ const buildIncludeUsuarioAgencia = () => ({
             "sueldoBase",
             "sueldoExtra",
             "ingresoMax",
+            "activo",
           ],
         },
       ],
@@ -1782,6 +1813,7 @@ const obtenerRelacionesVendedores = async () =>
               "sueldoBase",
               "sueldoExtra",
               "ingresoMax",
+              "activo",
             ],
           },
           {
@@ -1794,6 +1826,7 @@ const obtenerRelacionesVendedores = async () =>
               "sueldoBase",
               "sueldoExtra",
               "ingresoMax",
+              "activo",
             ],
             through: { attributes: [] },
           },
@@ -1823,6 +1856,7 @@ const obtenerRelacionesVendedores = async () =>
               "sueldoBase",
               "sueldoExtra",
               "ingresoMax",
+              "activo",
             ],
           },
         ],
@@ -2853,11 +2887,19 @@ const isCommercialSupervisorInReport = (person) =>
     normalizeText(position.cargo).includes("SUPERVISOR"),
   );
 
-const normalizarCantidadVendedoresComision = (value) => {
+const normalizarCantidadVendedoresComision = (value, maximo = 6) => {
   if (value === undefined || value === null || value === "") return null;
   const numero = Number(value);
-  if (typeof value === "boolean" || !Number.isInteger(numero) || numero < 1 || numero > 5) {
-    throw createHttpError("La comision semanal debe corresponder a entre 1 y 5 vendedores", 400);
+  if (
+    typeof value === "boolean" ||
+    !Number.isInteger(numero) ||
+    numero < 1 ||
+    numero > maximo
+  ) {
+    throw createHttpError(
+      `La comision semanal debe corresponder a entre 1 y ${maximo} vendedores`,
+      400,
+    );
   }
   return numero;
 };
@@ -2870,8 +2912,11 @@ const guardarEquipoSemanalLiderComercial = async ({
   cantidadVendedoresComision,
   actualizadoPorId,
 }) => {
-  const cantidadComision = normalizarCantidadVendedoresComision(cantidadVendedoresComision);
   const esSupervisor = tipoLider === "SUPERVISOR";
+  const cantidadComision = normalizarCantidadVendedoresComision(
+    cantidadVendedoresComision,
+    esSupervisor ? 6 : 5,
+  );
   const nombreLider = esSupervisor ? "supervisor comercial" : "jefe comercial";
   const numericLeaderId = Number(liderComercialId);
   if (!Number.isInteger(numericLeaderId) || numericLeaderId <= 0) {
@@ -2918,9 +2963,24 @@ const guardarEquipoSemanalLiderComercial = async ({
     throw createHttpError(`Debe seleccionar un ${nombreLider} del reporte`, 400);
   }
 
+  const restringirACallCenter = esSupervisor && isCallCenterSupervisor(leader);
+  if (esSupervisor && !restringirACallCenter) {
+    normalizarCantidadVendedoresComision(cantidadVendedoresComision, 5);
+  }
+  if (restringirACallCenter && normalizedSellerIds.length > 6) {
+    throw createHttpError(
+      "El supervisor de Call Center puede tener hasta 6 vendedores por semana",
+      400,
+    );
+  }
+
   const invalidSellerId = normalizedSellerIds.find((sellerId) => {
     const seller = personasPorId.get(sellerId);
-    return !seller || !isSellerEligibleForTeam(seller);
+    return (
+      !seller ||
+      !isSellerEligibleForTeam(seller) ||
+      (restringirACallCenter && !isCallCenterSeller(seller))
+    );
   });
   if (invalidSellerId) {
     throw createHttpError(
@@ -2975,7 +3035,10 @@ const guardarEquipoSemanalLiderComercial = async ({
     jefeComercialId: numericLeaderId,
     semanaInicio: week.startDate,
     vendedorIds: normalizedSellerIds,
-    ...(cantidadVendedoresComision !== undefined ? { cantidadVendedoresComision: cantidadComision } : {}),
+    // Una nueva seleccion debe calcularse con la cantidad real del equipo.
+    // Solo se conserva un divisor manual cuando llega explicitamente.
+    cantidadVendedoresComision:
+      cantidadVendedoresComision === undefined ? null : cantidadComision,
     actualizadoPorId: actualizadoPorId || null,
   };
   const [team] = await PagoComisionEquipoSemanal.findOrCreate({
@@ -2992,7 +3055,7 @@ const guardarEquipoSemanalLiderComercial = async ({
     jefeComercialId: numericLeaderId,
     semanaInicio: week.startDate,
     vendedorIds: normalizedSellerIds,
-    ...(cantidadVendedoresComision !== undefined ? { cantidadVendedoresComision: cantidadComision } : {}),
+    cantidadVendedoresComision: payload.cantidadVendedoresComision,
   };
 };
 
@@ -3005,6 +3068,57 @@ const guardarEquipoSemanalJefeComercial = (params) =>
 
 const guardarEquipoSemanalSupervisorComercial = (params) =>
   guardarEquipoSemanalLiderComercial({
+    ...params,
+    liderComercialId: params.supervisorComercialId,
+    tipoLider: "SUPERVISOR",
+  });
+
+const eliminarEquipoSemanalLiderComercial = async ({
+  liderComercialId,
+  tipoLider,
+  semanaInicio,
+}) => {
+  const esSupervisor = tipoLider === "SUPERVISOR";
+  const nombreLider = esSupervisor ? "supervisor comercial" : "jefe comercial";
+  const numericLeaderId = Number(liderComercialId);
+  if (!Number.isInteger(numericLeaderId) || numericLeaderId <= 0) {
+    throw createHttpError(`El ${nombreLider} no es valido`, 400);
+  }
+
+  const { year, month, week } = await parseCommercialWeek(semanaInicio);
+  if (await getPeriodoPagado(year, month)) {
+    throw createHttpError(
+      "No se puede eliminar el equipo semanal de un periodo pagado",
+      400,
+    );
+  }
+
+  const eliminados = await PagoComisionEquipoSemanal.destroy({
+    where: {
+      jefeComercialId: numericLeaderId,
+      semanaInicio: week.startDate,
+    },
+  });
+
+  return {
+    message: eliminados
+      ? "Relacion semanal eliminada correctamente"
+      : "La relacion semanal ya no existia",
+    eliminado: eliminados > 0,
+    jefeComercialId: numericLeaderId,
+    semanaInicio: week.startDate,
+  };
+};
+
+const eliminarEquipoSemanalJefeComercial = (params) =>
+  eliminarEquipoSemanalLiderComercial({
+    ...params,
+    liderComercialId: params.jefeComercialId,
+    tipoLider: "JEFE",
+  });
+
+const eliminarEquipoSemanalSupervisorComercial = (params) =>
+  eliminarEquipoSemanalLiderComercial({
     ...params,
     liderComercialId: params.supervisorComercialId,
     tipoLider: "SUPERVISOR",
@@ -3568,6 +3682,8 @@ module.exports = {
   hasCommercialLeadershipPosition,
   isInactiveCommercialLeader,
   isIndividualSellerPosition,
+  isCallCenterSeller,
+  isCallCenterSupervisor,
   isSellerEligibleForTeam,
   getLeaderCommissionMembers,
   getLeaderBonusExclusionReasons,
@@ -3615,6 +3731,8 @@ module.exports = {
   marcarPeriodoPagosComisionesPagado,
   guardarEquipoSemanalJefeComercial,
   guardarEquipoSemanalSupervisorComercial,
+  eliminarEquipoSemanalJefeComercial,
+  eliminarEquipoSemanalSupervisorComercial,
   guardarMetaMensualJefeComercial,
   guardarPromedioMensualJefeComercial,
   guardarPromedioMensualSupervisorComercial,

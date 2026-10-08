@@ -165,6 +165,8 @@ describe("rolesCreditekResumenService", () => {
         activo: true,
         fechaIngreso: "2026-01-15",
         fechaSalida: null,
+        jornadaLaboral: "medio_tiempo",
+        afiliadoIess: false,
         rolPagoId: 2,
         rolPago: {
           id: 2,
@@ -242,6 +244,8 @@ describe("rolesCreditekResumenService", () => {
         cedula: "0102030405",
         fechaIngreso: "2026-01-15",
         fechaSalida: null,
+        jornadaLaboral: "medio_tiempo",
+        afiliadoIess: false,
         cargo: "VENDEDOR",
         rolPagoId: 2,
         rolPagoSueldoBase: 482,

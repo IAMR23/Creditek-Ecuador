@@ -1210,6 +1210,42 @@ const ensurePlanesBatallaSchema = async (queryInterface, tables) => {
   `);
 };
 
+const ensureUsuariosLaboralesPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("usuarios")) return;
+
+  const schema = await queryInterface.describeTable("usuarios");
+  if (schema.jornadaLaboral && schema.afiliadoIess) return;
+
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../migrations/202610080002-add-datos-laborales-usuarios.sql",
+    ),
+    "utf8",
+  );
+  await sequelize.query(sql);
+};
+
+const ensureSupervisorCallCenterComisionesSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  const requiredTables = [
+    "roles_pago",
+    "comisiones_configuracion",
+    "pagos_comisiones_equipos_semanales",
+  ];
+  if (!requiredTables.every((table) => tables.includes(table))) return;
+
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../migrations/202610080003-unificar-supervisor-call-center-6-vendedores.sql",
+    ),
+    "utf8",
+  );
+  await sequelize.query(sql);
+};
+
 const ensureUsuariosSchema = async (queryInterface, tables) => {
   if (!tables.includes("usuarios")) return;
 
@@ -2290,6 +2326,7 @@ const connectDB = async () => {
     await ensureEntregaTipoSchema(queryInterface);
     await ensureTicketsTiPreSyncSchema(queryInterface);
     await ensureUphoneCedulaSchema(queryInterface);
+    await ensureUsuariosLaboralesPreSyncSchema(queryInterface);
     await ensureGhlBroadcastQueueSchema(await queryInterface.showAllTables());
     await sequelize.sync({});
     for (const migration of [
@@ -2338,6 +2375,7 @@ const connectDB = async () => {
       seedComisionesConfiguracion,
     } = require("../seeders/comisionesConfiguracionSeeder");
     await seedComisionesConfiguracion();
+    await ensureSupervisorCallCenterComisionesSchema(queryInterface);
     const { seedSancionesConfiguracion } = require("../seeders/sancionesConfiguracionSeeder");
     await seedSancionesConfiguracion();
     const {

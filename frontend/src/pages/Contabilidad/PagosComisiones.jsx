@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Trash2,
   Truck,
   X,
 } from "lucide-react";
@@ -237,6 +238,18 @@ const getCargosComerciales = (vendedor) => {
   if (vendedor.cargo) cargos.push(vendedor.cargo);
   return [...new Set(cargos.map((cargo) => String(cargo).toUpperCase()))];
 };
+const isCallCenterSeller = (vendedor) =>
+  getCargosComerciales(vendedor).some(
+    (cargo) =>
+      cargo.includes("VENDEDOR") &&
+      cargo.includes("CALL CENTER") &&
+      !cargo.includes("JEFE") &&
+      !cargo.includes("SUPERVISOR"),
+  );
+const isCallCenterSupervisor = (vendedor) =>
+  getCargosComerciales(vendedor).some(
+    (cargo) => cargo.includes("SUPERVISOR") && cargo.includes("CALL CENTER"),
+  );
 const cumpleFiltroCargo = (vendedor, cargoFiltro) => {
   const cargos = getCargosComerciales(vendedor);
   if (cargoFiltro === "CALL_CENTER") {
@@ -1487,6 +1500,45 @@ export default function PagosComisiones() {
     }
   };
 
+  const eliminarEquipoSemanal = async ({ jefe, week }) => {
+    if (guardandoEquipoSemanal) return;
+
+    const confirmacion = await Swal.fire({
+      title: "Eliminar relacion semanal",
+      text: `Se eliminara la seleccion guardada de ${week.label}. El reporte volvera a usar la asignacion general.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Eliminar relacion",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    const key = `${jefe.usuarioId}-${week.startDate}`;
+    const tipoLider = jefe.esSupervisorComercial ? "supervisores" : "jefes";
+    setGuardandoEquipoSemanal(key);
+    try {
+      await api.delete(
+        `${ENDPOINT}/${tipoLider}/${jefe.usuarioId}/equipos-semanales/${week.startDate}`,
+      );
+      await fetchReport();
+      Swal.fire({
+        icon: "success",
+        title: "Relacion semanal eliminada",
+        showConfirmButton: false,
+        timer: 1400,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo eliminar la relacion semanal",
+        "error",
+      );
+    } finally {
+      setGuardandoEquipoSemanal("");
+    }
+  };
+
   const guardarPromedioSupervisorMensual = async ({ supervisor, vendedorIds }) => {
     const key = String(supervisor.usuarioId);
     setGuardandoPromedioSupervisor(key);
@@ -2362,6 +2414,7 @@ export default function PagosComisiones() {
             loading={loading}
             vendedoresDisponibles={vendedoresElegiblesEquipo}
             onGuardarEquipoSemanal={guardarEquipoSemanal}
+            onEliminarEquipoSemanal={eliminarEquipoSemanal}
             onGuardarMetaJefe={guardarMetaJefeMensual}
             onGuardarPromedioSupervisor={guardarPromedioSupervisorMensual}
             guardandoEquipoSemanal={guardandoEquipoSemanal}
@@ -2794,6 +2847,7 @@ function WeeklyLeaderTeamConfiguration({
   weeks,
   sellers,
   onSave,
+  onDelete,
   savingKey,
   disabled,
 }) {
@@ -2829,6 +2883,7 @@ function WeeklyLeaderTeamConfiguration({
             week={week}
             sellers={sellers}
             onSave={onSave}
+            onDelete={onDelete}
             savingKey={savingKey}
             disabled={disabled}
           />
@@ -3099,6 +3154,7 @@ function WeeklyTeamCard({
   week,
   sellers,
   onSave,
+  onDelete,
   savingKey,
   disabled,
 }) {
@@ -3129,6 +3185,7 @@ function WeeklyTeamCard({
   const isSaving = savingKey === key;
   const isBusy = Boolean(savingKey);
   const hasChanges = !configured || selectedSignature !== savedSignature;
+  const maxSellers = isCallCenterSupervisor(leader) ? 6 : null;
 
   const toggleSeller = (sellerId) => {
     const id = String(sellerId);
@@ -3191,24 +3248,50 @@ function WeeklyTeamCard({
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-xs text-slate-500">
-          {selectedIds.length} seleccionado{selectedIds.length === 1 ? "" : "s"}
-        </span>
-        <button
-          type="button"
-          onClick={() =>
-            onSave({
-              jefe: leader,
-              week,
-              vendedorIds: selectedIds.map(Number),
-            })
-          }
-          disabled={disabled || isBusy || !hasChanges}
-          className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Save size={13} />
-          {isSaving ? "Guardando..." : "Guardar semana"}
-        </button>
+        <div>
+          <span className="text-xs text-slate-500">
+            {selectedIds.length} relacionado{selectedIds.length === 1 ? "" : "s"} esta semana
+          </span>
+          {maxSellers && selectedIds.length > maxSellers ? (
+            <span className="block text-[10px] font-bold text-red-700">
+              Relacion anterior fuera de rango: quite al menos un vendedor.
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {configured ? (
+            <button
+              type="button"
+              onClick={() => onDelete({ jefe: leader, week })}
+              disabled={disabled || isBusy}
+              className="inline-flex items-center gap-1 rounded border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 size={13} />
+              Eliminar
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() =>
+              onSave({
+                jefe: leader,
+                week,
+                vendedorIds: selectedIds.map(Number),
+                cantidadVendedoresComision: null,
+              })
+            }
+            disabled={
+              disabled ||
+              isBusy ||
+              !hasChanges ||
+              Boolean(maxSellers && selectedIds.length > maxSellers)
+            }
+            className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save size={13} />
+            {isSaving ? "Guardando..." : "Guardar semana"}
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -3318,6 +3401,7 @@ function LeadershipCommissionTables({
   sectionLabel,
   vendedoresDisponibles,
   onGuardarEquipoSemanal,
+  onEliminarEquipoSemanal,
   onGuardarMetaJefe,
   onGuardarPromedioSupervisor,
   guardandoEquipoSemanal,
@@ -3461,7 +3545,9 @@ function LeadershipCommissionTables({
                 leader={row}
                 leaderType="supervisor"
                 sellers={vendedoresDisponibles.filter(
-                  (vendedor) => Number(vendedor.usuarioId) !== Number(row.usuarioId),
+                  (vendedor) =>
+                    Number(vendedor.usuarioId) !== Number(row.usuarioId) &&
+                    (!isCallCenterSupervisor(row) || isCallCenterSeller(vendedor)),
                 )}
                 weeks={weeks}
                 onSave={onGuardarPromedioSupervisor}
@@ -3474,9 +3560,12 @@ function LeadershipCommissionTables({
                 leader={row}
                 weeks={weeks}
                 sellers={vendedoresDisponibles.filter(
-                  (vendedor) => Number(vendedor.usuarioId) !== Number(row.usuarioId),
+                  (vendedor) =>
+                    Number(vendedor.usuarioId) !== Number(row.usuarioId) &&
+                    (!isCallCenterSupervisor(row) || isCallCenterSeller(vendedor)),
                 )}
                 onSave={onGuardarEquipoSemanal}
+                onDelete={onEliminarEquipoSemanal}
                 savingKey={guardandoEquipoSemanal}
                 disabled={periodoPagado}
               />
@@ -3506,12 +3595,25 @@ function LeadershipCommissionTables({
                               className="mx-auto mt-1 block h-7 max-w-full rounded border border-slate-300 bg-white px-1 text-xs font-semibold text-slate-900 outline-none focus:border-emerald-600 disabled:opacity-50"
                             >
                               <option value="">
-                                {getWeekValues(row, week).cantidadVendedores ?? 0} vendedor{Number(getWeekValues(row, week).cantidadVendedores) === 1 ? "" : "es"}
+                                {Number(getWeekValues(row, week).cantidadVendedores) >
+                                (isCallCenterSupervisor(row) ? 6 : 5)
+                                  ? "Seleccione una tabla"
+                                  : "Automatico segun equipo"}
                               </option>
-                              {[1, 2, 3, 4, 5].map((cantidad) => (
+                              {Array.from(
+                                { length: isCallCenterSupervisor(row) ? 6 : 5 },
+                                (_, indexCantidad) => indexCantidad + 1,
+                              ).map((cantidad) => (
                                 <option key={cantidad} value={cantidad}>{cantidad} vendedor{cantidad === 1 ? "" : "es"}</option>
                               ))}
                             </select>
+                            {getWeekValues(row, week).cantidadVendedoresComision === null &&
+                            Number(getWeekValues(row, week).cantidadVendedores) >
+                              (isCallCenterSupervisor(row) ? 6 : 5) ? (
+                              <span className="mt-1 block text-[10px] font-bold text-red-700">
+                                Hay mas vendedores asignados que el maximo permitido; corrija la relacion semanal.
+                              </span>
+                            ) : null}
                             {guardandoEquipoSemanal === `${row.usuarioId}-${week.startDate}` ? (
                               <span role="status" className="mt-1 block text-[10px] font-normal">Guardando y calculando...</span>
                             ) : null}

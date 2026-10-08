@@ -74,6 +74,9 @@ const novedadesDelMes = (novedades, periodo) => {
 // Conserva las fórmulas previas para quien no tiene una novedad en el período.
 const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482) => {
   if (!Number.isFinite(sueldoMensual) || sueldoMensual < 0) throw errorValidacion('Sueldo mensual inválido');
+  const factorJornada = row.jornadaLaboral === 'medio_tiempo' ? 0.5 : 1;
+  const salarioJornada = redondear(sueldoMensual * factorJornada);
+  const afiliadoIess = row.afiliadoIess !== false;
   const key = validarPeriodo(periodo);
   const vigentes = novedadesDelMes(novedades, periodo);
   const maternidades = vigentes.filter((item) => item.tipo === 'MATERNIDAD' &&
@@ -87,13 +90,17 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
   let diasSueldoCompleto = diasTrabajados;
   let sueldoMaternidadEmpresa = 0;
   let subsidioIessInformativo = 0;
-  const valorDia = sueldoMensual / 30;
+  const valorDia = salarioJornada / 30;
   for (const novedad of maternidades) {
     // Los ajustes manuales antiguos se conservan como historial, pero no intervienen.
     const dias = diasEnMes30(novedad.fechaInicio, finMaternidad(novedad), periodo);
     diasMaternidad25 += dias;
-    sueldoMaternidadEmpresa += valorDia * dias * numero(novedad.porcentajeEmpleador ?? 25) / 100;
-    subsidioIessInformativo += valorDia * dias * numero(novedad.porcentajeIess ?? 75) / 100;
+    sueldoMaternidadEmpresa += afiliadoIess
+      ? valorDia * dias * numero(novedad.porcentajeEmpleador ?? 25) / 100
+      : valorDia * dias;
+    subsidioIessInformativo += afiliadoIess
+      ? valorDia * dias * numero(novedad.porcentajeIess ?? 75) / 100
+      : 0;
   }
   if (tieneMaternidad) {
     diasSueldoCompleto = 30 - diasMaternidad25;
@@ -107,21 +114,26 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
   subsidioIessInformativo = redondear(subsidioIessInformativo);
   const sueldoCompletoPeriodo = redondear(valorDia * diasSueldoCompleto);
   const sueldoAPagar = redondear(sueldoCompletoPeriodo + sueldoMaternidadEmpresa);
-  const sueldosExtras = row.sueldosExtrasManual != null ? numero(row.sueldosExtrasManual) : redondear(numero(row.rolPagoSueldoExtra) * diasTrabajados / 30);
+  const sueldosExtras = row.sueldosExtrasManual != null
+    ? numero(row.sueldosExtrasManual)
+    : redondear(numero(row.rolPagoSueldoExtra) * factorJornada * diasTrabajados / 30);
   const fondosReserva = row.fondosReservaManual != null ? redondear(numero(row.fondosReservaManual))
-    : row.fondoReservaActivo ? redondear(((tieneMaternidad ? sueldoMensual : sueldoAPagar) + sueldosExtras) / 12) : 0;
+    : row.fondoReservaActivo ? redondear(((tieneMaternidad ? salarioJornada : sueldoAPagar) + sueldosExtras) / 12) : 0;
   const comisionVenta = numero(row.ingresosComisiones);
   const totalIngresos = redondear(sueldoAPagar + sueldosExtras + fondosReserva + comisionVenta);
   // Los fondos de reserva son un valor neto para el empleado y no forman parte de la base del IESS.
-  const baseIess = tieneMaternidad ? sueldoMensual : redondear(sueldoAPagar + sueldosExtras + comisionVenta);
-  const iess = redondear(baseIess * 0.0945);
+  const baseIess = afiliadoIess
+    ? (tieneMaternidad ? salarioJornada : redondear(sueldoAPagar + sueldosExtras + comisionVenta))
+    : 0;
+  const iess = afiliadoIess ? redondear(baseIess * 0.0945) : 0;
   const anticipo = redondear(numero(row.totalAnticipos) - numero(row.descuentosMeta));
   const prestamo = redondear(numero(row.sumanPrestamos) + numero(row.prestamosEgresos));
   const sancionMeta = numero(row.descuentosMetaCalculado);
   const totalEgresos = redondear(iess + anticipo + prestamo + sancionMeta);
   const valorRecibir = redondear(totalIngresos - totalEgresos);
   const aplicables = [...maternidades, ...lactancias];
-  return { salario: sueldoMensual, diasTrabajados, diasMaternidad25, diasSueldoCompleto, sueldoCompletoPeriodo,
+  return { salario: salarioJornada, jornadaLaboral: row.jornadaLaboral || 'tiempo_completo', afiliadoIess,
+    diasTrabajados, diasMaternidad25, diasSueldoCompleto, sueldoCompletoPeriodo,
     sueldoMaternidadEmpresa, subsidioIessInformativo, sueldoAPagar, sueldosExtras, fondosReserva, comisionVenta,
     totalIngresos, totalIngresosEmpresa: totalIngresos, baseIess, iess, anticipo, prestamo, sancionMeta, totalEgresos,
     valorRecibir, valorRecibirEmpresa: valorRecibir, tieneMaternidad,

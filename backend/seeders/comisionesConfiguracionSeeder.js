@@ -3,7 +3,6 @@ const RolPago = require("../models/RolPago");
 const { Op } = require("sequelize");
 
 const CARGO_POR_GRUPO = {
-  "SUPERVISOR CALL CENTER": "SUPERVISOR CALL CENTER",
   "SUPERVISOR PISO": "SUPERVISOR PISO",
   "JEFE COMERCIAL PISO": "JEFE COMERCIAL DE PISO",
   "VENDEDORES DE PISO Y FURGONETA": "VENDEDOR PISO",
@@ -140,9 +139,19 @@ const toRecord = (row, index) => {
 };
 
 const seedComisionesConfiguracion = async () => {
-  const registros = COMISIONES_INICIALES.map(toRecord);
+  // La matriz historica sin rol se conserva solo como historial inactivo.
+  // La configuracion vigente del supervisor de Call Center se administra en
+  // la migracion vinculada al cargo "SUPERVISOR DE CALL CENTER" y llega a 6.
+  const registros = COMISIONES_INICIALES.map(toRecord).filter(
+    (registro) => registro.grupo !== "SUPERVISOR CALL CENTER",
+  );
   const roles = await RolPago.findAll({ attributes: ["id", "cargo"] });
   const rolesPorCargo = new Map(roles.map((rol) => [rol.cargo.trim().toUpperCase(), rol.id]));
+
+  await ComisionConfiguracion.update(
+    { activo: false },
+    { where: { grupo: "SUPERVISOR CALL CENTER" } },
+  );
 
   // Retira solamente la tabla anterior del jefe de piso. Se conserva el
   // historial y se evita que los escalones antiguos sigan activos junto con

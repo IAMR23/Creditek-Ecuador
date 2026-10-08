@@ -44,9 +44,44 @@ const {
   resolveSalesSanctionConfig,
   resolvePersonalSellerSanctionConfig,
   applyPersonalSellerPenaltiesToPrimaryView,
+  eliminarEquipoSemanalJefeComercial,
+  eliminarEquipoSemanalSupervisorComercial,
 } = require("./pagosComisionesService");
+const ConfiguracionMesComision = require("../models/ConfiguracionMesComision");
+const PagoComisionEquipoSemanal = require("../models/PagoComisionEquipoSemanal");
+const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
 
 describe("pagosComisionesService", () => {
+  test.each([
+    ["jefe", eliminarEquipoSemanalJefeComercial, { jefeComercialId: 10 }],
+    ["supervisor", eliminarEquipoSemanalSupervisorComercial, { supervisorComercialId: 10 }],
+  ])("elimina de forma idempotente la relacion semanal del %s", async (_tipo, eliminar, ids) => {
+    jest.spyOn(ConfiguracionMesComision, "findAll").mockResolvedValue([]);
+    jest.spyOn(PagoComisionPeriodo, "findOne").mockResolvedValue(null);
+    const destroy = jest
+      .spyOn(PagoComisionEquipoSemanal, "destroy")
+      .mockResolvedValue(1);
+
+    const resultado = await eliminar({
+      ...ids,
+      semanaInicio: "2026-08-06",
+    });
+
+    expect(destroy).toHaveBeenCalledWith({
+      where: {
+        jefeComercialId: 10,
+        semanaInicio: "2026-08-06",
+      },
+    });
+    expect(resultado).toMatchObject({
+      eliminado: true,
+      jefeComercialId: 10,
+      semanaInicio: "2026-08-06",
+    });
+
+    jest.restoreAllMocks();
+  });
+
   test("incluye usuarios con cargo salarial vendedor de piso aunque el nivel no venga como ASISTENTE", () => {
     expect(
       isCargoPagoComisionable({
@@ -450,6 +485,46 @@ describe("pagosComisionesService", () => {
       tieneMultiplesCargos: true,
     });
     expect(payload.posicionesPago).toHaveLength(2);
+  });
+
+  test("ignora relaciones antiguas con cargos salariales inactivos", () => {
+    const payload = getUsuarioPayload({
+      usuario: {
+        id: 41,
+        nombre: "Persona con relacion anterior",
+        activo: true,
+        rolPago: {
+          id: 3,
+          nivel: "ASISTENTE",
+          cargo: "VENDEDOR CALL CENTER",
+          ingresoMax: 900,
+          activo: true,
+        },
+        rolesPago: [
+          {
+            id: 3,
+            nivel: "ASISTENTE",
+            cargo: "VENDEDOR CALL CENTER",
+            ingresoMax: 900,
+            activo: true,
+          },
+          {
+            id: 30,
+            nivel: "SUPERVISOR",
+            cargo: "SUPERVISOR CALL CENTER ANTERIOR",
+            ingresoMax: 1800,
+            activo: false,
+          },
+        ],
+      },
+    });
+
+    expect(payload).toMatchObject({
+      rolPagoId: 3,
+      cargo: "VENDEDOR CALL CENTER",
+      tieneMultiplesCargos: false,
+    });
+    expect(payload.posicionesPago).toHaveLength(1);
   });
 
   test("incluye al usuario si su segundo cargo es comisionable", () => {
@@ -1033,6 +1108,39 @@ describe("pagosComisionesService", () => {
     });
   });
 
+  test("supervisor de Call Center solo cuenta vendedores de Call Center", () => {
+    const leader = {
+      usuarioId: 10,
+      posicionesPago: [
+        { cargo: "SUPERVISOR DE CALL CENTER", nivel: "SUPERVISOR" },
+      ],
+    };
+    const sellerCallCenter = {
+      usuarioId: 11,
+      posicionesPago: [{ cargo: "VENDEDOR CALL CENTER" }],
+    };
+    const sellerPiso = {
+      usuarioId: 12,
+      posicionesPago: [{ cargo: "VENDEDOR PISO" }],
+    };
+
+    const team = getLeaderMembersForWeek({
+      leader,
+      defaultJuniors: [],
+      weeklyTeam: { vendedorIds: [11, 12, 999] },
+      sellersById: new Map([
+        [11, sellerCallCenter],
+        [12, sellerPiso],
+      ]),
+    });
+
+    expect(team).toMatchObject({
+      configured: true,
+      selectedSellerIds: [11],
+      members: [sellerCallCenter],
+    });
+  });
+
   test("el supervisor calcula produccion y promedio con su seleccion de cada semana", () => {
     const weeks = [
       { startDate: "2026-07-02", endDate: "2026-07-08" },
@@ -1577,16 +1685,41 @@ describe("tabla del jefe comercial de piso", () => {
 });
 
 describe("cantidad para comision semanal", () => {
-  test.each([1, 2, 3, 4, 5])("valida cantidad %s", cantidad => {
+  test.each([1, 2, 3, 4, 5, 6])("valida cantidad %s", cantidad => {
     expect(normalizarCantidadVendedoresComision(String(cantidad))).toBe(cantidad);
   });
-  test.each([0, 6, -1, 1.5, "abc", true])("rechaza cantidad %s", cantidad => {
+  test.each([0, 7, -1, 1.5, "abc", true])("rechaza cantidad %s", cantidad => {
     expect(() => normalizarCantidadVendedoresComision(cantidad)).toThrow();
+  });
+  test("seis vendedores se permite solo al supervisor", () => {
+    expect(normalizarCantidadVendedoresComision(6, 6)).toBe(6);
+    expect(() => normalizarCantidadVendedoresComision(6, 5)).toThrow(
+      "entre 1 y 5 vendedores",
+    );
   });
   test("automatico y recuperacion de seleccion persistida", () => {
     expect(normalizarCantidadVendedoresComision(null)).toBeNull();
     const map = buildWeeklyTeamsMap([{ jefeComercialId: 1, semanaInicio: "2026-01-05", vendedorIds: [2, 3], cantidadVendedoresComision: 5 }]);
     expect([...map.values()][0]).toMatchObject({ vendedorIds: [2, 3], cantidadVendedoresComision: 5 });
+  });
+  test("seis vendedores usa la matriz vinculada al rol Supervisor de Call Center", () => {
+    const grouped = buildWeeklyRulesByGroup([
+      {
+        rolPagoId: 9,
+        grupo: "SUPERVISOR DE CALL CENTER",
+        subgrupo: "6 vendedores",
+        periodo: "COMISION_SEMANAL",
+        unidadesVendidas: "64",
+        comisionPorEquipo: 1.5,
+        porcentaje: null,
+      },
+    ]);
+
+    const rules = grouped["ROL:9|SUB:6 VENDEDORES"];
+    expect(rules).toHaveLength(1);
+    expect(
+      calculateCommission({ rules, venden: 64, valorVendido: 0 }),
+    ).toMatchObject({ totalComisiones: 96 });
   });
   test.each([false, true])("seleccion semanal usa tarifa del cargo sin alterar equipo ni promedio; supervisor %s", supervisor => {
     const grupo = supervisor ? "SUPERVISOR CALL CENTER" : "JEFE COMERCIAL";
@@ -1598,19 +1731,19 @@ describe("cantidad para comision semanal", () => {
       cantidadVendedoresPromedioJefe: 3, cantidadVendedoresPromedioSupervisor: 3,
       semanas: Object.fromEntries(weeks.map((week, i) => [week.startDate, {
         venden: 30, ventasParaPromedioAntiguedad: 30, valorVendido: 100, cantidadVendedores: 4,
-        cantidadVendedoresComision: i === 0 ? 2 : 5,
+        cantidadVendedoresComision: i === 0 ? 2 : 6,
       }])),
       total: { venden: 0, valorVendido: 0, totalComisiones: 0, noCumpleMetas: 0, valorDescontar: 0 },
     };
     const rules = buildWeeklyRulesByGroup(
-      ["JEFE COMERCIAL", "SUPERVISOR CALL CENTER"].flatMap(cargo => [2, 4, 5].map(cantidad => ({
+      ["JEFE COMERCIAL", "SUPERVISOR CALL CENTER"].flatMap(cargo => [2, 4, 5, 6].map(cantidad => ({
         grupo: cargo, subgrupo: cantidad + " VENDEDORES", periodo: "COMISION_SEMANAL",
         unidadesVendidas: "1 EN ADELANTE", comisionPorEquipo: cantidad * (cargo === "SUPERVISOR CALL CENTER" ? 2 : 1), porcentaje: null,
       }))),
     );
     finalizarVendedor(lider, weeks, rules, {}, { byRole: {}, byCargo: {} }, new Map());
     expect(lider.semanas[weeks[0].startDate].totalComisiones).toBe(supervisor ? 120 : 60);
-    expect(lider.semanas[weeks[1].startDate].totalComisiones).toBe(supervisor ? 300 : 150);
+    expect(lider.semanas[weeks[1].startDate].totalComisiones).toBe(supervisor ? 360 : 180);
     expect(lider.semanas[weeks[0].startDate].cantidadVendedores).toBe(4);
     expect(lider.resumenMensual.promedioVentasPorJunior).toBe(
       supervisor ? 10 : null,

@@ -221,6 +221,50 @@ describe("POST /usuarios", () => {
     );
   });
 
+  test("crea usuarios afiliados y de tiempo completo por defecto", async () => {
+    Usuario.create.mockImplementation(async (data) => ({
+      id: 32,
+      ...data,
+      toJSON: () => ({ id: 32, ...data }),
+    }));
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send(payloadValido);
+
+    expect(response.status).toBe(201);
+    expect(Usuario.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jornadaLaboral: "tiempo_completo",
+        afiliadoIess: true,
+      }),
+    );
+  });
+
+  test("permite crear un usuario de medio tiempo no afiliado", async () => {
+    Usuario.create.mockImplementation(async (data) => ({
+      id: 33,
+      ...data,
+      toJSON: () => ({ id: 33, ...data }),
+    }));
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send({
+        ...payloadValido,
+        jornadaLaboral: "medio_tiempo",
+        afiliadoIess: false,
+      });
+
+    expect(response.status).toBe(201);
+    expect(Usuario.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jornadaLaboral: "medio_tiempo",
+        afiliadoIess: false,
+      }),
+    );
+  });
+
   test("rechaza un usuario Uphone ya asignado", async () => {
     Usuario.findOne
       .mockResolvedValueOnce(null)
@@ -361,6 +405,53 @@ describe("PUT /usuarios/:id", () => {
     expect(response.status).toBe(400);
     expect(response.body.message).toBe(
       "El usuario Uphone ya esta asignado a otro usuario.",
+    );
+    expect(usuario.save).not.toHaveBeenCalled();
+  });
+
+  test("actualiza jornada laboral y afiliacion", async () => {
+    const usuario = {
+      id: 24,
+      jornadaLaboral: "tiempo_completo",
+      afiliadoIess: true,
+      save: jest.fn().mockResolvedValue(undefined),
+      toJSON() {
+        return {
+          id: this.id,
+          jornadaLaboral: this.jornadaLaboral,
+          afiliadoIess: this.afiliadoIess,
+        };
+      },
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/24")
+      .send({
+        jornadaLaboral: "medio_tiempo",
+        afiliadoIess: false,
+      });
+
+    expect(response.status).toBe(200);
+    expect(usuario.jornadaLaboral).toBe("medio_tiempo");
+    expect(usuario.afiliadoIess).toBe(false);
+    expect(usuario.save).toHaveBeenCalled();
+  });
+
+  test("rechaza una jornada laboral desconocida", async () => {
+    const usuario = {
+      id: 25,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/25")
+      .send({ jornadaLaboral: "por_horas" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      "La jornada laboral debe ser tiempo completo o medio tiempo.",
     );
     expect(usuario.save).not.toHaveBeenCalled();
   });

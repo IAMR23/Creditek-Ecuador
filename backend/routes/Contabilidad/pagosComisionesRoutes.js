@@ -25,6 +25,10 @@ router.put(
   "/jefes/:jefeComercialId/equipos-semanales/:semanaInicio",
   controller.guardarEquipoSemanalJefeComercial,
 );
+router.delete(
+  "/jefes/:jefeComercialId/equipos-semanales/:semanaInicio",
+  controller.eliminarEquipoSemanalJefeComercial,
+);
 router.put(
   "/jefes/:jefeComercialId/promedio-mensual/:year/:month",
   controller.guardarPromedioMensualJefeComercial,
@@ -36,6 +40,10 @@ router.put(
 router.put(
   "/supervisores/:supervisorComercialId/equipos-semanales/:semanaInicio",
   controller.guardarEquipoSemanalSupervisorComercial,
+);
+router.delete(
+  "/supervisores/:supervisorComercialId/equipos-semanales/:semanaInicio",
+  controller.eliminarEquipoSemanalSupervisorComercial,
 );
 router.put(
   "/supervisores/:supervisorComercialId/promedio-mensual/:year/:month",

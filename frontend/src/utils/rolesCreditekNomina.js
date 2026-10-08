@@ -5,11 +5,19 @@ const numero = (value) => {
 const redondear = (value) => Number(value.toFixed(2));
 const IESS_RATE = 0.0945;
 
+export const factorJornadaNomina = (jornadaLaboral) =>
+  jornadaLaboral === "medio_tiempo" ? 0.5 : 1;
+
+export const calcularValorPorJornada = (value, jornadaLaboral) =>
+  redondear(numero(value) * factorJornadaNomina(jornadaLaboral));
+
 export const calcularBaseIessNomina = ({ sueldoAPagar, sueldosExtras, comisionVenta }) =>
   redondear(numero(sueldoAPagar) + numero(sueldosExtras) + numero(comisionVenta));
 
 export const calcularIessNomina = (valores) =>
-  redondear(calcularBaseIessNomina(valores) * IESS_RATE);
+  valores?.afiliadoIess === false
+    ? 0
+    : redondear(calcularBaseIessNomina(valores) * IESS_RATE);
 
 export const normalizarIdsNomina = (ids) => Array.isArray(ids)
   ? [...new Set(ids.filter((id) => ["string", "number"].includes(typeof id)).map(String))]
@@ -61,12 +69,20 @@ export const aplicarCalculoNovedad = (row) => {
     : row.fondoReservaActivo ? redondear(((calculo.tieneMaternidad ? calculo.salario : calculo.sueldoAPagar) + sueldosExtras) / 12) : 0;
   const comisionVenta = numero(row.ingresosComisiones);
   const totalIngresos = redondear(calculo.sueldoAPagar + sueldosExtras + fondosReserva + comisionVenta);
-  const baseIess = calculo.tieneMaternidad
-    ? numero(calculo.baseIess ?? calculo.salario)
-    : calcularBaseIessNomina({ sueldoAPagar: calculo.sueldoAPagar, sueldosExtras, comisionVenta });
+  const afiliadoIess = row.afiliadoIess !== false;
+  const baseIess = afiliadoIess
+    ? calculo.tieneMaternidad
+      ? numero(calculo.baseIess ?? calculo.salario)
+      : calcularBaseIessNomina({ sueldoAPagar: calculo.sueldoAPagar, sueldosExtras, comisionVenta })
+    : 0;
   const iess = calculo.tieneMaternidad
-    ? calculo.iess
-    : calcularIessNomina({ sueldoAPagar: calculo.sueldoAPagar, sueldosExtras, comisionVenta });
+    ? (afiliadoIess ? calculo.iess : 0)
+    : calcularIessNomina({
+        sueldoAPagar: calculo.sueldoAPagar,
+        sueldosExtras,
+        comisionVenta,
+        afiliadoIess,
+      });
   const egresos = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - egresos.totalEgresos);
   return { ...row, ...calculo, ...egresos, fondosReserva, sueldosExtras, totalIngresos, baseIess,

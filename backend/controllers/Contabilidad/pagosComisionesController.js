@@ -254,6 +254,32 @@ const guardarPromedioMensualSupervisorComercial = async (req, res) => {
   }
 };
 
+const eliminarEquipoSemanalJefeComercial = async (req, res) => {
+  try {
+    const resultado =
+      await pagosComisionesService.eliminarEquipoSemanalJefeComercial({
+        jefeComercialId: req.params.jefeComercialId,
+        semanaInicio: req.params.semanaInicio,
+      });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
+const eliminarEquipoSemanalSupervisorComercial = async (req, res) => {
+  try {
+    const resultado =
+      await pagosComisionesService.eliminarEquipoSemanalSupervisorComercial({
+        supervisorComercialId: req.params.supervisorComercialId,
+        semanaInicio: req.params.semanaInicio,
+      });
+    return res.json(resultado);
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
 const guardarMetaMensualJefeComercial = async (req, res) => {
   try {
     const resultado =
@@ -297,6 +323,8 @@ module.exports = {
   actualizarSupervisorComercial,
   guardarEquipoSemanalJefeComercial,
   guardarEquipoSemanalSupervisorComercial,
+  eliminarEquipoSemanalJefeComercial,
+  eliminarEquipoSemanalSupervisorComercial,
   guardarMetaMensualJefeComercial,
   guardarPromedioMensualJefeComercial,
   guardarPromedioMensualSupervisorComercial,

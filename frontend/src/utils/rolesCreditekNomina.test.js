@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   calcularBaseIessNomina,
   calcularIessNomina,
+  calcularValorPorJornada,
   calcularEgresosNomina,
   aplicarCalculoNovedad,
   moverPrioridadNomina,
@@ -14,6 +15,37 @@ test('excluye fondos de reserva de la base y del calculo del IESS', () => {
   const valores = { sueldoAPagar: 482, sueldosExtras: 0, comisionVenta: 20, fondosReserva: 100 };
   assert.equal(calcularBaseIessNomina(valores), 502);
   assert.equal(calcularIessNomina(valores), 47.44);
+});
+
+test('prorratea al 50% los valores salariales de medio tiempo', () => {
+  assert.equal(calcularValorPorJornada(482, "tiempo_completo"), 482);
+  assert.equal(calcularValorPorJornada(482, "medio_tiempo"), 241);
+  assert.equal(calcularValorPorJornada(68, "medio_tiempo"), 34);
+});
+
+test('no descuenta IESS cuando el usuario no esta afiliado', () => {
+  assert.equal(calcularIessNomina({
+    sueldoAPagar: 482,
+    sueldosExtras: 0,
+    comisionVenta: 20,
+    afiliadoIess: false,
+  }), 0);
+});
+
+test('novedad de no afiliado conserva base y descuento IESS en cero', () => {
+  const result = aplicarCalculoNovedad({
+    afiliadoIess: false,
+    nominaCalculada: {
+      tipoNovedad: 'LACTANCIA',
+      tieneMaternidad: false,
+      salario: 482,
+      sueldoAPagar: 482,
+      sueldosExtras: 0,
+    },
+  });
+  assert.equal(result.baseIess, 0);
+  assert.equal(result.iess, 0);
+  assert.equal(result.valorRecibir, 482);
 });
 
 test('maternidad usa el cálculo del servidor y separa el subsidio del pago de Creditek', () => {

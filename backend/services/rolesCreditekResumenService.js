@@ -209,6 +209,8 @@ const obtenerDatosPagoUsuario = (usuario, ingreso) => {
     cedula: usuario?.cedula || "",
     fechaIngreso: usuario?.fechaIngreso || null,
     fechaSalida: usuario?.fechaSalida || null,
+    jornadaLaboral: usuario?.jornadaLaboral || "tiempo_completo",
+    afiliadoIess: usuario?.afiliadoIess !== false,
     cargo: usuario?.rolPago?.cargo || rolPago?.cargo || nomina?.cargo || ingreso?.cargo || "",
     rolPagoId: rolPago?.id || nomina?.rolPagoId || usuario?.rolPagoId || null,
     rolPagoSueldoBase: redondear(sueldoBase),
@@ -310,6 +312,8 @@ const obtenerResumen = async (periodoValue) => {
           "activo",
           "fechaIngreso",
           "fechaSalida",
+          "jornadaLaboral",
+          "afiliadoIess",
           "rolPagoId",
         ],
         include: [

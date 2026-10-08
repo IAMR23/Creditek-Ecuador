@@ -21,6 +21,7 @@ const {
 } = require("../services/notificacionesPersonalService");
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
+const JORNADAS_LABORALES = new Set(["tiempo_completo", "medio_tiempo"]);
 const ETIQUETAS_CAMPOS_USUARIO = {
   email: "Correo electrónico",
   password: "Contraseña",
@@ -102,6 +103,21 @@ const normalizarRolesPagoIds = (rolPagoId, rolesPagoIds) => {
         .filter((id) => Number.isInteger(id) && id > 0),
     ),
   ];
+};
+
+const validarDatosLaborales = (jornadaLaboral, afiliadoIess) => {
+  if (
+    jornadaLaboral !== undefined &&
+    !JORNADAS_LABORALES.has(jornadaLaboral)
+  ) {
+    return "La jornada laboral debe ser tiempo completo o medio tiempo.";
+  }
+
+  if (afiliadoIess !== undefined && typeof afiliadoIess !== "boolean") {
+    return "La afiliacion al IESS debe indicarse con un valor si/no valido.";
+  }
+
+  return null;
 };
 
 const validarRoles = async (rolIds) => {
@@ -254,6 +270,8 @@ router.post("/", async (req, res) => {
       rolIds,
       fechaIngreso,
       fechaSalida,
+      jornadaLaboral,
+      afiliadoIess,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -266,6 +284,14 @@ router.post("/", async (req, res) => {
     const emailNormalizado = String(email || "").trim().toLowerCase();
     const usuarioUphoneNormalizado = String(usuarioUphone || "").trim() || null;
     const camposFaltantes = [];
+    const errorDatosLaborales = validarDatosLaborales(
+      jornadaLaboral,
+      afiliadoIess,
+    );
+
+    if (errorDatosLaborales) {
+      return res.status(400).json({ message: errorDatosLaborales });
+    }
 
     if (!emailNormalizado) camposFaltantes.push("Correo electrónico");
     if (!String(password || "").trim()) camposFaltantes.push("Contraseña");
@@ -352,6 +378,8 @@ router.post("/", async (req, res) => {
       fechaIngreso,
       fechaSalida: fechaSalida || null,
       fechaSalidaRegistradaAt: fechaSalida ? new Date() : null,
+      jornadaLaboral: jornadaLaboral ?? "tiempo_completo",
+      afiliadoIess: afiliadoIess ?? true,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -496,6 +524,8 @@ const actualizarUsuario = async (req, res) => {
       activo,
       fechaIngreso,
       fechaSalida,
+      jornadaLaboral,
+      afiliadoIess,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -507,6 +537,15 @@ const actualizarUsuario = async (req, res) => {
 
     if (!usuario) {
       return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    const errorDatosLaborales = validarDatosLaborales(
+      jornadaLaboral,
+      afiliadoIess,
+    );
+
+    if (errorDatosLaborales) {
+      return res.status(400).json({ message: errorDatosLaborales });
     }
 
     // ========== VALIDAR EMAIL SOLO SI CAMBIA ==========
@@ -627,6 +666,8 @@ const actualizarUsuario = async (req, res) => {
     if (cedula !== undefined) usuario.cedula = cedula;
     if (activo !== undefined) usuario.activo = activo;
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
+    if (jornadaLaboral !== undefined) usuario.jornadaLaboral = jornadaLaboral;
+    if (afiliadoIess !== undefined) usuario.afiliadoIess = afiliadoIess;
     let cambioFechaSalida = false;
     if (fechaSalida !== undefined) {
       const nuevaFechaSalida = fechaSalida || null;
