@@ -5,6 +5,7 @@ jest.mock("./ghlAdvisorAvailabilityService", () => ({
     invalid: [],
   })),
   isGhlUserActiveToday: jest.fn(async () => true),
+  isGhlUserScheduledToday: jest.fn(async () => true),
 }));
 
 const service = require("./ghlOpportunityDistributionService");
@@ -173,6 +174,37 @@ describe("control de ejecuciones GHL", () => {
     await service.processOneDetail(run, { pipelineId: "p", stageId: "s", modo: "all" }, detail, {});
     expect(detail.estado).toBe("assigned");
     expect(ghl.requestGhl).toHaveBeenCalledTimes(1);
+  });
+
+  test("el refresco usa el horario diario y marca la conversacion como no leida", async () => {
+    jest.clearAllMocks();
+    const run = makeRun();
+    const detail = { opportunityId: "o1", newAssignedTo: "u1", previousAssignedTo: null, attemptCount: 0, update: jest.fn(async (values) => Object.assign(detail, values)) };
+    jest.spyOn(Ejecucion, "findByPk").mockResolvedValue({ estado: "running" });
+    jest.spyOn(Detalle, "findAll").mockResolvedValue([{ estado: "assigned" }]);
+    jest.spyOn(ghl, "requestGhl")
+      .mockResolvedValueOnce({ opportunity: { id: "o1", contactId: "c1", pipelineId: "p", pipelineStageId: "contactado" } })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ conversations: [{ id: "conversation-1", unreadCount: 0 }] })
+      .mockResolvedValueOnce({ success: true });
+
+    await service.processOneDetail(
+      run,
+      { pipelineId: "p", stageId: "gestion", modo: "refresh_non_management" },
+      detail,
+      {},
+      null,
+      { locationId: "location-1" },
+    );
+
+    expect(advisorAvailability.isGhlUserScheduledToday).toHaveBeenCalledWith("u1");
+    expect(advisorAvailability.isGhlUserActiveToday).not.toHaveBeenCalled();
+    expect(ghl.requestGhl).toHaveBeenNthCalledWith(4, {}, expect.objectContaining({
+      method: "PUT",
+      url: "/conversations/conversation-1",
+      data: { locationId: "location-1", unreadCount: 1 },
+    }));
+    expect(detail.estado).toBe("assigned");
   });
 
   test("cancela una ejecucion activa solicitando detencion segura", async () => {

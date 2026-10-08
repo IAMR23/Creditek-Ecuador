@@ -3,6 +3,7 @@ const {
   ensureGhlAdvisorAvailabilitySchema,
   ensureGhlRepartoCapacitySchema,
   ensureGhlRepartoExecutionControlSchema,
+  ensureGhlRefreshExcludedStagesSchema,
 } = require("./db");
 const fs = require("fs");
 const path = require("path");
@@ -78,6 +79,29 @@ describe("esquema previo al arranque para reparto GHL", () => {
     );
     expect(sql).toContain("ADD VALUE IF NOT EXISTS 'refresh_non_management'");
     expect(sql).toContain("SELECT enumlabel");
+  });
+
+  test("agrega arreglos de etapas excluidas y conserva la etapa existente", async () => {
+    const query = jest.spyOn(sequelize, "query").mockResolvedValue([]);
+    await ensureGhlRefreshExcludedStagesSchema({
+      showAllTables: jest.fn().mockResolvedValue(["ghl_reparto_configuraciones"]),
+    });
+    const sql = query.mock.calls.map(([statement]) => statement).join("\n");
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "stageIds"');
+    expect(sql).toContain('ARRAY["stageId"]');
+    expect(sql).toContain("ghl_reparto_config_stage_arrays_check");
+  });
+
+  test("la migracion de multiples etapas es incremental e idempotente", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "../migrations/202610070001-add-ghl-refresh-excluded-stages.sql"),
+      "utf8",
+    );
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "stageIds"');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS "stageNombres"');
+    expect(sql).toContain('ARRAY["stageId"]');
+    expect(sql).toContain("cardinality(\"stageIds\") = cardinality(\"stageNombres\")");
+    expect(sql).not.toMatch(/DROP TABLE|DROP COLUMN/i);
   });
 
   test("agrega limite y contadores de capacidad antes de sequelize.sync", async () => {

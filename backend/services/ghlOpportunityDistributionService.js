@@ -161,8 +161,13 @@ const eligibleOpportunities = (opportunities, mode) => mode === "unassigned"
 
 function classifyCurrentOpportunity(opportunity, configRow) {
   const stageId = ghl.getOpportunityStageId(opportunity);
+  const excludedStageIds = new Set(
+    Array.isArray(configRow.stageIds) && configRow.stageIds.length
+      ? configRow.stageIds.map(String)
+      : [String(configRow.stageId || "")],
+  );
   const invalidStage = configRow.modo === "refresh_non_management"
-    ? stageId === configRow.stageId
+    ? excludedStageIds.has(stageId)
     : stageId !== configRow.stageId;
   if (invalidStage || ghl.getOpportunityPipelineId(opportunity) !== configRow.pipelineId) return "STAGE_CHANGED";
   if (configRow.modo === "unassigned" && assignedToOf(opportunity)) return "OWNER_CHANGED";
@@ -738,12 +743,23 @@ async function fetchRealtimeOpenOpportunities(
 async function validateInput(input) {
   const days = [...new Set((input.diasSemana || []).map(Number))].filter((day) => Number.isInteger(day) && day >= 0 && day <= 6).sort();
   const users = uniqueUsers(input.usuariosGhl);
-  if (!ID_RE.test(String(input.pipelineId || "")) || !ID_RE.test(String(input.stageId || ""))) throw serviceError("INVALID_PIPELINE_STAGE", "Pipeline y etapa son obligatorios", 400);
+  const dynamicAdvisors = input.modo === "refresh_non_management";
+  const requestedStageIds = [...new Set(
+    (dynamicAdvisors && Array.isArray(input.stageIds) && input.stageIds.length
+      ? input.stageIds
+      : [input.stageId])
+      .map((stageId) => String(stageId || "").trim())
+      .filter(Boolean),
+  )];
+  if (!ID_RE.test(String(input.pipelineId || ""))
+    || !requestedStageIds.length
+    || requestedStageIds.some((stageId) => !ID_RE.test(stageId))) {
+    throw serviceError("INVALID_PIPELINE_STAGE", "Pipeline y etapas son obligatorios", 400);
+  }
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.hora || "")) throw serviceError("INVALID_TIME", "La hora debe usar formato HH:mm", 400);
   if (!days.length) throw serviceError("INVALID_DAYS", "Seleccione al menos un dia", 400);
   if (input.zonaHoraria && input.zonaHoraria !== TIME_ZONE) throw serviceError("INVALID_TIMEZONE", `La zona horaria debe ser ${TIME_ZONE}`, 400);
   if (!["unassigned", "all", "refresh_non_management"].includes(input.modo)) throw serviceError("INVALID_MODE", "Modo de reparto invalido", 400);
-  const dynamicAdvisors = input.modo === "refresh_non_management";
   if (!dynamicAdvisors && (users.length < 2 || users.some((user) => !ID_RE.test(user.id)))) throw serviceError("GHL_USERS_MINIMUM", "Seleccione al menos dos usuarios GHL validos y distintos", 400);
   const intervaloMinutos = Number(input.intervaloMinutos ?? 1);
   if (!Number.isInteger(intervaloMinutos) || intervaloMinutos < 1 || intervaloMinutos > 60) throw serviceError("INVALID_INTERVAL", "El intervalo debe estar entre 1 y 60 minutos", 400);
@@ -751,21 +767,28 @@ async function validateInput(input) {
   if (!Number.isInteger(maxPendientesPorAsesor) || maxPendientesPorAsesor < 1 || maxPendientesPorAsesor > MAX_PENDING_PER_ADVISOR) throw serviceError("INVALID_MAX_PENDING", `El limite por asesor debe ser un entero entre 1 y ${MAX_PENDING_PER_ADVISOR}`, 400);
   const catalogs = await getCatalogs();
   const pipeline = catalogs.pipelines.find((item) => idOf(item) === String(input.pipelineId));
-  const stage = pipelineStages(pipeline).find((item) => idOf(item) === String(input.stageId));
+  const stagesById = new Map(pipelineStages(pipeline).map((stage) => [idOf(stage), stage]));
+  const selectedStages = requestedStageIds.map((stageId) => stagesById.get(stageId)).filter(Boolean);
   const activeById = new Map(catalogs.users.map((user) => [idOf(user), user]));
-  if (!pipeline || !stage) throw serviceError("INVALID_PIPELINE_STAGE", "El pipeline o la etapa ya no existe en GHL", 400);
+  if (!pipeline || selectedStages.length !== requestedStageIds.length) throw serviceError("INVALID_PIPELINE_STAGE", "El pipeline o una de las etapas ya no existe en GHL", 400);
   if (!dynamicAdvisors && users.some((user) => !activeById.has(user.id))) throw serviceError("INVALID_GHL_USERS", "Uno o mas usuarios no estan activos o no pertenecen a GHL", 400);
-  return { nombre: String(input.nombre || `${pipeline.name} - ${stage.name}`).trim().slice(0, 160), pipelineId: idOf(pipeline), pipelineNombre: String(pipeline.name || "Pipeline"), stageId: idOf(stage), stageNombre: String(stage.name || "Etapa"), hora: input.hora, intervaloMinutos, maxPendientesPorAsesor, zonaHoraria: TIME_ZONE, diasSemana: days, modo: input.modo, usuariosGhl: dynamicAdvisors ? [] : users.map((user) => { const raw = activeById.get(user.id); return { id: user.id, name: raw?.name || `${raw?.firstName || ""} ${raw?.lastName || ""}`.trim() || user.name, email: raw?.email || user.email || "" }; }), activo: input.activo !== false };
+  const stageNames = selectedStages.map((stage) => String(stage.name || "Etapa"));
+  return { nombre: String(input.nombre || `${pipeline.name} - ${stageNames.join(", ")}`).trim().slice(0, 160), pipelineId: idOf(pipeline), pipelineNombre: String(pipeline.name || "Pipeline"), stageId: requestedStageIds[0], stageNombre: stageNames.join(", ").slice(0, 200), stageIds: requestedStageIds, stageNombres: stageNames, hora: input.hora, intervaloMinutos, maxPendientesPorAsesor, zonaHoraria: TIME_ZONE, diasSemana: days, modo: input.modo, usuariosGhl: dynamicAdvisors ? [] : users.map((user) => { const raw = activeById.get(user.id); return { id: user.id, name: raw?.name || `${raw?.firstName || ""} ${raw?.lastName || ""}`.trim() || user.name, email: raw?.email || user.email || "" }; }), activo: input.activo !== false };
 }
 
 async function allStageOpportunities(configRow, client, config, now = new Date()) {
   if (configRow.modo === "refresh_non_management") {
+    const excludedStageIds = new Set(
+      Array.isArray(configRow.stageIds) && configRow.stageIds.length
+        ? configRow.stageIds.map(String)
+        : [String(configRow.stageId || "")],
+    );
     const all = await ghl.fetchAllOpportunityStatuses(
       client,
       { ...config, pipelineId: configRow.pipelineId },
       opportunityTodayRange(now),
     );
-    return all.filter((item) => ghl.getOpportunityPipelineId(item) === configRow.pipelineId && ghl.getOpportunityStageId(item) !== configRow.stageId);
+    return all.filter((item) => ghl.getOpportunityPipelineId(item) === configRow.pipelineId && !excludedStageIds.has(ghl.getOpportunityStageId(item)));
   }
   const dateRange = configRow.modo === "unassigned" ? {} : opportunityDateRange(now);
   const all = await ghl.fetchOpportunitiesByStatus(client, { ...config, pipelineId: configRow.pipelineId }, "open", dateRange);
@@ -774,7 +797,17 @@ async function allStageOpportunities(configRow, client, config, now = new Date()
 
 async function advisorsForConfiguration(configRow, currentGhlUsers, now) {
   if (configRow.modo === "refresh_non_management") {
-    return advisorAvailability.resolveActiveAdvisors(currentGhlUsers, now);
+    const scheduleConfiguration = await RealtimeConfiguracion.findByPk(1, {
+      attributes: ["horariosFlujoActivo", "horariosFlujo"],
+    });
+    if (scheduleConfiguration?.horariosFlujoActivo !== true) {
+      return { active: [], paused: [], invalid: [], schedule: null };
+    }
+    return advisorAvailability.resolveDayScheduledAdvisors(
+      scheduleConfiguration.horariosFlujo,
+      currentGhlUsers,
+      now,
+    );
   }
   return advisorAvailability.resolveConfiguredAdvisors(configRow.usuariosGhl, currentGhlUsers, now);
 }
@@ -821,7 +854,9 @@ async function preview(configRow) {
     cantidad: 0,
   });
   const warning = !advisors.active.length
-    ? "No hay asesores en Play; las oportunidades no se modificaran y permaneceran sin propietario"
+    ? configRow.modo === "refresh_non_management"
+      ? "No hay asesores validos en el horario de hoy; las oportunidades no se modificaran"
+      : "No hay asesores en Play; las oportunidades no se modificaran y permaneceran sin propietario"
     : configRow.modo === "unassigned" && eligible.length > 0 && assignments.length === 0
       ? "Todos los asesores en Play alcanzaron el limite; la cola permanecera sin propietario"
       : null;
@@ -862,6 +897,42 @@ async function requestWithRetry(client, options, maxRetries = 3, beforeRetry = n
       if (beforeRetry) await beforeRetry();
     }
   }
+}
+
+const conversationsFromPayload = (payload) => {
+  if (Array.isArray(payload?.conversations)) return payload.conversations;
+  if (Array.isArray(payload?.data?.conversations)) return payload.data.conversations;
+  return [];
+};
+
+async function markOpportunityConversationsUnread(client, config, opportunity, beforeRetry = null) {
+  const contactId = ghl.getOpportunityContactId(opportunity);
+  if (!contactId) {
+    throw serviceError(
+      "GHL_CONTACT_REQUIRED",
+      "La oportunidad no tiene un contacto asociado para marcarlo como no leido",
+      409,
+    );
+  }
+  const payload = await requestWithRetry(client, {
+    method: "GET",
+    url: "/conversations/search",
+    params: { locationId: config.locationId, contactId, limit: 100 },
+  }, 3, beforeRetry);
+  const conversations = conversationsFromPayload(payload);
+  for (const conversation of conversations) {
+    const conversationId = ghl.toId(conversation?.id || conversation?._id);
+    if (!conversationId) continue;
+    await requestWithRetry(client, {
+      method: "PUT",
+      url: `/conversations/${encodeURIComponent(conversationId)}`,
+      data: {
+        locationId: config.locationId,
+        unreadCount: Math.max(1, Number(conversation.unreadCount) || 0),
+      },
+    }, 3, beforeRetry);
+  }
+  return conversations.length;
 }
 
 async function acquireLock(configId) {
@@ -950,12 +1021,14 @@ async function finalizeControl(run, state) {
   return "cancelled";
 }
 
-async function processOneDetail(run, configRow, detail, client, capacityTracker = null) {
+async function processOneDetail(run, configRow, detail, client, capacityTracker = null, ghlConfig = null) {
   throwIfClientAborted(client);
   await currentControlState(run.id);
   await detail.update({ attemptCount: Number(detail.attemptCount || 0) + 1 });
   try {
-    const advisorStillActive = await advisorAvailability.isGhlUserActiveToday(detail.newAssignedTo);
+    const advisorStillActive = configRow.modo === "refresh_non_management"
+      ? await advisorAvailability.isGhlUserScheduledToday(detail.newAssignedTo)
+      : await advisorAvailability.isGhlUserActiveToday(detail.newAssignedTo);
     const plannedCapacityAvailable = !capacityTracker
       || configRow.modo !== "unassigned"
       || (Number(capacityTracker.loads.get(detail.newAssignedTo)) || 0) < capacityTracker.limit;
@@ -963,11 +1036,26 @@ async function processOneDetail(run, configRow, detail, client, capacityTracker 
     const current = currentPayload.opportunity || currentPayload.data || currentPayload;
     const currentOwner = assignedToOf(current);
     if (currentOwner === detail.newAssignedTo) {
+      if (configRow.modo === "refresh_non_management") {
+        await markOpportunityConversationsUnread(
+          client,
+          ghlConfig || ghl.getGhlConfig({ requirePipelineId: false }),
+          current,
+          () => currentControlState(run.id),
+        );
+      }
       await detail.update({ estado: "assigned", assignedAt: detail.assignedAt || new Date(), retryable: false, previousAssignedTo: detail.previousAssignedTo || currentOwner, errorCode: null, errorMessage: null });
       return;
     }
     if (!advisorStillActive) {
-      await detail.update({ estado: "skipped", retryable: false, errorCode: "ADVISOR_PAUSED", errorMessage: "El asesor dejo de estar en Play antes de la asignacion" });
+      await detail.update({
+        estado: "skipped",
+        retryable: false,
+        errorCode: "ADVISOR_PAUSED",
+        errorMessage: configRow.modo === "refresh_non_management"
+          ? "El asesor dejo de pertenecer al horario del dia antes de la asignacion"
+          : "El asesor dejo de estar en Play antes de la asignacion",
+      });
       return;
     }
     const skipCode = classifyCurrentOpportunity(current, configRow);
@@ -981,6 +1069,14 @@ async function processOneDetail(run, configRow, detail, client, capacityTracker 
     }
     await currentControlState(run.id);
     await requestWithRetry(client, { method: "PUT", url: `/opportunities/${encodeURIComponent(detail.opportunityId)}`, data: { assignedTo: detail.newAssignedTo } }, 3, () => currentControlState(run.id));
+    if (configRow.modo === "refresh_non_management") {
+      await markOpportunityConversationsUnread(
+        client,
+        ghlConfig || ghl.getGhlConfig({ requirePipelineId: false }),
+        current,
+        () => currentControlState(run.id),
+      );
+    }
     try {
       await detail.update({ estado: "assigned", assignedAt: new Date(), retryable: false, previousAssignedTo: currentOwner, errorCode: null, errorMessage: null });
     } catch (storageError) {
@@ -998,7 +1094,7 @@ async function processOneDetail(run, configRow, detail, client, capacityTracker 
   } finally { await refreshCounters(run); }
 }
 
-async function processPlan(run, configRow, client, capacityTracker = null) {
+async function processPlan(run, configRow, client, capacityTracker = null, ghlConfig = null) {
   try {
     throwIfClientAborted(client);
     await currentControlState(run.id);
@@ -1006,7 +1102,7 @@ async function processPlan(run, configRow, client, capacityTracker = null) {
     for (const detail of details) {
       throwIfClientAborted(client);
       await currentControlState(run.id);
-      await processOneDetail(run, configRow, detail, client, capacityTracker);
+      await processOneDetail(run, configRow, detail, client, capacityTracker, ghlConfig);
       await currentControlState(run.id);
     }
     const counters = await refreshCounters(run);
@@ -1711,12 +1807,14 @@ async function execute(configRow, { type = "manual", userId = null, scheduledFor
         estado: "skipped",
         finishedAt: new Date(),
         heartbeatAt: new Date(),
-        errorGeneral: "Sin asesores en Play; las oportunidades quedaron pendientes sin propietario",
+        errorGeneral: configRow.modo === "refresh_non_management"
+          ? "Sin asesores validos en el horario de hoy; las oportunidades no se modificaron"
+          : "Sin asesores en Play; las oportunidades quedaron pendientes sin propietario",
       });
       return run.reload();
     }
     await currentControlState(run.id);
-    const result = await processPlan(run, configRow, client, plan.capacityTracker);
+    const result = await processPlan(run, configRow, client, plan.capacityTracker, config);
     if (["completed", "partial"].includes(result.estado)) {
       const nextUserIndex = configRow.modo === "unassigned"
         ? plan.nextUserIndex
@@ -1831,7 +1929,7 @@ async function resume(id) {
     activeAbortControllers.set(String(run.id), lock.controller);
     const { client } = await getClient(lock.controller.signal, config);
     const capacityTracker = await currentCapacityTracker(configRow, client, config);
-    return await processPlan(run, configRow, client, capacityTracker);
+    return await processPlan(run, configRow, client, capacityTracker, config);
     }, undefined, {
       onUnresponsive: (error) => realtimeReviewCoordinator.recordFailure(
         config.locationId,
@@ -1927,7 +2025,8 @@ module.exports = {
   setRealtimeDistributionState,
   getRealtimePipelineContext, resolveRealtimeAdvisors, realtimePriorityLoads,
   isRealtimeStageOpportunity, fetchRealtimeOpenOpportunities,
-  validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry, acquireLock,
+  validateInput, allStageOpportunities, advisorsForConfiguration, preview, requestWithRetry,
+  markOpportunityConversationsUnread, acquireLock,
   releaseLock, lockScopeForConfiguration, refreshCounters, processOneDetail, processPlan, execute, requestPause,
   requestCancel, resume, isExecutionStale, forceFinishStale, listExecutions, recoverStaleRuns,
   isOpenOpportunity, configurationMatchesOpportunity, fetchWebhookOpportunity, classifyRealtimeOpportunity,

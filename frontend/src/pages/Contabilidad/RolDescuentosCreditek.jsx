@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Archive, CalendarRange, FileSpreadsheet, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Trash2, X } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import CollaboratorSearchInput from "../../components/CollaboratorSearchInput";
 import { agruparDescuentos, colorCuota, crearExcelDescuentos, ESTADOS_DESCUENTOS, MESES_DESCUENTOS, mesesDesde, totalesDescuentos } from "../../utils/rolDescuentosCreditek";
 
 const ENDPOINT = "/api/contabilidad/rol-descuentos-creditek";
@@ -25,6 +26,8 @@ export default function RolDescuentosCreditek() {
   const [guardando, setGuardando] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [errorEditor, setErrorEditor] = useState("");
+  const [colaboradorBusqueda, setColaboradorBusqueda] = useState("");
+  const [colaboradorSelectorOpen, setColaboradorSelectorOpen] = useState(false);
   const [plan, setPlan] = useState({ inicio: "", cantidad: 1, valor: "" });
   const meses = useMemo(() => mesesDesde(inicio, cantidad), [inicio, cantidad]);
   const fin = meses.at(-1)?.key;
@@ -52,6 +55,12 @@ export default function RolDescuentosCreditek() {
     setEditor(fila ? { id: fila.id, usuarioId: fila.usuarioId, motivo: fila.motivo, version: fila.version, cuotas: fila.cuotas.map((cuota) => ({ ...cuota })) }
       : { usuarioId: "", motivo: "", cuotas: [] });
     setPlan({ inicio, cantidad: 1, valor: "" });
+    setColaboradorBusqueda(
+      fila?.usuario
+        ? `${fila.usuario.nombre}${fila.usuario.activo === false ? " (inactivo)" : ""}`
+        : "",
+    );
+    setColaboradorSelectorOpen(false);
     setErrorEditor("");
   };
   const agregarCuotas = () => {
@@ -71,6 +80,7 @@ export default function RolDescuentosCreditek() {
   const editarCuota = (index, campo, value) => setEditor((actual) => ({ ...actual, cuotas: actual.cuotas.map((cuota, i) => i === index ? { ...cuota, [campo]: value } : cuota) }));
   const guardar = async (event) => {
     event.preventDefault();
+    if (!editor.usuarioId) { setErrorEditor("Seleccione un colaborador de la lista"); return; }
     if (!editor.cuotas.length) { setErrorEditor("Agregue al menos una cuota mensual"); return; }
     setGuardando(true);
     setErrorEditor("");
@@ -166,7 +176,31 @@ export default function RolDescuentosCreditek() {
         <form onSubmit={guardar} role="dialog" aria-modal="true" aria-labelledby="titulo-descuento" className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
           <div className="mb-4 flex items-center justify-between"><h2 id="titulo-descuento" className="text-xl font-bold">{editor.id ? "Editar motivo" : "Nuevo motivo"}</h2><button type="button" disabled={guardando} onClick={() => setEditor(null)} aria-label="Cerrar editor"><X size={22} /></button></div>
           <fieldset disabled={guardando} className="space-y-4">
-            <label className="grid gap-1 text-sm">Colaborador<select required value={editor.usuarioId} disabled={Boolean(editor.id)} onChange={(e) => setEditor({ ...editor, usuarioId: e.target.value })} className={inputClass}><option value="">Seleccione un usuario</option>{usuariosEditor.map((usuario) => <option key={usuario.id} value={usuario.id}>{usuario.nombre}{usuario.activo === false ? " (inactivo)" : ""}</option>)}</select></label>
+            <CollaboratorSearchInput
+              options={usuariosEditor}
+              searchValue={colaboradorBusqueda}
+              selectedId={editor.usuarioId}
+              open={colaboradorSelectorOpen}
+              placeholder="Seleccione un usuario"
+              disabled={Boolean(editor.id)}
+              getOptionLabel={(usuario) => `${usuario.nombre}${usuario.activo === false ? " (inactivo)" : ""}`}
+              onOpenChange={setColaboradorSelectorOpen}
+              onSearchChange={(value) => {
+                setColaboradorBusqueda(value);
+                setEditor({ ...editor, usuarioId: "" });
+                setColaboradorSelectorOpen(true);
+              }}
+              onShowAll={() => {
+                setColaboradorBusqueda("");
+                setEditor({ ...editor, usuarioId: "" });
+                setColaboradorSelectorOpen(true);
+              }}
+              onSelect={(usuario) => {
+                setEditor({ ...editor, usuarioId: String(usuario.id) });
+                setColaboradorBusqueda(`${usuario.nombre}${usuario.activo === false ? " (inactivo)" : ""}`);
+                setColaboradorSelectorOpen(false);
+              }}
+            />
             <label className="grid gap-1 text-sm">Motivo<input required maxLength={200} value={editor.motivo} onChange={(e) => setEditor({ ...editor, motivo: e.target.value })} placeholder="Ej.: préstamo, lentes, teléfono, multa…" className={inputClass} /></label>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="mb-2 text-sm font-semibold">Agregar cuotas mensuales</p><div className="flex flex-wrap items-end gap-2">
               <label className="grid gap-1 text-xs">Primer mes<input type="month" min="2000-01" max="2100-12" value={plan.inicio} onChange={(e) => setPlan({ ...plan, inicio: e.target.value })} className={inputClass} /></label>

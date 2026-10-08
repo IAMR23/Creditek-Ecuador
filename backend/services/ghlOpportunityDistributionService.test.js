@@ -14,8 +14,14 @@ jest.mock("./ghlAdvisorAvailabilityService", () => ({
     paused: [],
     invalid: [],
   })),
+  resolveDayScheduledAdvisors: jest.fn(async (_schedules, currentUsers) => ({
+    active: currentUsers,
+    paused: [],
+    invalid: [],
+  })),
   countTodayByGhlUser: jest.fn(async (ids) => new Map(ids.map((id) => [id, 0]))),
   isGhlUserActiveToday: jest.fn(async () => true),
+  isGhlUserScheduledToday: jest.fn(async () => true),
 }));
 
 const {
@@ -48,6 +54,7 @@ const ghl = require("./ghlService");
 const advisorAvailability = require("./ghlAdvisorAvailabilityService");
 const { sequelize } = require("../config/db");
 const Ejecucion = require("../models/GhlRepartoEjecucion");
+const RealtimeConfiguracion = require("../models/GhlRepartoTiempoRealConfiguracion");
 
 const users = ["u1", "u2", "u3", "u4", "u5"].map((id) => ({ id, name: id }));
 const opportunities = (amount) => Array.from({ length: amount }, (_, index) => ({ id: `o${String(index).padStart(3, "0")}`, createdAt: `2026-01-01T00:${String(index % 60).padStart(2, "0")}:00Z` }));
@@ -264,9 +271,10 @@ describe("reparto determinista de oportunidades GHL", () => {
 
   test("omite una oportunidad que cambio de etapa", () => expect(classifyCurrentOpportunity({ pipelineId: "p", pipelineStageId: "otra" }, { pipelineId: "p", stageId: "s", modo: "all" })).toBe("STAGE_CHANGED"));
   test("el refresco acepta etapas distintas y excluye Gestion", () => {
-    const config = { pipelineId: "p", stageId: "gestion", modo: "refresh_non_management" };
+    const config = { pipelineId: "p", stageId: "gestion", stageIds: ["gestion", "cerrado"], modo: "refresh_non_management" };
     expect(classifyCurrentOpportunity({ pipelineId: "p", pipelineStageId: "contactado" }, config)).toBeNull();
     expect(classifyCurrentOpportunity({ pipelineId: "p", pipelineStageId: "gestion" }, config)).toBe("STAGE_CHANGED");
+    expect(classifyCurrentOpportunity({ pipelineId: "p", pipelineStageId: "cerrado" }, config)).toBe("STAGE_CHANGED");
   });
   test("omite una oportunidad asignada manualmente durante modo sin propietario", () => expect(classifyCurrentOpportunity({ pipelineId: "p", pipelineStageId: "s", assignedTo: "u9" }, { pipelineId: "p", stageId: "s", modo: "unassigned" })).toBe("OWNER_CHANGED"));
   test("un error parcial conserva las asignaciones exitosas", () => expect(executionState(4, 1)).toBe("partial"));
@@ -364,19 +372,25 @@ describe("reparto determinista de oportunidades GHL", () => {
     jest.restoreAllMocks();
   });
 
-  test("preview de refresco usa todos los asesores en Play y excluye Gestion", async () => {
+  test("preview de refresco usa los asesores del horario de hoy y excluye Gestion", async () => {
     const client = { request: jest.fn() };
     jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
     jest.spyOn(ghl, "createGhlClient").mockReturnValue(client);
     jest.spyOn(ghl, "fetchAllOpportunityStatuses").mockResolvedValue([
       { id: "o1", pipelineId: "p", pipelineStageId: "contactado" },
       { id: "o2", pipelineId: "p", pipelineStageId: "gestion" },
+      { id: "o3", pipelineId: "p", pipelineStageId: "cerrado" },
     ]);
     jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue(users.slice(0, 2));
+    jest.spyOn(RealtimeConfiguracion, "findByPk").mockResolvedValue({
+      horariosFlujoActivo: true,
+      horariosFlujo: [{ diaSemana: 3, horaInicio: "08:00", horaFin: "18:00", usuariosGhl: ["u1", "u2"] }],
+    });
 
     const result = await preview({
       pipelineId: "p",
       stageId: "gestion",
+      stageIds: ["gestion", "cerrado"],
       modo: "refresh_non_management",
       usuariosGhl: [],
       indiceSiguienteUsuario: 0,
@@ -385,11 +399,41 @@ describe("reparto determinista de oportunidades GHL", () => {
     expect(result.totalEncontradas).toBe(1);
     expect(result.totalElegibles).toBe(1);
     expect(result.usuariosActivos).toBe(2);
-    expect(advisorAvailability.resolveActiveAdvisors).toHaveBeenCalled();
+    expect(advisorAvailability.resolveDayScheduledAdvisors).toHaveBeenCalled();
+    expect(advisorAvailability.resolveActiveAdvisors).not.toHaveBeenCalled();
     expect(ghl.fetchAllOpportunityStatuses).toHaveBeenCalledWith(client, expect.anything(), {
       fechaInicio: expect.any(String),
       fechaFin: expect.any(String),
     });
+  });
+
+  test("valida y conserva varias etapas excluidas para el refresco", async () => {
+    jest.spyOn(ghl, "getGhlConfig").mockReturnValue({ locationId: "l" });
+    jest.spyOn(ghl, "createGhlClient").mockReturnValue({});
+    jest.spyOn(ghl, "fetchPipelines").mockResolvedValue([{
+      id: "pipeline",
+      name: "Ventas",
+      stages: [{ id: "gestion", name: "Gestion" }, { id: "cerrado", name: "Cerrado" }],
+    }]);
+    jest.spyOn(ghl, "fetchAllAssignableUsers").mockResolvedValue([]);
+
+    const result = await validateInput({
+      nombre: "Refresco",
+      pipelineId: "pipeline",
+      stageIds: ["gestion", "cerrado", "gestion"],
+      hora: "09:00",
+      diasSemana: [1],
+      modo: "refresh_non_management",
+      usuariosGhl: [],
+    });
+
+    expect(result).toMatchObject({
+      stageId: "gestion",
+      stageNombre: "Gestion, Cerrado",
+      stageIds: ["gestion", "cerrado"],
+      stageNombres: ["Gestion", "Cerrado"],
+    });
+    jest.restoreAllMocks();
   });
 
   test("una oportunidad pendiente se reparte en la siguiente consulta cuando aparece Play", async () => {

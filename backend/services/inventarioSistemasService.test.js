@@ -71,6 +71,9 @@ describe("inventarioSistemasService", () => {
       nombre: "Computador de escritorio",
       marca: "Dell",
       modelo: "OptiPlex 7090",
+      dispositivoMarcaId: null,
+      modeloId: null,
+      fechaIngreso: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       cantidad: 4,
       precio: 750.5,
       estado: "OPERATIVO",
@@ -150,5 +153,54 @@ describe("inventarioSistemasService", () => {
       cantidad: 3,
       precio: 49.9,
     });
+  });
+
+  test("acepta un producto del catálogo con fecha de ingreso", () => {
+    const resultado = validarInventario(
+      {
+        nombre: "Televisor",
+        marca: "LG",
+        modelo: "OLED C4",
+        dispositivoMarcaId: "12",
+        modeloId: "45",
+        fechaIngreso: "2026-10-05",
+        agenciaId: 2,
+        responsableId: 9,
+        cantidad: 3,
+      },
+      { requiereCatalogo: true },
+    );
+
+    expect(resultado.errores).toEqual([]);
+    expect(resultado.data).toMatchObject({
+      nombre: "Televisor",
+      marca: "LG",
+      modelo: "OLED C4",
+      dispositivoMarcaId: 12,
+      modeloId: 45,
+      fechaIngreso: "2026-10-05",
+      cantidad: 3,
+    });
+  });
+
+  test("rechaza una fecha imposible y una selección incompleta del catálogo", () => {
+    const resultado = validarInventario(
+      {
+        nombre: "Celular",
+        dispositivoMarcaId: 12,
+        fechaIngreso: "2026-02-30",
+        agenciaId: 2,
+        responsableId: 9,
+      },
+      { requiereCatalogo: true },
+    );
+
+    expect(resultado.errores).toEqual(
+      expect.arrayContaining([
+        "El tipo, la marca y el modelo son obligatorios",
+        "La marca y el modelo deben pertenecer al catálogo",
+        "La fecha de ingreso no es válida",
+      ]),
+    );
   });
 });

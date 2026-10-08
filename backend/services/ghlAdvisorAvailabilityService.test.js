@@ -48,7 +48,27 @@ describe("disponibilidad diaria de asesores GHL", () => {
     const state = service.flowScheduleState(schedules, NOW);
     expect(state.time).toBe("10:00");
     expect([...state.activeIds]).toEqual(["ghl-10"]);
+    expect([...state.scheduledIds]).toEqual(["ghl-10", "ghl-20"]);
     expect([...state.configuredIds]).toEqual(["ghl-10", "ghl-20"]);
+  });
+
+  test("el refresco incluye a todos los vendedores programados en el dia sin exigir Play ni la hora actual", async () => {
+    const first = makeLink({ ghlUserId: "ghl-10", usuario: { id: 10, activo: true } });
+    const second = makeLink({ id: 2, usuarioId: 20, ghlUserId: "ghl-20", usuario: { id: 20, activo: true } });
+    jest.spyOn(Vinculo, "findAll").mockResolvedValue([first, second]);
+    const schedules = [
+      { diaSemana: 3, horaInicio: "08:00", horaFin: "11:00", usuariosGhl: ["ghl-10"] },
+      { diaSemana: 3, horaInicio: "11:00", horaFin: "18:00", usuariosGhl: ["ghl-20"] },
+    ];
+
+    const result = await service.resolveDayScheduledAdvisors(
+      schedules,
+      [{ id: "ghl-10" }, { id: "ghl-20" }],
+      NOW,
+    );
+
+    expect(result.active.map((user) => user.id)).toEqual(["ghl-10", "ghl-20"]);
+    expect(result.paused).toEqual([]);
   });
 
   test("un turno con fecha solo se activa durante la semana programada", () => {

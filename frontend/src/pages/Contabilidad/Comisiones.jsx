@@ -22,6 +22,11 @@ const PERIODOS = [
   { value: "BONO_MENSUAL_5_SEMANAS", label: "Bono mensual 5 semanas" },
 ];
 
+const SUBGRUPOS = Array.from({ length: 5 }, (_, index) => {
+  const cantidad = index + 2;
+  return `${cantidad} vendedores`;
+});
+
 const emptyFilters = {
   rolPagoId: "",
   periodo: "",
@@ -466,13 +471,20 @@ export default function Comisiones() {
               </Field>
 
               <Field label="Subgrupo">
-                <input
+                <select
                   value={form.subgrupo}
                   onChange={(event) =>
                     setForm({ ...form, subgrupo: event.target.value })
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
+                >
+                  <option value="">Sin subgrupo</option>
+                  {SUBGRUPOS.map((subgrupo) => (
+                    <option key={subgrupo} value={subgrupo}>
+                      {subgrupo}
+                    </option>
+                  ))}
+                </select>
               </Field>
 
               <Field label="Periodo">

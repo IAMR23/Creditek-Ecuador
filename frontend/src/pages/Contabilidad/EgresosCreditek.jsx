@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { api } from "../../api/client";
+import CollaboratorSearchInput from "../../components/CollaboratorSearchInput";
 import EgresosCreditekTipos from "./EgresosCreditekTipos";
 import {
   descargarExcelEgresosCreditek,
@@ -157,6 +158,8 @@ export default function EgresosCreditek() {
   const [registros, setRegistros] = useState([]);
   const [seccionActiva, setSeccionActiva] = useState("prestamos");
   const [usuarioId, setUsuarioId] = useState("");
+  const [usuarioBusqueda, setUsuarioBusqueda] = useState("");
+  const [usuarioSelectorOpen, setUsuarioSelectorOpen] = useState(false);
   const [tipo, setTipo] = useState("plan_movistar");
   const [fechaFin, setFechaFin] = useState("");
   const esPrestamo = seccionActiva === "prestamos";
@@ -175,6 +178,8 @@ export default function EgresosCreditek() {
   const [periodo, setPeriodo] = useState("todos");
   const [fechaFiltro, setFechaFiltro] = useState("");
   const [registroEditando, setRegistroEditando] = useState(null);
+  const [usuarioEdicionBusqueda, setUsuarioEdicionBusqueda] = useState("");
+  const [usuarioEdicionSelectorOpen, setUsuarioEdicionSelectorOpen] = useState(false);
   const [edicion, setEdicion] = useState({
     usuarioId: "",
     tipo: "entradas",
@@ -379,6 +384,8 @@ export default function EgresosCreditek() {
 
   const abrirEdicion = (registro) => {
     setRegistroEditando(registro);
+    setUsuarioEdicionBusqueda(registro.usuario?.nombre || "");
+    setUsuarioEdicionSelectorOpen(false);
     setEdicion({
       usuarioId: String(registro.usuarioId || ""),
       tipo: String(registro.tipo || "ENTRADAS").toLowerCase(),
@@ -701,22 +708,33 @@ export default function EgresosCreditek() {
               onSubmit={guardar}
               className="grid gap-3 p-4 sm:grid-cols-2 sm:items-end sm:p-5 lg:grid-cols-12"
             >
-              <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-3">
-                Usuario
-                <select
-                  value={usuarioId}
-                  onChange={(event) => setUsuarioId(event.target.value)}
+              <div className="min-w-0 text-xs lg:col-span-3">
+                <CollaboratorSearchInput
+                  label="Usuario"
+                  options={usuarios}
+                  searchValue={usuarioBusqueda}
+                  selectedId={usuarioId}
+                  open={usuarioSelectorOpen}
+                  placeholder="Seleccionar usuario"
                   disabled={loading || saving || actualizandoId !== null}
-                  className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                >
-                  <option value="">Seleccionar usuario</option>
-                  {usuarios.map((usuario) => (
-                    <option key={usuario.id} value={usuario.id}>
-                      {usuario.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onOpenChange={setUsuarioSelectorOpen}
+                  onSearchChange={(value) => {
+                    setUsuarioBusqueda(value);
+                    setUsuarioId("");
+                    setUsuarioSelectorOpen(true);
+                  }}
+                  onShowAll={() => {
+                    setUsuarioBusqueda("");
+                    setUsuarioId("");
+                    setUsuarioSelectorOpen(true);
+                  }}
+                  onSelect={(usuario) => {
+                    setUsuarioId(String(usuario.id));
+                    setUsuarioBusqueda(usuario.nombre || "");
+                    setUsuarioSelectorOpen(false);
+                  }}
+                />
+              </div>
 
               <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 lg:col-span-2">
                 {esPrestamo ? "Tipo de préstamo" : "Tipo"}
@@ -1217,39 +1235,38 @@ export default function EgresosCreditek() {
 
             <form onSubmit={guardarEdicion}>
               <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-                <label className="grid min-w-0 gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">
-                  {editandoControlFinanciero ? "Responsable" : "Usuario"}
-                  <select
-                    value={edicion.usuarioId}
-                    onChange={(event) =>
-                      setEdicion((actual) => ({
-                        ...actual,
-                        usuarioId: event.target.value,
-                      }))
+                <div className="min-w-0 text-xs sm:col-span-2">
+                  <CollaboratorSearchInput
+                    label={editandoControlFinanciero ? "Responsable" : "Usuario"}
+                    options={
+                      registroEditando.usuario &&
+                      !usuarios.some((usuario) => Number(usuario.id) === Number(registroEditando.usuarioId))
+                        ? [{ ...registroEditando.usuario, nombre: `${registroEditando.usuario.nombre} (inactivo)` }, ...usuarios]
+                        : usuarios
                     }
+                    searchValue={usuarioEdicionBusqueda}
+                    selectedId={edicion.usuarioId}
+                    open={usuarioEdicionSelectorOpen}
+                    placeholder={editandoControlFinanciero ? "Seleccionar responsable" : "Seleccionar usuario"}
                     disabled={actualizandoId !== null}
-                    className="h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-                  >
-                    <option value="">
-                      {editandoControlFinanciero
-                        ? "Seleccionar responsable"
-                        : "Seleccionar usuario"}
-                    </option>
-                    {registroEditando.usuario &&
-                      !usuarios.some(
-                        (usuario) => usuario.id === registroEditando.usuarioId,
-                      ) && (
-                        <option value={registroEditando.usuarioId}>
-                          {registroEditando.usuario.nombre} (inactivo)
-                        </option>
-                      )}
-                    {usuarios.map((usuario) => (
-                      <option key={usuario.id} value={usuario.id}>
-                        {usuario.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    onOpenChange={setUsuarioEdicionSelectorOpen}
+                    onSearchChange={(value) => {
+                      setUsuarioEdicionBusqueda(value);
+                      setEdicion((actual) => ({ ...actual, usuarioId: "" }));
+                      setUsuarioEdicionSelectorOpen(true);
+                    }}
+                    onShowAll={() => {
+                      setUsuarioEdicionBusqueda("");
+                      setEdicion((actual) => ({ ...actual, usuarioId: "" }));
+                      setUsuarioEdicionSelectorOpen(true);
+                    }}
+                    onSelect={(usuario) => {
+                      setEdicion((actual) => ({ ...actual, usuarioId: String(usuario.id) }));
+                      setUsuarioEdicionBusqueda(usuario.nombre || "");
+                      setUsuarioEdicionSelectorOpen(false);
+                    }}
+                  />
+                </div>
 
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
                   {esPrestamo ? "Tipo de préstamo" : "Tipo"}

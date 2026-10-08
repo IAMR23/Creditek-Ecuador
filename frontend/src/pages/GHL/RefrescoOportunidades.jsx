@@ -14,6 +14,8 @@ const empty = {
   nombre: "Refresco de oportunidades",
   pipelineId: "",
   stageId: "",
+  stageIds: [],
+  stageNombres: [],
   hora: "09:00",
   intervaloMinutos: 1,
   zonaHoraria: "America/Guayaquil",
@@ -24,6 +26,16 @@ const empty = {
 };
 const inputClass = "h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 const messageOf = (error) => error.response?.data?.message || error.message || "Ocurrió un error";
+const normalizeRefreshForm = (value = {}) => ({
+  ...empty,
+  ...value,
+  stageIds: Array.isArray(value.stageIds) && value.stageIds.length
+    ? value.stageIds.map(String)
+    : value.stageId ? [String(value.stageId)] : [],
+  stageNombres: Array.isArray(value.stageNombres) && value.stageNombres.length
+    ? value.stageNombres
+    : value.stageNombre ? [value.stageNombre] : [],
+});
 
 export default function RefrescoOportunidades() {
   const [pipelines, setPipelines] = useState([]);
@@ -56,7 +68,7 @@ export default function RefrescoOportunidades() {
       setHistory(historyResponse.data.ejecuciones || []);
       if (!selectedId && configResponse.data.configuraciones?.[0]) {
         setSelectedId(configResponse.data.configuraciones[0].id);
-        setForm(configResponse.data.configuraciones[0]);
+        setForm(normalizeRefreshForm(configResponse.data.configuraciones[0]));
       }
       setError("");
     } catch (requestError) {
@@ -83,7 +95,11 @@ export default function RefrescoOportunidades() {
 
   const set = (key, value) => { setForm((old) => ({ ...old, [key]: value })); setPreview(null); };
   const toggleDay = (day) => set("diasSemana", form.diasSemana.includes(day) ? form.diasSemana.filter((item) => item !== day) : [...form.diasSemana, day]);
-  const valid = useMemo(() => form.pipelineId && form.stageId && form.hora && form.diasSemana.length, [form]);
+  const valid = useMemo(() => form.pipelineId && form.stageIds.length && form.hora && form.diasSemana.length, [form]);
+  const excludedStageNames = useMemo(() => form.stageIds.map((stageId) =>
+    stages.find((stage) => String(stage.id || stage._id) === String(stageId))?.name
+      || form.stageNombres?.[form.stageIds.indexOf(stageId)]
+      || stageId), [form.stageIds, form.stageNombres, stages]);
 
   const save = async () => {
     setBusy("save"); setError("");
@@ -93,14 +109,14 @@ export default function RefrescoOportunidades() {
         ? await api.put(`/api/ghl/repartos/configuraciones/${selectedId}`, payload)
         : await api.post("/api/ghl/repartos/configuraciones", payload);
       setSelectedId(response.data.configuracion.id);
-      setForm(response.data.configuracion);
+      setForm(normalizeRefreshForm(response.data.configuracion));
       await load();
     } catch (requestError) { setError(messageOf(requestError)); }
     finally { setBusy(""); }
   };
 
   const doPreview = async () => {
-    if (!valid) return setError("Complete pipeline, etapa excluida, hora y días de ejecución");
+    if (!valid) return setError("Complete pipeline, etapas excluidas, hora y días de ejecución");
     setBusy("preview");
     try {
       const response = await api.post("/api/ghl/repartos/vista-previa", {
@@ -116,7 +132,7 @@ export default function RefrescoOportunidades() {
 
   const execute = async () => {
     if (!selectedId) return setError("Guarde la configuración antes de ejecutar");
-    if (!window.confirm("¿Confirma que desea redistribuir todas las oportunidades fuera de la etapa excluida entre los asesores que están en Play ahora?")) return;
+    if (!window.confirm("¿Confirma que desea redistribuir las oportunidades de hoy entre los asesores incluidos en el horario del día y marcarlas como no leídas?")) return;
     setBusy("execute"); setError("");
     try { await api.post(`/api/ghl/repartos/configuraciones/${selectedId}/execute`, { confirm: true }); }
     catch (requestError) { setError(messageOf(requestError)); }
@@ -138,23 +154,23 @@ export default function RefrescoOportunidades() {
   const choose = (id) => {
     if (!id) { setSelectedId(null); setForm(empty); setPreview(null); return; }
     const row = configs.find((item) => String(item.id) === id);
-    setSelectedId(row.id); setForm(row); setPreview(null);
+    setSelectedId(row.id); setForm(normalizeRefreshForm(row)); setPreview(null);
   };
 
   return <div className="min-h-screen space-y-4 bg-gray-50 p-4">
     <header className="flex flex-wrap items-center justify-between gap-3">
-      <div><div className="text-sm font-semibold text-green-700">GoHighLevel</div><h1 className="text-2xl font-bold text-gray-900">Refresco de oportunidades</h1><p className="text-sm text-gray-500">Redistribuye únicamente leads creados hoy y fuera de Gestión entre quienes estén en Play · America/Guayaquil</p></div>
+      <div><div className="text-sm font-semibold text-green-700">GoHighLevel</div><h1 className="text-2xl font-bold text-gray-900">Refresco de oportunidades</h1><p className="text-sm text-gray-500">Redistribuye únicamente leads creados hoy y fuera de Gestión entre los asesores del horario diario · America/Guayaquil</p></div>
       <div className={`rounded-full px-3 py-1 text-xs font-bold ${error ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>{loading ? "Comprobando conexión..." : error ? "GHL no disponible" : "GHL conectado"}</div>
     </header>
     {error && <div className="flex items-center gap-2 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertTriangle size={18}/><span className="flex-1">{error}</span><button onClick={() => setError("")}><X size={16}/></button></div>}
 
     <section className="space-y-4 rounded border bg-white p-4 shadow-sm">
-      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800"><b>Alcance diario:</b> solo se procesan leads creados el mismo día de la ejecución. Los destinatarios se toman automáticamente entre los asesores vinculados que estén en Play; quien esté en descanso no recibirá clientes.</div>
+      <div className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800"><b>Alcance diario:</b> solo se procesan leads creados el mismo día de la ejecución. Se reparten entre los asesores vinculados incluidos en el horario de ese día, sin depender de Play, y sus conversaciones quedan como no leídas.</div>
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <Field label="Configuración"><select className={inputClass} value={selectedId || ""} onChange={(event) => choose(event.target.value)}><option value="">Nueva configuración</option>{configs.map((config) => <option key={config.id} value={config.id}>{config.nombre}</option>)}</select></Field>
         <Field label="Nombre"><input className={inputClass} value={form.nombre} onChange={(event) => set("nombre", event.target.value)}/></Field>
-        <Field label="Pipeline"><select className={inputClass} value={form.pipelineId} onChange={(event) => { setForm((old) => ({ ...old, pipelineId: event.target.value, stageId: "" })); setPreview(null); }}><option value="">Seleccione...</option>{pipelines.map((pipeline) => <option key={pipeline.id || pipeline._id} value={pipeline.id || pipeline._id}>{pipeline.name}</option>)}</select></Field>
-        <Field label="Etapa excluida (Gestión)"><select className={inputClass} value={form.stageId} onChange={(event) => set("stageId", event.target.value)} disabled={!form.pipelineId}><option value="">Seleccione la etapa Gestión...</option>{stages.map((stage) => <option key={stage.id || stage._id} value={stage.id || stage._id}>{stage.name}</option>)}</select></Field>
+        <Field label="Pipeline"><select className={inputClass} value={form.pipelineId} onChange={(event) => { setForm((old) => ({ ...old, pipelineId: event.target.value, stageId: "", stageIds: [], stageNombres: [] })); setPreview(null); }}><option value="">Seleccione...</option>{pipelines.map((pipeline) => <option key={pipeline.id || pipeline._id} value={pipeline.id || pipeline._id}>{pipeline.name}</option>)}</select></Field>
+        <div className="space-y-1"><span className="block text-xs font-semibold text-gray-600">Etapas excluidas</span><div className="max-h-36 space-y-1 overflow-y-auto rounded border border-gray-300 bg-white p-2">{form.pipelineId && stages.length ? stages.map((stage) => { const stageId = String(stage.id || stage._id); const checked = form.stageIds.includes(stageId); return <label key={stageId} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50"><input type="checkbox" checked={checked} onChange={() => { const stageIds = checked ? form.stageIds.filter((id) => id !== stageId) : [...form.stageIds, stageId]; setForm((old) => ({ ...old, stageIds, stageId: stageIds[0] || "", stageNombres: stageIds.map((id) => stages.find((item) => String(item.id || item._id) === id)?.name || id) })); setPreview(null); }} className="h-4 w-4 accent-green-600"/><span>{stage.name}</span></label>; }) : <span className="block px-2 py-1 text-sm text-gray-400">Seleccione primero un pipeline</span>}</div></div>
         <Field label="Hora de ejecución"><input type="time" className={inputClass} value={form.hora} onChange={(event) => set("hora", event.target.value)}/></Field>
         <Field label="Zona horaria"><input className={`${inputClass} bg-gray-100`} value="America/Guayaquil" disabled/></Field>
         <Field label="Estado"><label className="flex h-10 items-center gap-2"><input type="checkbox" checked={form.activo} onChange={(event) => set("activo", event.target.checked)} className="h-5 w-5 accent-green-600"/> {form.activo ? "Activo" : "Inactivo"}</label></Field>
@@ -168,7 +184,7 @@ export default function RefrescoOportunidades() {
       </div>
     </section>
 
-    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Vista previa segura</h2><p className="mb-3 text-xs text-gray-500">Incluye únicamente leads creados hoy ({preview.rangoFechas?.fechaInicio}), cualquiera que sea su estado, excepto los que estén en <b>{form.stageNombre || stages.find((stage) => String(stage.id || stage._id) === String(form.stageId))?.name || "la etapa seleccionada"}</b>.</p>{preview.advertencia && <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{preview.advertencia}</div>}<div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6"><Metric label="Encontradas hoy" value={preview.totalEncontradas}/><Metric label="Elegibles" value={preview.totalElegibles}/><Metric label="En Play ahora" value={preview.usuariosActivos}/><Metric label="En descanso" value={preview.usuariosPausados}/><Metric label="Vínculos inválidos" value={preview.usuariosInvalidos}/><Metric label="Omitidas" value={preview.totalOmitidas}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-green-50 p-3 text-sm"><b>{user.name}</b><div>{user.cantidad} oportunidades</div></div>)}</div></section>}
+    {preview && <section className="rounded border bg-white p-4 shadow-sm"><h2 className="font-bold">Vista previa segura</h2><p className="mb-3 text-xs text-gray-500">Incluye únicamente leads creados hoy ({preview.rangoFechas?.fechaInicio}), cualquiera que sea su estado, excepto los que estén en <b>{excludedStageNames.join(", ") || "las etapas seleccionadas"}</b>. Al ejecutar, sus conversaciones quedarán como no leídas.</p>{preview.advertencia && <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{preview.advertencia}</div>}<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><Metric label="Encontradas hoy" value={preview.totalEncontradas}/><Metric label="Elegibles" value={preview.totalElegibles}/><Metric label="En horario hoy" value={preview.usuariosActivos}/><Metric label="Vínculos inválidos" value={preview.usuariosInvalidos}/><Metric label="Omitidas" value={preview.totalOmitidas}/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{preview.usuarios.map((user) => <div key={user.id} className="rounded bg-green-50 p-3 text-sm"><b>{user.name}</b><div>{user.cantidad} oportunidades</div></div>)}</div></section>}
 
     <section className="overflow-hidden rounded border bg-white shadow-sm">
       <div className="flex items-center justify-between border-b p-4"><b>Historial de refrescos</b>{hasActiveExecution && <span className="text-xs font-semibold text-blue-700">Actualizando automáticamente...</span>}</div>

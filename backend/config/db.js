@@ -215,6 +215,43 @@ const ensureGhlRepartoCapacitySchema = async (queryInterface) => {
   }
 };
 
+const ensureGhlRefreshExcludedStagesSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("ghl_reparto_configuraciones")) return;
+  await sequelize.query(`
+    ALTER TABLE ghl_reparto_configuraciones
+      ADD COLUMN IF NOT EXISTS "stageIds" VARCHAR(100)[],
+      ADD COLUMN IF NOT EXISTS "stageNombres" VARCHAR(200)[];
+    UPDATE ghl_reparto_configuraciones
+    SET "stageIds" = ARRAY["stageId"]::VARCHAR(100)[],
+        "stageNombres" = ARRAY["stageNombre"]::VARCHAR(200)[]
+    WHERE "stageIds" IS NULL OR cardinality("stageIds") = 0
+       OR "stageNombres" IS NULL OR cardinality("stageNombres") = 0;
+    ALTER TABLE ghl_reparto_configuraciones
+      ALTER COLUMN "stageIds" SET DEFAULT ARRAY[]::VARCHAR(100)[],
+      ALTER COLUMN "stageIds" SET NOT NULL,
+      ALTER COLUMN "stageNombres" SET DEFAULT ARRAY[]::VARCHAR(200)[],
+      ALTER COLUMN "stageNombres" SET NOT NULL;
+  `);
+  await sequelize.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ghl_reparto_config_stage_arrays_check'
+          AND conrelid = 'ghl_reparto_configuraciones'::regclass
+      ) THEN
+        ALTER TABLE ghl_reparto_configuraciones
+          ADD CONSTRAINT ghl_reparto_config_stage_arrays_check
+          CHECK (
+            cardinality("stageIds") > 0
+            AND cardinality("stageIds") = cardinality("stageNombres")
+          );
+      END IF;
+    END $$;
+  `);
+};
+
 const ensureGhlFlowScheduleSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("ghl_reparto_tiempo_real_configuraciones")) return;
@@ -818,6 +855,58 @@ const ensureInventarioSistemasSchema = async (queryInterface, tables) => {
     type: Sequelize.DECIMAL(12, 2),
     allowNull: true,
   });
+
+  await addColumnIfMissing(
+    queryInterface,
+    "sistemas_inventarios",
+    "dispositivoMarcaId",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+      references: { model: "DispositivoMarcas", key: "id" },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
+  );
+
+  await addColumnIfMissing(queryInterface, "sistemas_inventarios", "modeloId", {
+    type: Sequelize.INTEGER,
+    allowNull: true,
+    references: { model: "modelos", key: "id" },
+    onUpdate: "CASCADE",
+    onDelete: "RESTRICT",
+  });
+
+  await addColumnIfMissing(
+    queryInterface,
+    "sistemas_inventarios",
+    "fechaIngreso",
+    {
+      type: Sequelize.DATEONLY,
+      allowNull: true,
+    },
+  );
+
+  await sequelize.query(`
+    UPDATE sistemas_inventarios
+    SET "fechaIngreso" = COALESCE(DATE("createdAt"), CURRENT_DATE)
+    WHERE "fechaIngreso" IS NULL;
+  `);
+
+  await queryInterface.changeColumn("sistemas_inventarios", "fechaIngreso", {
+    type: Sequelize.DATEONLY,
+    allowNull: false,
+    defaultValue: Sequelize.literal("CURRENT_DATE"),
+  });
+
+  await sequelize.query(`
+    CREATE INDEX IF NOT EXISTS sistemas_inventarios_dispositivo_marca_idx
+      ON sistemas_inventarios ("dispositivoMarcaId");
+    CREATE INDEX IF NOT EXISTS sistemas_inventarios_modelo_idx
+      ON sistemas_inventarios ("modeloId");
+    CREATE INDEX IF NOT EXISTS sistemas_inventarios_fecha_ingreso_idx
+      ON sistemas_inventarios ("fechaIngreso");
+  `);
 };
 
 const ensurePersonasSchema = async (queryInterface, tables) => {
@@ -2179,6 +2268,7 @@ const connectDB = async () => {
     await ensureGhlRepartoExecutionControlSchema(queryInterface);
     await ensureGhlRepartoCapacitySchema(queryInterface);
     await ensureGhlAdvisorAvailabilitySchema(queryInterface);
+    await ensureGhlRefreshExcludedStagesSchema(queryInterface);
     await ensureGhlFlowScheduleSchema(queryInterface);
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
@@ -2430,8 +2520,10 @@ module.exports = {
   ensureFacturasFisicasOcrPreSyncSchema,
   ensureGhlAdvisorAvailabilitySchema,
   ensureGhlRepartoCapacitySchema,
+  ensureGhlRefreshExcludedStagesSchema,
   ensureGhlRepartoExecutionControlSchema,
   ensureGhlFlowScheduleSchema,
+  ensureInventarioSistemasSchema,
   ensureRequiredFeatureTables,
   ensureTicketsTiPreSyncSchema,
   ensureUphoneCedulaSchema,

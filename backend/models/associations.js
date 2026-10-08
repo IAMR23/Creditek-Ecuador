@@ -1140,6 +1140,26 @@ InventarioSistema.belongsTo(Usuario, {
   as: "actualizadoPor",
 });
 
+InventarioSistema.belongsTo(DispositivoMarca, {
+  foreignKey: "dispositivoMarcaId",
+  as: "dispositivoMarca",
+});
+
+DispositivoMarca.hasMany(InventarioSistema, {
+  foreignKey: "dispositivoMarcaId",
+  as: "inventariosSistemas",
+});
+
+InventarioSistema.belongsTo(Modelo, {
+  foreignKey: "modeloId",
+  as: "modeloCatalogo",
+});
+
+Modelo.hasMany(InventarioSistema, {
+  foreignKey: "modeloId",
+  as: "inventariosSistemas",
+});
+
 /* CONFIGURACION AGENCIAS DE REPORTES DE CAJA */
 
 ReporteCajaUsuarioAgencia.belongsTo(Agencia, {

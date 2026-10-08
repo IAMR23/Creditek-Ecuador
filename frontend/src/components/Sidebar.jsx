@@ -120,16 +120,16 @@ export default function Sidebar({ auth }) {
             icon: <TicketCheck size={20} />,
             path: "/gestion-tickets",
           },
-          {
+/*           {
             label: "Revisar Gestiones",
             icon: <BarChart3 size={20} />,
             path: "/revision-gestiones",
-          },
-          {
+          }, */
+/*           {
             label: "Revisar Gestiones Comerciales",
             icon: <BarChart3 size={20} />,
             path: "/revision-gestiones-comercial",
-          },
+          }, */
 
           {
             label: "Secretarios Ejecutivos",
@@ -418,21 +418,21 @@ export default function Sidebar({ auth }) {
             label: "GHL",
             icon: <UsersRound size={20} />,
             items: [
-              {
+             /*  {
                 label: "Reparto de Oportunidades",
                 icon: <UsersRound size={18} />,
                 path: "/ghl/reparto-oportunidades",
-              },
+              }, */
               {
                 label: "Refresco de oportunidades",
                 icon: <RefreshCcw size={18} />,
                 path: "/ghl/refresco-oportunidades",
               },
-              {
+/*               {
                 label: "Disponibilidad de asesores",
                 icon: <UserPlus size={18} />,
                 path: "/ghl/disponibilidad-asesores",
-              },
+              }, */
               {
                 label: "Horarios de flujo",
                 icon: <CalendarClock size={18} />,
@@ -467,11 +467,11 @@ export default function Sidebar({ auth }) {
             icon: <BarChart3 size={20} />,
             path: "/supervisores/powerbi",
           },
-          {
+/*           {
             label: "Reporte gestiones",
             icon: <FileSpreadsheet size={20} />,
             path: "/supervisores/reporte-gestiones",
-          },
+          }, */
         ],
       },
 

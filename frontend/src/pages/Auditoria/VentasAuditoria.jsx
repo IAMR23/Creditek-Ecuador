@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API_URL } from "../../../config";
 import { api } from "../../api/client";
-import { nombreCortoUsuario } from "../../utils/nombres";
+import CollaboratorSearchInput from "../../components/CollaboratorSearchInput";
 import { Link } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import * as XLSX from "xlsx";
@@ -358,6 +358,8 @@ export default function VentasAuditoria() {
   const [vendedorId, setVendedorId] = useState(
     filtrosGuardados.vendedorId || "",
   );
+  const [vendedorBusqueda, setVendedorBusqueda] = useState("");
+  const [vendedorSelectorOpen, setVendedorSelectorOpen] = useState(false);
   const [modelos, setModelos] = useState([]);
   const [modeloId, setModeloId] = useState(filtrosGuardados.modeloId || "");
   const [origenes, setOrigenes] = useState([]);
@@ -383,6 +385,15 @@ export default function VentasAuditoria() {
   const [filaEditandoId, setFilaEditandoId] = useState("");
   const [edicionFila, setEdicionFila] = useState({});
   const [guardandoFilaId, setGuardandoFilaId] = useState("");
+
+  useEffect(() => {
+    const vendedorSeleccionado = usuarios.find(
+      (usuario) => String(usuario.id) === String(vendedorId),
+    );
+    if (vendedorSeleccionado) {
+      setVendedorBusqueda(vendedorSeleccionado.nombre || "");
+    }
+  }, [usuarios, vendedorId]);
   const [comentariosEditados, setComentariosEditados] = useState({});
   const [comentariosGuardando, setComentariosGuardando] = useState({});
   const [auditoriaCaja, setAuditoriaCaja] = useState(null);
@@ -687,6 +698,8 @@ export default function VentasAuditoria() {
     setFechaFin(hoy);
     setAgenciaId("");
     setVendedorId("");
+    setVendedorBusqueda("");
+    setVendedorSelectorOpen(false);
     setModeloId("");
     setCierreCaja("");
     setOrigenId("");
@@ -1647,13 +1660,29 @@ export default function VentasAuditoria() {
             emptyLabel="Todas"
           />
 
-          <FiltroSelect
-            label="Vendedor"
-            value={vendedorId}
-            onChange={setVendedorId}
+          <CollaboratorSearchInput
             options={usuarios}
-            emptyLabel="Todos"
-            shortNames
+            searchValue={vendedorBusqueda}
+            selectedId={vendedorId}
+            open={vendedorSelectorOpen}
+            label="Vendedor"
+            placeholder="Todos los vendedores"
+            onOpenChange={setVendedorSelectorOpen}
+            onSearchChange={(value) => {
+              setVendedorBusqueda(value);
+              setVendedorId("");
+              setVendedorSelectorOpen(true);
+            }}
+            onShowAll={() => {
+              setVendedorBusqueda("");
+              setVendedorId("");
+              setVendedorSelectorOpen(true);
+            }}
+            onSelect={(usuario) => {
+              setVendedorId(String(usuario.id));
+              setVendedorBusqueda(usuario.nombre || "");
+              setVendedorSelectorOpen(false);
+            }}
           />
 
           <label className="block">
@@ -2256,7 +2285,7 @@ function FiltroFecha({ label, value, onChange }) {
   );
 }
 
-function FiltroSelect({ label, value, onChange, options, emptyLabel, shortNames = false }) {
+function FiltroSelect({ label, value, onChange, options, emptyLabel }) {
   return (
     <label className="block">
       <span className="block text-sm font-medium text-gray-700">{label}</span>
@@ -2268,7 +2297,7 @@ function FiltroSelect({ label, value, onChange, options, emptyLabel, shortNames 
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
-            {shortNames ? nombreCortoUsuario(option) : option.nombre}
+            {option.nombre}
           </option>
         ))}
       </select>

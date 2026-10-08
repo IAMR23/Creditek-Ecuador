@@ -955,26 +955,28 @@ function flowScheduleState(schedules = [], now = new Date()) {
   const time = `${values.hour}:${values.minute}`;
   const date = `${values.year}-${values.month}-${values.day}`;
   const configuredIds = new Set();
+  const scheduledIds = new Set();
   const activeIds = new Set();
 
   (Array.isArray(schedules) ? schedules : []).forEach((block) => {
     const users = Array.isArray(block?.usuariosGhl) ? block.usuariosGhl : [];
     users.forEach((userId) => configuredIds.add(String(userId)));
-    if (
-      (block?.fecha ? String(block.fecha) === date : Number(block?.diaSemana) === day)
+    const matchesDay = block?.fecha
+      ? String(block.fecha) === date
+      : Number(block?.diaSemana) === day;
+    if (matchesDay) users.forEach((userId) => scheduledIds.add(String(userId)));
+    if (matchesDay
       && String(block?.horaInicio || "") <= time
-      && time < String(block?.horaFin || "")
-    ) {
+      && time < String(block?.horaFin || "")) {
       users.forEach((userId) => activeIds.add(String(userId)));
     }
   });
 
-  return { day, date, time, configuredIds, activeIds };
+  return { day, date, time, configuredIds, scheduledIds, activeIds };
 }
 
-async function resolveScheduledAdvisors(schedules, currentGhlUsers, now = new Date()) {
-  const state = flowScheduleState(schedules, now);
-  const ids = [...state.configuredIds];
+async function resolveAdvisorsByScheduleIds(idsSet, activeIds, currentGhlUsers, state) {
+  const ids = [...idsSet];
   if (!ids.length) return { active: [], paused: [], invalid: [], schedule: state };
 
   const rows = await Vinculo.findAll({
@@ -999,7 +1001,7 @@ async function resolveScheduledAdvisors(schedules, currentGhlUsers, now = new Da
     };
     if (!row || row.usuario?.activo !== true || !ghlUser) {
       result.invalid.push({ ...user, reason: "Asociacion RVE-GHL incompleta o usuario inactivo" });
-    } else if (state.activeIds.has(ghlUserId)) {
+    } else if (activeIds.has(ghlUserId)) {
       result.active.push(user);
     } else {
       result.paused.push(user);
@@ -1007,6 +1009,43 @@ async function resolveScheduledAdvisors(schedules, currentGhlUsers, now = new Da
   });
 
   return result;
+}
+
+async function resolveScheduledAdvisors(schedules, currentGhlUsers, now = new Date()) {
+  const state = flowScheduleState(schedules, now);
+  return resolveAdvisorsByScheduleIds(
+    state.configuredIds,
+    state.activeIds,
+    currentGhlUsers,
+    state,
+  );
+}
+
+async function resolveDayScheduledAdvisors(schedules, currentGhlUsers, now = new Date()) {
+  const state = flowScheduleState(schedules, now);
+  return resolveAdvisorsByScheduleIds(
+    state.scheduledIds,
+    state.scheduledIds,
+    currentGhlUsers,
+    state,
+  );
+}
+
+async function isGhlUserScheduledToday(ghlUserId, now = new Date()) {
+  const [row, automaticConfiguration] = await Promise.all([
+    Vinculo.findOne({
+      where: { ghlUserId, activo: true },
+      include: [{ model: Usuario, as: "usuario", attributes: ["id", "activo"] }],
+    }),
+    RealtimeConfiguracion.findByPk(1, {
+      attributes: ["horariosFlujoActivo", "horariosFlujo"],
+    }),
+  ]);
+  if (row?.usuario?.activo !== true || automaticConfiguration?.horariosFlujoActivo !== true) {
+    return false;
+  }
+  return flowScheduleState(automaticConfiguration.horariosFlujo, now)
+    .scheduledIds.has(String(ghlUserId));
 }
 
 async function isGhlUserActiveToday(ghlUserId, now = new Date()) {
@@ -1102,6 +1141,8 @@ module.exports = {
   resolveConfiguredAdvisors,
   flowScheduleState,
   resolveScheduledAdvisors,
+  resolveDayScheduledAdvisors,
   resolveActiveAdvisors,
   isGhlUserActiveToday,
+  isGhlUserScheduledToday,
 };

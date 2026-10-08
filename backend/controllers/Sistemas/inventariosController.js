@@ -1,22 +1,36 @@
 const { Op } = require("sequelize");
 const Agencia = require("../../models/Agencia");
+const Dispositivo = require("../../models/Dispositivo");
+const DispositivoMarca = require("../../models/DispositivoMarca");
 const InventarioSistema = require("../../models/InventarioSistema");
+const Marca = require("../../models/Marca");
+const Modelo = require("../../models/Modelo");
 const Usuario = require("../../models/Usuario");
 const { sequelize } = require("../../config/db");
 const {
-  DISPOSITIVOS,
   ESTADOS,
   obtenerResumenInventario,
-  resolverDispositivo,
   serializarInventario,
   validarInventario,
 } = require("../../services/inventarioSistemasService");
+
+const includeProducto = {
+  model: DispositivoMarca,
+  as: "dispositivoMarca",
+  attributes: ["id", "dispositivoId", "marcaId"],
+  include: [
+    { model: Dispositivo, as: "dispositivo", attributes: ["id", "nombre"] },
+    { model: Marca, as: "marca", attributes: ["id", "nombre"] },
+  ],
+};
 
 const includeInventario = [
   { model: Agencia, as: "agencia", attributes: ["id", "nombre", "ciudad"] },
   { model: Usuario, as: "responsable", attributes: ["id", "nombre"] },
   { model: Usuario, as: "creadoPor", attributes: ["id", "nombre"] },
   { model: Usuario, as: "actualizadoPor", attributes: ["id", "nombre"] },
+  includeProducto,
+  { model: Modelo, as: "modeloCatalogo", attributes: ["id", "nombre"] },
 ];
 
 const parsePositiveInt = (value, fallback, max = 100) => {
@@ -43,8 +57,13 @@ const construirWhere = (query = {}) => {
   const estado = String(query.estado || "").trim().toUpperCase();
   if (ESTADOS.some((item) => item.value === estado)) where.estado = estado;
 
-  const dispositivo = resolverDispositivo(query.dispositivo);
-  if (dispositivo) where.nombre = dispositivo.label;
+  const dispositivo = String(query.dispositivo || "").trim();
+  if (dispositivo) where.nombre = dispositivo;
+
+  if (Number(query.modeloId) > 0) where.modeloId = Number(query.modeloId);
+  if (Number(query.dispositivoMarcaId) > 0) {
+    where.dispositivoMarcaId = Number(query.dispositivoMarcaId);
+  }
 
   return where;
 };
@@ -75,6 +94,75 @@ const validarReferencias = async ({ agenciaId, responsableId }, options = {}) =>
   return null;
 };
 
+const resolverProductoCatalogo = async (
+  { dispositivoMarcaId, modeloId },
+  options = {},
+) => {
+  const relacionId = Number(dispositivoMarcaId);
+  const productoModeloId = Number(modeloId);
+
+  if (
+    !Number.isInteger(relacionId) ||
+    relacionId < 1 ||
+    !Number.isInteger(productoModeloId) ||
+    productoModeloId < 1
+  ) {
+    return { error: "El tipo, la marca y el modelo son obligatorios" };
+  }
+
+  const modelo = await Modelo.findOne({
+    where: {
+      id: productoModeloId,
+      dispositivoMarcaId: relacionId,
+      activo: true,
+    },
+    attributes: ["id", "nombre", "dispositivoMarcaId"],
+    include: [
+      {
+        model: DispositivoMarca,
+        as: "dispositivoMarca",
+        where: { activo: true },
+        required: true,
+        attributes: ["id", "dispositivoId", "marcaId"],
+        include: [
+          {
+            model: Dispositivo,
+            as: "dispositivo",
+            where: { activo: true },
+            required: true,
+            attributes: ["id", "nombre"],
+          },
+          {
+            model: Marca,
+            as: "marca",
+            where: { activo: true },
+            required: true,
+            attributes: ["id", "nombre"],
+          },
+        ],
+      },
+    ],
+    ...options,
+  });
+
+  if (!modelo) {
+    return {
+      error:
+        "El modelo seleccionado no pertenece al tipo y marca indicados o está inactivo",
+    };
+  }
+
+  return {
+    data: {
+      dispositivoMarcaId: modelo.dispositivoMarcaId,
+      modeloId: modelo.id,
+      nombre: modelo.dispositivoMarca.dispositivo.nombre,
+      marca: modelo.dispositivoMarca.marca.nombre,
+      modelo: modelo.nombre,
+    },
+  };
+};
+
 exports.listar = async (req, res) => {
   try {
     const pagina = parsePositiveInt(req.query.pagina || req.query.page, 1);
@@ -88,11 +176,18 @@ exports.listar = async (req, res) => {
         distinct: true,
         limit: limite,
         offset: (pagina - 1) * limite,
-        order: [["updatedAt", "DESC"], ["nombre", "ASC"]],
+        order: [["fechaIngreso", "DESC"], ["updatedAt", "DESC"]],
       }),
       InventarioSistema.findAll({
         where,
-        attributes: ["nombre", "estado", "responsableId", "cantidad"],
+        attributes: [
+          "nombre",
+          "estado",
+          "responsableId",
+          "cantidad",
+          "dispositivoMarcaId",
+        ],
+        include: [includeProducto],
       }),
     ]);
 
@@ -115,7 +210,7 @@ exports.listar = async (req, res) => {
 
 exports.catalogos = async (_req, res) => {
   try {
-    const [agencias, responsables] = await Promise.all([
+    const [agencias, responsables, relaciones, modelos] = await Promise.all([
       Agencia.findAll({
         where: { activo: true },
         attributes: ["id", "nombre", "ciudad"],
@@ -126,13 +221,67 @@ exports.catalogos = async (_req, res) => {
         attributes: ["id", "nombre"],
         order: [["nombre", "ASC"]],
       }),
+      DispositivoMarca.findAll({
+        where: { activo: true },
+        attributes: ["id", "dispositivoId", "marcaId"],
+        include: [
+          {
+            model: Dispositivo,
+            as: "dispositivo",
+            where: { activo: true },
+            required: true,
+            attributes: ["id", "nombre"],
+          },
+          {
+            model: Marca,
+            as: "marca",
+            where: { activo: true },
+            required: true,
+            attributes: ["id", "nombre"],
+          },
+        ],
+      }),
+      Modelo.findAll({
+        where: { activo: true },
+        attributes: ["id", "nombre", "dispositivoMarcaId"],
+        order: [["nombre", "ASC"]],
+      }),
     ]);
+
+    const relacionesActivas = relaciones.map((relacion) => ({
+      id: relacion.id,
+      dispositivoId: relacion.dispositivoId,
+      marcaId: relacion.marcaId,
+      dispositivo: relacion.dispositivo,
+      marca: relacion.marca,
+    }));
+    const relacionesIds = new Set(relacionesActivas.map((item) => item.id));
+    const dispositivosMap = new Map();
+    relacionesActivas.forEach((relacion) => {
+      dispositivosMap.set(relacion.dispositivo.id, {
+        id: relacion.dispositivo.id,
+        nombre: relacion.dispositivo.nombre,
+        label: relacion.dispositivo.nombre,
+        value: relacion.dispositivo.nombre,
+      });
+    });
+    const dispositivos = Array.from(dispositivosMap.values()).sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, "es"),
+    );
 
     return res.json({
       ok: true,
       agencias,
       responsables,
-      dispositivos: DISPOSITIVOS,
+      dispositivos,
+      dispositivoMarcas: relacionesActivas,
+      modelos: modelos
+        .filter((modelo) => relacionesIds.has(modelo.dispositivoMarcaId))
+        .map((modelo) => ({
+          id: modelo.id,
+          nombre: modelo.nombre,
+          dispositivoMarcaId: modelo.dispositivoMarcaId,
+        })),
       estados: ESTADOS,
     });
   } catch (error) {
@@ -143,7 +292,15 @@ exports.catalogos = async (_req, res) => {
 
 exports.crear = async (req, res) => {
   try {
-    const validacion = validarInventario(req.body);
+    const producto = await resolverProductoCatalogo(req.body);
+    if (producto.error) {
+      return res.status(400).json({ ok: false, message: producto.error });
+    }
+
+    const validacion = validarInventario(
+      { ...req.body, ...producto.data },
+      { requiereCatalogo: true },
+    );
     if (validacion.errores.length) {
       return res.status(400).json({ ok: false, message: validacion.errores[0], errores: validacion.errores });
     }
@@ -185,25 +342,6 @@ exports.guardarLote = async (req, res) => {
     });
   }
 
-  const validaciones = items.map((item) =>
-    validarInventario({
-      ...item,
-      agenciaId,
-      responsableId,
-    }),
-  );
-  const errores = validaciones.flatMap((validacion, index) =>
-    validacion.errores.map((error) => `Ítem ${index + 1}: ${error}`),
-  );
-
-  if (errores.length > 0) {
-    return res.status(400).json({
-      ok: false,
-      message: errores[0],
-      errores,
-    });
-  }
-
   const idsEditados = items
     .map((item) => Number(item.id))
     .filter((id) => Number.isInteger(id) && id > 0);
@@ -216,6 +354,42 @@ exports.guardarLote = async (req, res) => {
   }
 
   try {
+    const productos = await Promise.all(
+      items.map((item) => resolverProductoCatalogo(item)),
+    );
+    const erroresCatalogo = productos.flatMap((producto, index) =>
+      producto.error ? [`Ítem ${index + 1}: ${producto.error}`] : [],
+    );
+    if (erroresCatalogo.length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: erroresCatalogo[0],
+        errores: erroresCatalogo,
+      });
+    }
+
+    const validaciones = items.map((item, index) =>
+      validarInventario(
+        {
+          ...item,
+          ...productos[index].data,
+          agenciaId,
+          responsableId,
+        },
+        { requiereCatalogo: true },
+      ),
+    );
+    const errores = validaciones.flatMap((validacion, index) =>
+      validacion.errores.map((error) => `Ítem ${index + 1}: ${error}`),
+    );
+    if (errores.length > 0) {
+      return res.status(400).json({
+        ok: false,
+        message: errores[0],
+        errores,
+      });
+    }
+
     const idsGuardados = await sequelize.transaction(async (transaction) => {
       const errorReferencias = await validarReferencias(validaciones[0].data, {
         transaction,
@@ -301,10 +475,19 @@ exports.actualizar = async (req, res) => {
       return res.status(404).json({ ok: false, message: "Inventario no encontrado" });
     }
 
-    const validacion = validarInventario({
+    const datosActualizados = {
       ...inventario.get({ plain: true }),
       ...req.body,
-    });
+    };
+    const producto = await resolverProductoCatalogo(datosActualizados);
+    if (producto.error) {
+      return res.status(400).json({ ok: false, message: producto.error });
+    }
+
+    const validacion = validarInventario(
+      { ...datosActualizados, ...producto.data },
+      { requiereCatalogo: true },
+    );
     if (validacion.errores.length) {
       return res.status(400).json({ ok: false, message: validacion.errores[0], errores: validacion.errores });
     }

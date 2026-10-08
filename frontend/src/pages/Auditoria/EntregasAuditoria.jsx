@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 import Swal from "sweetalert2";
 import { API_URL } from "../../../config";
-import { nombreCortoUsuario } from "../../utils/nombres";
+import CollaboratorSearchInput from "../../components/CollaboratorSearchInput";
 
 const STORAGE_KEY = "entregas_auditoria_filtros";
 
@@ -115,6 +116,8 @@ export default function EntregasAuditoria() {
   const [vendedorId, setVendedorId] = useState(
     filtrosGuardados.vendedorId || "",
   );
+  const [vendedorBusqueda, setVendedorBusqueda] = useState("");
+  const [vendedorSelectorOpen, setVendedorSelectorOpen] = useState(false);
   const [modelos, setModelos] = useState([]);
   const [modeloId, setModeloId] = useState(filtrosGuardados.modeloId || "");
   const [dispositivos, setDispositivos] = useState([]);
@@ -126,6 +129,15 @@ export default function EntregasAuditoria() {
   );
   const [estado, setEstado] = useState(filtrosGuardados.estado || "");
   const [busquedaCliente, setBusquedaCliente] = useState("");
+
+  useEffect(() => {
+    const vendedorSeleccionado = usuarios.find(
+      (usuario) => String(usuario.id) === String(vendedorId),
+    );
+    if (vendedorSeleccionado) {
+      setVendedorBusqueda(vendedorSeleccionado.nombre || "");
+    }
+  }, [usuarios, vendedorId]);
 
   const filasVisibles = useMemo(
     () => filas.filter((fila) => coincideBusquedaCliente(fila, busquedaCliente)),
@@ -260,6 +272,8 @@ export default function EntregasAuditoria() {
     setFechaFin(hoy);
     setAgenciaId("");
     setVendedorId("");
+    setVendedorBusqueda("");
+    setVendedorSelectorOpen(false);
     setModeloId("");
     setCierreCaja("");
     setDispositivoId("");
@@ -391,13 +405,29 @@ export default function EntregasAuditoria() {
             options={agencias}
             emptyLabel="Todas"
           />
-          <FiltroSelect
-            label="Vendedor"
-            value={vendedorId}
-            onChange={setVendedorId}
+          <CollaboratorSearchInput
             options={usuarios}
-            emptyLabel="Todos"
-            shortNames
+            searchValue={vendedorBusqueda}
+            selectedId={vendedorId}
+            open={vendedorSelectorOpen}
+            label="Vendedor"
+            placeholder="Todos los vendedores"
+            onOpenChange={setVendedorSelectorOpen}
+            onSearchChange={(value) => {
+              setVendedorBusqueda(value);
+              setVendedorId("");
+              setVendedorSelectorOpen(true);
+            }}
+            onShowAll={() => {
+              setVendedorBusqueda("");
+              setVendedorId("");
+              setVendedorSelectorOpen(true);
+            }}
+            onSelect={(usuario) => {
+              setVendedorId(String(usuario.id));
+              setVendedorBusqueda(usuario.nombre || "");
+              setVendedorSelectorOpen(false);
+            }}
           />
           <label className="block">
             <span className="block text-sm font-medium text-gray-700">Modelo</span>
@@ -649,7 +679,7 @@ function FiltroFecha({ label, value, onChange }) {
   );
 }
 
-function FiltroSelect({ label, value, onChange, options, emptyLabel, shortNames = false }) {
+function FiltroSelect({ label, value, onChange, options, emptyLabel }) {
   return (
     <label className="block">
       <span className="block text-sm font-medium text-gray-700">{label}</span>
@@ -661,7 +691,7 @@ function FiltroSelect({ label, value, onChange, options, emptyLabel, shortNames 
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
-            {shortNames ? nombreCortoUsuario(option) : option.nombre}
+            {option.nombre}
           </option>
         ))}
       </select>
