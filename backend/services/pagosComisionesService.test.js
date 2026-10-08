@@ -17,6 +17,7 @@ const {
   calculateSalesPenalty,
   calculateWeeklyPenalty,
   calculateMonthlyBonus,
+  calculateProportionalChiefBonus,
   isActiveDuringWeek,
   isActiveFullWeek,
   getNewPersonnelPenaltyStartDate,
@@ -28,6 +29,7 @@ const {
   calculateCommission,
   calculateLeaderAverage,
   getActiveTeamMembersForWeek,
+  getSelectedAverageSalesForWeek,
   getCommissionTeamMembersForWeek,
   getCommissionTeamProductionForWeek,
   selectHighestPaidPosition,
@@ -574,6 +576,62 @@ describe("pagosComisionesService", () => {
     ).toBe(10);
   });
 
+  test("promedio del supervisor suma solo las ventas de los vendedores seleccionados", () => {
+    const weeks = [
+      { startDate: "2026-09-03", endDate: "2026-09-09" },
+      { startDate: "2026-09-10", endDate: "2026-09-16" },
+    ];
+    const sellers = [
+      {
+        usuarioId: 11,
+        fechaIngreso: "2025-01-01",
+        semanas: {
+          "2026-09-03": { ventasParaPromedioAntiguedad: 8 },
+          "2026-09-10": { ventasParaPromedioAntiguedad: 10 },
+        },
+      },
+      {
+        usuarioId: 12,
+        fechaIngreso: "2025-01-01",
+        semanas: {
+          "2026-09-03": { ventasParaPromedioAntiguedad: 6 },
+          "2026-09-10": { ventasParaPromedioAntiguedad: 12 },
+        },
+      },
+      {
+        usuarioId: 13,
+        fechaIngreso: "2025-01-01",
+        semanas: {
+          "2026-09-03": { ventasParaPromedioAntiguedad: 100 },
+          "2026-09-10": { ventasParaPromedioAntiguedad: 100 },
+        },
+      },
+    ];
+    const selectedSellerIds = [11, 12];
+    const sellersById = new Map(
+      sellers.map((seller) => [seller.usuarioId, seller]),
+    );
+    const totalDispositivos = weeks.reduce(
+      (total, week) =>
+        total +
+        getSelectedAverageSalesForWeek({
+          sellerIds: selectedSellerIds,
+          sellersById,
+          week,
+        }),
+      0,
+    );
+
+    expect(totalDispositivos).toBe(36);
+    expect(
+      calculateLeaderAverage({
+        totalDispositivos,
+        cantidadSemanas: weeks.length,
+        cantidadJuniors: selectedSellerIds.length,
+      }),
+    ).toBe(9);
+  });
+
   test("bono del jefe usa los limites exactos configurados sin redondear", () => {
     const rules = {
       tiers: [
@@ -1098,6 +1156,7 @@ describe("pagosComisionesService", () => {
         anio: 2026,
         mes: 9,
         vendedorIds: [51, "52", 51, "invalido"],
+        metaVentas: "280",
       },
     ]);
 
@@ -1111,6 +1170,7 @@ describe("pagosComisionesService", () => {
       year: 2026,
       month: 9,
       vendedorIds: [51, 52],
+      metaVentas: 280,
     });
   });
 
@@ -1330,7 +1390,12 @@ describe("pagosComisionesService", () => {
 });
 
 describe("bono mensual del jefe comercial", () => {
-  const calcular = (cantidad, configurado = true, supervisor = false, ventasSemanales = [50, 50, 50, 50]) => {
+  const calcular = ({
+    cantidad = 5,
+    supervisor = false,
+    ventasSemanales = [50, 50, 50, 50],
+    metaVentasMensual = supervisor ? null : 250,
+  } = {}) => {
     const weeks = [5, 12, 19, 26].map(day => ({
       startDate: "2026-01-" + String(day).padStart(2, "0"),
       endDate: day === 26 ? "2026-02-01" : "2026-01-" + String(day + 6).padStart(2, "0"),
@@ -1341,8 +1406,8 @@ describe("bono mensual del jefe comercial", () => {
       esJefeComercial: !supervisor, esSupervisorComercial: supervisor,
       cantidadVendedoresPromedioJefe: cantidad,
       cantidadVendedoresPromedioSupervisor: cantidad,
-      promedioJefeMensualConfigurado: configurado,
-      promedioSupervisorMensualConfigurado: configurado,
+      metaVentasMensual,
+      promedioSupervisorMensualConfigurado: true,
       semanas: Object.fromEntries(weeks.map((week, index) => [week.startDate, {
         venden: ventasSemanales[index], ventasParaPromedioAntiguedad: ventasSemanales[index], valorVendido: 1000, vendenParaBono: 10,
         cantidadVendedoresBono: index + 1, cantidadVendedores: index + 1,
@@ -1364,50 +1429,55 @@ describe("bono mensual del jefe comercial", () => {
     finalizarVendedor(jefe, weeks, supervisor ? reglasSemanales : {}, { ...rules, ...reglasSupervisor }, { byRole: {}, byCargo: {} }, new Map());
     return jefe.resumenMensual;
   };
-  test.each([true, false])("suma ventas de equipos semanales y usa divisor mensual con seleccion configurada %s", configurado => {
-    expect(calcular(5, configurado)).toMatchObject({
-      ventasConsideradasBono: 200,
-      promedioVentasPorJunior: 10,
-      totalVendedoresSemanas: null,
-      valorComisionMensual: 100,
+
+  test("aplica regla de tres: 224 ventas sobre meta 280 pagan 80 dolares", () => {
+    expect(calculateProportionalChiefBonus({ ventas: 224, metaVentas: 280 })).toBe(80);
+    expect(calcular({
+      ventasSemanales: [40, 50, 30, 60, 44],
+      metaVentasMensual: 280,
+    })).toMatchObject({
+      bonoMensualProporcionalJefe: true,
+      ventasTvCelulaMensual: 224,
+      ventasConsideradasBono: 224,
+      metaVentasMensual: 280,
+      bonoMetaMensual: 100,
+      porcentajeMetaMensual: 80,
+      promedioVentasPorJunior: null,
+      valorComisionMensual: 80,
     });
   });
-  test("suma 221 ventas de cinco equipos semanales y divide entre cinco semanas y tres vendedores", () => {
-    expect(calcular(3, true, false, [40, 50, 30, 60, 41])).toMatchObject({
-      ventasTvCelulaMensual: 221,
-      ventasConsideradasBono: 221,
-      promedioVentasPorJunior: 14.733,
-      cantidadVendedoresPromedioJefe: 3,
+
+  test("la cantidad de vendedores no interviene en el bono del jefe", () => {
+    const params = {
+      ventasSemanales: [56, 56, 56, 56],
+      metaVentasMensual: 280,
+    };
+    expect(calcular({ ...params, cantidad: 2 }).valorComisionMensual).toBe(80);
+    expect(calcular({ ...params, cantidad: 5 }).valorComisionMensual).toBe(80);
+  });
+
+  test("sin meta mensual configurada el jefe no genera bono", () => {
+    expect(calcular({ metaVentasMensual: null })).toMatchObject({
+      promedioVentasPorJunior: null,
+      valorComisionMensual: 0,
     });
   });
-  test("una semana sin ventas aporta cero sin reducir el numero de semanas", () => {
-    expect(calcular(3, true, false, [0, 50, 50, 50])).toMatchObject({
-      ventasTvCelulaMensual: 150,
-      ventasConsideradasBono: 150,
-      promedioVentasPorJunior: 12.5,
-    });
-  });
-  test("cambiar cantidad seleccionada cambia divisor pero conserva ventas", () => {
-    expect(calcular(2)).toMatchObject({ ventasConsideradasBono: 200, promedioVentasPorJunior: 25, valorComisionMensual: 200 });
-  });
-  test("sin vendedores seleccionados el promedio y bono son cero", () => {
-    expect(calcular(0)).toMatchObject({ promedioVentasPorJunior: 0, valorComisionMensual: 0 });
-  });
-  test.each([true, false])("supervisor usa divisor mensual y tarifas de Call Center con seleccion configurada %s", configurado => {
-    expect(calcular(5, configurado, true)).toMatchObject({
+
+  test("supervisor conserva divisor mensual y tarifas de Call Center", () => {
+    expect(calcular({ cantidad: 5, supervisor: true })).toMatchObject({
       totalVendedoresSemanas: null, promedioVentasPorJunior: 10,
       valorComisionSemanal: 400, valorComisionMensual: 60,
       totalComisionesSemanaMensual: 460,
     });
   });
   test("supervisor divide ventas semanales entre cinco semanas y tres vendedores", () => {
-    expect(calcular(3, true, true, [40, 50, 30, 60, 41])).toMatchObject({
+    expect(calcular({ cantidad: 3, supervisor: true, ventasSemanales: [40, 50, 30, 60, 41] })).toMatchObject({
       ventasConsideradasBono: 221, promedioVentasPorJunior: 14.733,
       valorComisionMensual: 60,
     });
   });
   test("supervisor sin seleccionados no genera bono mensual", () => {
-    expect(calcular(0, true, true)).toMatchObject({
+    expect(calcular({ cantidad: 0, supervisor: true })).toMatchObject({
       promedioVentasPorJunior: 0, valorComisionMensual: 0,
     });
   });
@@ -1451,6 +1521,7 @@ describe("tabla del jefe comercial de piso", () => {
       grupoComision: "JEFE COMERCIAL PISO",
       esJefeComercial: true,
       esSupervisorComercial: false,
+      metaVentasMensual: 280,
       cantidadVendedoresPromedioJefe: 0,
       semanas: Object.fromEntries(
         weeks.map((week, index) => [week.startDate, {
@@ -1480,26 +1551,27 @@ describe("tabla del jefe comercial de piso", () => {
     return jefe;
   };
 
-  test("suma las comisiones de las ventas seleccionadas y agrega 100 mensuales", () => {
+  test("suma las comisiones semanales y agrega el bono mensual proporcional", () => {
     const jefe = calcular([50, 60, 70, 90]);
 
     expect(jefe.resumenMensual).toMatchObject({
-      bonoMensualFijoJefePiso: true,
+      bonoMensualProporcionalJefe: true,
       ventasTvCelulaMensual: 270,
       valorComisionSemanal: 208.5,
-      valorComisionMensual: 100,
-      totalComisionesSemanaMensual: 308.5,
+      metaVentasMensual: 280,
+      valorComisionMensual: 96.43,
+      totalComisionesSemanaMensual: 304.93,
       promedioVentasPorJunior: null,
     });
   });
 
-  test("no paga comision ni bono con menos de 50 o desde 200 ventas", () => {
+  test("el bono proporcional no depende de que exista comision semanal", () => {
     const jefe = calcular([49, 200, 0, 0]);
 
     expect(jefe.resumenMensual).toMatchObject({
       valorComisionSemanal: 0,
-      valorComisionMensual: 0,
-      totalComisionesSemanaMensual: 0,
+      valorComisionMensual: 88.93,
+      totalComisionesSemanaMensual: 88.93,
     });
   });
 });
@@ -1522,6 +1594,7 @@ describe("cantidad para comision semanal", () => {
     const lider = {
       usuarioId: 1, grupoComision: grupo,
       esJefeComercial: !supervisor, esSupervisorComercial: supervisor,
+      metaVentasMensual: supervisor ? null : 120,
       cantidadVendedoresPromedioJefe: 3, cantidadVendedoresPromedioSupervisor: 3,
       semanas: Object.fromEntries(weeks.map((week, i) => [week.startDate, {
         venden: 30, ventasParaPromedioAntiguedad: 30, valorVendido: 100, cantidadVendedores: 4,
@@ -1539,16 +1612,19 @@ describe("cantidad para comision semanal", () => {
     expect(lider.semanas[weeks[0].startDate].totalComisiones).toBe(supervisor ? 120 : 60);
     expect(lider.semanas[weeks[1].startDate].totalComisiones).toBe(supervisor ? 300 : 150);
     expect(lider.semanas[weeks[0].startDate].cantidadVendedores).toBe(4);
-    expect(lider.resumenMensual.promedioVentasPorJunior).toBe(10);
+    expect(lider.resumenMensual.promedioVentasPorJunior).toBe(
+      supervisor ? 10 : null,
+    );
     expect(lider.total.venden).toBe(60);
   });
 });
 
-test.each([false, true])("antiguedad afecta solo bono mensual del lider; supervisor %s", supervisor => {
+test.each([false, true])("antiguedad solo modifica el bono por promedio del supervisor; supervisor %s", supervisor => {
   const grupo = supervisor ? "SUPERVISOR CALL CENTER" : "JEFE COMERCIAL";
   const weeks = [{ startDate: "2026-08-06", endDate: "2026-08-12" }];
   const crear = elegibles => ({
     usuarioId: 1, grupoComision: grupo, esJefeComercial: !supervisor, esSupervisorComercial: supervisor,
+    metaVentasMensual: supervisor ? null : 40,
     cantidadVendedoresPromedioJefe: 2, cantidadVendedoresPromedioSupervisor: 2,
     semanas: { "2026-08-06": { venden: 40, ventasParaPromedioAntiguedad: elegibles, valorVendido: 1000, cantidadVendedores: 4, cantidadVendedoresComision: 3 } },
     total: { venden: 0, valorVendido: 0, totalComisiones: 0, noCumpleMetas: 0, valorDescontar: 0 },
@@ -1560,6 +1636,22 @@ test.each([false, true])("antiguedad afecta solo bono mensual del lider; supervi
   for (const lider of [antes, despues]) finalizarVendedor(lider, weeks, semanal, mensual, { byRole: {}, byCargo: {} }, new Map());
   expect(despues.total).toEqual(antes.total);
   expect(despues.semanas["2026-08-06"].totalComisiones).toBe(80);
-  expect(despues.resumenMensual).toMatchObject({ ventasTvCelulaMensual: 40, ventasConsideradasBono: 20, promedioVentasPorJunior: 10, valorComisionSemanal: 80, valorComisionMensual: 0 });
+  expect(despues.resumenMensual).toMatchObject(
+    supervisor
+      ? {
+          ventasTvCelulaMensual: 40,
+          ventasConsideradasBono: 20,
+          promedioVentasPorJunior: 10,
+          valorComisionSemanal: 80,
+          valorComisionMensual: 0,
+        }
+      : {
+          ventasTvCelulaMensual: 40,
+          ventasConsideradasBono: 40,
+          promedioVentasPorJunior: null,
+          valorComisionSemanal: 80,
+          valorComisionMensual: 100,
+        },
+  );
   expect(antes.resumenMensual.valorComisionMensual).toBe(100);
 });

@@ -30,6 +30,10 @@ router.put(
   controller.guardarPromedioMensualJefeComercial,
 );
 router.put(
+  "/jefes/:jefeComercialId/meta-mensual/:year/:month",
+  controller.guardarMetaMensualJefeComercial,
+);
+router.put(
   "/supervisores/:supervisorComercialId/equipos-semanales/:semanaInicio",
   controller.guardarEquipoSemanalSupervisorComercial,
 );

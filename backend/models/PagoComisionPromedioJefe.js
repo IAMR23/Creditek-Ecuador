@@ -29,6 +29,11 @@ const PagoComisionPromedioJefe = sequelize.define(
       allowNull: false,
       defaultValue: [],
     },
+    metaVentas: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0.01 },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

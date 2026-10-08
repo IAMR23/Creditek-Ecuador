@@ -809,7 +809,7 @@ export default function PagosComisiones() {
   const [jefeComercialId, setJefeComercialId] = useState("");
   const [guardandoJefe, setGuardandoJefe] = useState(false);
   const [guardandoEquipoSemanal, setGuardandoEquipoSemanal] = useState("");
-  const [guardandoPromedioJefe, setGuardandoPromedioJefe] = useState("");
+  const [guardandoMetaJefe, setGuardandoMetaJefe] = useState("");
   const [guardandoPromedioSupervisor, setGuardandoPromedioSupervisor] = useState("");
   const [guardandoPersonalNuevoBono, setGuardandoPersonalNuevoBono] = useState("");
   const [juniorSupervisorId, setJuniorSupervisorId] = useState("");
@@ -1513,29 +1513,29 @@ export default function PagosComisiones() {
     }
   };
 
-  const guardarPromedioJefeMensual = async ({ jefe, vendedorIds }) => {
+  const guardarMetaJefeMensual = async ({ jefe, metaVentas }) => {
     const key = String(jefe.usuarioId);
-    setGuardandoPromedioJefe(key);
+    setGuardandoMetaJefe(key);
     try {
       await api.put(
-        `${ENDPOINT}/jefes/${jefe.usuarioId}/promedio-mensual/${filters.year}/${filters.month}`,
-        { vendedorIds },
+        `${ENDPOINT}/jefes/${jefe.usuarioId}/meta-mensual/${filters.year}/${filters.month}`,
+        { metaVentas },
       );
       await fetchReport();
       Swal.fire({
         icon: "success",
-        title: "Promedio mensual guardado",
+        title: "Meta mensual guardada",
         showConfirmButton: false,
         timer: 1400,
       });
     } catch (error) {
       Swal.fire(
         "Error",
-        error.response?.data?.message || "No se pudo guardar el promedio mensual",
+        error.response?.data?.message || "No se pudo guardar la meta mensual",
         "error",
       );
     } finally {
-      setGuardandoPromedioJefe("");
+      setGuardandoMetaJefe("");
     }
   };
 
@@ -2273,8 +2273,8 @@ export default function PagosComisiones() {
                           {vendedor.esJefeComercial ? (
                             <span className="block text-[11px] font-normal text-emerald-700">
                               {vendedor.vendedoresJunior?.length || 0} junior(s)
-                              {vendedor.resumenMensual?.promedioVentasPorJunior !== null
-                                ? ` · Promedio ${formatCommission(vendedor.resumenMensual?.promedioVentasPorJunior)}`
+                              {vendedor.resumenMensual?.metaVentasMensual
+                                ? ` · Meta ${formatCommission(vendedor.resumenMensual.metaVentasMensual)} · Bono $${formatCommission(vendedor.resumenMensual.valorComisionMensual || 0)}`
                                 : ""}
                             </span>
                           ) : null}
@@ -2362,10 +2362,10 @@ export default function PagosComisiones() {
             loading={loading}
             vendedoresDisponibles={vendedoresElegiblesEquipo}
             onGuardarEquipoSemanal={guardarEquipoSemanal}
-            onGuardarPromedioJefe={guardarPromedioJefeMensual}
+            onGuardarMetaJefe={guardarMetaJefeMensual}
             onGuardarPromedioSupervisor={guardarPromedioSupervisorMensual}
             guardandoEquipoSemanal={guardandoEquipoSemanal}
-            guardandoPromedioJefe={guardandoPromedioJefe}
+            guardandoMetaJefe={guardandoMetaJefe}
             guardandoPromedioSupervisor={guardandoPromedioSupervisor}
             periodoPagado={periodoPagado}
             sectionLabel={
@@ -2838,6 +2838,82 @@ function WeeklyLeaderTeamConfiguration({
   );
 }
 
+function MonthlyChiefGoalConfiguration({
+  leader,
+  onSave,
+  savingKey,
+  disabled,
+}) {
+  const resumen = leader.resumenMensual || {};
+  const savedGoal = resumen.metaVentasMensual
+    ? String(resumen.metaVentasMensual)
+    : "";
+  const [goal, setGoal] = useState(savedGoal);
+
+  useEffect(() => {
+    setGoal(savedGoal);
+  }, [savedGoal]);
+
+  const numericGoal = Number(String(goal).trim().replace(",", "."));
+  const validGoal = Number.isFinite(numericGoal) && numericGoal > 0;
+  const monthlySales = Number(resumen.ventasTvCelulaMensual || 0);
+  const calculatedBonus = validGoal
+    ? (monthlySales * 100) / numericGoal
+    : 0;
+  const isSaving = savingKey === String(leader.usuarioId);
+  const isBusy = Boolean(savingKey);
+  const hasChanges = validGoal && numericGoal !== Number(savedGoal || 0);
+
+  return (
+    <div className="border-b border-slate-200 bg-emerald-50 px-4 py-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex-1">
+          <h3 className="text-sm font-bold text-slate-900">
+            Meta mensual para bono de $100
+          </h3>
+          <p className="mt-1 text-xs text-slate-600">
+            Bono mensual = ventas mensuales × $100 ÷ meta elegida. No se aplica
+            promedio por vendedor.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-emerald-800">
+            <span>Ventas: {formatCommission(monthlySales)}</span>
+            <span>Meta: {validGoal ? formatCommission(numericGoal) : "-"}</span>
+            <span>Bono calculado: ${formatCommission(calculatedBonus)}</span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="text-xs font-semibold text-slate-700">
+            Meta mensual
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={goal}
+              onChange={(event) => setGoal(event.target.value)}
+              disabled={disabled || isBusy}
+              className="mt-1 block w-40 rounded border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => onSave({ jefe: leader, metaVentas: numericGoal })}
+            disabled={disabled || isBusy || !hasChanges}
+            className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save size={13} />
+            {isSaving ? "Guardando..." : "Guardar meta"}
+          </button>
+        </div>
+      </div>
+      {disabled ? (
+        <span className="mt-2 inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
+          <Lock size={13} /> Periodo pagado
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function MonthlyLeaderAverageConfiguration({
   leader,
   leaderType,
@@ -2886,8 +2962,25 @@ function MonthlyLeaderAverageConfiguration({
     weeks.some((week) => isSellerAvailableForWeek(seller, week)),
   );
   const selectedCount = selectedIds.length;
+  const selectedIdSet = new Set(selectedIds);
+  const hasSellerAverageSales = sellers.some(
+    (seller) => seller.ventasParaPromedioPorSemana,
+  );
+  const selectedSales = isChief || !hasSellerAverageSales
+    ? Number(resumen.ventasConsideradasBono || 0)
+    : sellers.reduce((total, seller) => {
+        if (!selectedIdSet.has(String(seller.usuarioId))) return total;
+        return total + weeks.reduce(
+          (sellerTotal, week) =>
+            sellerTotal +
+            Number(
+              seller.ventasParaPromedioPorSemana?.[week.startDate] || 0,
+            ),
+          0,
+        );
+      }, 0);
   const promedioCalculado = selectedCount && weeks.length
-    ? Number(resumen.ventasConsideradasBono || 0) / weeks.length / selectedCount
+    ? selectedSales / weeks.length / selectedCount
     : 0;
 
   const toggleSeller = (sellerId) => {
@@ -2907,14 +3000,18 @@ function MonthlyLeaderAverageConfiguration({
             Vendedores para promedio mensual
           </h3>
           <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span>Dispositivos: {formatCommission(resumen.ventasConsideradasBono || 0)}</span>
+            <span>Dispositivos: {formatCommission(selectedSales)}</span>
             <span>Semanas: {weeks.length}</span>
             <span>Seleccionados: {selectedCount}</span>
             <span>Promedio: {formatCommission(promedioCalculado)}</span>
           </div>
-            <p className="mt-1 text-xs text-slate-600">
-              Promedio = ventas elegibles de los equipos semanales ÷ semanas ÷ vendedores del promedio mensual. Si el vendedor sigue activo, sin fecha de salida, y ya supera 15 días desde su ingreso, también cuentan sus ventas iniciales.
-            </p>
+          <p className="mt-1 text-xs text-slate-600">
+            {isChief
+              ? "Promedio = ventas elegibles de los equipos semanales ÷ semanas ÷ vendedores del promedio mensual."
+              : "Promedio = suma de ventas elegibles de los vendedores seleccionados ÷ semanas ÷ vendedores seleccionados."}{" "}
+            Si el vendedor sigue activo, sin fecha de salida, y ya supera 15
+            días desde su ingreso, también cuentan sus ventas iniciales.
+          </p>
         </div>
         {disabled ? (
           <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
@@ -3221,10 +3318,10 @@ function LeadershipCommissionTables({
   sectionLabel,
   vendedoresDisponibles,
   onGuardarEquipoSemanal,
-  onGuardarPromedioJefe,
+  onGuardarMetaJefe,
   onGuardarPromedioSupervisor,
   guardandoEquipoSemanal,
-  guardandoPromedioJefe,
+  guardandoMetaJefe,
   guardandoPromedioSupervisor,
   periodoPagado,
 }) {
@@ -3249,6 +3346,9 @@ function LeadershipCommissionTables({
       {rows.map((row) => {
         const mensual = getMonthlyValues(row);
         const usaBonoFijoJefePiso = Boolean(mensual.bonoMensualFijoJefePiso);
+        const usaBonoProporcionalJefe = Boolean(
+          mensual.bonoMensualProporcionalJefe,
+        );
         const personalNuevo = isPersonalNuevoEnReporte(row, weeks);
         const fechaIngreso = getFechaIngresoVisible(row);
         const cargosPagoLabel = getCargosPagoLabel(row);
@@ -3301,12 +3401,24 @@ function LeadershipCommissionTables({
                         : vendedor.nombre,
                     )
                     .join(", ")}
-                  {!usaBonoFijoJefePiso && mensual.promedioVentasPorJunior !== null
+                  {row.esSupervisorComercial &&
+                  mensual.promedioVentasPorJunior !== null
                     ? ` · Promedio por vendedor: ${formatCommission(mensual.promedioVentasPorJunior)}`
                     : ""}
                 </p>
               ) : null}
-              {usaBonoFijoJefePiso ? (
+              {usaBonoProporcionalJefe ? (
+                <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs text-emerald-900">
+                  <p className="font-semibold">
+                    Bono mensual por regla de tres: {formatCommission(mensual.ventasTvCelulaMensual || 0)} ventas × $100 ÷ {mensual.metaVentasMensual ? formatCommission(mensual.metaVentasMensual) : "meta pendiente"} = ${formatCommission(mensual.valorComisionMensual || 0)}
+                  </p>
+                  {!mensual.metaVentasMensual ? (
+                    <p className="mt-1 text-amber-700">
+                      Configure la meta mensual que equivale al bono completo de $100.
+                    </p>
+                  ) : null}
+                </div>
+              ) : usaBonoFijoJefePiso ? (
                 <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs text-emerald-900">
                   La comisión usa las ventas semanales de los vendedores seleccionados. Si al menos una semana alcanza entre 50 y 199 ventas, se agregan $100 de bono mensual.
                 </div>
@@ -3336,24 +3448,24 @@ function LeadershipCommissionTables({
                 </div>
               ) : null}
             </div>
-            {(row.esJefeComercial || row.esSupervisorComercial) && !usaBonoFijoJefePiso ? (
+            {row.esJefeComercial && usaBonoProporcionalJefe ? (
+              <MonthlyChiefGoalConfiguration
+                leader={row}
+                onSave={onGuardarMetaJefe}
+                savingKey={guardandoMetaJefe}
+                disabled={periodoPagado}
+              />
+            ) : null}
+            {row.esSupervisorComercial ? (
               <MonthlyLeaderAverageConfiguration
                 leader={row}
-                leaderType={row.esJefeComercial ? "jefe" : "supervisor"}
+                leaderType="supervisor"
                 sellers={vendedoresDisponibles.filter(
                   (vendedor) => Number(vendedor.usuarioId) !== Number(row.usuarioId),
                 )}
                 weeks={weeks}
-                onSave={
-                  row.esJefeComercial
-                    ? onGuardarPromedioJefe
-                    : onGuardarPromedioSupervisor
-                }
-                savingKey={
-                  row.esJefeComercial
-                    ? guardandoPromedioJefe
-                    : guardandoPromedioSupervisor
-                }
+                onSave={onGuardarPromedioSupervisor}
+                savingKey={guardandoPromedioSupervisor}
                 disabled={periodoPagado}
               />
             ) : null}

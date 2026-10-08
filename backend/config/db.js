@@ -1398,6 +1398,17 @@ const ensureComisionesConfiguracionSchema = async (queryInterface, tables) => {
 };
 
 const ensurePagosComisionesSchema = async (queryInterface, tables) => {
+  if (tables.includes("pagos_comisiones_promedios_jefes")) {
+    await addColumnIfMissing(
+      queryInterface,
+      "pagos_comisiones_promedios_jefes",
+      "metaVentas",
+      {
+        type: Sequelize.DECIMAL(12, 2),
+        allowNull: true,
+      },
+    );
+  }
   if (tables.includes("pagos_comisiones_sanciones_observaciones")) {
     await addColumnIfMissing(queryInterface, "pagos_comisiones_sanciones_observaciones", "observacionesVendedores", {
       type: Sequelize.JSONB, allowNull: false, defaultValue: {},
