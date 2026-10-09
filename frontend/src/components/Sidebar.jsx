@@ -243,6 +243,11 @@ export default function Sidebar({ auth }) {
             icon: <Boxes size={20} />,
             path: "/logistica/stock-contifico",
           },
+          {
+            label: "Ingreso de productos",
+            icon: <Boxes size={20} />,
+            path: "/logistica/ingreso-productos",
+          },
         ],
       },
 

@@ -21,25 +21,6 @@ const InventarioSistema = sequelize.define(
       type: DataTypes.STRING(120),
       allowNull: true,
     },
-    dispositivoMarcaId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: { model: "DispositivoMarcas", key: "id" },
-      onUpdate: "CASCADE",
-      onDelete: "RESTRICT",
-    },
-    modeloId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: { model: "modelos", key: "id" },
-      onUpdate: "CASCADE",
-      onDelete: "RESTRICT",
-    },
-    fechaIngreso: {
-      type: DataTypes.DATEONLY,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-    },
     cantidad: {
       type: DataTypes.INTEGER,
       allowNull: false,

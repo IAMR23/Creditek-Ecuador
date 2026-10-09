@@ -93,6 +93,7 @@ export const ROUTE_PERMISSIONS = {
   "/mis-entregas-pendientes": "Logistica",
   "/mis-entregas-realizadas": "Logistica",
   "/logistica/stock-contifico": "Logistica",
+  "/logistica/ingreso-productos": ["Logistica", "Administracion"],
 
   "/revisar-cajas": ["Contabilidad", "Administracion"],
   "/revisar-cajas2": ["Contabilidad", "Administracion"],

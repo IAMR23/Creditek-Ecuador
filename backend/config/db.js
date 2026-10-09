@@ -855,58 +855,6 @@ const ensureInventarioSistemasSchema = async (queryInterface, tables) => {
     type: Sequelize.DECIMAL(12, 2),
     allowNull: true,
   });
-
-  await addColumnIfMissing(
-    queryInterface,
-    "sistemas_inventarios",
-    "dispositivoMarcaId",
-    {
-      type: Sequelize.INTEGER,
-      allowNull: true,
-      references: { model: "DispositivoMarcas", key: "id" },
-      onUpdate: "CASCADE",
-      onDelete: "RESTRICT",
-    },
-  );
-
-  await addColumnIfMissing(queryInterface, "sistemas_inventarios", "modeloId", {
-    type: Sequelize.INTEGER,
-    allowNull: true,
-    references: { model: "modelos", key: "id" },
-    onUpdate: "CASCADE",
-    onDelete: "RESTRICT",
-  });
-
-  await addColumnIfMissing(
-    queryInterface,
-    "sistemas_inventarios",
-    "fechaIngreso",
-    {
-      type: Sequelize.DATEONLY,
-      allowNull: true,
-    },
-  );
-
-  await sequelize.query(`
-    UPDATE sistemas_inventarios
-    SET "fechaIngreso" = COALESCE(DATE("createdAt"), CURRENT_DATE)
-    WHERE "fechaIngreso" IS NULL;
-  `);
-
-  await queryInterface.changeColumn("sistemas_inventarios", "fechaIngreso", {
-    type: Sequelize.DATEONLY,
-    allowNull: false,
-    defaultValue: Sequelize.literal("CURRENT_DATE"),
-  });
-
-  await sequelize.query(`
-    CREATE INDEX IF NOT EXISTS sistemas_inventarios_dispositivo_marca_idx
-      ON sistemas_inventarios ("dispositivoMarcaId");
-    CREATE INDEX IF NOT EXISTS sistemas_inventarios_modelo_idx
-      ON sistemas_inventarios ("modeloId");
-    CREATE INDEX IF NOT EXISTS sistemas_inventarios_fecha_ingreso_idx
-      ON sistemas_inventarios ("fechaIngreso");
-  `);
 };
 
 const ensurePersonasSchema = async (queryInterface, tables) => {
@@ -2572,7 +2520,6 @@ module.exports = {
   ensureGhlRefreshExcludedStagesSchema,
   ensureGhlRepartoExecutionControlSchema,
   ensureGhlFlowScheduleSchema,
-  ensureInventarioSistemasSchema,
   ensureRequiredFeatureTables,
   ensureTicketsTiPreSyncSchema,
   ensureUphoneCedulaSchema,

@@ -79,6 +79,7 @@ import Caja from "./pages/Vendedores/Caja";
 import MisCierresCaja from "./pages/Vendedores/MisCierresCaja";
 import EntregasRepartidoresTabla from "./pages/Logistica/EntregasRepartidoresTabla";
 import StockContifico from "./pages/Logistica/StockContifico";
+import IngresoProductosMastherPhone from "./pages/Logistica/IngresoProductosMastherPhone";
 import BDDVentas from "./pages/Admin/BDDVentas";
 import VentasConEntrega from "./pages/Gerencia/VentasConEntrega";
 import GestionTickets from "./pages/Gerencia/GestionTickets";
@@ -478,6 +479,13 @@ function App() {
                 <Route
                   path="logistica/stock-contifico"
                   element={protect(<StockContifico />, "/logistica/stock-contifico")}
+                />
+                <Route
+                  path="logistica/ingreso-productos"
+                  element={protect(
+                    <IngresoProductosMastherPhone />,
+                    "/logistica/ingreso-productos",
+                  )}
                 />
                 <Route
                   path="logistica/gasto-combustible"

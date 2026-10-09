@@ -58,25 +58,6 @@ const normalizarCantidad = (value) => {
   return { valido: true, valor: numero };
 };
 
-const fechaActualEcuador = () =>
-  new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-const normalizarFechaIngreso = (value) => {
-  const fecha = String(value || fechaActualEcuador()).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-    return { valido: false, valor: null };
-  }
-
-  const [anio, mes, dia] = fecha.split("-").map(Number);
-  const fechaUtc = new Date(Date.UTC(anio, mes - 1, dia));
-  const valido =
-    fechaUtc.getUTCFullYear() === anio &&
-    fechaUtc.getUTCMonth() === mes - 1 &&
-    fechaUtc.getUTCDate() === dia;
-
-  return { valido, valor: valido ? fecha : null };
-};
-
 const resolverDispositivo = (value) => {
   const opcion = normalizarOpcion(value);
   return (
@@ -90,10 +71,7 @@ const resolverDispositivo = (value) => {
 const obtenerResumenInventario = (registros = []) => {
   const responsables = new Set();
   const cantidades = new Map(
-    DISPOSITIVOS.map((dispositivo) => [
-      dispositivo.value,
-      { ...dispositivo, cantidad: 0 },
-    ]),
+    DISPOSITIVOS.map((dispositivo) => [dispositivo.value, 0]),
   );
   const resumen = {
     items: 0,
@@ -118,52 +96,34 @@ const obtenerResumenInventario = (registros = []) => {
     if (item.estado === "FUERA_DE_SERVICIO") resumen.fueraServicio += cantidad;
     if (item.responsableId) responsables.add(Number(item.responsableId));
 
-    const nombreDispositivo =
-      item.dispositivoMarca?.dispositivo?.nombre || item.nombre;
-    const dispositivo = resolverDispositivo(nombreDispositivo);
-    const value = dispositivo?.value || normalizarOpcion(nombreDispositivo);
-    if (!value) return;
-
-    const acumulado = cantidades.get(value) || {
-      value,
-      label: nombreDispositivo,
-      cantidad: 0,
-    };
-    cantidades.set(value, {
-      ...acumulado,
-      cantidad: acumulado.cantidad + cantidad,
-    });
+    const dispositivo = resolverDispositivo(item.nombre);
+    if (dispositivo) {
+      cantidades.set(
+        dispositivo.value,
+        (cantidades.get(dispositivo.value) || 0) + cantidad,
+      );
+    }
   });
 
   resumen.responsables = responsables.size;
-  resumen.porDispositivo = Array.from(cantidades.values());
+  resumen.porDispositivo = DISPOSITIVOS.map((dispositivo) => ({
+    ...dispositivo,
+    cantidad: cantidades.get(dispositivo.value) || 0,
+  }));
 
   return resumen;
 };
 
-const validarInventario = (payload = {}, options = {}) => {
-  const dispositivoMarcaId = idPositivo(payload.dispositivoMarcaId);
-  const modeloId = idPositivo(payload.modeloId);
-  const usaCatalogo = Boolean(dispositivoMarcaId && modeloId);
+const validarInventario = (payload = {}) => {
   const dispositivo = resolverDispositivo(payload.dispositivo ?? payload.nombre);
-  const nombreCatalogo = limpiarTexto(payload.nombre ?? payload.dispositivo, 120);
   const estado = normalizarOpcion(payload.estado || "OPERATIVO");
   const agenciaId = idPositivo(payload.agenciaId);
   const responsableId = idPositivo(payload.responsableId);
   const cantidad = normalizarCantidad(payload.cantidad);
   const precio = normalizarPrecio(payload.precio);
-  const fechaIngreso = normalizarFechaIngreso(payload.fechaIngreso);
   const errores = [];
 
-  if (options.requiereCatalogo && !usaCatalogo) {
-    errores.push("El tipo, la marca y el modelo son obligatorios");
-  }
-  if (!dispositivo && !(usaCatalogo && nombreCatalogo)) {
-    errores.push("El dispositivo seleccionado no es válido");
-  }
-  if (Boolean(dispositivoMarcaId) !== Boolean(modeloId)) {
-    errores.push("La marca y el modelo deben pertenecer al catálogo");
-  }
+  if (!dispositivo) errores.push("El dispositivo seleccionado no es válido");
   if (!ESTADOS_VALIDOS.has(estado)) errores.push("El estado no es válido");
   if (!agenciaId) errores.push("La agencia es obligatoria");
   if (!responsableId) errores.push("La persona responsable es obligatoria");
@@ -173,21 +133,13 @@ const validarInventario = (payload = {}, options = {}) => {
   if (!precio.valido) {
     errores.push("El precio debe ser un valor valido mayor o igual a cero");
   }
-  if (!fechaIngreso.valido) {
-    errores.push("La fecha de ingreso no es válida");
-  }
 
   return {
     errores,
     data: {
-      nombre: usaCatalogo
-        ? nombreCatalogo
-        : dispositivo?.label || nombreCatalogo || null,
+      nombre: dispositivo?.label || null,
       marca: limpiarTexto(payload.marca, 80),
       modelo: limpiarTexto(payload.modelo, 120),
-      dispositivoMarcaId,
-      modeloId,
-      fechaIngreso: fechaIngreso.valor,
       cantidad: cantidad.valor,
       precio: precio.valor,
       estado,
@@ -202,23 +154,14 @@ const serializarInventario = (registro) => {
   const item = registro?.get ? registro.get({ plain: true }) : registro;
   if (!item) return null;
 
-  const nombreDispositivo =
-    item.dispositivoMarca?.dispositivo?.nombre || item.nombre;
-  const nombreMarca = item.dispositivoMarca?.marca?.nombre || item.marca || "";
-  const nombreModelo = item.modeloCatalogo?.nombre || item.modelo || "";
-  const dispositivo = resolverDispositivo(nombreDispositivo);
+  const dispositivo = resolverDispositivo(item.nombre);
 
   return {
     id: item.id,
-    dispositivo: dispositivo?.label || nombreDispositivo,
-    dispositivoValor:
-      dispositivo?.value || normalizarOpcion(nombreDispositivo),
-    dispositivoId: item.dispositivoMarca?.dispositivo?.id || null,
-    dispositivoMarcaId: item.dispositivoMarcaId || null,
-    modeloId: item.modeloId || null,
-    marca: nombreMarca,
-    modelo: nombreModelo,
-    fechaIngreso: item.fechaIngreso || null,
+    dispositivo: dispositivo?.label || item.nombre,
+    dispositivoValor: dispositivo?.value || normalizarOpcion(item.nombre),
+    marca: item.marca || "",
+    modelo: item.modelo || "",
     cantidad: normalizarCantidad(item.cantidad).valor || 1,
     precio:
       item.precio === null || item.precio === undefined
@@ -242,7 +185,6 @@ module.exports = {
   DISPOSITIVOS,
   ESTADOS,
   obtenerResumenInventario,
-  normalizarFechaIngreso,
   resolverDispositivo,
   serializarInventario,
   validarInventario,

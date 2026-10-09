@@ -29,52 +29,17 @@ import { api } from "../../api/client";
 
 let secuenciaItems = 0;
 
-const normalizar = (value) =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-const hoyLocal = () => {
-  const ahora = new Date();
-  const local = new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-};
-
-const crearItemFormulario = (data = {}, catalogos = {}) => {
-  const relacion =
-    catalogos.dispositivoMarcas?.find(
-      (item) => String(item.id) === String(data.dispositivoMarcaId),
-    ) ||
-    catalogos.dispositivoMarcas?.find(
-      (item) =>
-        normalizar(item.dispositivo?.nombre) === normalizar(data.dispositivo) &&
-        normalizar(item.marca?.nombre) === normalizar(data.marca),
-    );
-  const modelo =
-    catalogos.modelos?.find((item) => String(item.id) === String(data.modeloId)) ||
-    catalogos.modelos?.find(
-      (item) =>
-        String(item.dispositivoMarcaId) === String(relacion?.id) &&
-        normalizar(item.nombre) === normalizar(data.modelo),
-    );
-
-  return {
-    claveTemporal: data.id ? `item-${data.id}` : `nuevo-${secuenciaItems += 1}`,
-    id: data.id || null,
-    dispositivoId: String(relacion?.dispositivoId || data.dispositivoId || ""),
-    dispositivoMarcaId: String(relacion?.id || data.dispositivoMarcaId || ""),
-    modeloId: String(modelo?.id || data.modeloId || ""),
-    cantidad: data.cantidad ?? 1,
-    fechaIngreso: data.fechaIngreso || hoyLocal(),
-    precio: data.precio ?? "",
-    estado: data.estado || "OPERATIVO",
-    observacion: data.observacion || "",
-  };
-};
+const crearItemFormulario = (data = {}) => ({
+  claveTemporal: data.id ? `item-${data.id}` : `nuevo-${secuenciaItems += 1}`,
+  id: data.id || null,
+  dispositivo: data.dispositivo || "LAPTOP",
+  marca: data.marca || "",
+  modelo: data.modelo || "",
+  cantidad: data.cantidad ?? 1,
+  precio: data.precio ?? "",
+  estado: data.estado || "OPERATIVO",
+  observacion: data.observacion || "",
+});
 
 const crearFormInicial = () => ({
   responsableId: "",
@@ -149,13 +114,6 @@ const formatFecha = (value) => {
   });
 };
 
-const formatFechaIngreso = (value) => {
-  if (!value) return "-";
-  const fecha = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(fecha.getTime())) return "-";
-  return fecha.toLocaleDateString("es-EC", { dateStyle: "medium" });
-};
-
 const formatPrecio = (value) => {
   if (value === null || value === undefined || value === "") return "Sin precio";
 
@@ -208,8 +166,6 @@ export default function Inventarios() {
     agencias: [],
     responsables: [],
     dispositivos: [],
-    dispositivoMarcas: [],
-    modelos: [],
     estados: [],
   });
   const [resumen, setResumen] = useState(resumenInicial);
@@ -234,7 +190,7 @@ export default function Inventarios() {
         ...dispositivo,
         cantidad:
           resumen.porDispositivo?.find(
-            (item) => normalizar(item.value) === normalizar(dispositivo.nombre),
+            (item) => item.value === dispositivo.value,
           )?.cantidad || 0,
       })),
     [catalogos.dispositivos, resumen.porDispositivo],
@@ -270,8 +226,6 @@ export default function Inventarios() {
         agencias: data.agencias || [],
         responsables: data.responsables || [],
         dispositivos: data.dispositivos || [],
-        dispositivoMarcas: data.dispositivoMarcas || [],
-        modelos: data.modelos || [],
         estados: data.estados || [],
       });
     } catch (error) {
@@ -356,18 +310,14 @@ export default function Inventarios() {
       items: [
         crearItemFormulario({
           id: item.id,
-          dispositivo: item.dispositivo,
-          dispositivoId: item.dispositivoId,
-          dispositivoMarcaId: item.dispositivoMarcaId,
+          dispositivo: item.dispositivoValor || "LAPTOP",
           marca: item.marca,
-          modeloId: item.modeloId,
           modelo: item.modelo,
           cantidad: item.cantidad,
-          fechaIngreso: item.fechaIngreso,
           precio: item.precio,
           estado: item.estado,
           observacion: item.observacion,
-        }, catalogos),
+        }),
       ],
     });
     setModalAbierto(true);
@@ -390,21 +340,9 @@ export default function Inventarios() {
   const actualizarItem = (index, campo, value) => {
     setForm((prev) => ({
       ...prev,
-      items: prev.items.map((item, itemIndex) => {
-        if (itemIndex !== index) return item;
-        if (campo === "dispositivoId") {
-          return {
-            ...item,
-            dispositivoId: value,
-            dispositivoMarcaId: "",
-            modeloId: "",
-          };
-        }
-        if (campo === "dispositivoMarcaId") {
-          return { ...item, dispositivoMarcaId: value, modeloId: "" };
-        }
-        return { ...item, [campo]: value };
-      }),
+      items: prev.items.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [campo]: value } : item,
+      ),
     }));
   };
 
@@ -431,17 +369,14 @@ export default function Inventarios() {
       form.items.length === 0 ||
       form.items.some(
         (item) =>
-          !item.dispositivoId ||
-          !item.dispositivoMarcaId ||
-          !item.modeloId ||
-          !item.fechaIngreso ||
+          !item.dispositivo ||
           !Number.isInteger(Number(item.cantidad)) ||
           Number(item.cantidad) < 1,
       )
     ) {
       Swal.fire(
-        "Productos requeridos",
-        "Selecciona tipo, marca, modelo, fecha y una cantidad entera mayor o igual a uno.",
+        "Dispositivos requeridos",
+        "Agrega dispositivos válidos con una cantidad entera mayor o igual a uno.",
         "warning",
       );
       return;
@@ -454,10 +389,10 @@ export default function Inventarios() {
         agenciaId: Number(form.agenciaId),
         items: form.items.map((item) => ({
           id: item.id,
-          dispositivoMarcaId: Number(item.dispositivoMarcaId),
-          modeloId: Number(item.modeloId),
+          dispositivo: item.dispositivo,
+          marca: item.marca,
+          modelo: item.modelo,
           cantidad: Number(item.cantidad),
-          fechaIngreso: item.fechaIngreso,
           precio: item.precio === "" ? null : Number(item.precio),
           estado: item.estado,
           observacion: item.observacion,
@@ -471,20 +406,20 @@ export default function Inventarios() {
       setForm(crearFormInicial());
       await cargarInventarios();
       Swal.fire(
-        editando ? "Ingreso actualizado" : "Productos ingresados",
+        editando ? "Asignación actualizada" : "Dispositivos asignados",
         (() => {
           const total = payload.items.reduce(
             (acumulado, item) => acumulado + item.cantidad,
             0,
           );
-          return `${total} ${total === 1 ? "producto fue guardado" : "productos fueron guardados"} correctamente.`;
+          return `${total} ${total === 1 ? "dispositivo fue guardado" : "dispositivos fueron guardados"} correctamente.`;
         })(),
         "success",
       );
     } catch (error) {
       Swal.fire(
         "Error",
-        getErrorMessage(error, "No se pudo guardar el ingreso"),
+        getErrorMessage(error, "No se pudo guardar la asignación"),
         "error",
       );
     } finally {
@@ -495,7 +430,7 @@ export default function Inventarios() {
   const eliminar = async (item) => {
     const confirmacion = await Swal.fire({
       icon: "warning",
-      title: "Desactivar producto",
+      title: "Desactivar ítem",
       text: `Se ocultará ${item.dispositivo} asignado a ${
         item.responsable?.nombre || "la persona responsable"
       }, pero se conservará su historial.`,
@@ -532,13 +467,13 @@ export default function Inventarios() {
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-                Sistemas · Inventario
+                Sistemas · Control interno
               </p>
               <h1 className="mt-1 text-2xl font-bold text-slate-900">
-                Inventario de productos
+                Inventario por responsable
               </h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-500">
-                Registra productos usando los tipos, marcas y modelos existentes, junto con su cantidad y fecha de ingreso.
+                Registra el tipo de equipo, su cantidad y la persona que lo tiene bajo su responsabilidad.
               </p>
             </div>
             <button
@@ -546,13 +481,13 @@ export default function Inventarios() {
               onClick={abrirNuevo}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
             >
-              <Plus size={18} /> Ingresar productos
+              <Plus size={18} /> Asignar dispositivos
             </button>
           </div>
         </header>
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <StatCard label="Productos registrados" value={resumen.items} icon={<Boxes size={22} />} />
+          <StatCard label="Dispositivos registrados" value={resumen.items} icon={<Boxes size={22} />} />
           <StatCard label="Responsables" value={resumen.responsables} icon={<UserRound size={22} />} tone="gray" />
           <StatCard label="Operativos" value={resumen.operativos} icon={<PackageCheck size={22} />} />
           <StatCard label="Mantenimiento" value={resumen.mantenimiento} icon={<Wrench size={22} />} tone="amber" />
@@ -576,10 +511,10 @@ export default function Inventarios() {
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="shrink-0 rounded-lg bg-emerald-100 p-2 text-emerald-700">
-                    <DispositivoIcono value={normalizar(dispositivo.nombre)} size={20} />
+                    <DispositivoIcono value={dispositivo.value} size={20} />
                   </span>
                   <p className="text-sm font-semibold text-slate-700">
-                    {nombresContadorDispositivo[normalizar(dispositivo.nombre)] ||
+                    {nombresContadorDispositivo[dispositivo.value] ||
                       dispositivo.label}
                   </p>
                 </div>
@@ -643,14 +578,14 @@ export default function Inventarios() {
           <div className="mt-5 flex min-h-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
             <CircleOff size={40} className="text-slate-300" />
             <h2 className="mt-3 text-lg font-bold text-slate-700">Sin ítems registrados</h2>
-            <p className="mt-1 text-sm text-slate-500">Agrega un producto o cambia los filtros aplicados.</p>
+            <p className="mt-1 text-sm text-slate-500">Agrega un dispositivo o cambia los filtros aplicados.</p>
           </div>
         ) : (
           <section className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-col gap-1 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-sm font-bold uppercase text-slate-700">
-                  Ingresos de inventario
+                  Asignaciones de inventario
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
                   Los equipos están agrupados por responsable y agencia.
@@ -674,7 +609,7 @@ export default function Inventarios() {
                     <th className="border-b border-slate-200 px-4 py-3">Precio</th>
                     <th className="border-b border-slate-200 px-4 py-3">Estado técnico</th>
                     <th className="border-b border-slate-200 px-4 py-3">Observación</th>
-                    <th className="border-b border-slate-200 px-4 py-3">Fecha de ingreso</th>
+                    <th className="border-b border-slate-200 px-4 py-3">Actualización</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -748,10 +683,7 @@ export default function Inventarios() {
                             {item.observacion || "Sin observaciones"}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
-                            <span className="block font-semibold text-slate-700">
-                              {formatFechaIngreso(item.fechaIngreso)}
-                            </span>
-                            <span className="mt-0.5 block">Editado {formatFecha(item.updatedAt)}</span>
+                            {formatFecha(item.updatedAt)}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex justify-end gap-2">
@@ -807,7 +739,7 @@ export default function Inventarios() {
                   Inventario de Sistemas
                 </p>
                 <h2 className="mt-1 text-xl font-bold text-slate-800">
-                  {editando ? "Editar ingreso" : "Ingresar productos"}
+                  {editando ? "Editar asignación" : "Asignar dispositivos"}
                 </h2>
               </div>
               <button type="button" onClick={cerrarModal} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700" aria-label="Cerrar formulario">
@@ -855,9 +787,9 @@ export default function Inventarios() {
                       2
                     </span>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-800">Agrega los productos</h3>
+                      <h3 className="text-sm font-bold text-slate-800">Agrega los dispositivos</h3>
                       <p className="text-sm text-slate-500">
-                        Selecciona tipo, marca y modelo desde los catálogos existentes.
+                        Puedes registrar varios ítems para la misma persona.
                       </p>
                     </div>
                   </div>
@@ -866,59 +798,43 @@ export default function Inventarios() {
                     onClick={agregarItem}
                     className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
                   >
-                    <Plus size={17} /> Agregar otro producto
+                    <Plus size={17} /> Agregar otro ítem
                   </button>
                 </div>
 
                 <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1580px] table-fixed text-left">
+                    <table className="w-full min-w-[1360px] table-fixed text-left">
                       <colgroup>
                         <col className="w-[64px]" />
-                        <col className="w-[190px]" />
-                        <col className="w-[165px]" />
-                        <col className="w-[200px]" />
-                        <col className="w-[105px]" />
+                        <col className="w-[210px]" />
+                        <col className="w-[175px]" />
                         <col className="w-[155px]" />
                         <col className="w-[175px]" />
+                        <col className="w-[105px]" />
                         <col className="w-[135px]" />
-                        <col className="w-[245px]" />
+                        <col className="w-[270px]" />
                         <col className="w-[72px]" />
                       </colgroup>
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
                         <tr>
                           <th className="px-3 py-3 text-center">N.º</th>
-                          <th className="px-3 py-3">Tipo</th>
+                          <th className="px-3 py-3">Dispositivo</th>
+                          <th className="px-3 py-3">Estado técnico</th>
                           <th className="px-3 py-3">Marca</th>
                           <th className="px-3 py-3">Modelo</th>
                           <th className="px-3 py-3">Cantidad</th>
-                          <th className="px-3 py-3">Fecha de ingreso</th>
-                          <th className="px-3 py-3">Estado técnico</th>
                           <th className="px-3 py-3">Precio</th>
                           <th className="px-3 py-3">Observación</th>
                           <th className="px-3 py-3 text-center">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {form.items.map((item, index) => {
-                          const tipo = catalogos.dispositivos.find(
-                            (opcion) => String(opcion.id) === String(item.dispositivoId),
-                          );
-                          const relaciones = catalogos.dispositivoMarcas.filter(
-                            (opcion) =>
-                              String(opcion.dispositivoId) === String(item.dispositivoId),
-                          );
-                          const modelos = catalogos.modelos.filter(
-                            (opcion) =>
-                              String(opcion.dispositivoMarcaId) ===
-                              String(item.dispositivoMarcaId),
-                          );
-
-                          return (
+                        {form.items.map((item, index) => (
                           <tr key={item.claveTemporal} className="align-top transition hover:bg-emerald-50/40">
                             <td className="px-3 py-3">
                               <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-700">
-                                <DispositivoIcono value={normalizar(tipo?.nombre)} size={18} />
+                                <DispositivoIcono value={item.dispositivo} size={18} />
                               </div>
                               <p className="mt-1 text-center text-xs font-bold text-slate-500">
                                 {index + 1}
@@ -926,47 +842,48 @@ export default function Inventarios() {
                             </td>
                             <td className="px-3 py-3">
                               <select
-                                value={item.dispositivoId}
-                                onChange={(event) => actualizarItem(index, "dispositivoId", event.target.value)}
+                                value={item.dispositivo}
+                                onChange={(event) => actualizarItem(index, "dispositivo", event.target.value)}
                                 className={tableInputClass}
-                                aria-label={`Tipo del ítem ${index + 1}`}
+                                aria-label={`Dispositivo del ítem ${index + 1}`}
                                 required
                               >
-                                <option value="">Selecciona un tipo</option>
                                 {catalogos.dispositivos.map((opcion) => (
-                                  <option key={opcion.id} value={opcion.id}>{opcion.nombre}</option>
+                                  <option key={opcion.value} value={opcion.value}>{opcion.label}</option>
                                 ))}
                               </select>
                             </td>
                             <td className="px-3 py-3">
                               <select
-                                value={item.dispositivoMarcaId}
-                                onChange={(event) => actualizarItem(index, "dispositivoMarcaId", event.target.value)}
+                                value={item.estado}
+                                onChange={(event) => actualizarItem(index, "estado", event.target.value)}
+                                className={tableInputClass}
+                                aria-label={`Estado del ítem ${index + 1}`}
+                              >
+                                {catalogos.estados.map((opcion) => (
+                                  <option key={opcion.value} value={opcion.value}>{opcion.label}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-3 py-3">
+                              <input
+                                value={item.marca}
+                                onChange={(event) => actualizarItem(index, "marca", event.target.value)}
+                                maxLength={80}
+                                placeholder="Ej. Dell"
                                 className={tableInputClass}
                                 aria-label={`Marca del ítem ${index + 1}`}
-                                disabled={!item.dispositivoId}
-                                required
-                              >
-                                <option value="">Selecciona una marca</option>
-                                {relaciones.map((opcion) => (
-                                  <option key={opcion.id} value={opcion.id}>{opcion.marca?.nombre}</option>
-                                ))}
-                              </select>
+                              />
                             </td>
                             <td className="px-3 py-3">
-                              <select
-                                value={item.modeloId}
-                                onChange={(event) => actualizarItem(index, "modeloId", event.target.value)}
+                              <input
+                                value={item.modelo}
+                                onChange={(event) => actualizarItem(index, "modelo", event.target.value)}
+                                maxLength={120}
+                                placeholder="Ej. Latitude 5420"
                                 className={tableInputClass}
                                 aria-label={`Modelo del ítem ${index + 1}`}
-                                disabled={!item.dispositivoMarcaId}
-                                required
-                              >
-                                <option value="">Selecciona un modelo</option>
-                                {modelos.map((opcion) => (
-                                  <option key={opcion.id} value={opcion.id}>{opcion.nombre}</option>
-                                ))}
-                              </select>
+                              />
                             </td>
                             <td className="px-3 py-3">
                               <input
@@ -981,28 +898,6 @@ export default function Inventarios() {
                                 aria-label={`Cantidad del ítem ${index + 1}`}
                                 required
                               />
-                            </td>
-                            <td className="px-3 py-3">
-                              <input
-                                type="date"
-                                value={item.fechaIngreso}
-                                onChange={(event) => actualizarItem(index, "fechaIngreso", event.target.value)}
-                                className={tableInputClass}
-                                aria-label={`Fecha de ingreso del ítem ${index + 1}`}
-                                required
-                              />
-                            </td>
-                            <td className="px-3 py-3">
-                              <select
-                                value={item.estado}
-                                onChange={(event) => actualizarItem(index, "estado", event.target.value)}
-                                className={tableInputClass}
-                                aria-label={`Estado del ítem ${index + 1}`}
-                              >
-                                {catalogos.estados.map((opcion) => (
-                                  <option key={opcion.value} value={opcion.value}>{opcion.label}</option>
-                                ))}
-                              </select>
                             </td>
                             <td className="px-3 py-3">
                               <input
@@ -1044,8 +939,7 @@ export default function Inventarios() {
                               )}
                             </td>
                           </tr>
-                          );
-                        })}
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -1058,7 +952,7 @@ export default function Inventarios() {
                 </button>
                 <button type="submit" disabled={guardando} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60">
                   {guardando ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
-                  {guardando ? "Guardando..." : "Guardar ingreso"}
+                  {guardando ? "Guardando..." : "Guardar asignación"}
                 </button>
               </div>
             </form>

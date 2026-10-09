@@ -94,6 +94,8 @@ const ConfiguracionMesComision = require('./ConfiguracionMesComision');
 const PagoComisionPeriodo = require('./PagoComisionPeriodo');
 const MetaMinimaMultaConfiguracion = require('./MetaMinimaMultaConfiguracion');
 const InventarioSistema = require('./InventarioSistema');
+const LogisticaMastherPhoneIngreso = require('./LogisticaMastherPhoneIngreso');
+const LogisticaMastherPhoneConciliacion = require('./LogisticaMastherPhoneConciliacion');
 const ReporteCajaUsuarioAgencia = require('./ReporteCajaUsuarioAgencia');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
@@ -1140,24 +1142,36 @@ InventarioSistema.belongsTo(Usuario, {
   as: "actualizadoPor",
 });
 
-InventarioSistema.belongsTo(DispositivoMarca, {
-  foreignKey: "dispositivoMarcaId",
-  as: "dispositivoMarca",
-});
+/* INVENTARIO MASTHER PHONE */
 
-DispositivoMarca.hasMany(InventarioSistema, {
-  foreignKey: "dispositivoMarcaId",
-  as: "inventariosSistemas",
-});
-
-InventarioSistema.belongsTo(Modelo, {
+LogisticaMastherPhoneIngreso.belongsTo(Modelo, {
   foreignKey: "modeloId",
-  as: "modeloCatalogo",
+  as: "modelo",
+});
+Modelo.hasMany(LogisticaMastherPhoneIngreso, {
+  foreignKey: "modeloId",
+  as: "ingresosMastherPhone",
+});
+LogisticaMastherPhoneIngreso.belongsTo(Usuario, {
+  foreignKey: "registradoPorId",
+  as: "registradoPor",
+});
+LogisticaMastherPhoneIngreso.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
 });
 
-Modelo.hasMany(InventarioSistema, {
+LogisticaMastherPhoneConciliacion.belongsTo(Modelo, {
   foreignKey: "modeloId",
-  as: "inventariosSistemas",
+  as: "modelo",
+});
+Modelo.hasMany(LogisticaMastherPhoneConciliacion, {
+  foreignKey: "modeloId",
+  as: "conciliacionesMastherPhone",
+});
+LogisticaMastherPhoneConciliacion.belongsTo(Usuario, {
+  foreignKey: "actualizadoPorId",
+  as: "actualizadoPor",
 });
 
 /* CONFIGURACION AGENCIAS DE REPORTES DE CAJA */
