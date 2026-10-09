@@ -6,8 +6,10 @@ const {
   calculateControlRow,
   calculateEntryAmounts,
   collectSalesOperations,
+  deleteEntry,
   getReport,
   getWeekStart,
+  parseEntryDateTime,
   registerEntry,
   updateEntry,
   validateWeekStart,
@@ -101,6 +103,15 @@ describe("inventario semanal Masther Phone", () => {
     expect(() => calculateEntryAmounts("10,25", 1)).toThrow("debe usar punto");
   });
 
+  test("permite registrar el precio unitario como pendiente", () => {
+    expect(calculateEntryAmounts("", 3)).toEqual({
+      precioUnitario: null,
+      subtotal: null,
+      iva: null,
+      total: null,
+    });
+  });
+
   test("no inventa saldo si falta una conciliacion semanal", () => {
     const row = calculateControlRow({
       modelId: 1,
@@ -157,6 +168,18 @@ describe("inventario semanal Masther Phone", () => {
     );
   });
 
+  test("interpreta la fecha y hora de ingreso en America/Guayaquil", () => {
+    expect(parseEntryDateTime("2026-10-09T14:45").toISOString()).toBe(
+      "2026-10-09T19:45:00.000Z",
+    );
+    expect(() => parseEntryDateTime("2026-10-09")).toThrow(
+      "fecha y hora de ingreso",
+    );
+    expect(() => parseEntryDateTime("2026-10-09T25:00")).toThrow(
+      "no es valida",
+    );
+  });
+
   test("acepta un rango elegido y lo ajusta a semanas completas", async () => {
     jest.spyOn(LogisticaMastherPhoneIngreso, "findAll").mockResolvedValue([]);
 
@@ -183,7 +206,7 @@ describe("inventario semanal Masther Phone", () => {
       id: 9,
       modeloId: 1,
       cantidad: 3,
-      fechaIngreso: "2026-10-08",
+      fechaIngreso: new Date("2026-10-08T15:30:00.000Z"),
       bodega: "PROVEEDOR",
       precioUnitario: "50.00",
       registradoPorId: 2,
@@ -196,7 +219,7 @@ describe("inventario semanal Masther Phone", () => {
       {
         modeloId: 1,
         cantidad: 3,
-        fechaIngreso: "2026-10-08",
+        fechaIngreso: "2026-10-08T10:30",
         bodega: "PROVEEDOR",
         precioUnitario: 50,
         requestKey: "12345678-1234-1234-1234-123456789012",
@@ -214,7 +237,7 @@ describe("inventario semanal Masther Phone", () => {
       registerEntry({
         modeloId: 1,
         cantidad: 3,
-        fechaIngreso: "2026-10-08",
+        fechaIngreso: "2026-10-08T10:30",
         bodega: "OTRA",
         precioUnitario: 50,
         requestKey: "12345678-1234-1234-1234-123456789012",
@@ -227,7 +250,7 @@ describe("inventario semanal Masther Phone", () => {
       id: 12,
       modeloId: 1,
       cantidad: 3,
-      fechaIngreso: "2026-10-08",
+      fechaIngreso: new Date("2026-10-08T15:30:00.000Z"),
       bodega: "PROVEEDOR",
       precioUnitario: "50.00",
       registradoPorId: 2,
@@ -241,7 +264,7 @@ describe("inventario semanal Masther Phone", () => {
       {
         modeloId: 2,
         cantidad: 5,
-        fechaIngreso: "2026-10-09",
+        fechaIngreso: "2026-10-09T14:45",
         bodega: "CREDITEK",
         precioUnitario: 60,
       },
@@ -255,7 +278,7 @@ describe("inventario semanal Masther Phone", () => {
       subtotal: "300.000000",
       iva: "45.000000",
       total: "345.000000",
-      fechaIngreso: "2026-10-09",
+      fechaIngreso: new Date("2026-10-09T19:45:00.000Z"),
       bodega: "CREDITEK",
       actualizadoPorId: 8,
     });
@@ -268,6 +291,24 @@ describe("inventario semanal Masther Phone", () => {
       iva: 45,
       total: 345,
       actualizadoPorId: 8,
+      fechaIngreso: "2026-10-09T19:45:00.000Z",
+    });
+  });
+
+  test("elimina un movimiento independiente", async () => {
+    const entry = { destroy: jest.fn().mockResolvedValue(undefined) };
+    jest.spyOn(LogisticaMastherPhoneIngreso, "findByPk").mockResolvedValue(entry);
+
+    await expect(deleteEntry(12)).resolves.toEqual({ id: 12 });
+    expect(entry.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  test("no elimina cuando el movimiento no existe", async () => {
+    jest.spyOn(LogisticaMastherPhoneIngreso, "findByPk").mockResolvedValue(null);
+
+    await expect(deleteEntry(999)).rejects.toMatchObject({
+      code: "ENTRY_NOT_FOUND",
+      httpStatus: 404,
     });
   });
 
@@ -319,11 +360,13 @@ describe("inventario semanal Masther Phone", () => {
 
     expect(report.filas[0]).toMatchObject({
       cantidad: 90,
+      stockProveedor: 90,
       stockCreditek: 7,
       ventasTotalesSemana: 23,
       cantidadBodegaCreditek: 7,
       cantidadBodegaProveedor: 90,
       mastherPhone: 16,
+      ventasProveedor: 16,
       totalBodega: 74,
     });
   });

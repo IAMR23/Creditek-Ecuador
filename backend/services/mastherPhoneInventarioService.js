@@ -10,6 +10,8 @@ const Modelo = require("../models/Modelo");
 const Venta = require("../models/Venta");
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const LOCAL_DATE_TIME_PATTERN =
+  /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
 const REQUEST_KEY_PATTERN = /^[A-Za-z0-9-]{16,64}$/;
 const WAREHOUSES = new Set(["CREDITEK", "PROVEEDOR"]);
 
@@ -38,6 +40,15 @@ const parseNonNegativeInteger = (value, name) => {
 
 const calculateEntryAmounts = (unitPriceValue, quantityValue) => {
   const unitPriceText = String(unitPriceValue ?? "").trim();
+  if (!unitPriceText) {
+    parsePositiveInteger(quantityValue, "La cantidad");
+    return {
+      precioUnitario: null,
+      subtotal: null,
+      iva: null,
+      total: null,
+    };
+  }
   if (!/^\d+(?:\.\d{1,6})?$/.test(unitPriceText)) {
     throw createError(
       "El precio unitario debe usar punto, ser mayor a cero y tener máximo seis decimales.",
@@ -82,6 +93,61 @@ const parseDateOnly = (value, name = "La fecha") => {
     throw createError(`${name} no es válida.`);
   }
   return text;
+};
+
+const parseEntryDateTime = (value) => {
+  const text = String(value || "").trim();
+  const match = text.match(LOCAL_DATE_TIME_PATTERN);
+  if (!match) {
+    throw createError(
+      "La fecha y hora de ingreso debe tener formato YYYY-MM-DDTHH:mm.",
+    );
+  }
+  const [, dateOnly, hourText, minuteText, secondText = "00"] = match;
+  parseDateOnly(dateOnly, "La fecha de ingreso");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  if (hour > 23 || minute > 59 || second > 59) {
+    throw createError("La fecha y hora de ingreso no es valida.");
+  }
+  return new Date(
+    `${dateOnly}T${hourText}:${minuteText}:${secondText.padStart(2, "0")}-05:00`,
+  );
+};
+
+const ecuadorDayStart = (dateOnly) =>
+  new Date(`${parseDateOnly(dateOnly)}T00:00:00-05:00`);
+
+const ecuadorDayEndExclusive = (dateOnly) =>
+  new Date(`${addDays(parseDateOnly(dateOnly), 1)}T00:00:00-05:00`);
+
+const entryDateTimeValue = (value) => {
+  if (value instanceof Date) return value.getTime();
+  const text = String(value || "");
+  if (DATE_ONLY_PATTERN.test(text)) {
+    return new Date(`${text}T00:00:00-05:00`).getTime();
+  }
+  return new Date(text).getTime();
+};
+
+const serializeEntryDateTime = (value) => {
+  const timestamp = entryDateTimeValue(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : value;
+};
+
+const toEcuadorDateOnly = (value) => {
+  if (DATE_ONLY_PATTERN.test(String(value || ""))) return String(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 };
 
 const addDays = (dateOnly, days) => {
@@ -299,7 +365,7 @@ const serializeEntry = (entry) => {
     iva: item.iva === null || item.iva === undefined ? null : Number(item.iva),
     total:
       item.total === null || item.total === undefined ? null : Number(item.total),
-    fechaIngreso: item.fechaIngreso,
+    fechaIngreso: serializeEntryDateTime(item.fechaIngreso),
     bodega: item.bodega,
     registradoPorId: item.registradoPorId,
     actualizadoPorId: item.actualizadoPorId,
@@ -312,7 +378,7 @@ const registerEntry = async (payload, userId) => {
   const modelId = parsePositiveInteger(payload.modeloId, "modeloId");
   const quantity = parsePositiveInteger(payload.cantidad, "La cantidad");
   const amounts = calculateEntryAmounts(payload.precioUnitario, quantity);
-  const entryDate = parseDateOnly(payload.fechaIngreso, "La fecha de ingreso");
+  const entryDate = parseEntryDateTime(payload.fechaIngreso);
   const warehouse = String(payload.bodega || "").trim().toUpperCase();
   if (!WAREHOUSES.has(warehouse)) {
     throw createError("Selecciona una bodega válida.");
@@ -334,9 +400,14 @@ const registerEntry = async (payload, userId) => {
     if (
       existing.modeloId !== modelId ||
       existing.cantidad !== quantity ||
-      existing.fechaIngreso !== entryDate ||
+      entryDateTimeValue(existing.fechaIngreso) !== entryDate.getTime() ||
       existing.bodega !== warehouse ||
-      Number(existing.precioUnitario) !== Number(amounts.precioUnitario)
+      (existing.precioUnitario === null
+        ? null
+        : Number(existing.precioUnitario)) !==
+        (amounts.precioUnitario === null
+          ? null
+          : Number(amounts.precioUnitario))
     ) {
       throw createError(
         "La clave de la solicitud ya fue utilizada con otros datos.",
@@ -367,9 +438,14 @@ const registerEntry = async (payload, userId) => {
       concurrent &&
       concurrent.modeloId === modelId &&
       concurrent.cantidad === quantity &&
-      concurrent.fechaIngreso === entryDate &&
+      entryDateTimeValue(concurrent.fechaIngreso) === entryDate.getTime() &&
       concurrent.bodega === warehouse &&
-      Number(concurrent.precioUnitario) === Number(amounts.precioUnitario)
+      (concurrent.precioUnitario === null
+        ? null
+        : Number(concurrent.precioUnitario)) ===
+        (amounts.precioUnitario === null
+          ? null
+          : Number(amounts.precioUnitario))
     ) {
       return { ingreso: serializeEntry(concurrent), duplicado: true };
     }
@@ -391,7 +467,10 @@ const listEntries = async ({ dateFrom, dateTo, brandId, modelId }) => {
   const parsedModelId = modelId ? parsePositiveInteger(modelId, "modeloId") : null;
   const entries = await LogisticaMastherPhoneIngreso.findAll({
     where: {
-      fechaIngreso: { [Op.between]: [start, end] },
+      fechaIngreso: {
+        [Op.gte]: ecuadorDayStart(start),
+        [Op.lt]: ecuadorDayEndExclusive(end),
+      },
       ...(parsedModelId ? { modeloId: parsedModelId } : {}),
     },
     attributes: [
@@ -442,7 +521,7 @@ const updateEntry = async (entryId, payload, userId) => {
   const modelId = parsePositiveInteger(payload.modeloId, "modeloId");
   const quantity = parsePositiveInteger(payload.cantidad, "La cantidad");
   const amounts = calculateEntryAmounts(payload.precioUnitario, quantity);
-  const entryDate = parseDateOnly(payload.fechaIngreso, "La fecha de ingreso");
+  const entryDate = parseEntryDateTime(payload.fechaIngreso);
   const warehouse = String(payload.bodega || "").trim().toUpperCase();
   if (!WAREHOUSES.has(warehouse)) {
     throw createError("Selecciona una bodega válida.");
@@ -468,6 +547,17 @@ const updateEntry = async (entryId, payload, userId) => {
     actualizadoPorId: userId || null,
   });
   return serializeEntry(entry);
+};
+
+const deleteEntry = async (entryId) => {
+  const parsedEntryId = parsePositiveInteger(entryId, "ingresoId");
+  const entry = await LogisticaMastherPhoneIngreso.findByPk(parsedEntryId);
+  if (!entry) {
+    throw createError("El ingreso no existe.", 404, "ENTRY_NOT_FOUND");
+  }
+
+  await entry.destroy();
+  return { id: parsedEntryId };
 };
 
 const collectSalesOperations = async ({ modelIds, dateFrom, dateTo }) => {
@@ -589,7 +679,7 @@ const getReport = async ({ weekStart, dateFrom, dateTo, brandId, modelId }) => {
 
   const entries = await LogisticaMastherPhoneIngreso.findAll({
     where: {
-      fechaIngreso: { [Op.lte]: requestedEnd },
+      fechaIngreso: { [Op.lt]: ecuadorDayEndExclusive(requestedEnd) },
       ...(parsedModelId ? { modeloId: parsedModelId } : {}),
     },
     attributes: ["modeloId", "cantidad", "fechaIngreso", "bodega"],
@@ -617,12 +707,13 @@ const getReport = async ({ weekStart, dateFrom, dateTo, brandId, modelId }) => {
       brandId: Number(brand.id),
       accumulatedEntries: 0,
       accumulatedByWarehouse: { CREDITEK: 0, PROVEEDOR: 0 },
-      controlStartDate: entry.fechaIngreso,
+      controlStartDate: toEcuadorDateOnly(entry.fechaIngreso),
     };
     current.accumulatedByWarehouse[entry.bodega] += Number(entry.cantidad);
     current.accumulatedEntries = current.accumulatedByWarehouse.PROVEEDOR;
-    if (entry.fechaIngreso < current.controlStartDate) {
-      current.controlStartDate = entry.fechaIngreso;
+    const entryDateOnly = toEcuadorDateOnly(entry.fechaIngreso);
+    if (entryDateOnly < current.controlStartDate) {
+      current.controlStartDate = entryDateOnly;
     }
     controlled.set(entry.modeloId, current);
   }
@@ -634,9 +725,11 @@ const getReport = async ({ weekStart, dateFrom, dateTo, brandId, modelId }) => {
       filas: [],
       totales: {
         cantidad: 0,
+        stockProveedor: 0,
         stockCreditek: 0,
         ventasTotalesSemana: 0,
         mastherPhone: 0,
+        ventasProveedor: 0,
         totalBodega: 0,
         pendienteConciliacion: false,
       },
@@ -665,12 +758,14 @@ const getReport = async ({ weekStart, dateFrom, dateTo, brandId, modelId }) => {
         modelo: item.model,
         producto: `${item.brand} ${item.model}`.trim(),
         cantidad: item.accumulatedByWarehouse.PROVEEDOR || 0,
+        stockProveedor: item.accumulatedByWarehouse.PROVEEDOR || 0,
         cantidadBodegaCreditek: ownStock,
         cantidadBodegaProveedor:
           item.accumulatedByWarehouse.PROVEEDOR || 0,
         stockCreditek: ownStock,
         ventasTotalesSemana: totalSales,
         mastherPhone: mastherSales,
+        ventasProveedor: mastherSales,
         totalBodega:
           (item.accumulatedByWarehouse.PROVEEDOR || 0) - mastherSales,
         pendienteConciliacion: false,
@@ -688,6 +783,10 @@ const getReport = async ({ weekStart, dateFrom, dateTo, brandId, modelId }) => {
     filas: rows,
     totales: {
       cantidad: rows.reduce((sum, row) => sum + row.cantidad, 0),
+      stockProveedor: rows.reduce(
+        (sum, row) => sum + row.stockProveedor,
+        0,
+      ),
       stockCreditek: rows.reduce(
         (sum, row) => sum + (row.stockCreditek || 0),
         0,
@@ -697,6 +796,10 @@ const getReport = async ({ weekStart, dateFrom, dateTo, brandId, modelId }) => {
         0,
       ),
       mastherPhone: rows.reduce((sum, row) => sum + row.mastherPhone, 0),
+      ventasProveedor: rows.reduce(
+        (sum, row) => sum + row.ventasProveedor,
+        0,
+      ),
       totalBodega: rows.reduce((sum, row) => sum + row.totalBodega, 0),
       pendienteConciliacion: false,
     },
@@ -756,10 +859,12 @@ module.exports = {
   calculateEntryAmounts,
   calculateControlRow,
   collectSalesOperations,
+  deleteEntry,
   getCatalog,
   getReport,
   getWeekStart,
   listEntries,
+  parseEntryDateTime,
   registerEntry,
   saveReconciliation,
   updateEntry,

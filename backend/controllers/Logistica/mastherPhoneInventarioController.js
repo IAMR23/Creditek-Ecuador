@@ -62,6 +62,15 @@ const actualizarIngreso = async (req, res) => {
   }
 };
 
+const eliminarIngreso = async (req, res) => {
+  try {
+    const ingreso = await service.deleteEntry(req.params.ingresoId);
+    return res.json({ ok: true, ingreso });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
 const reporte = async (req, res) => {
   try {
     const data = await service.getReport({
@@ -96,6 +105,7 @@ const guardarConciliacion = async (req, res) => {
 module.exports = {
   actualizarIngreso,
   catalogos,
+  eliminarIngreso,
   guardarConciliacion,
   listarIngresos,
   registrarIngreso,

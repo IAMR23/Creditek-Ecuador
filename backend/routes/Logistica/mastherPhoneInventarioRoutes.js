@@ -13,6 +13,7 @@ router.get("/reporte", controller.reporte);
 router.get("/ingresos", controller.listarIngresos);
 router.post("/ingresos", controller.registrarIngreso);
 router.put("/ingresos/:ingresoId", controller.actualizarIngreso);
+router.delete("/ingresos/:ingresoId", controller.eliminarIngreso);
 router.put(
   "/conciliaciones/:modeloId/:semanaInicio",
   controller.guardarConciliacion,

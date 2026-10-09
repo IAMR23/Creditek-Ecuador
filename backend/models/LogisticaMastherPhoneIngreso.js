@@ -42,7 +42,7 @@ const LogisticaMastherPhoneIngreso = sequelize.define(
       validate: { min: 0 },
     },
     fechaIngreso: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.DATE,
       allowNull: false,
     },
     bodega: {

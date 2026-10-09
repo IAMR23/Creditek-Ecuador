@@ -10,6 +10,7 @@ async function run() {
     "202610080005-add-edicion-ingresos-masther-phone.sql",
     "202610080006-add-valores-ingresos-masther-phone.sql",
     "202610080007-ampliar-decimales-ingresos-masther-phone.sql",
+    "202610090001-add-hora-ingresos-masther-phone.sql",
   ];
   for (const migration of migrations) {
     const sql = fs.readFileSync(
@@ -76,6 +77,19 @@ async function run() {
     amountColumns.some((column) => Number(column.numeric_scale) !== 6)
   ) {
     throw new Error("No se pudieron verificar los valores monetarios.");
+  }
+  const [dateTimeColumns] = await sequelize.query(`
+    SELECT data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'logistica_masther_phone_ingresos'
+      AND column_name = 'fechaIngreso';
+  `);
+  if (
+    dateTimeColumns.length !== 1 ||
+    dateTimeColumns[0].data_type !== "timestamp with time zone"
+  ) {
+    throw new Error("No se pudo verificar la fecha y hora de ingreso.");
   }
   console.log("Migración de inventario Masther Phone aplicada y verificada.");
 }

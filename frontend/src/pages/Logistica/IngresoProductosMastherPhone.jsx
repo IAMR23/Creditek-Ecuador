@@ -10,6 +10,7 @@ import {
   Pencil,
   RefreshCw,
   Save,
+  Trash2,
   X,
 } from "lucide-react";
 import { api } from "../../api/client";
@@ -23,6 +24,22 @@ const getEcuadorDate = () => {
   }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+};
+
+const toEcuadorDateTimeLocal = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
 };
 
 const addDays = (dateOnly, days) => {
@@ -70,7 +87,7 @@ const initialEntry = () => ({
   marcaId: "",
   modeloId: "",
   bodega: "",
-  fechaIngreso: getEcuadorDate(),
+  fechaIngreso: toEcuadorDateTimeLocal(),
   cantidad: 1,
   precioUnitario: "",
   requestKey: createRequestKey(),
@@ -82,6 +99,17 @@ const formatDate = (dateOnly) => {
     dateStyle: "medium",
     timeZone: "America/Guayaquil",
   }).format(new Date(`${dateOnly}T12:00:00-05:00`));
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("es-EC", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Guayaquil",
+  }).format(date);
 };
 
 const formatNumber = (value) =>
@@ -104,6 +132,9 @@ const isValidUnitPrice = (value) => {
 
 const calculateAmounts = (quantityValue, unitPriceValue) => {
   const quantity = Number(quantityValue);
+  if (!String(unitPriceValue ?? "").trim()) {
+    return { subtotal: null, iva: null, total: null };
+  }
   const unitPriceUnits = Math.round(Number(unitPriceValue) * 1000000);
   if (!Number.isInteger(quantity) || quantity < 1 || unitPriceUnits < 1) {
     return { subtotal: 0, iva: 0, total: 0 };
@@ -141,6 +172,7 @@ export default function IngresoProductosMastherPhone() {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [savingEntryEdit, setSavingEntryEdit] = useState(false);
+  const [deletingEntryId, setDeletingEntryId] = useState(null);
   const [error, setError] = useState("");
 
   const entryModels = useMemo(
@@ -244,11 +276,12 @@ export default function IngresoProductosMastherPhone() {
       !entry.fechaIngreso ||
       !Number.isInteger(quantity) ||
       quantity < 1 ||
-      !isValidUnitPrice(entry.precioUnitario)
+      (String(entry.precioUnitario).trim() &&
+        !isValidUnitPrice(entry.precioUnitario))
     ) {
       return Swal.fire(
         "Datos incompletos",
-        "Selecciona todos los datos. El precio debe usar punto y tener máximo seis decimales.",
+        "Selecciona todos los datos. Si ingresas un precio, debe usar punto y tener máximo seis decimales.",
         "warning",
       );
     }
@@ -322,7 +355,7 @@ export default function IngresoProductosMastherPhone() {
       marcaId: String(movement.marcaId),
       modeloId: String(movement.modeloId),
       bodega: movement.bodega,
-      fechaIngreso: movement.fechaIngreso,
+      fechaIngreso: toEcuadorDateTimeLocal(movement.fechaIngreso),
       cantidad: movement.cantidad,
       precioUnitario: movement.precioUnitario ?? "",
     });
@@ -337,11 +370,12 @@ export default function IngresoProductosMastherPhone() {
       !editDraft?.fechaIngreso ||
       !Number.isInteger(quantity) ||
       quantity < 1 ||
-      !isValidUnitPrice(editDraft?.precioUnitario)
+      (String(editDraft?.precioUnitario ?? "").trim() &&
+        !isValidUnitPrice(editDraft?.precioUnitario))
     ) {
       return Swal.fire(
         "Datos incompletos",
-        "Selecciona todos los datos. El precio debe usar punto y tener máximo seis decimales.",
+        "Selecciona todos los datos. Si ingresas un precio, debe usar punto y tener máximo seis decimales.",
         "warning",
       );
     }
@@ -367,6 +401,44 @@ export default function IngresoProductosMastherPhone() {
       );
     } finally {
       setSavingEntryEdit(false);
+    }
+  };
+
+  const deleteMovement = async (movement) => {
+    const confirmation = await Swal.fire({
+      title: "¿Eliminar movimiento?",
+      text: `Se eliminará el ingreso de ${movement.producto}. Esta acción no se podrá deshacer.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      reverseButtons: true,
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      setDeletingEntryId(movement.id);
+      await api.delete(`/api/logistica/masther-phone/ingresos/${movement.id}`);
+      if (editingEntryId === movement.id) {
+        setEditingEntryId(null);
+        setEditDraft(null);
+      }
+      await Promise.all([loadReport(), loadEntries()]);
+      await Swal.fire(
+        "Movimiento eliminado",
+        "El ingreso fue eliminado correctamente.",
+        "success",
+      );
+    } catch (requestError) {
+      await Swal.fire(
+        "Error",
+        getErrorMessage(requestError, "No se pudo eliminar el movimiento."),
+        "error",
+      );
+    } finally {
+      setDeletingEntryId(null);
     }
   };
 
@@ -460,9 +532,9 @@ export default function IngresoProductosMastherPhone() {
               </select>
             </label>
             <label className="text-sm font-semibold text-slate-700">
-              Fecha de ingreso
+              Fecha y hora de ingreso
               <input
-                type="date"
+                type="datetime-local"
                 value={entry.fechaIngreso}
                 onChange={(event) =>
                   setEntry((current) => ({ ...current, fechaIngreso: event.target.value }))
@@ -472,7 +544,7 @@ export default function IngresoProductosMastherPhone() {
               />
             </label>
             <label className="text-sm font-semibold text-slate-700">
-              {entry.bodega === "CREDITEK" ? "Cantidad Stock Creditek" : "Cantidad Masther Phone"}
+              {entry.bodega === "CREDITEK" ? "Cantidad Stock Creditek" : "Cantidad Stock Proveedor"}
               <input
                 type="number"
                 min="1"
@@ -486,7 +558,7 @@ export default function IngresoProductosMastherPhone() {
               />
             </label>
             <label className="text-sm font-semibold text-slate-700">
-              Precio unitario
+              Precio unitario (opcional)
               <input
                 type="text"
                 inputMode="decimal"
@@ -497,7 +569,6 @@ export default function IngresoProductosMastherPhone() {
                 }
                 placeholder="0.000000"
                 className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                required
               />
             </label>
             <button
@@ -611,7 +682,7 @@ export default function IngresoProductosMastherPhone() {
           </div>
           <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
             <CalendarDays size={15} className="text-emerald-600" />
-            Las ventas respetan exactamente las fechas elegidas. La bodega seleccionada al registrar cada movimiento determina si suma en CANTIDAD o en STOCK CREDITEK.
+            Las ventas respetan exactamente las fechas elegidas. Cada movimiento suma en STOCK PROVEEDOR o STOCK CREDITEK según la bodega seleccionada.
           </p>
         </section>
 
@@ -655,14 +726,14 @@ export default function IngresoProductosMastherPhone() {
                         <td className="px-4 py-3">
                           {editing ? (
                             <input
-                              type="date"
+                              type="datetime-local"
                               value={editDraft.fechaIngreso}
                               onChange={(event) =>
                                 setEditDraft((current) => ({ ...current, fechaIngreso: event.target.value }))
                               }
                               className="rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-emerald-500"
                             />
-                          ) : formatDate(movement.fechaIngreso)}
+                          ) : formatDateTime(movement.fechaIngreso)}
                         </td>
                         <td className="px-4 py-3">
                           {editing ? (
@@ -764,9 +835,14 @@ export default function IngresoProductosMastherPhone() {
                               </button>
                             </div>
                           ) : (
-                            <button type="button" onClick={() => startEditingEntry(movement)} className="rounded-lg border border-slate-300 p-2 text-slate-600 hover:border-emerald-400 hover:text-emerald-700" title="Editar ingreso">
-                              <Pencil size={16} />
-                            </button>
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => startEditingEntry(movement)} disabled={deletingEntryId === movement.id} className="rounded-lg border border-slate-300 p-2 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 disabled:opacity-50" title="Editar ingreso">
+                                <Pencil size={16} />
+                              </button>
+                              <button type="button" onClick={() => deleteMovement(movement)} disabled={deletingEntryId === movement.id} className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50 disabled:opacity-50" title="Eliminar movimiento">
+                                {deletingEntryId === movement.id ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -785,7 +861,7 @@ export default function IngresoProductosMastherPhone() {
                 <Boxes size={19} className="text-emerald-600" /> Control por período
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Ejemplo: ingreso 90, ventas 23 y STOCK CREDITEK 7 → MASTHER PHONE 16 y TOTAL BODEGA 74.
+                Ejemplo: STOCK PROVEEDOR 90, STOCK CREDITEK 7 y ventas 23 → VENTAS PROVEEDOR 16 y TOTAL BODEGA 74.
               </p>
             </div>
             <div className="text-right text-xs font-semibold text-slate-500">
@@ -814,10 +890,10 @@ export default function IngresoProductosMastherPhone() {
                 <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-600">
                   <tr>
                     <th className="border-b border-slate-200 px-4 py-3 text-left">PRODUCTO</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">CANTIDAD</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-right">STOCK PROVEEDOR</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-right">STOCK CREDITEK</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-right">VENTAS TOTALES SEMANA</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">MASTHER PHONE</th>
+                    <th className="border-b border-slate-200 px-4 py-3 text-right">VENTAS PROVEEDOR</th>
                     <th className="border-b border-slate-200 px-4 py-3 text-right">TOTAL BODEGA</th>
                   </tr>
                 </thead>
@@ -831,14 +907,14 @@ export default function IngresoProductosMastherPhone() {
                         </p>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        <p className="font-bold text-slate-800">{formatNumber(row.cantidad)}</p>
+                        <p className="font-bold text-slate-800">{formatNumber(row.stockProveedor)}</p>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums">
                         {formatNumber(row.stockCreditek)}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatNumber(row.ventasTotalesSemana)}</td>
                       <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                        {row.mastherPhone === null ? <PendingValue /> : formatNumber(row.mastherPhone)}
+                        {row.ventasProveedor === null ? <PendingValue /> : formatNumber(row.ventasProveedor)}
                       </td>
                       <td className="px-4 py-3 text-right font-bold tabular-nums text-slate-800">
                         {row.totalBodega === null ? <PendingValue /> : formatNumber(row.totalBodega)}
@@ -849,13 +925,13 @@ export default function IngresoProductosMastherPhone() {
                 <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-bold text-slate-800">
                   <tr>
                     <td className="px-4 py-3 text-left">TOTALES</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatNumber(totals?.cantidad)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{formatNumber(totals?.stockProveedor)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {totals?.stockCreditek === null ? <PendingValue /> : formatNumber(totals?.stockCreditek)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{formatNumber(totals?.ventasTotalesSemana)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      {totals?.mastherPhone === null ? <PendingValue /> : formatNumber(totals?.mastherPhone)}
+                      {totals?.ventasProveedor === null ? <PendingValue /> : formatNumber(totals?.ventasProveedor)}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {totals?.totalBodega === null ? <PendingValue /> : formatNumber(totals?.totalBodega)}
