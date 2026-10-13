@@ -1,8 +1,6 @@
 const { Op, UniqueConstraintError } = require("sequelize");
-const DetalleEntrega = require("../models/DetalleEntrega");
 const DetalleVenta = require("../models/DetalleVenta");
 const DispositivoMarca = require("../models/DispositivoMarca");
-const Entrega = require("../models/Entrega");
 const LogisticaMastherPhoneConciliacion = require("../models/LogisticaMastherPhoneConciliacion");
 const LogisticaMastherPhoneIngreso = require("../models/LogisticaMastherPhoneIngreso");
 const Marca = require("../models/Marca");
@@ -563,32 +561,12 @@ const deleteEntry = async (entryId) => {
 const collectSalesOperations = async ({ modelIds, dateFrom, dateTo }) => {
   if (!modelIds.length) return [];
 
-  const completedDeliveries = await Entrega.findAll({
+  const activeSales = await Venta.findAll({
     where: {
       activo: true,
-      estado: "Entregado",
       fecha: { [Op.between]: [dateFrom, dateTo] },
     },
-    attributes: ["id", "ventaId", "fecha", "clienteId", "usuarioAgenciaId"],
-    include: [
-      {
-        model: DetalleEntrega,
-        as: "detalleEntregas",
-        where: { modeloId: { [Op.in]: modelIds } },
-        required: true,
-        attributes: ["modeloId", "cantidad"],
-      },
-    ],
-  });
-
-  const saleWhere = {
-    activo: true,
-    fecha: { [Op.between]: [dateFrom, dateTo] },
-  };
-
-  const activeSales = await Venta.findAll({
-    where: saleWhere,
-    attributes: ["id", "fecha", "clienteId", "usuarioAgenciaId"],
+    attributes: ["id", "fecha"],
     include: [
       {
         model: DetalleVenta,
@@ -601,41 +579,6 @@ const collectSalesOperations = async ({ modelIds, dateFrom, dateTo }) => {
   });
 
   const operations = [];
-  const activeSaleIds = new Set(activeSales.map((sale) => Number(sale.id)));
-  const legacySaleMatches = new Map();
-  for (const sale of activeSales) {
-    for (const detail of sale.detalleVenta || []) {
-      const key = `${sale.clienteId}:${sale.usuarioAgenciaId}:${detail.modeloId}`;
-      const dates = legacySaleMatches.get(key) || [];
-      dates.push(sale.fecha);
-      legacySaleMatches.set(key, dates);
-    }
-  }
-  const daysBetween = (first, second) => {
-    const firstTime = Date.parse(`${first}T00:00:00Z`);
-    const secondTime = Date.parse(`${second}T00:00:00Z`);
-    return Math.abs(firstTime - secondTime) / 86400000;
-  };
-  for (const delivery of completedDeliveries) {
-    const linkedSaleId = Number(delivery.ventaId);
-    if (Number.isSafeInteger(linkedSaleId) && activeSaleIds.has(linkedSaleId)) {
-      continue;
-    }
-    for (const detail of delivery.detalleEntregas || []) {
-      const legacyKey = `${delivery.clienteId}:${delivery.usuarioAgenciaId}:${detail.modeloId}`;
-      const isLegacyDuplicate =
-        !delivery.ventaId &&
-        (legacySaleMatches.get(legacyKey) || []).some(
-          (saleDate) => daysBetween(delivery.fecha, saleDate) <= 1,
-        );
-      if (isLegacyDuplicate) continue;
-      operations.push({
-        modeloId: Number(detail.modeloId),
-        fecha: delivery.fecha,
-        cantidad: Number(detail.cantidad),
-      });
-    }
-  }
   for (const sale of activeSales) {
     for (const detail of sale.detalleVenta || []) {
       operations.push({

@@ -3,6 +3,7 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import {
+  Banknote,
   Pencil,
   Plus,
   RefreshCw,
@@ -334,6 +335,10 @@ export default function CierresCajaTabla() {
   const [agenciaId, setAgenciaId] = useState("");
   const [usuarioId, setUsuarioId] = useState("");
   const [estadoCierre, setEstadoCierre] = useState("");
+  const [periodoConsultado, setPeriodoConsultado] = useState(() => {
+    const hoy = getHoyLocal();
+    return { fechaInicio: hoy, fechaFin: hoy };
+  });
 
   const [filtros, setFiltros] = useState({
     agencias: [],
@@ -367,6 +372,33 @@ export default function CierresCajaTabla() {
     );
   }, [cierres, selectedCierreId]);
 
+  const totalFisicoConsultado = useMemo(
+    () =>
+      redondearDosDecimales(
+        cierres.reduce(
+          (total, item) => total + (Number(item.cierre?.totalFisico) || 0),
+          0,
+        ),
+      ),
+    [cierres],
+  );
+
+  const descripcionPeriodo = useMemo(() => {
+    const { fechaInicio: inicio, fechaFin: fin } = periodoConsultado;
+
+    if (inicio && fin && inicio === fin) {
+      return `Del día ${formatearFecha(inicio)}`;
+    }
+
+    if (inicio && fin) {
+      return `Del ${formatearFecha(inicio)} al ${formatearFecha(fin)}`;
+    }
+
+    if (inicio) return `Desde el ${formatearFecha(inicio)}`;
+    if (fin) return `Hasta el ${formatearFecha(fin)}`;
+    return "Todos los cierres consultados";
+  }, [periodoConsultado]);
+
   const cargarFiltros = async () => {
     try {
       const { data } = await axios.get(
@@ -392,17 +424,20 @@ export default function CierresCajaTabla() {
       setLoading(true);
       setError("");
 
+      const parametrosConsulta = {
+        fechaInicio,
+        fechaFin,
+        ...(agenciaId && { agenciaId }),
+        ...(usuarioId && { usuarioId }),
+        ...(estadoCierre && { estadoCierre }),
+      };
+
       const { data } = await axios.get(`${API_URL}/api/contabilidad/cierres-caja`, {
-        params: {
-          fechaInicio,
-          fechaFin,
-          ...(agenciaId && { agenciaId }),
-          ...(usuarioId && { usuarioId }),
-          ...(estadoCierre && { estadoCierre }),
-        },
+        params: parametrosConsulta,
       });
 
       setCierres(data?.data || []);
+      setPeriodoConsultado({ fechaInicio, fechaFin });
     } catch (err) {
       console.error(err);
       if (err?.response?.status === 401) {
@@ -673,6 +708,38 @@ export default function CierresCajaTabla() {
                 <option value="ANULADO">Anulado</option>
               </select>
             </label>
+          </div>
+
+          <div
+            className="mt-4 flex flex-col gap-3 rounded border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-emerald-600 p-2 text-white">
+                <Banknote size={24} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">
+                  Dinero físico en caja
+                </p>
+                <p className="text-xs text-emerald-700">{descripcionPeriodo}</p>
+              </div>
+            </div>
+
+            <div className="sm:text-right">
+              <p className="text-2xl font-bold text-emerald-900">
+                {loading
+                  ? "Calculando..."
+                  : error
+                    ? "No disponible"
+                    : formatearMoneda(totalFisicoConsultado)}
+              </p>
+              {!loading && !error && (
+                <p className="text-xs text-emerald-700">
+                  {cierres.length} {cierres.length === 1 ? "cierre incluido" : "cierres incluidos"}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

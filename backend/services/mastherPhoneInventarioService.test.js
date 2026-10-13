@@ -1,4 +1,4 @@
-const Entrega = require("../models/Entrega");
+const { Op } = require("sequelize");
 const LogisticaMastherPhoneIngreso = require("../models/LogisticaMastherPhoneIngreso");
 const Modelo = require("../models/Modelo");
 const Venta = require("../models/Venta");
@@ -347,7 +347,6 @@ describe("inventario semanal Masther Phone", () => {
         }),
       },
     ]);
-    jest.spyOn(Entrega, "findAll").mockResolvedValue([]);
     jest.spyOn(Venta, "findAll").mockResolvedValue([
       {
         id: 11,
@@ -371,24 +370,8 @@ describe("inventario semanal Masther Phone", () => {
     });
   });
 
-  test("evita duplicar entregas vinculadas y coincidencias antiguas sin ventaId", async () => {
-    jest.spyOn(Entrega, "findAll").mockResolvedValue([
-      {
-        id: 1,
-        ventaId: 10,
-        fecha: "2026-10-07",
-        detalleEntregas: [{ modeloId: 1, cantidad: 3 }],
-      },
-      {
-        id: 2,
-        ventaId: null,
-        clienteId: 200,
-        usuarioAgenciaId: 5,
-        fecha: "2026-10-07",
-        detalleEntregas: [{ modeloId: 1, cantidad: 2 }],
-      },
-    ]);
-    jest.spyOn(Venta, "findAll").mockResolvedValue([
+  test("usa exclusivamente ventas activas del periodo", async () => {
+    const findSales = jest.spyOn(Venta, "findAll").mockResolvedValue([
       {
         id: 10,
         fecha: "2026-10-07",
@@ -396,8 +379,6 @@ describe("inventario semanal Masther Phone", () => {
       },
       {
         id: 11,
-        clienteId: 200,
-        usuarioAgenciaId: 5,
         fecha: "2026-10-08",
         detalleVenta: [{ modeloId: 1, cantidad: 2 }],
       },
@@ -410,5 +391,15 @@ describe("inventario semanal Masther Phone", () => {
     });
 
     expect(operations.reduce((sum, item) => sum + item.cantidad, 0)).toBe(5);
+    const query = findSales.mock.calls[0][0];
+    expect(query.where.activo).toBe(true);
+    expect(query.where.fecha[Op.between]).toEqual([
+      "2026-10-05",
+      "2026-10-11",
+    ]);
+    expect(query.include[0]).toMatchObject({
+      as: "detalleVenta",
+      required: true,
+    });
   });
 });
