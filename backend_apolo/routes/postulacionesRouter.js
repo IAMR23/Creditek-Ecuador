@@ -34,12 +34,15 @@ const INTERVIEW_STATUSES = [
   "SELECCIONADO",
   "CAPACITACION",
   "NO_ASISTIO_CAP",
+  "PRODUCCION",
 ];
 const SELECTED_INTERVIEW_STATUSES = ["SELECCIONADO"];
 const TRAINING_INTERVIEW_STATUSES = ["CAPACITACION", "NO_ASISTIO_CAP"];
+const PRODUCTION_INTERVIEW_STATUSES = ["PRODUCCION"];
 const POST_INTERVIEW_STATUSES = [
   ...SELECTED_INTERVIEW_STATUSES,
   ...TRAINING_INTERVIEW_STATUSES,
+  ...PRODUCTION_INTERVIEW_STATUSES,
 ];
 const ACTIVE_INTERVIEW_STATUSES = ["AGENDADA", "CONFIRMADA", "REPROGRAMADA"];
 const INTERVIEW_MODALITIES = ["PRESENCIAL", "VIRTUAL"];
@@ -592,9 +595,20 @@ const buildListWhere = (query = {}) => {
     where.descartada = false;
     where.estadoEntrevista = { [Op.in]: TRAINING_INTERVIEW_STATUSES };
   }
+  if (fase === "produccion") {
+    where.pasaEntrevista = true;
+    where.descartada = false;
+    where.estadoEntrevista = { [Op.in]: PRODUCTION_INTERVIEW_STATUSES };
+  }
   if (fase === "descartado") where.descartada = true;
   if (
-    !["entrevista", "seleccionado", "seleccionados", "capacitacion"].includes(fase) &&
+    ![
+      "entrevista",
+      "seleccionado",
+      "seleccionados",
+      "capacitacion",
+      "produccion",
+    ].includes(fase) &&
     INTERVIEW_STATUSES.includes(estadoEntrevista)
   ) {
     where.estadoEntrevista = estadoEntrevista;
@@ -1199,6 +1213,184 @@ const validatePayload = (payload) => {
   return errors;
 };
 
+router.post("/pipeline", auth, async (req, res) => {
+  try {
+    const nombre = normalizeLimitedText(req.body?.nombre, 150, "El nombre");
+    const cedula = normalizeCedula(req.body?.cedula).replace(/\D/g, "");
+
+    if (!nombre) {
+      return res.status(400).json({
+        ok: false,
+        message: "El nombre es obligatorio.",
+      });
+    }
+
+    if (!/^\d{10}$/.test(cedula)) {
+      return res.status(400).json({
+        ok: false,
+        message: "La cédula debe contener exactamente 10 dígitos.",
+      });
+    }
+
+    const postulacionesExistentes = await findPostulacionesByCedula(cedula);
+    if (postulacionesExistentes.length > 0) {
+      return res.status(409).json({
+        ok: false,
+        code: "CEDULA_DUPLICADA",
+        message: "Ya existe un postulante registrado con esta cédula.",
+      });
+    }
+
+    const fechaCreacion = new Date().toISOString();
+    const formulario = {
+      datos_personales: {
+        nombreCompleto: nombre,
+        cedula,
+      },
+      metadata: {
+        fecha_envio: fechaCreacion,
+        origen: "pipeline",
+        version_formulario: "pipeline-v1",
+        registro_basico: true,
+      },
+    };
+    const postulacion = await Postulacion.create({
+      nombre,
+      cedula,
+      telefono: null,
+      leida: true,
+      pasaEntrevista: false,
+      estadoEntrevista: "PENDIENTE",
+      descartada: false,
+      formulario,
+    });
+
+    return res.status(201).json({
+      ok: true,
+      message: "Postulante creado en la etapa Postulación.",
+      data: postulacion,
+    });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    if (status >= 500) {
+      console.error("Error creando postulante desde Pipeline:", error);
+    }
+
+    return res.status(status).json({
+      ok: false,
+      code: error.code,
+      message:
+        status >= 500
+          ? "Error al crear el postulante desde Pipeline."
+          : error.message,
+    });
+  }
+});
+
+router.patch("/:id/pipeline-etapa", auth, async (req, res) => {
+  try {
+    const id = parsePositiveInt(req.params.id, null);
+    const etapa = String(req.body?.etapa || "").trim().toUpperCase();
+    const motivoDescarte =
+      typeof req.body?.motivoDescarte === "string"
+        ? req.body.motivoDescarte.trim()
+        : "";
+    const etapasValidas = new Set([
+      "POSTULACION",
+      "ENTREVISTA",
+      "DATA",
+      "CAPACITACION",
+      "PRODUCCION",
+      "DESCARTE",
+    ]);
+
+    if (!id || !etapasValidas.has(etapa)) {
+      return res.status(400).json({
+        ok: false,
+        message: "La etapa solicitada no es válida.",
+      });
+    }
+
+    if (etapa === "DESCARTE" && !motivoDescarte) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe ingresar el motivo por el que descarta al postulante.",
+      });
+    }
+
+    if (motivoDescarte.length > 1000) {
+      return res.status(400).json({
+        ok: false,
+        message: "El motivo del descarte no puede superar 1000 caracteres.",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id);
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulación no encontrada.",
+      });
+    }
+
+    if (etapa === "DESCARTE") {
+      postulacion.descartada = true;
+      postulacion.descartadaAt = postulacion.descartadaAt || new Date();
+      const formulario = postulacion.formulario || {};
+      postulacion.formulario = {
+        ...formulario,
+        metadata: {
+          ...(formulario.metadata || {}),
+          motivo_descarte: motivoDescarte,
+          motivo_descarte_at: new Date().toISOString(),
+        },
+      };
+      if (typeof postulacion.changed === "function") {
+        postulacion.changed("formulario", true);
+      }
+    } else {
+      postulacion.descartada = false;
+      postulacion.descartadaAt = null;
+
+      if (etapa === "POSTULACION") {
+        postulacion.pasaEntrevista = false;
+        postulacion.pasaEntrevistaAt = null;
+        postulacion.estadoEntrevista = "PENDIENTE";
+      } else {
+        postulacion.pasaEntrevista = true;
+        postulacion.pasaEntrevistaAt = postulacion.pasaEntrevistaAt || new Date();
+
+        if (etapa === "ENTREVISTA") {
+          postulacion.estadoEntrevista = postulacion.fechaEntrevista
+            ? "AGENDADA"
+            : "PENDIENTE";
+        }
+        if (etapa === "DATA") postulacion.estadoEntrevista = "SELECCIONADO";
+        if (etapa === "CAPACITACION") {
+          postulacion.estadoEntrevista = "CAPACITACION";
+        }
+        if (etapa === "PRODUCCION") {
+          postulacion.estadoEntrevista = "PRODUCCION";
+        }
+      }
+    }
+
+    await postulacion.save();
+
+    return res.json({
+      ok: true,
+      message: `Postulante movido a ${etapa}.`,
+      data: postulacion,
+    });
+  } catch (error) {
+    console.error("Error moviendo postulante en Pipeline:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al mover el postulante en Pipeline.",
+    });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const payloadFinal = normalizePayload(req.body);
@@ -1340,7 +1532,12 @@ router.get("/", auth, async (req, res) => {
       offset,
     });
     const totalPages = Math.max(Math.ceil(count / limit), 1);
-    const data = ["seleccionado", "seleccionados", "capacitacion"].includes(fase)
+    const data = [
+      "seleccionado",
+      "seleccionados",
+      "capacitacion",
+      "produccion",
+    ].includes(fase)
       ? await agregarDatosIncorporacion(rows)
       : rows;
 

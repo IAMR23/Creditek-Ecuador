@@ -13,6 +13,7 @@ const interviewStatusLabels = {
   SELECCIONADO: "Seleccionado",
   CAPACITACION: "En capacitación",
   NO_ASISTIO_CAP: "No asistió a la capacitación",
+  PRODUCCION: "En producción",
 };
 
 const labels = {

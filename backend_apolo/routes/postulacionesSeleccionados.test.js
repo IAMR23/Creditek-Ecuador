@@ -87,7 +87,7 @@ test("la lista de Entrevistas excluye Seleccionados y Capacitacion", async () =>
   assert.equal(lastListOptions.where.descartada, false);
   assert.deepEqual(
     lastListOptions.where.estadoEntrevista[Op.notIn],
-    ["SELECCIONADO", "CAPACITACION", "NO_ASISTIO_CAP"],
+    ["SELECCIONADO", "CAPACITACION", "NO_ASISTIO_CAP", "PRODUCCION"],
   );
 });
 

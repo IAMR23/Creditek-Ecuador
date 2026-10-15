@@ -38,7 +38,12 @@ export default function InterviewFilters({
             {Object.entries(INTERVIEW_STATUS)
               .filter(
                 ([value]) =>
-                  !["SELECCIONADO", "CAPACITACION", "NO_ASISTIO_CAP"].includes(value),
+                  ![
+                    "SELECCIONADO",
+                    "CAPACITACION",
+                    "NO_ASISTIO_CAP",
+                    "PRODUCCION",
+                  ].includes(value),
               )
               .map(([value, meta]) => (
                 <option key={value} value={value}>{meta.label}</option>

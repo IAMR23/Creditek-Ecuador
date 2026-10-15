@@ -177,6 +177,58 @@ test("rechaza una carga masiva que inicia antes de la fecha de ingreso", async (
   assert.equal(guardados, 0);
 });
 
+test("la carga masiva global admite usuarios de distintas agencias", async () => {
+  const asistenciasGuardadas = [];
+  let consultaRelaciones = 0;
+  const segundoUsuario = {
+    id: 6,
+    cedula: "0102030406",
+    nombre: "Segundo postulante",
+    fechaIngreso: "2026-07-20",
+    fechaSalida: null,
+  };
+
+  Usuario.findAll = async () => [usuario, segundoUsuario];
+  UsuarioAgencia.findAll = async (options) => {
+    consultaRelaciones += 1;
+    if (consultaRelaciones === 1) {
+      assert.equal(options.where.agenciaId, undefined);
+      return [
+        { id: 10, usuarioId: 5, agenciaId: 2 },
+        { id: 11, usuarioId: 6, agenciaId: 3 },
+      ];
+    }
+
+    const usuarioId = options.where.usuarioId;
+    if (usuarioId === 5) return [{ id: 10, usuarioId: 5 }];
+    if (usuarioId === 6) return [{ id: 11, usuarioId: 6 }];
+
+    return [
+      { id: 10, usuarioId: 5 },
+      { id: 11, usuarioId: 6 },
+    ];
+  };
+  Asistencia.upsert = async (values) => {
+    asistenciasGuardadas.push(values);
+    return [values, true];
+  };
+
+  const response = await postJson("/masivo", {
+    usuarioAgenciaIds: [10, 11],
+    fechaInicio: "2026-07-20",
+    fechaFin: "2026-07-20",
+    estado: "asistencia",
+    observacion: "",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.totalUsuarios, 2);
+  assert.deepEqual(
+    asistenciasGuardadas.map((registro) => registro.usuarioAgenciaId).sort(),
+    [10, 11],
+  );
+});
+
 test("al remover la unica salida limpia y sincroniza fechaSalida", async () => {
   const sincronizaciones = [];
   let consulta = 0;

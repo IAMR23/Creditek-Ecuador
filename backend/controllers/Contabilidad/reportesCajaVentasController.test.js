@@ -316,4 +316,122 @@ describe("reportesCajaVentasController", () => {
     );
     errorLog.mockRestore();
   });
+
+  test("la API de celulares persiste la carga y responde un resumen JSON", async () => {
+    const infoLog = jest.spyOn(console, "info").mockImplementation(() => {});
+    const datos = {
+      registrosCaja: [],
+      ventasTv: [],
+      ventasCelular: [
+        {
+          FECHA: "10/14/26 09:00 AM",
+          CONTRATO: "CEL-1",
+          IMEI: "123456789012345",
+        },
+      ],
+    };
+    fs.existsSync.mockReturnValue(true);
+    fsp.readFile.mockResolvedValue(JSON.stringify(datos));
+    spawn.mockReturnValue(
+      crearProcesoPython({
+        registrosCaja: 0,
+        ventasTv: 0,
+        ventasCelular: 1,
+        noLeidas: 0,
+      }),
+    );
+    obtenerFechaReporte.mockReturnValue("2026-10-14");
+    guardarCargaControlFinanciero.mockResolvedValue({
+      carga: { id: 44 },
+      esCargaNueva: true,
+      archivosAgregados: 1,
+      archivosOmitidos: 0,
+      registrosAgregados: 1,
+      registrosOmitidos: 0,
+    });
+    conciliarCarga.mockResolvedValue({ id: 55 });
+    auditarVentasDesdeDirectorios.mockResolvedValue({
+      estado: "COMPLETADA",
+      inconsistencias: 0,
+      tv: { aplica: false, registros: 0, inconsistencias: 0 },
+      celular: { aplica: true, registros: 1, inconsistencias: 0 },
+      errores: [],
+    });
+    const res = crearRes();
+
+    await controller.importarVentasApi(
+      {
+        files: { ventasCelular: [{ originalname: "celular.pdf" }] },
+        body: {},
+        reportesCajaApiTipo: "CELULAR",
+        reportesCajaRequestId: "request-44",
+        reportesCajaVentasTempRoot: "C:/temp/api-celular",
+        reportesCajaDir: "C:/temp/api-celular/caja",
+        ventasTvDir: "C:/temp/api-celular/tv",
+        ventasCelularDir: "C:/temp/api-celular/celular",
+      },
+      res,
+    );
+
+    expect(guardarCargaControlFinanciero).toHaveBeenCalledWith(
+      expect.objectContaining({ datos, usuarioId: undefined }),
+    );
+    expect(conciliarCarga).toHaveBeenCalledWith({
+      cargaId: 44,
+      origen: "CARGA",
+      usuarioId: undefined,
+    });
+    expect(res.download).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: true,
+        requestId: "request-44",
+        tipo: "CELULAR",
+        resultado: expect.objectContaining({
+          fechaReporte: "2026-10-14",
+          cargaId: 44,
+          archivosRecibidos: 1,
+          registrosProcesados: 1,
+          registrosAgregados: 1,
+          conciliacionEntradasId: 55,
+        }),
+      }),
+    );
+    expect(fsp.rm).toHaveBeenCalledWith("C:/temp/api-celular", {
+      recursive: true,
+      force: true,
+    });
+    infoLog.mockRestore();
+  });
+
+  test("la API responde 400 cuando no recibe PDFs", async () => {
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+    const res = crearRes();
+
+    await controller.importarVentasApi(
+      {
+        files: { ventasTv: [] },
+        body: {},
+        reportesCajaApiTipo: "TV",
+        reportesCajaRequestId: "request-vacio",
+        reportesCajaVentasTempRoot: "C:/temp/api-vacia",
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      code: "ARCHIVOS_REQUERIDOS",
+      message: "Adjunta al menos un PDF de televisiones.",
+      requestId: "request-vacio",
+    });
+    expect(spawn).not.toHaveBeenCalled();
+    expect(fsp.rm).toHaveBeenCalledWith("C:/temp/api-vacia", {
+      recursive: true,
+      force: true,
+    });
+    errorLog.mockRestore();
+  });
 });

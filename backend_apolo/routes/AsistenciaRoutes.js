@@ -516,14 +516,17 @@ router.post("/masivo", async (req, res) => {
     const observacionNormalizada = normalizarObservacion(observacion);
     const estadoNormalizado = !estado || estado === "libre" ? null : estado;
 
-    if (!agenciaId) {
-      return res.status(400).json({ message: "agenciaId es obligatorio." });
-    }
-
     if (!Array.isArray(usuarioAgenciaIds) || usuarioAgenciaIds.length === 0) {
       return res
         .status(400)
         .json({ message: "usuarioAgenciaIds debe contener al menos un usuario." });
+    }
+
+    const idsSolicitados = [...new Set(usuarioAgenciaIds.map(Number))];
+    if (idsSolicitados.some((id) => !Number.isInteger(id) || id <= 0)) {
+      return res.status(400).json({
+        message: "usuarioAgenciaIds contiene uno o más identificadores inválidos.",
+      });
     }
 
     if (!validarFechaISO(fechaInicio) || !validarFechaISO(fechaFin)) {
@@ -544,17 +547,18 @@ router.post("/masivo", async (req, res) => {
 
     const usuarioAgencias = await UsuarioAgencia.findAll({
       where: {
-        id: { [Op.in]: usuarioAgenciaIds },
-        agenciaId,
+        id: { [Op.in]: idsSolicitados },
+        ...(agenciaId ? { agenciaId } : {}),
         activo: true,
       },
       attributes: ["id", "usuarioId"],
     });
 
-    if (usuarioAgencias.length !== usuarioAgenciaIds.length) {
+    if (usuarioAgencias.length !== idsSolicitados.length) {
       return res.status(400).json({
-        message:
-          "Uno o más usuarioAgenciaIds no existen, no pertenecen a la agencia o están inactivos.",
+        message: agenciaId
+          ? "Uno o más usuarioAgenciaIds no existen, no pertenecen a la agencia o están inactivos."
+          : "Uno o más usuarioAgenciaIds no existen o están inactivos.",
       });
     }
 

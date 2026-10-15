@@ -54,6 +54,11 @@ export const INTERVIEW_STATUS = {
     className: "border-red-200 bg-red-50 text-red-700",
     dotClassName: "bg-red-500",
   },
+  PRODUCCION: {
+    label: "En producción",
+    className: "border-green-200 bg-green-50 text-green-800",
+    dotClassName: "bg-green-600",
+  },
 };
 
 export const getPersonalData = (postulacion) =>

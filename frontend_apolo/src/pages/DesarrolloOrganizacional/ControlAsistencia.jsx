@@ -223,10 +223,14 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
     }
   }
 
-  const guardarAsistenciaMasiva = async ({
-    agenciaActual,
-    usuarios,
-  }) => {
+  const guardarAsistenciaMasiva = async (gruposVisibles) => {
+    const usuarios = Array.from(
+      new Map(
+        gruposVisibles
+          .flatMap((grupo) => grupo.usuarios || [])
+          .map((usuario) => [usuario.usuarioId || usuario.usuarioAgenciaId, usuario])
+      ).values()
+    )
     const fechaMin = fechas[0]?.fecha
     const fechaMax = fechas[fechas.length - 1]?.fecha
 
@@ -254,15 +258,15 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
       return
     }
 
-    const modalId = `observacion-masiva-${agenciaActual.id}`
+    const modalId = "observacion-masiva-global"
 
     const { isConfirmed, value } = await Swal.fire({
       title: "Registrar asistencia masiva",
       html: `
         <div class="space-y-3 text-left">
           <div class="text-sm text-slate-600">
-            <strong>${escapeHtml(agenciaActual.nombre)}</strong><br />
-            Se aplicará a ${usuarios.length} usuario(s) visibles.
+            <strong>Todas las tablas visibles</strong><br />
+            Se aplicará a ${usuarios.length} usuario(s) de ${gruposVisibles.length} tabla(s).
           </div>
           <div>
             <label for="swal-estado-masivo" class="mb-1 block text-sm font-medium text-slate-700">
@@ -347,7 +351,6 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
     try {
       setLoading(true)
       await api.post("/asistencias/masivo", {
-        agenciaId: agenciaActual.id,
         usuarioAgenciaIds: usuarios.map((usuario) => usuario.usuarioAgenciaId),
         fechaInicio: value.fechaInicio,
         fechaFin: value.fechaFin,
@@ -360,7 +363,7 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
       Swal.fire({
         icon: "success",
         title: "Asistencia masiva registrada",
-        text: `Se actualizó ${usuarios.length} usuario(s) en ${agenciaActual.nombre}.`,
+        text: `Se actualizó ${usuarios.length} usuario(s) de todas las tablas visibles.`,
         timer: 1800,
         showConfirmButton: false,
       })
@@ -517,7 +520,7 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
               onChange={(e) => setAgenciaId(e.target.value)}
               className="rounded-lg border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
-              <option value="">Todas las agencias</option>
+              <option value="">Todo</option>
               {agencias.map((agencia) => (
                 <option key={agencia.id} value={agencia.id}>
                   {agencia.nombre} · {agencia.tipo === "DEPARTAMENTO" ? "Departamento" : "Agencia"}
@@ -533,12 +536,24 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
             />
           </div>
 
-          <button
-            onClick={cargarAsistencia}
-            className="rounded-lg bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 font-semibold text-white shadow"
-          >
-            Actualizar
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => guardarAsistenciaMasiva(agenciasFiltradas)}
+              disabled={loading || agenciasFiltradas.length === 0}
+              className="rounded-lg bg-black px-4 py-2 font-semibold text-white shadow hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Carga masiva: todas las tablas
+            </button>
+            <button
+              type="button"
+              onClick={cargarAsistencia}
+              disabled={loading}
+              className="rounded-lg bg-gradient-to-r from-green-500 to-green-600 px-4 py-2 font-semibold text-white shadow disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Cargando..." : "Recargar"}
+            </button>
+          </div>
         </div>
 
         <div className="max-h-[72vh] overflow-auto">
@@ -597,25 +612,13 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
                         colSpan={fechas.length + 1}
                         className="border border-black px-2 py-1 font-bold uppercase"
                       >
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
                           <span className="flex items-center gap-2">
                             {agencia.nombre}
                             <span className="rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-700">
                               {agencia.tipo === "DEPARTAMENTO" ? "Departamento" : "Agencia"}
                             </span>
                           </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              guardarAsistenciaMasiva({
-                                agenciaActual: agencia,
-                                usuarios: agencia.usuarios || [],
-                              })
-                            }
-                            className="rounded bg-black px-2 py-1 text-[11px] font-semibold text-white hover:bg-slate-800"
-                          >
-                            Carga masiva
-                          </button>
                         </div>
                       </td>
                     </tr>

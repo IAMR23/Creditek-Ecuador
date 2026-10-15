@@ -41,13 +41,6 @@ const buildUsuarioWhere = (usuario) =>
   condicionCampoNormalizado("usuario", usuario);
 const httpError = (statusCode, code, message) =>
   Object.assign(new Error(message), { statusCode, code });
-const NOVENTA_DIAS_MS = 90 * 24 * 60 * 60 * 1000;
-
-const buildUsuarios90DiasWhere = (now = new Date()) => ({
-  activo: true,
-  createdAt: { [Op.lte]: new Date(now.getTime() - NOVENTA_DIAS_MS) },
-});
-
 const findUsuarioByUsername = (usuario, transaction) =>
   Usuario.findOne({
     where: buildUsuarioWhere(usuario),
@@ -367,56 +360,6 @@ router.get("/por-cedula/:cedula", async (req, res) => {
     console.error("Error consultando usuario por cédula:", error);
     return res.status(500).json({
       message: "Error al consultar el usuario por cédula",
-    });
-  }
-});
-
-router.get("/notificaciones-90-dias", async (req, res) => {
-  try {
-    const now = new Date();
-    const where = buildUsuarios90DiasWhere(now);
-    const soloConteo =
-      String(req.query.soloConteo || "").trim().toLowerCase() === "true";
-
-    if (soloConteo) {
-      const total = await Usuario.count({ where });
-      return res.json({ total });
-    }
-
-    const usuarios = await Usuario.findAll({
-      where,
-      attributes: ["id", "nombre", "cedula", "email", "createdAt", "fechaIngreso", "activo"],
-      include: [
-        { model: Rol, as: "rol", attributes: ["id", "nombre"] },
-        {
-          model: Agencia,
-          as: "agencias",
-          attributes: ["id", "nombre", "tipo"],
-          through: { attributes: [], where: { activo: true } },
-          required: false,
-        },
-      ],
-      order: [
-        ["createdAt", "ASC"],
-        ["nombre", "ASC"],
-      ],
-    });
-
-    const data = usuarios.map((usuario) => {
-      const plain = usuario.toJSON ? usuario.toJSON() : usuario;
-      const createdAt = new Date(plain.createdAt);
-      const diasDesdeCreacion = Number.isNaN(createdAt.getTime())
-        ? 90
-        : Math.max(Math.floor((now.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000)), 90);
-
-      return { ...plain, diasDesdeCreacion };
-    });
-
-    return res.json({ total: data.length, data });
-  } catch (error) {
-    console.error("Error obteniendo notificaciones de usuarios:", error);
-    return res.status(500).json({
-      message: "Error al obtener las notificaciones de usuarios",
     });
   }
 });

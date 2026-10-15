@@ -87,6 +87,7 @@ test("el dashboard devuelve sus indicadores filtrados por fecha de postulacion",
     "SELECCIONADO",
     "CAPACITACION",
     "NO_ASISTIO_CAP",
+    "PRODUCCION",
   ]);
   assert.deepEqual(countCalls[2].where.estadoEntrevista[Op.in], ["SELECCIONADO"]);
   assert.deepEqual(countCalls[3].where.estadoEntrevista[Op.in], [

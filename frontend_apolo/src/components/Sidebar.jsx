@@ -3,15 +3,16 @@ import { NavLink } from "react-router-dom";
 import {
   Archive,
   BadgeCheck,
-  Bell,
   Building2,
   ChevronDown,
   ClipboardCheck,
   ClipboardList,
   FileText,
   GraduationCap,
+  GitBranch,
   LayoutDashboard,
   MonitorPlay,
+  Settings,
   Shield,
   UserCheck,
   Users,
@@ -29,7 +30,7 @@ export default function Sidebar() {
   const isUser = role === "USUARIO";
   const isAdmin = role === "ADMIN";
   const [simuladorAbierto, setSimuladorAbierto] = useState(true);
-  const [notificaciones90Dias, setNotificaciones90Dias] = useState(0);
+  const [administracionAbierta, setAdministracionAbierta] = useState(true);
   const [resumenPostulaciones, setResumenPostulaciones] = useState({
     totalGeneral: 0,
     total: 0,
@@ -76,6 +77,43 @@ export default function Sidebar() {
     </div>
   );
 
+  const administracionMenu = (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
+      <button
+        type="button"
+        onClick={() => setAdministracionAbierta((current) => !current)}
+        aria-expanded={administracionAbierta}
+        aria-controls="administracion-menu"
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-extrabold text-slate-800 transition hover:bg-white"
+      >
+        <Settings size={18} className="text-orange-500" aria-hidden="true" />
+        <span className="flex-1 text-left">Administración</span>
+        <ChevronDown
+          size={16}
+          className={`transition-transform ${administracionAbierta ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {administracionAbierta && (
+        <div id="administracion-menu" className="mt-1 border-l border-slate-300 pl-3">
+          <NavLink to="/usuarios" className={linkClass}>
+            <Users size={17} aria-hidden="true" /> Usuarios
+          </NavLink>
+          <NavLink to="/usuarios-agencias" className={linkClass}>
+            <UsersRound size={17} aria-hidden="true" /> Usuarios/Agencias
+          </NavLink>
+          <NavLink to="/agencias" className={linkClass}>
+            <Building2 size={17} aria-hidden="true" /> Agencias
+          </NavLink>
+          <NavLink to="/roles" className={linkClass}>
+            <Shield size={17} aria-hidden="true" /> Roles
+          </NavLink>
+        </div>
+      )}
+    </div>
+  );
+
   useEffect(() => {
     if (isUser) return undefined;
     let active = true;
@@ -94,27 +132,6 @@ export default function Sidebar() {
       active = false;
       window.clearInterval(intervalId);
       window.removeEventListener(POSTULACIONES_EVENT, cargarResumen);
-    };
-  }, [isUser]);
-
-  useEffect(() => {
-    if (isUser) return undefined;
-    let active = true;
-    const cargarNotificaciones = async () => {
-      try {
-        const response = await api.get("/usuarios/notificaciones-90-dias", {
-          params: { soloConteo: true },
-        });
-        if (active) setNotificaciones90Dias(response.data?.total || 0);
-      } catch {
-        if (active) setNotificaciones90Dias(0);
-      }
-    };
-    cargarNotificaciones();
-    const intervalId = window.setInterval(cargarNotificaciones, 60000);
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
     };
   }, [isUser]);
 
@@ -141,15 +158,9 @@ export default function Sidebar() {
             <NavLink to="/dashboard" className={linkClass}><LayoutDashboard size={18} /> Dashboard</NavLink>
             {isAdmin && <NavLink to="/evaluacion" className={linkClass}><ClipboardCheck size={18} /> Evaluación</NavLink>}
             {isAdmin && simuladorMenu}
-            <NavLink to="/agencias" className={linkClass}><Building2 size={18} /> Agencias</NavLink>
-            <NavLink to="/roles" className={linkClass}><Shield size={18} /> Roles</NavLink>
-            <NavLink to="/usuarios" className={linkClass}><Users size={18} /> Usuarios</NavLink>
-            <NavLink to="/notificaciones" className={linkClass}>
-              <Bell size={18} /><span className="flex-1">Notificaciones</span>
-              {notificaciones90Dias > 0 && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-extrabold text-amber-800">{notificaciones90Dias}</span>}
-            </NavLink>
-            <NavLink to="/usuarios-agencias" className={linkClass}><UsersRound size={18} /> Usuarios/Agencias</NavLink>
+            {administracionMenu}
             <NavLink to="/control-asistencia" className={linkClass}><ClipboardList size={18} /> Movimientos de Terminales</NavLink>
+            <NavLink to="/pipeline" className={linkClass}><GitBranch size={18} /> Pipeline</NavLink>
             <NavLink to="/postulaciones" className={linkClass}>
               <FileText size={18} /><span className="flex flex-1 items-center gap-2">Postulaciones{resumenPostulaciones.noLeidas > 0 && <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />}</span>
               <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">{resumenPostulaciones.total}</span>
