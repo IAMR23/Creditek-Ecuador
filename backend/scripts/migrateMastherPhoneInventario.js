@@ -11,6 +11,7 @@ async function run() {
     "202610080006-add-valores-ingresos-masther-phone.sql",
     "202610080007-ampliar-decimales-ingresos-masther-phone.sql",
     "202610090001-add-hora-ingresos-masther-phone.sql",
+    "202610160001-control-semanal-masther-phone.sql",
   ];
   for (const migration of migrations) {
     const sql = fs.readFileSync(
@@ -26,11 +27,14 @@ async function run() {
     WHERE table_schema = 'public'
       AND table_name IN (
         'logistica_masther_phone_ingresos',
-        'logistica_masther_phone_conciliaciones'
+        'logistica_masther_phone_conciliaciones',
+        'logistica_masther_phone_cierres',
+        'logistica_masther_phone_cierre_detalles',
+        'logistica_masther_phone_ajustes'
       )
     ORDER BY table_name;
   `);
-  if (tables.length !== 2) {
+  if (tables.length !== 5) {
     throw new Error("No se pudieron verificar las tablas de Masther Phone.");
   }
 
@@ -49,10 +53,13 @@ async function run() {
     WHERE schemaname = 'public'
       AND indexname IN (
         'logistica_masther_phone_ingresos_request_key_uk',
-        'logistica_masther_phone_conciliaciones_modelo_semana_uk'
+        'logistica_masther_phone_conciliaciones_modelo_semana_uk',
+        'logistica_masther_phone_cierres_periodo_uk',
+        'logistica_masther_phone_cierre_detalles_cierre_modelo_origen_uk',
+        'logistica_masther_phone_ajustes_request_key_uk'
       );
   `);
-  if (uniqueIndexes.length !== 2) {
+  if (uniqueIndexes.length !== 5) {
     throw new Error("No se pudieron verificar los índices contra duplicados.");
   }
   const [auditColumns] = await sequelize.query(`

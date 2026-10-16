@@ -1,9 +1,12 @@
 jest.mock("../../controllers/Logistica/mastherPhoneInventarioController", () => ({
   actualizarIngreso: jest.fn(),
   catalogos: jest.fn(),
+  cerrarSemana: jest.fn(),
   eliminarIngreso: jest.fn(),
   guardarConciliacion: jest.fn(),
   listarIngresos: jest.fn(),
+  listarAjustes: jest.fn(),
+  registrarAjuste: jest.fn(),
   registrarIngreso: jest.fn(),
   reporte: jest.fn(),
 }));
@@ -28,6 +31,13 @@ describe("rutas del inventario Masther Phone", () => {
         (layer) =>
           layer.route?.path === "/ingresos/:ingresoId" &&
           layer.route.methods.delete,
+      ),
+    ).toBe(true);
+    expect(
+      router.stack.some(
+        (layer) =>
+          layer.route?.path === "/cierres/:semanaInicio" &&
+          layer.route.methods.post,
       ),
     ).toBe(true);
   });

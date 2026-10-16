@@ -14,6 +14,9 @@ router.get("/ingresos", controller.listarIngresos);
 router.post("/ingresos", controller.registrarIngreso);
 router.put("/ingresos/:ingresoId", controller.actualizarIngreso);
 router.delete("/ingresos/:ingresoId", controller.eliminarIngreso);
+router.get("/ajustes", controller.listarAjustes);
+router.post("/ajustes", controller.registrarAjuste);
+router.post("/cierres/:semanaInicio", controller.cerrarSemana);
 router.put(
   "/conciliaciones/:modeloId/:semanaInicio",
   controller.guardarConciliacion,

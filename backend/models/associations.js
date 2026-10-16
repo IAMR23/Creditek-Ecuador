@@ -96,6 +96,9 @@ const MetaMinimaMultaConfiguracion = require('./MetaMinimaMultaConfiguracion');
 const InventarioSistema = require('./InventarioSistema');
 const LogisticaMastherPhoneIngreso = require('./LogisticaMastherPhoneIngreso');
 const LogisticaMastherPhoneConciliacion = require('./LogisticaMastherPhoneConciliacion');
+const LogisticaMastherPhoneAjuste = require('./LogisticaMastherPhoneAjuste');
+const LogisticaMastherPhoneCierre = require('./LogisticaMastherPhoneCierre');
+const LogisticaMastherPhoneCierreDetalle = require('./LogisticaMastherPhoneCierreDetalle');
 const ReporteCajaUsuarioAgencia = require('./ReporteCajaUsuarioAgencia');
 const ControlFinancieroCarga = require('./ControlFinancieroCarga');
 const ControlFinancieroRegistro = require('./ControlFinancieroRegistro');
@@ -1172,6 +1175,44 @@ Modelo.hasMany(LogisticaMastherPhoneConciliacion, {
 LogisticaMastherPhoneConciliacion.belongsTo(Usuario, {
   foreignKey: "actualizadoPorId",
   as: "actualizadoPor",
+});
+
+LogisticaMastherPhoneAjuste.belongsTo(Modelo, {
+  foreignKey: "modeloId",
+  as: "modelo",
+});
+Modelo.hasMany(LogisticaMastherPhoneAjuste, {
+  foreignKey: "modeloId",
+  as: "ajustesMastherPhone",
+});
+LogisticaMastherPhoneAjuste.belongsTo(Usuario, {
+  foreignKey: "registradoPorId",
+  as: "registradoPor",
+});
+LogisticaMastherPhoneAjuste.belongsTo(LogisticaMastherPhoneCierre, {
+  foreignKey: "cierreCorregidoId",
+  as: "cierreCorregido",
+});
+
+LogisticaMastherPhoneCierre.belongsTo(Usuario, {
+  foreignKey: "cerradoPorId",
+  as: "cerradoPor",
+});
+LogisticaMastherPhoneCierre.hasMany(LogisticaMastherPhoneCierreDetalle, {
+  foreignKey: "cierreId",
+  as: "detalles",
+});
+LogisticaMastherPhoneCierreDetalle.belongsTo(LogisticaMastherPhoneCierre, {
+  foreignKey: "cierreId",
+  as: "cierre",
+});
+LogisticaMastherPhoneCierreDetalle.belongsTo(Modelo, {
+  foreignKey: "modeloId",
+  as: "modelo",
+});
+Modelo.hasMany(LogisticaMastherPhoneCierreDetalle, {
+  foreignKey: "modeloId",
+  as: "cierresMastherPhone",
 });
 
 /* CONFIGURACION AGENCIAS DE REPORTES DE CAJA */

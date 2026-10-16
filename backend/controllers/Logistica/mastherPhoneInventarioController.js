@@ -76,11 +76,45 @@ const reporte = async (req, res) => {
     const data = await service.getReport({
       weekStart: req.query.semanaInicio,
       dateFrom: req.query.fechaInicio,
-      dateTo: req.query.fechaFin,
       brandId: req.query.marcaId,
       modelId: req.query.modeloId,
     });
     return res.json({ ok: true, ...data });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+const registrarAjuste = async (req, res) => {
+  try {
+    const result = await service.registerAdjustment(req.body, req.user?.id);
+    return res.status(result.duplicado ? 200 : 201).json({ ok: true, ...result });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+const listarAjustes = async (req, res) => {
+  try {
+    const ajustes = await service.listAdjustments({
+      dateFrom: req.query.fechaInicio,
+      dateTo: req.query.fechaFin,
+      brandId: req.query.marcaId,
+      modelId: req.query.modeloId,
+    });
+    return res.json({ ok: true, ajustes });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+const cerrarSemana = async (req, res) => {
+  try {
+    const data = await service.closeWeek(
+      { weekStart: req.params.semanaInicio },
+      req.user?.id,
+    );
+    return res.status(201).json({ ok: true, ...data });
   } catch (error) {
     return sendError(res, error);
   }
@@ -105,9 +139,12 @@ const guardarConciliacion = async (req, res) => {
 module.exports = {
   actualizarIngreso,
   catalogos,
+  cerrarSemana,
   eliminarIngreso,
   guardarConciliacion,
+  listarAjustes,
   listarIngresos,
+  registrarAjuste,
   registrarIngreso,
   reporte,
 };

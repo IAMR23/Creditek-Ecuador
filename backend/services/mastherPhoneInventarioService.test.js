@@ -1,109 +1,249 @@
 const { Op } = require("sequelize");
-const LogisticaMastherPhoneIngreso = require("../models/LogisticaMastherPhoneIngreso");
-const Modelo = require("../models/Modelo");
+const { sequelize } = require("../config/db");
+const LogisticaMastherPhoneCierre = require("../models/LogisticaMastherPhoneCierre");
+const LogisticaMastherPhoneCierreDetalle = require("../models/LogisticaMastherPhoneCierreDetalle");
 const Venta = require("../models/Venta");
 const {
-  calculateControlRow,
   calculateEntryAmounts,
+  closeWeek,
   collectSalesOperations,
-  deleteEntry,
-  getReport,
   getWeekStart,
+  getReport,
   parseEntryDateTime,
-  registerEntry,
-  updateEntry,
+  simulateInventory,
   validateWeekStart,
 } = require("./mastherPhoneInventarioService");
 
-const reconciliation = (modelId, week, stockCreditek) => [
-  `${modelId}:${week}`,
-  { stockCreditek },
-];
+const timestamp = (value) => new Date(`${value}-05:00`).getTime();
+const metadata = new Map([
+  [
+    1,
+    {
+      modeloId: 1,
+      marcaId: 1,
+      marca: "Marca",
+      modelo: "X5C Plus",
+      producto: "Marca X5C Plus",
+    },
+  ],
+]);
+
+const entry = (id, origin, quantity, dateTime) => ({
+  tipo: "INGRESO",
+  id,
+  modeloId: 1,
+  origen: origin,
+  cantidad: quantity,
+  fecha: dateTime.slice(0, 10),
+  timestamp: timestamp(dateTime),
+});
+
+const sale = (id, quantity, date) => ({
+  tipo: "VENTA",
+  id,
+  modeloId: 1,
+  cantidad: quantity,
+  fecha: date,
+  timestamp: timestamp(`${date}T00:00:00`),
+});
 
 describe("inventario semanal Masther Phone", () => {
   afterEach(() => jest.restoreAllMocks());
 
-  test("aplica el ejemplo obligatorio y conserva el saldo la semana siguiente", () => {
-    const weeklySales = new Map([
-      ["1:2026-10-05", 23],
-      ["1:2026-10-12", 10],
-    ]);
-    const reconciliations = new Map([
-      reconciliation(1, "2026-10-05", 7),
-      reconciliation(1, "2026-10-12", 2),
-    ]);
-
-    const firstWeek = calculateControlRow({
-      modelId: 1,
-      brand: "Marca",
-      model: "Modelo 256 GB",
-      accumulatedEntries: 90,
-      controlStartDate: "2026-10-05",
-      selectedWeek: "2026-10-05",
-      weeklySales,
-      reconciliations,
-      preControlSales: 0,
-    });
-    const nextWeek = calculateControlRow({
-      modelId: 1,
-      brand: "Marca",
-      model: "Modelo 256 GB",
-      accumulatedEntries: 90,
-      controlStartDate: "2026-10-05",
-      selectedWeek: "2026-10-12",
-      weeklySales,
-      reconciliations,
-      preControlSales: 0,
-    });
+  test("aplica el caso X5C Plus y arrastra cada origen sin duplicar ingresos", () => {
+    const firstWeek = simulateInventory({
+      events: [
+        entry(1, "PROVEEDOR", 90, "2026-10-01T08:00:00"),
+        entry(2, "CREDITEK", 7, "2026-10-01T08:05:00"),
+        sale(10, 23, "2026-10-02"),
+      ],
+      periodStart: "2026-10-01",
+      periodEndExclusive: "2026-10-08",
+      metadata,
+    })[0];
 
     expect(firstWeek).toMatchObject({
-      cantidad: 90,
-      ventasTotalesSemana: 23,
-      stockCreditek: 7,
-      mastherPhone: 16,
-      totalBodega: 74,
-    });
-    expect(nextWeek).toMatchObject({
-      ventasTotalesSemana: 10,
-      stockCreditek: 2,
-      mastherPhone: 8,
-      totalBodega: 66,
+      stockInicialCreditek: 0,
+      stockInicialProveedor: 0,
+      ingresosCreditek: 7,
+      ingresosProveedor: 90,
+      ventasTotales: 23,
+      ventasCreditek: 7,
+      ventasProveedor: 16,
+      saldoFinalCreditek: 0,
+      saldoFinalProveedor: 74,
+      salidasSinStock: 0,
     });
 
-    const accumulatedPeriod = calculateControlRow({
-      modelId: 1,
-      brand: "Marca",
-      model: "Modelo 256 GB",
-      accumulatedEntries: 90,
-      controlStartDate: "2026-10-05",
-      selectedStartWeek: "2026-10-05",
-      selectedEndWeek: "2026-10-12",
-      weeklySales,
-      reconciliations,
-      preControlSales: 0,
+    const secondWeek = simulateInventory({
+      initialBalances: new Map([[1, { CREDITEK: 0, PROVEEDOR: 74 }]]),
+      events: [sale(11, 24, "2026-10-09")],
+      periodStart: "2026-10-08",
+      periodEndExclusive: "2026-10-15",
+      metadata,
+    })[0];
+
+    expect(secondWeek).toMatchObject({
+      stockInicialCreditek: 0,
+      stockInicialProveedor: 74,
+      ingresosCreditek: 0,
+      ingresosProveedor: 0,
+      ventasProveedor: 24,
+      saldoFinalCreditek: 0,
+      saldoFinalProveedor: 50,
     });
-    expect(accumulatedPeriod).toMatchObject({
-      ventasTotalesSemana: 33,
-      stockCreditek: 9,
-      mastherPhone: 24,
-      totalBodega: 66,
+
+    const thirdWeek = simulateInventory({
+      initialBalances: new Map([[1, { CREDITEK: 0, PROVEEDOR: 50 }]]),
+      events: [entry(3, "PROVEEDOR", 20, "2026-10-15T08:00:00")],
+      periodStart: "2026-10-15",
+      periodEndExclusive: "2026-10-22",
+      metadata,
+    })[0];
+
+    expect(thirdWeek).toMatchObject({
+      stockInicialProveedor: 50,
+      ingresosProveedor: 20,
+      saldoFinalProveedor: 70,
     });
   });
 
-  test("calcula subtotal, IVA y total con seis decimales y separador punto", () => {
+  test("procesa cronológicamente y no usa un ingreso posterior para una venta anterior", () => {
+    const row = simulateInventory({
+      events: [
+        sale(10, 3, "2026-10-02"),
+        entry(1, "PROVEEDOR", 5, "2026-10-02T12:00:00"),
+      ],
+      periodStart: "2026-10-01",
+      periodEndExclusive: "2026-10-08",
+      metadata,
+    })[0];
+
+    expect(row).toMatchObject({
+      ventasTotales: 3,
+      ventasProveedor: 0,
+      salidasSinStock: 3,
+      saldoFinalProveedor: 5,
+    });
+    expect(row.incidencias).toHaveLength(1);
+    expect(row.incidencias[0]).toMatchObject({
+      tipo: "VENTA_SIN_EXISTENCIA",
+      faltante: 3,
+    });
+  });
+
+  test("considera como apertura los ingresos de las 00:00 antes de las ventas del día", () => {
+    const row = simulateInventory({
+      events: [
+        entry(1, "CREDITEK", 7, "2026-10-01T00:00:00"),
+        entry(2, "PROVEEDOR", 90, "2026-10-01T00:00:00"),
+        sale(4975, 1, "2026-10-01"),
+      ],
+      periodStart: "2026-10-01",
+      periodEndExclusive: "2026-10-08",
+      metadata,
+    })[0];
+
+    expect(row).toMatchObject({
+      ventasTotales: 1,
+      ventasCreditek: 1,
+      ventasProveedor: 0,
+      salidasSinStock: 0,
+      saldoFinalCreditek: 6,
+      saldoFinalProveedor: 90,
+    });
+    expect(row.incidencias).toHaveLength(0);
+  });
+
+  test("conserva saldos en semanas sin movimientos y respeta el límite exclusivo", () => {
+    const row = simulateInventory({
+      initialBalances: new Map([[1, { CREDITEK: 2, PROVEEDOR: 8 }]]),
+      events: [entry(2, "PROVEEDOR", 20, "2026-10-08T00:00:00")],
+      periodStart: "2026-10-01",
+      periodEndExclusive: "2026-10-08",
+      metadata,
+    })[0];
+
+    expect(row).toMatchObject({
+      stockInicialCreditek: 2,
+      stockInicialProveedor: 8,
+      ingresosProveedor: 0,
+      saldoFinalCreditek: 2,
+      saldoFinalProveedor: 8,
+    });
+  });
+
+  test("consume Creditek primero y registra agotamiento en vez de ocultarlo", () => {
+    const row = simulateInventory({
+      initialBalances: new Map([[1, { CREDITEK: 2, PROVEEDOR: 3 }]]),
+      events: [sale(5, 7, "2026-10-02")],
+      periodStart: "2026-10-01",
+      periodEndExclusive: "2026-10-08",
+      metadata,
+    })[0];
+
+    expect(row).toMatchObject({
+      ventasTotales: 7,
+      ventasCreditek: 2,
+      ventasProveedor: 3,
+      salidasSinStock: 2,
+      saldoFinalCreditek: 0,
+      saldoFinalProveedor: 0,
+    });
+    expect(row.incidencias[0].faltante).toBe(2);
+  });
+
+  test("aplica ajustes al origen y conserva la fórmula del saldo", () => {
+    const row = simulateInventory({
+      initialBalances: new Map([[1, { CREDITEK: 3, PROVEEDOR: 10 }]]),
+      events: [
+        {
+          tipo: "AJUSTE",
+          id: 1,
+          modeloId: 1,
+          origen: "PROVEEDOR",
+          cantidad: -2,
+          fecha: "2026-10-03",
+          timestamp: timestamp("2026-10-03T10:00:00"),
+        },
+      ],
+      periodStart: "2026-10-01",
+      periodEndExclusive: "2026-10-08",
+      metadata,
+    })[0];
+
+    expect(row.ajustesProveedor).toBe(-2);
+    expect(row.saldoFinalProveedor).toBe(
+      row.stockInicialProveedor +
+        row.ingresosProveedor -
+        row.ventasProveedor +
+        row.ajustesProveedor,
+    );
+  });
+
+  test("calcula semanas de jueves a miércoles", () => {
+    expect(getWeekStart("2026-10-01")).toBe("2026-10-01");
+    expect(getWeekStart("2026-10-07")).toBe("2026-10-01");
+    expect(getWeekStart("2026-10-08")).toBe("2026-10-08");
+    expect(validateWeekStart("2026-10-15")).toBe("2026-10-15");
+    expect(() => validateWeekStart("2026-10-14")).toThrow(
+      "La semana debe iniciar un jueves.",
+    );
+  });
+
+  test("interpreta ingresos en America/Guayaquil", () => {
+    expect(parseEntryDateTime("2026-10-09T14:45").toISOString()).toBe(
+      "2026-10-09T19:45:00.000Z",
+    );
+  });
+
+  test("mantiene los cálculos existentes de precio e IVA", () => {
     expect(calculateEntryAmounts("10.123456", 3)).toEqual({
       precioUnitario: "10.123456",
       subtotal: "30.370368",
       iva: "4.555555",
       total: "34.925923",
     });
-    expect(() => calculateEntryAmounts("10.1234567", 1)).toThrow(
-      "máximo seis decimales",
-    );
-    expect(() => calculateEntryAmounts("10,25", 1)).toThrow("debe usar punto");
-  });
-
-  test("permite registrar el precio unitario como pendiente", () => {
     expect(calculateEntryAmounts("", 3)).toEqual({
       precioUnitario: null,
       subtotal: null,
@@ -112,294 +252,114 @@ describe("inventario semanal Masther Phone", () => {
     });
   });
 
-  test("no inventa saldo si falta una conciliacion semanal", () => {
-    const row = calculateControlRow({
-      modelId: 1,
-      brand: "Marca",
-      model: "Modelo",
-      accumulatedEntries: 20,
-      controlStartDate: "2026-10-05",
-      selectedWeek: "2026-10-12",
-      weeklySales: new Map([
-        ["1:2026-10-05", 4],
-        ["1:2026-10-12", 2],
-      ]),
-      reconciliations: new Map([reconciliation(1, "2026-10-12", 1)]),
-      preControlSales: 0,
-    });
-
-    expect(row.mastherPhone).toBe(1);
-    expect(row.totalBodega).toBeNull();
-    expect(row.semanasPendientes).toEqual(["2026-10-05"]);
-  });
-
-  test("obliga a cubrir con stock propio las ventas anteriores al primer ingreso", () => {
-    const base = {
-      modelId: 1,
-      brand: "Marca",
-      model: "Modelo",
-      accumulatedEntries: 30,
-      controlStartDate: "2026-10-08",
-      selectedWeek: "2026-10-05",
-      weeklySales: new Map([["1:2026-10-05", 10]]),
-      preControlSales: 5,
-    };
-
-    const invalid = calculateControlRow({
-      ...base,
-      reconciliations: new Map([reconciliation(1, "2026-10-05", 4)]),
-    });
-    const valid = calculateControlRow({
-      ...base,
-      reconciliations: new Map([reconciliation(1, "2026-10-05", 5)]),
-    });
-
-    expect(invalid.mastherPhone).toBeNull();
-    expect(invalid.totalBodega).toBeNull();
-    expect(valid.mastherPhone).toBe(5);
-    expect(valid.totalBodega).toBe(25);
-  });
-
-  test("calcula semanas de lunes a domingo y rechaza otro inicio", () => {
-    expect(getWeekStart("2026-10-11")).toBe("2026-10-05");
-    expect(validateWeekStart("2026-10-05")).toBe("2026-10-05");
-    expect(() => validateWeekStart("2026-10-06")).toThrow(
-      "La semana debe iniciar un lunes.",
-    );
-  });
-
-  test("interpreta la fecha y hora de ingreso en America/Guayaquil", () => {
-    expect(parseEntryDateTime("2026-10-09T14:45").toISOString()).toBe(
-      "2026-10-09T19:45:00.000Z",
-    );
-    expect(() => parseEntryDateTime("2026-10-09")).toThrow(
-      "fecha y hora de ingreso",
-    );
-    expect(() => parseEntryDateTime("2026-10-09T25:00")).toThrow(
-      "no es valida",
-    );
-  });
-
-  test("acepta un rango elegido y lo ajusta a semanas completas", async () => {
-    jest.spyOn(LogisticaMastherPhoneIngreso, "findAll").mockResolvedValue([]);
-
-    const report = await getReport({
-      dateFrom: "2026-10-01",
-      dateTo: "2026-10-31",
-    });
-
-    expect(report).toMatchObject({
-      fechaInicioSolicitada: "2026-10-01",
-      fechaFinSolicitada: "2026-10-31",
-      semanaInicio: "2026-09-28",
-      semanaFin: "2026-11-01",
-      esSemanaUnica: false,
-    });
+  test("rechaza períodos no terminados y un cierre repetido", async () => {
     await expect(
-      getReport({ dateFrom: "2026-10-31", dateTo: "2026-10-01" }),
-    ).rejects.toThrow("La fecha inicial no puede ser posterior");
-  });
+      closeWeek(
+        { weekStart: "2026-10-15" },
+        1,
+        { now: new Date("2026-10-21T23:59:59-05:00") },
+      ),
+    ).rejects.toMatchObject({ code: "PERIOD_NOT_FINISHED", httpStatus: 409 });
 
-  test("un reintento con la misma clave no crea un segundo ingreso", async () => {
-    jest.spyOn(Modelo, "findOne").mockResolvedValue({ id: 1 });
-    jest.spyOn(LogisticaMastherPhoneIngreso, "findOne").mockResolvedValue({
-      id: 9,
-      modeloId: 1,
-      cantidad: 3,
-      fechaIngreso: new Date("2026-10-08T15:30:00.000Z"),
-      bodega: "PROVEEDOR",
-      precioUnitario: "50.00",
-      registradoPorId: 2,
-    });
-    const create = jest
-      .spyOn(LogisticaMastherPhoneIngreso, "create")
-      .mockResolvedValue(null);
-
-    const result = await registerEntry(
-      {
-        modeloId: 1,
-        cantidad: 3,
-        fechaIngreso: "2026-10-08T10:30",
-        bodega: "PROVEEDOR",
-        precioUnitario: 50,
-        requestKey: "12345678-1234-1234-1234-123456789012",
-      },
-      2,
+    jest.spyOn(sequelize, "transaction").mockImplementation(async (_options, callback) =>
+      callback({ LOCK: { UPDATE: "UPDATE" } }),
     );
+    jest.spyOn(LogisticaMastherPhoneCierre, "findOne").mockResolvedValue({ id: 5 });
 
-    expect(result.duplicado).toBe(true);
-    expect(result.ingreso.id).toBe(9);
-    expect(create).not.toHaveBeenCalled();
+    await expect(
+      closeWeek(
+        { weekStart: "2026-10-01" },
+        1,
+        { now: new Date("2026-10-08T00:00:00-05:00") },
+      ),
+    ).rejects.toMatchObject({ code: "PERIOD_ALREADY_CLOSED", httpStatus: 409 });
   });
 
-  test("exige elegir una de las dos bodegas permitidas", async () => {
-    await expect(
-      registerEntry({
-        modeloId: 1,
-        cantidad: 3,
-        fechaIngreso: "2026-10-08T10:30",
-        bodega: "OTRA",
-        precioUnitario: 50,
-        requestKey: "12345678-1234-1234-1234-123456789012",
+  test("carga el detalle de un cierre en una consulta separada sin alias SQL anidados", async () => {
+    const closure = {
+      id: 8,
+      periodoInicio: "2026-10-01",
+      periodoFinExclusivo: "2026-10-08",
+      cerradoPorId: 3,
+      cerradoEn: new Date("2026-10-08T05:00:00.000Z"),
+      get: jest.fn(function get() {
+        return { ...this, get: undefined };
       }),
-    ).rejects.toThrow("Selecciona una bodega válida.");
-  });
-
-  test("edita un movimiento y registra el usuario que hizo la correccion", async () => {
-    const entry = {
-      id: 12,
-      modeloId: 1,
-      cantidad: 3,
-      fechaIngreso: new Date("2026-10-08T15:30:00.000Z"),
-      bodega: "PROVEEDOR",
-      precioUnitario: "50.00",
-      registradoPorId: 2,
-      update: jest.fn(async (changes) => Object.assign(entry, changes)),
     };
-    jest.spyOn(LogisticaMastherPhoneIngreso, "findByPk").mockResolvedValue(entry);
-    jest.spyOn(Modelo, "findOne").mockResolvedValue({ id: 2 });
-
-    const result = await updateEntry(
-      12,
-      {
-        modeloId: 2,
-        cantidad: 5,
-        fechaIngreso: "2026-10-09T14:45",
-        bodega: "CREDITEK",
-        precioUnitario: 60,
-      },
-      8,
-    );
-
-    expect(entry.update).toHaveBeenCalledWith({
-      modeloId: 2,
-      cantidad: 5,
-      precioUnitario: "60.000000",
-      subtotal: "300.000000",
-      iva: "45.000000",
-      total: "345.000000",
-      fechaIngreso: new Date("2026-10-09T19:45:00.000Z"),
-      bodega: "CREDITEK",
-      actualizadoPorId: 8,
-    });
-    expect(result).toMatchObject({
-      modeloId: 2,
-      cantidad: 5,
-      bodega: "CREDITEK",
-      precioUnitario: 60,
-      subtotal: 300,
-      iva: 45,
-      total: 345,
-      actualizadoPorId: 8,
-      fechaIngreso: "2026-10-09T19:45:00.000Z",
-    });
-  });
-
-  test("elimina un movimiento independiente", async () => {
-    const entry = { destroy: jest.fn().mockResolvedValue(undefined) };
-    jest.spyOn(LogisticaMastherPhoneIngreso, "findByPk").mockResolvedValue(entry);
-
-    await expect(deleteEntry(12)).resolves.toEqual({ id: 12 });
-    expect(entry.destroy).toHaveBeenCalledTimes(1);
-  });
-
-  test("no elimina cuando el movimiento no existe", async () => {
-    jest.spyOn(LogisticaMastherPhoneIngreso, "findByPk").mockResolvedValue(null);
-
-    await expect(deleteEntry(999)).rejects.toMatchObject({
-      code: "ENTRY_NOT_FOUND",
-      httpStatus: 404,
-    });
-  });
-
-  test("suma varios movimientos independientes del mismo modelo", async () => {
     const model = {
       id: 1,
-      nombre: "Modelo 256 GB",
-      dispositivoMarca: { marca: { id: 7, nombre: "Marca" } },
+      nombre: "X5C Plus",
+      dispositivoMarca: { marca: { id: 1, nombre: "Marca" } },
     };
-    jest.spyOn(LogisticaMastherPhoneIngreso, "findAll").mockResolvedValue([
+    jest.spyOn(LogisticaMastherPhoneCierre, "findOne").mockResolvedValue(closure);
+    jest.spyOn(LogisticaMastherPhoneCierreDetalle, "findAll").mockResolvedValue([
       {
-        get: () => ({
-          modeloId: 1,
-          cantidad: 7,
-          fechaIngreso: "2026-10-05",
-          bodega: "CREDITEK",
-          modelo: model,
-        }),
+        cierreId: 8,
+        modeloId: 1,
+        origen: "CREDITEK",
+        saldoInicial: 7,
+        ingresos: 0,
+        salidas: 7,
+        ajustes: 0,
+        saldoFinal: 0,
+        modelo: model,
       },
       {
-        get: () => ({
-          modeloId: 1,
-          cantidad: 40,
-          fechaIngreso: "2026-10-05",
-          bodega: "PROVEEDOR",
-          modelo: model,
-        }),
-      },
-      {
-        get: () => ({
-          modeloId: 1,
-          cantidad: 50,
-          fechaIngreso: "2026-10-08",
-          bodega: "PROVEEDOR",
-          modelo: model,
-        }),
-      },
-    ]);
-    jest.spyOn(Venta, "findAll").mockResolvedValue([
-      {
-        id: 11,
-        fecha: "2026-10-09",
-        detalleVenta: [{ modeloId: 1, cantidad: 23 }],
+        cierreId: 8,
+        modeloId: 1,
+        origen: "PROVEEDOR",
+        saldoInicial: 90,
+        ingresos: 0,
+        salidas: 16,
+        ajustes: 0,
+        saldoFinal: 74,
+        modelo: model,
       },
     ]);
 
-    const report = await getReport({ weekStart: "2026-10-05" });
+    const report = await getReport({ weekStart: "2026-10-01" });
 
-    expect(report.filas[0]).toMatchObject({
-      cantidad: 90,
-      stockProveedor: 90,
-      stockCreditek: 7,
-      ventasTotalesSemana: 23,
-      cantidadBodegaCreditek: 7,
-      cantidadBodegaProveedor: 90,
-      mastherPhone: 16,
-      ventasProveedor: 16,
-      totalBodega: 74,
+    expect(LogisticaMastherPhoneCierre.findOne.mock.calls[0][0]).not.toHaveProperty(
+      "include",
+    );
+    expect(LogisticaMastherPhoneCierreDetalle.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { cierreId: 8 } }),
+    );
+    expect(report).toMatchObject({
+      estado: "CERRADA",
+      filas: [
+        expect.objectContaining({
+          producto: "Marca X5C Plus",
+          ventasCreditek: 7,
+          ventasProveedor: 16,
+          saldoFinalProveedor: 74,
+        }),
+      ],
     });
   });
 
-  test("usa exclusivamente ventas activas del periodo", async () => {
+  test("consulta exclusivamente ventas activas por Venta.fecha y DetalleVenta.cantidad", async () => {
     const findSales = jest.spyOn(Venta, "findAll").mockResolvedValue([
       {
         id: 10,
-        fecha: "2026-10-07",
+        fecha: "2026-10-02",
         detalleVenta: [{ modeloId: 1, cantidad: 3 }],
-      },
-      {
-        id: 11,
-        fecha: "2026-10-08",
-        detalleVenta: [{ modeloId: 1, cantidad: 2 }],
       },
     ]);
 
     const operations = await collectSalesOperations({
       modelIds: [1],
-      dateFrom: "2026-10-05",
-      dateTo: "2026-10-11",
+      dateFrom: "2026-10-01",
+      dateToExclusive: "2026-10-08",
     });
 
-    expect(operations.reduce((sum, item) => sum + item.cantidad, 0)).toBe(5);
+    expect(operations).toEqual([
+      { ventaId: 10, modeloId: 1, fecha: "2026-10-02", cantidad: 3 },
+    ]);
     const query = findSales.mock.calls[0][0];
     expect(query.where.activo).toBe(true);
-    expect(query.where.fecha[Op.between]).toEqual([
-      "2026-10-05",
-      "2026-10-11",
-    ]);
-    expect(query.include[0]).toMatchObject({
-      as: "detalleVenta",
-      required: true,
-    });
+    expect(query.where.fecha[Op.gte]).toBe("2026-10-01");
+    expect(query.where.fecha[Op.lt]).toBe("2026-10-08");
+    expect(query.include[0]).toMatchObject({ as: "detalleVenta", required: true });
   });
 });

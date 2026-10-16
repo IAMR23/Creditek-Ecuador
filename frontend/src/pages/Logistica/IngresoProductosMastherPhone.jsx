@@ -4,12 +4,15 @@ import {
   AlertTriangle,
   Boxes,
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  LockKeyhole,
   PackagePlus,
   Pencil,
   RefreshCw,
   Save,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -44,39 +47,13 @@ const toEcuadorDateTimeLocal = (value = new Date()) => {
 
 const addDays = (dateOnly, days) => {
   const [year, month, day] = dateOnly.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day + days))
-    .toISOString()
-    .slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 };
 
 const getWeekStart = (dateOnly) => {
   const [year, month, day] = dateOnly.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  const dayOfWeek = date.getUTCDay();
-  return addDays(dateOnly, -(dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-};
-
-const getPresetRange = (type) => {
-  const today = getEcuadorDate();
-  const [year, month] = today.split("-").map(Number);
-  if (type === "SEMANA") {
-    const start = getWeekStart(today);
-    return { fechaInicio: start, fechaFin: addDays(start, 6) };
-  }
-  if (type === "SIETE_DIAS") {
-    return { fechaInicio: addDays(today, -6), fechaFin: today };
-  }
-  if (type === "MES") {
-    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    return {
-      fechaInicio: `${year}-${String(month).padStart(2, "0")}-01`,
-      fechaFin: `${year}-${String(month).padStart(2, "0")}-${lastDay}`,
-    };
-  }
-  if (type === "ANIO") {
-    return { fechaInicio: `${year}-01-01`, fechaFin: `${year}-12-31` };
-  }
-  return null;
+  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return addDays(dateOnly, -((dayOfWeek - 4 + 7) % 7));
 };
 
 const createRequestKey = () =>
@@ -90,6 +67,17 @@ const initialEntry = () => ({
   fechaIngreso: toEcuadorDateTimeLocal(),
   cantidad: 1,
   precioUnitario: "",
+  requestKey: createRequestKey(),
+});
+
+const initialAdjustment = () => ({
+  marcaId: "",
+  modeloId: "",
+  origen: "",
+  fechaAjuste: toEcuadorDateTimeLocal(),
+  cantidad: "",
+  motivo: "",
+  corregirCierreVisible: false,
   requestKey: createRequestKey(),
 });
 
@@ -114,6 +102,11 @@ const formatDateTime = (value) => {
 
 const formatNumber = (value) =>
   new Intl.NumberFormat("es-EC", { maximumFractionDigits: 0 }).format(value || 0);
+
+const formatSigned = (value) => {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${formatNumber(number)}`;
+};
 
 const formatCurrency = (value) =>
   value === null || value === undefined
@@ -151,54 +144,46 @@ const calculateAmounts = (quantityValue, unitPriceValue) => {
 const getErrorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
 
-function PendingValue() {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">
-      <AlertTriangle size={13} /> Pendiente de conciliación
-    </span>
-  );
-}
+const modelsForBrand = (catalog, brandId) =>
+  brandId
+    ? catalog.modelos.filter((model) => String(model.marcaId) === String(brandId))
+    : catalog.modelos;
 
 export default function IngresoProductosMastherPhone() {
   const [catalog, setCatalog] = useState({ marcas: [], modelos: [] });
   const [entry, setEntry] = useState(initialEntry);
+  const [adjustment, setAdjustment] = useState(initialAdjustment);
   const [filters, setFilters] = useState({ marcaId: "", modeloId: "" });
-  const [periodType, setPeriodType] = useState("SEMANA");
-  const [period, setPeriod] = useState(() => getPresetRange("SEMANA"));
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(getEcuadorDate()));
   const [report, setReport] = useState(null);
   const [entries, setEntries] = useState([]);
+  const [adjustments, setAdjustments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingEntry, setSavingEntry] = useState(false);
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [savingEntryEdit, setSavingEntryEdit] = useState(false);
   const [deletingEntryId, setDeletingEntryId] = useState(null);
   const [error, setError] = useState("");
 
+  const weekEnd = addDays(weekStart, 6);
   const entryModels = useMemo(
-    () =>
-      catalog.modelos.filter(
-        (model) => String(model.marcaId) === String(entry.marcaId),
-      ),
-    [catalog.modelos, entry.marcaId],
+    () => modelsForBrand(catalog, entry.marcaId),
+    [catalog, entry.marcaId],
+  );
+  const adjustmentModels = useMemo(
+    () => modelsForBrand(catalog, adjustment.marcaId),
+    [adjustment.marcaId, catalog],
   );
   const filterModels = useMemo(
-    () =>
-      filters.marcaId
-        ? catalog.modelos.filter(
-            (model) => String(model.marcaId) === String(filters.marcaId),
-          )
-        : catalog.modelos,
-    [catalog.modelos, filters.marcaId],
+    () => modelsForBrand(catalog, filters.marcaId),
+    [catalog, filters.marcaId],
   );
   const editModels = useMemo(
-    () =>
-      editDraft
-        ? catalog.modelos.filter(
-            (model) => String(model.marcaId) === String(editDraft.marcaId),
-          )
-        : [],
-    [catalog.modelos, editDraft],
+    () => modelsForBrand(catalog, editDraft?.marcaId),
+    [catalog, editDraft?.marcaId],
   );
   const entryAmounts = useMemo(
     () => calculateAmounts(entry.cantidad, entry.precioUnitario),
@@ -209,62 +194,56 @@ export default function IngresoProductosMastherPhone() {
     [editDraft?.cantidad, editDraft?.precioUnitario],
   );
 
+  const filterParams = useMemo(
+    () => ({
+      ...(filters.marcaId ? { marcaId: filters.marcaId } : {}),
+      ...(filters.modeloId ? { modeloId: filters.modeloId } : {}),
+    }),
+    [filters.marcaId, filters.modeloId],
+  );
+
   const loadCatalog = useCallback(async () => {
     const { data } = await api.get("/api/logistica/masther-phone/catalogos");
     setCatalog({ marcas: data.marcas || [], modelos: data.modelos || [] });
   }, []);
 
-  const loadReport = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.get("/api/logistica/masther-phone/reporte", {
-        params: {
-          fechaInicio: period.fechaInicio,
-          fechaFin: period.fechaFin,
-          ...(filters.marcaId ? { marcaId: filters.marcaId } : {}),
-          ...(filters.modeloId ? { modeloId: filters.modeloId } : {}),
-        },
-      });
-      setReport(data);
+      const [reportResponse, entriesResponse, adjustmentsResponse] = await Promise.all([
+        api.get("/api/logistica/masther-phone/reporte", {
+          params: { semanaInicio: weekStart, ...filterParams },
+        }),
+        api.get("/api/logistica/masther-phone/ingresos", {
+          params: { fechaInicio: weekStart, fechaFin: addDays(weekStart, 6), ...filterParams },
+        }),
+        api.get("/api/logistica/masther-phone/ajustes", {
+          params: { fechaInicio: weekStart, fechaFin: addDays(weekStart, 6), ...filterParams },
+        }),
+      ]);
+      setReport(reportResponse.data);
+      setEntries(entriesResponse.data.ingresos || []);
+      setAdjustments(adjustmentsResponse.data.ajustes || []);
     } catch (requestError) {
       setReport(null);
+      setEntries([]);
+      setAdjustments([]);
       setError(getErrorMessage(requestError, "No se pudo cargar el control semanal."));
     } finally {
       setLoading(false);
     }
-  }, [filters.marcaId, filters.modeloId, period.fechaFin, period.fechaInicio]);
-
-  const loadEntries = useCallback(async () => {
-    try {
-      const { data } = await api.get("/api/logistica/masther-phone/ingresos", {
-        params: {
-          fechaInicio: period.fechaInicio,
-          fechaFin: period.fechaFin,
-          ...(filters.marcaId ? { marcaId: filters.marcaId } : {}),
-          ...(filters.modeloId ? { modeloId: filters.modeloId } : {}),
-        },
-      });
-      setEntries(data.ingresos || []);
-    } catch (requestError) {
-      setEntries([]);
-      setError(getErrorMessage(requestError, "No se pudieron cargar los movimientos."));
-    }
-  }, [filters.marcaId, filters.modeloId, period.fechaFin, period.fechaInicio]);
+  }, [filterParams, weekStart]);
 
   useEffect(() => {
-    loadCatalog().catch((requestError) => {
-      setError(getErrorMessage(requestError, "No se pudo cargar el catálogo."));
-    });
+    loadCatalog().catch((requestError) =>
+      setError(getErrorMessage(requestError, "No se pudo cargar el catálogo.")),
+    );
   }, [loadCatalog]);
 
   useEffect(() => {
-    loadReport();
-  }, [loadReport]);
-
-  useEffect(() => {
-    loadEntries();
-  }, [loadEntries]);
+    loadData();
+  }, [loadData]);
 
   const submitEntry = async (event) => {
     event.preventDefault();
@@ -276,16 +255,14 @@ export default function IngresoProductosMastherPhone() {
       !entry.fechaIngreso ||
       !Number.isInteger(quantity) ||
       quantity < 1 ||
-      (String(entry.precioUnitario).trim() &&
-        !isValidUnitPrice(entry.precioUnitario))
+      (String(entry.precioUnitario).trim() && !isValidUnitPrice(entry.precioUnitario))
     ) {
       return Swal.fire(
         "Datos incompletos",
-        "Selecciona todos los datos. Si ingresas un precio, debe usar punto y tener máximo seis decimales.",
+        "Selecciona todos los datos. Si ingresas un precio, usa punto y máximo seis decimales.",
         "warning",
       );
     }
-
     try {
       setSavingEntry(true);
       const { data } = await api.post("/api/logistica/masther-phone/ingresos", {
@@ -297,56 +274,96 @@ export default function IngresoProductosMastherPhone() {
         requestKey: entry.requestKey,
       });
       setEntry(initialEntry());
-      await Promise.all([loadReport(), loadEntries()]);
+      await loadData();
       await Swal.fire(
         data.duplicado ? "Ingreso ya registrado" : "Ingreso registrado",
         data.duplicado
           ? "La solicitud ya había sido procesada; no se duplicó la cantidad."
-          : "El movimiento independiente fue guardado correctamente.",
+          : "El movimiento fue guardado en el origen seleccionado.",
         "success",
       );
     } catch (requestError) {
-      Swal.fire(
-        "Error",
-        getErrorMessage(requestError, "No se pudo registrar el ingreso."),
-        "error",
-      );
+      Swal.fire("Error", getErrorMessage(requestError, "No se pudo registrar el ingreso."), "error");
     } finally {
       setSavingEntry(false);
     }
   };
 
-  const applyPeriodType = (type) => {
-    setPeriodType(type);
-    const preset = getPresetRange(type);
-    if (preset) setPeriod(preset);
+  const submitAdjustment = async (event) => {
+    event.preventDefault();
+    const quantity = Number(adjustment.cantidad);
+    if (
+      !adjustment.marcaId ||
+      !adjustment.modeloId ||
+      !adjustment.origen ||
+      !adjustment.fechaAjuste ||
+      !Number.isInteger(quantity) ||
+      quantity === 0 ||
+      adjustment.motivo.trim().length < 5
+    ) {
+      return Swal.fire(
+        "Ajuste incompleto",
+        "Indica producto, origen, un entero distinto de cero y un motivo de al menos 5 caracteres.",
+        "warning",
+      );
+    }
+    try {
+      setSavingAdjustment(true);
+      await api.post("/api/logistica/masther-phone/ajustes", {
+        modeloId: Number(adjustment.modeloId),
+        origen: adjustment.origen,
+        fechaAjuste: adjustment.fechaAjuste,
+        cantidad: quantity,
+        motivo: adjustment.motivo.trim(),
+        requestKey: adjustment.requestKey,
+        ...(adjustment.corregirCierreVisible && report?.cierre?.id
+          ? { cierreCorregidoId: report.cierre.id }
+          : {}),
+      });
+      setAdjustment(initialAdjustment());
+      await loadData();
+      await Swal.fire(
+        "Ajuste registrado",
+        "El ajuste quedó auditado y se aplicará en la semana abierta de su fecha.",
+        "success",
+      );
+    } catch (requestError) {
+      Swal.fire("Error", getErrorMessage(requestError, "No se pudo registrar el ajuste."), "error");
+    } finally {
+      setSavingAdjustment(false);
+    }
   };
 
-  const shiftPeriod = (direction) => {
-    if (periodType === "MES") {
-      const [year, month] = period.fechaInicio.split("-").map(Number);
-      const target = new Date(Date.UTC(year, month - 1 + direction, 1));
-      const targetYear = target.getUTCFullYear();
-      const targetMonth = target.getUTCMonth() + 1;
-      const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
-      setPeriod({
-        fechaInicio: `${targetYear}-${String(targetMonth).padStart(2, "0")}-01`,
-        fechaFin: `${targetYear}-${String(targetMonth).padStart(2, "0")}-${lastDay}`,
-      });
-      return;
-    }
-    if (periodType === "ANIO") {
-      const year = Number(period.fechaInicio.slice(0, 4)) + direction;
-      setPeriod({ fechaInicio: `${year}-01-01`, fechaFin: `${year}-12-31` });
-      return;
-    }
-    const start = new Date(`${period.fechaInicio}T00:00:00Z`);
-    const end = new Date(`${period.fechaFin}T00:00:00Z`);
-    const spanDays = Math.round((end - start) / 86400000) + 1;
-    setPeriod({
-      fechaInicio: addDays(period.fechaInicio, spanDays * direction),
-      fechaFin: addDays(period.fechaFin, spanDays * direction),
+  const closeSelectedWeek = async () => {
+    const totals = report?.totales || {};
+    const confirmation = await Swal.fire({
+      title: "¿Cerrar semana?",
+      html: `
+        <div style="text-align:left">
+          <p><strong>${formatDate(weekStart)} al ${formatDate(weekEnd)}</strong></p>
+          <p>Ventas: ${formatNumber(totals.ventasTotales)}</p>
+          <p>Saldo Creditek: ${formatNumber(totals.saldoFinalCreditek)}</p>
+          <p>Saldo proveedor: ${formatNumber(totals.saldoFinalProveedor)}</p>
+          <p style="margin-top:10px">El cierre guardará una foto histórica inmutable.</p>
+        </div>`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#059669",
+      confirmButtonText: "Sí, cerrar semana",
+      cancelButtonText: "Cancelar",
+      reverseButtons: true,
     });
+    if (!confirmation.isConfirmed) return;
+    try {
+      setClosing(true);
+      await api.post(`/api/logistica/masther-phone/cierres/${weekStart}`);
+      await loadData();
+      await Swal.fire("Semana cerrada", "Los saldos quedaron listos para el jueves siguiente.", "success");
+    } catch (requestError) {
+      await Swal.fire("No se pudo cerrar", getErrorMessage(requestError, "Revisa las incidencias."), "error");
+    } finally {
+      setClosing(false);
+    }
   };
 
   const startEditingEntry = (movement) => {
@@ -364,7 +381,6 @@ export default function IngresoProductosMastherPhone() {
   const saveEditedEntry = async () => {
     const quantity = Number(editDraft?.cantidad);
     if (
-      !editDraft?.marcaId ||
       !editDraft?.modeloId ||
       !editDraft?.bodega ||
       !editDraft?.fechaIngreso ||
@@ -373,13 +389,8 @@ export default function IngresoProductosMastherPhone() {
       (String(editDraft?.precioUnitario ?? "").trim() &&
         !isValidUnitPrice(editDraft?.precioUnitario))
     ) {
-      return Swal.fire(
-        "Datos incompletos",
-        "Selecciona todos los datos. Si ingresas un precio, debe usar punto y tener máximo seis decimales.",
-        "warning",
-      );
+      return Swal.fire("Datos incompletos", "Revisa los datos del ingreso.", "warning");
     }
-
     try {
       setSavingEntryEdit(true);
       await api.put(`/api/logistica/masther-phone/ingresos/${editingEntryId}`, {
@@ -391,14 +402,10 @@ export default function IngresoProductosMastherPhone() {
       });
       setEditingEntryId(null);
       setEditDraft(null);
-      await Promise.all([loadReport(), loadEntries()]);
+      await loadData();
       Swal.fire("Ingreso actualizado", "La corrección fue guardada.", "success");
     } catch (requestError) {
-      Swal.fire(
-        "Error",
-        getErrorMessage(requestError, "No se pudo actualizar el ingreso."),
-        "error",
-      );
+      Swal.fire("Error", getErrorMessage(requestError, "No se pudo actualizar el ingreso."), "error");
     } finally {
       setSavingEntryEdit(false);
     }
@@ -407,540 +414,285 @@ export default function IngresoProductosMastherPhone() {
   const deleteMovement = async (movement) => {
     const confirmation = await Swal.fire({
       title: "¿Eliminar movimiento?",
-      text: `Se eliminará el ingreso de ${movement.producto}. Esta acción no se podrá deshacer.`,
+      text: `Se eliminará el ingreso de ${movement.producto}.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#dc2626",
-      cancelButtonColor: "#64748b",
       confirmButtonText: "Sí, eliminar",
       cancelButtonText: "Cancelar",
       reverseButtons: true,
     });
     if (!confirmation.isConfirmed) return;
-
     try {
       setDeletingEntryId(movement.id);
       await api.delete(`/api/logistica/masther-phone/ingresos/${movement.id}`);
-      if (editingEntryId === movement.id) {
-        setEditingEntryId(null);
-        setEditDraft(null);
-      }
-      await Promise.all([loadReport(), loadEntries()]);
-      await Swal.fire(
-        "Movimiento eliminado",
-        "El ingreso fue eliminado correctamente.",
-        "success",
-      );
+      setEditingEntryId(null);
+      setEditDraft(null);
+      await loadData();
     } catch (requestError) {
-      await Swal.fire(
-        "Error",
-        getErrorMessage(requestError, "No se pudo eliminar el movimiento."),
-        "error",
-      );
+      Swal.fire("Error", getErrorMessage(requestError, "No se pudo eliminar el movimiento."), "error");
     } finally {
       setDeletingEntryId(null);
     }
   };
 
   const tableRows = report?.filas || [];
-  const totals = report?.totales;
+  const totals = report?.totales || {};
+  const closed = report?.estado === "CERRADA";
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="mx-auto max-w-[1700px] space-y-5">
         <header className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">
                 Logística · Masther Phone
               </p>
-              <h1 className="mt-1 text-2xl font-bold text-slate-900">
-                Ingreso de productos
-              </h1>
+              <h1 className="mt-1 text-2xl font-bold text-slate-900">Ingreso de productos</h1>
               <p className="mt-1 text-sm text-slate-500">
-                Registra movimientos y concilia semanalmente las ventas por origen de stock.
+                Control semanal por origen, de jueves 00:00 a jueves 00:00 (exclusivo).
               </p>
             </div>
-            <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-              <strong>Período:</strong> {formatDate(period.fechaInicio)} al{" "}
-              {formatDate(period.fechaFin)}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <strong>Semana:</strong> {formatDate(weekStart)} al {formatDate(weekEnd)}
+              </div>
+              <span
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold ${
+                  closed ? "bg-slate-200 text-slate-700" : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {closed ? <LockKeyhole size={16} /> : <CalendarDays size={16} />}
+                {closed ? "Cerrada" : "Abierta"}
+              </span>
             </div>
           </div>
         </header>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-3">
-            <span className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
-              <PackagePlus size={21} />
-            </span>
+            <span className="rounded-lg bg-emerald-100 p-2 text-emerald-700"><PackagePlus size={21} /></span>
             <div>
-              <h2 className="font-bold text-slate-800">Nuevo ingreso de Masther Phone</h2>
-              <p className="text-xs text-slate-500">Cada envío se guarda como un movimiento independiente.</p>
+              <h2 className="font-bold text-slate-800">Nuevo ingreso</h2>
+              <p className="text-xs text-slate-500">El saldo arrastrado no aparece aquí: no es un ingreso nuevo.</p>
             </div>
           </div>
-          <form onSubmit={submitEntry} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[1fr_1.3fr_180px_170px_110px_145px_auto] 2xl:items-end">
-            <label className="text-sm font-semibold text-slate-700">
-              Marca
-              <select
-                value={entry.marcaId}
-                onChange={(event) =>
-                  setEntry((current) => ({
-                    ...current,
-                    marcaId: event.target.value,
-                    modeloId: "",
-                  }))
-                }
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                required
-              >
-                <option value="">Selecciona una marca</option>
-                {catalog.marcas.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.nombre}</option>
-                ))}
+          <form onSubmit={submitEntry} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[1fr_1.3fr_170px_190px_130px_160px_auto] 2xl:items-end">
+            <label className="text-sm font-semibold text-slate-700">Marca
+              <select value={entry.marcaId} onChange={(event) => setEntry((current) => ({ ...current, marcaId: event.target.value, modeloId: "" }))} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5" required>
+                <option value="">Selecciona</option>
+                {catalog.marcas.map((brand) => <option key={brand.id} value={brand.id}>{brand.nombre}</option>)}
               </select>
             </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Modelo
-              <select
-                value={entry.modeloId}
-                onChange={(event) =>
-                  setEntry((current) => ({ ...current, modeloId: event.target.value }))
-                }
-                disabled={!entry.marcaId}
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none disabled:bg-slate-100 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                required
-              >
-                <option value="">Selecciona un modelo</option>
-                {entryModels.map((model) => (
-                  <option key={model.id} value={model.id}>{model.nombre}</option>
-                ))}
+            <label className="text-sm font-semibold text-slate-700">Modelo
+              <select value={entry.modeloId} onChange={(event) => setEntry((current) => ({ ...current, modeloId: event.target.value }))} disabled={!entry.marcaId} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 disabled:bg-slate-100" required>
+                <option value="">Selecciona</option>
+                {entryModels.map((model) => <option key={model.id} value={model.id}>{model.nombre}</option>)}
               </select>
             </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Bodega
-              <select
-                value={entry.bodega}
-                onChange={(event) =>
-                  setEntry((current) => ({ ...current, bodega: event.target.value }))
-                }
-                className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                required
-              >
-                <option value="">Selecciona una bodega</option>
-                <option value="CREDITEK">Bodega Creditek</option>
-                <option value="PROVEEDOR">Bodega Proveedor</option>
+            <label className="text-sm font-semibold text-slate-700">Origen
+              <select value={entry.bodega} onChange={(event) => setEntry((current) => ({ ...current, bodega: event.target.value }))} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5" required>
+                <option value="">Selecciona</option>
+                <option value="CREDITEK">Creditek</option>
+                <option value="PROVEEDOR">Proveedor</option>
               </select>
             </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Fecha y hora de ingreso
-              <input
-                type="datetime-local"
-                value={entry.fechaIngreso}
-                onChange={(event) =>
-                  setEntry((current) => ({ ...current, fechaIngreso: event.target.value }))
-                }
-                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                required
-              />
+            <label className="text-sm font-semibold text-slate-700">Fecha y hora
+              <input type="datetime-local" value={entry.fechaIngreso} onChange={(event) => setEntry((current) => ({ ...current, fechaIngreso: event.target.value }))} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5" required />
             </label>
-            <label className="text-sm font-semibold text-slate-700">
-              {entry.bodega === "CREDITEK" ? "Cantidad Stock Creditek" : "Cantidad Stock Proveedor"}
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={entry.cantidad}
-                onChange={(event) =>
-                  setEntry((current) => ({ ...current, cantidad: event.target.value }))
-                }
-                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                required
-              />
+            <label className="text-sm font-semibold text-slate-700">Cantidad
+              <input type="number" min="1" step="1" value={entry.cantidad} onChange={(event) => setEntry((current) => ({ ...current, cantidad: event.target.value }))} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right" required />
             </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Precio unitario (opcional)
-              <input
-                type="text"
-                inputMode="decimal"
-                pattern="\d+(\.\d{1,6})?"
-                value={entry.precioUnitario}
-                onChange={(event) =>
-                  setEntry((current) => ({ ...current, precioUnitario: event.target.value }))
-                }
-                placeholder="0.000000"
-                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-              />
+            <label className="text-sm font-semibold text-slate-700">Precio unitario
+              <input type="text" inputMode="decimal" pattern="\d+(\.\d{1,6})?" value={entry.precioUnitario} onChange={(event) => setEntry((current) => ({ ...current, precioUnitario: event.target.value }))} placeholder="Opcional" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right" />
             </label>
-            <button
-              type="submit"
-              disabled={savingEntry}
-              className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
-            >
-              {savingEntry ? <RefreshCw className="animate-spin" size={17} /> : <PackagePlus size={17} />}
-              Registrar
+            <button type="submit" disabled={savingEntry} className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60">
+              {savingEntry ? <RefreshCw className="animate-spin" size={17} /> : <PackagePlus size={17} />} Registrar
             </button>
           </form>
           <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3">
-            <div className="rounded-lg bg-slate-50 px-4 py-3 text-right">
-              <p className="text-xs font-bold uppercase text-slate-500">Subtotal</p>
-              <p className="mt-1 text-lg font-bold text-slate-800">{formatCurrency(entryAmounts.subtotal)}</p>
-            </div>
-            <div className="rounded-lg bg-slate-50 px-4 py-3 text-right">
-              <p className="text-xs font-bold uppercase text-slate-500">IVA 15%</p>
-              <p className="mt-1 text-lg font-bold text-slate-800">{formatCurrency(entryAmounts.iva)}</p>
-            </div>
-            <div className="rounded-lg bg-emerald-50 px-4 py-3 text-right">
-              <p className="text-xs font-bold uppercase text-emerald-700">Valor total</p>
-              <p className="mt-1 text-lg font-bold text-emerald-800">{formatCurrency(entryAmounts.total)}</p>
+            {[['Subtotal', entryAmounts.subtotal], ['IVA 15%', entryAmounts.iva], ['Valor total', entryAmounts.total]].map(([label, value]) => (
+              <div key={label} className="rounded-lg bg-slate-50 px-4 py-3 text-right">
+                <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+                <p className="mt-1 text-lg font-bold text-slate-800">{formatCurrency(value)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="rounded-lg bg-blue-100 p-2 text-blue-700"><SlidersHorizontal size={21} /></span>
+            <div>
+              <h2 className="font-bold text-slate-800">Ajuste auditado</h2>
+              <p className="text-xs text-slate-500">Usa cantidad positiva para sumar y negativa para restar. El motivo es obligatorio.</p>
             </div>
           </div>
+          <form onSubmit={submitAdjustment} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-[1fr_1.3fr_160px_190px_130px_2fr_auto] 2xl:items-end">
+            <label className="text-sm font-semibold text-slate-700">Marca
+              <select value={adjustment.marcaId} onChange={(event) => setAdjustment((current) => ({ ...current, marcaId: event.target.value, modeloId: "" }))} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5" required>
+                <option value="">Selecciona</option>
+                {catalog.marcas.map((brand) => <option key={brand.id} value={brand.id}>{brand.nombre}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">Modelo
+              <select value={adjustment.modeloId} onChange={(event) => setAdjustment((current) => ({ ...current, modeloId: event.target.value }))} disabled={!adjustment.marcaId} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 disabled:bg-slate-100" required>
+                <option value="">Selecciona</option>
+                {adjustmentModels.map((model) => <option key={model.id} value={model.id}>{model.nombre}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">Origen
+              <select value={adjustment.origen} onChange={(event) => setAdjustment((current) => ({ ...current, origen: event.target.value }))} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5" required>
+                <option value="">Selecciona</option><option value="CREDITEK">Creditek</option><option value="PROVEEDOR">Proveedor</option>
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">Fecha y hora
+              <input type="datetime-local" value={adjustment.fechaAjuste} onChange={(event) => setAdjustment((current) => ({ ...current, fechaAjuste: event.target.value }))} className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5" required />
+            </label>
+            <label className="text-sm font-semibold text-slate-700">Cantidad ±
+              <input type="number" step="1" value={adjustment.cantidad} onChange={(event) => setAdjustment((current) => ({ ...current, cantidad: event.target.value }))} placeholder="Ej. -2" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-right" required />
+            </label>
+            <label className="text-sm font-semibold text-slate-700">Motivo
+              <input type="text" minLength="5" maxLength="500" value={adjustment.motivo} onChange={(event) => setAdjustment((current) => ({ ...current, motivo: event.target.value }))} placeholder="Detalle verificable del ajuste" className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5" required />
+            </label>
+            <button type="submit" disabled={savingAdjustment} className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60">
+              {savingAdjustment ? <RefreshCw className="animate-spin" size={17} /> : <Save size={17} />} Guardar
+            </button>
+            {closed && report?.cierre?.id && (
+              <label className="flex items-center gap-2 text-sm text-slate-600 md:col-span-2 xl:col-span-4 2xl:col-span-7">
+                <input type="checkbox" checked={adjustment.corregirCierreVisible} onChange={(event) => setAdjustment((current) => ({ ...current, corregirCierreVisible: event.target.checked }))} />
+                Marcar como corrección trazable del cierre visible. Se aplicará en la semana abierta indicada por la fecha, sin modificar el cierre histórico.
+              </label>
+            )}
+          </form>
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[170px_180px_180px_auto_1fr_1fr_auto] xl:items-end">
-            <label className="text-sm font-semibold text-slate-700">
-              Período
-              <select
-                value={periodType}
-                onChange={(event) => applyPeriodType(event.target.value)}
-                className="mt-1.5 h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-emerald-500"
-              >
-                <option value="SEMANA">Semana actual</option>
-                <option value="SIETE_DIAS">Últimos 7 días</option>
-                <option value="MES">Mes actual</option>
-                <option value="ANIO">Año actual</option>
-                <option value="PERSONALIZADO">Personalizado</option>
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Fecha inicial
-              <input
-                type="date"
-                value={period.fechaInicio}
-                onChange={(event) => {
-                  setPeriodType("PERSONALIZADO");
-                  setPeriod((current) => ({ ...current, fechaInicio: event.target.value }));
-                }}
-                className="mt-1.5 h-[42px] w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500"
-                required
-              />
-            </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Fecha final
-              <input
-                type="date"
-                value={period.fechaFin}
-                onChange={(event) => {
-                  setPeriodType("PERSONALIZADO");
-                  setPeriod((current) => ({ ...current, fechaFin: event.target.value }));
-                }}
-                className="mt-1.5 h-[42px] w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500"
-                required
-              />
-            </label>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => shiftPeriod(-1)} className="rounded-lg border border-slate-300 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Período anterior">
-                <ChevronLeft size={18} />
-              </button>
-              <button type="button" onClick={() => shiftPeriod(1)} className="rounded-lg border border-slate-300 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Período siguiente">
-                <ChevronRight size={18} />
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex items-end gap-2">
+              <button type="button" onClick={() => setWeekStart((current) => addDays(current, -7))} className="rounded-lg border border-slate-300 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Semana anterior"><ChevronLeft size={18} /></button>
+              <div className="min-w-64 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-center text-sm font-bold text-slate-700">
+                Jueves {formatDate(weekStart)} — miércoles {formatDate(weekEnd)}
+              </div>
+              <button type="button" onClick={() => setWeekStart((current) => addDays(current, 7))} className="rounded-lg border border-slate-300 p-2.5 text-slate-600 hover:bg-slate-50" aria-label="Semana siguiente"><ChevronRight size={18} /></button>
+              <button type="button" onClick={() => setWeekStart(getWeekStart(getEcuadorDate()))} className="h-[42px] rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-600 hover:bg-slate-50">Actual</button>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-sm font-semibold text-slate-700">Marca
+                <select value={filters.marcaId} onChange={(event) => setFilters({ marcaId: event.target.value, modeloId: "" })} className="mt-1.5 block h-[42px] min-w-48 rounded-lg border border-slate-300 bg-white px-3">
+                  <option value="">Todas</option>{catalog.marcas.map((brand) => <option key={brand.id} value={brand.id}>{brand.nombre}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-semibold text-slate-700">Modelo
+                <select value={filters.modeloId} onChange={(event) => setFilters((current) => ({ ...current, modeloId: event.target.value }))} className="mt-1.5 block h-[42px] min-w-56 rounded-lg border border-slate-300 bg-white px-3">
+                  <option value="">Todos</option>{filterModels.map((model) => <option key={model.id} value={model.id}>{model.marca} · {model.nombre}</option>)}
+                </select>
+              </label>
+              <button type="button" onClick={loadData} className="inline-flex h-[42px] items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-600 hover:bg-slate-50"><RefreshCw size={17} /> Actualizar</button>
+              <button type="button" onClick={closeSelectedWeek} disabled={!report?.puedeCerrar || closing} className="inline-flex h-[42px] items-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">
+                {closing ? <RefreshCw className="animate-spin" size={17} /> : <LockKeyhole size={17} />} Cerrar semana
               </button>
             </div>
-            <label className="text-sm font-semibold text-slate-700">
-              Filtrar por marca
-              <select
-                value={filters.marcaId}
-                onChange={(event) =>
-                  setFilters({ marcaId: event.target.value, modeloId: "" })
-                }
-                className="mt-1.5 h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-emerald-500"
-              >
-                <option value="">Todas las marcas</option>
-                {catalog.marcas.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.nombre}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold text-slate-700">
-              Filtrar por modelo
-              <select
-                value={filters.modeloId}
-                onChange={(event) =>
-                  setFilters((current) => ({ ...current, modeloId: event.target.value }))
-                }
-                className="mt-1.5 h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 outline-none focus:border-emerald-500"
-              >
-                <option value="">Todos los modelos</option>
-                {filterModels.map((model) => (
-                  <option key={model.id} value={model.id}>{model.marca} · {model.nombre}</option>
-                ))}
-              </select>
-            </label>
-            <button type="button" onClick={loadReport} className="inline-flex h-[42px] items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-bold text-slate-600 hover:bg-slate-50">
-              <RefreshCw size={17} /> Actualizar
-            </button>
           </div>
-          <p className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-            <CalendarDays size={15} className="text-emerald-600" />
-            Las ventas respetan exactamente las fechas elegidas. Cada movimiento suma en STOCK PROVEEDOR o STOCK CREDITEK según la bodega seleccionada.
-          </p>
-        </section>
-
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-1 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-800">Movimientos del período</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Corrige el producto, la bodega, la fecha, la cantidad o el precio unitario registrado.
-              </p>
-            </div>
-            <span className="text-xs font-semibold text-slate-500">
-              {entries.length} movimiento(s)
-            </span>
-          </div>
-          {entries.length === 0 ? (
-            <p className="p-5 text-center text-sm text-slate-500">
-              No existen movimientos dentro de las fechas seleccionadas.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1300px] text-sm">
-                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 text-left">FECHA DE INGRESO</th>
-                    <th className="px-4 py-3 text-left">PRODUCTO</th>
-                    <th className="px-4 py-3 text-left">BODEGA</th>
-                    <th className="px-4 py-3 text-right">CANTIDAD</th>
-                    <th className="px-4 py-3 text-right">PRECIO UNITARIO</th>
-                    <th className="px-4 py-3 text-right">SUBTOTAL</th>
-                    <th className="px-4 py-3 text-right">IVA 15%</th>
-                    <th className="px-4 py-3 text-right">VALOR TOTAL</th>
-                    <th className="px-4 py-3 text-right">ACCIONES</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {entries.map((movement) => {
-                    const editing = editingEntryId === movement.id;
-                    return (
-                      <tr key={movement.id} className="align-top hover:bg-slate-50/70">
-                        <td className="px-4 py-3">
-                          {editing ? (
-                            <input
-                              type="datetime-local"
-                              value={editDraft.fechaIngreso}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({ ...current, fechaIngreso: event.target.value }))
-                              }
-                              className="rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-emerald-500"
-                            />
-                          ) : formatDateTime(movement.fechaIngreso)}
-                        </td>
-                        <td className="px-4 py-3">
-                          {editing ? (
-                            <div className="grid min-w-80 grid-cols-2 gap-2">
-                              <select
-                                value={editDraft.marcaId}
-                                onChange={(event) =>
-                                  setEditDraft((current) => ({
-                                    ...current,
-                                    marcaId: event.target.value,
-                                    modeloId: "",
-                                  }))
-                                }
-                                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 outline-none focus:border-emerald-500"
-                              >
-                                {catalog.marcas.map((brand) => (
-                                  <option key={brand.id} value={brand.id}>{brand.nombre}</option>
-                                ))}
-                              </select>
-                              <select
-                                value={editDraft.modeloId}
-                                onChange={(event) =>
-                                  setEditDraft((current) => ({ ...current, modeloId: event.target.value }))
-                                }
-                                className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 outline-none focus:border-emerald-500"
-                              >
-                                <option value="">Selecciona un modelo</option>
-                                {editModels.map((model) => (
-                                  <option key={model.id} value={model.id}>{model.nombre}</option>
-                                ))}
-                              </select>
-                            </div>
-                          ) : (
-                            <span className="font-semibold text-slate-800">{movement.producto}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {editing ? (
-                            <select
-                              value={editDraft.bodega}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({ ...current, bodega: event.target.value }))
-                              }
-                              className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 outline-none focus:border-emerald-500"
-                            >
-                              <option value="CREDITEK">Bodega Creditek</option>
-                              <option value="PROVEEDOR">Bodega Proveedor</option>
-                            </select>
-                          ) : movement.bodega === "CREDITEK" ? "Bodega Creditek" : "Bodega Proveedor"}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {editing ? (
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={editDraft.cantidad}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({ ...current, cantidad: event.target.value }))
-                              }
-                              className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-right outline-none focus:border-emerald-500"
-                            />
-                          ) : (
-                            <span className="font-bold tabular-nums">{formatNumber(movement.cantidad)}</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {editing ? (
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              pattern="\d+(\.\d{1,6})?"
-                              value={editDraft.precioUnitario}
-                              onChange={(event) =>
-                                setEditDraft((current) => ({ ...current, precioUnitario: event.target.value }))
-                              }
-                              placeholder="0.000000"
-                              className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right outline-none focus:border-emerald-500"
-                            />
-                          ) : formatCurrency(movement.precioUnitario)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                          {editing ? formatCurrency(editAmounts.subtotal) : formatCurrency(movement.subtotal)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                          {editing ? formatCurrency(editAmounts.iva) : formatCurrency(movement.iva)}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold tabular-nums text-slate-800">
-                          {editing ? formatCurrency(editAmounts.total) : formatCurrency(movement.total)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          {editing ? (
-                            <div className="flex justify-end gap-2">
-                              <button type="button" onClick={saveEditedEntry} disabled={savingEntryEdit} className="rounded-lg bg-emerald-600 p-2 text-white hover:bg-emerald-700 disabled:opacity-50" title="Guardar corrección">
-                                {savingEntryEdit ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                              </button>
-                              <button type="button" onClick={() => { setEditingEntryId(null); setEditDraft(null); }} className="rounded-lg border border-slate-300 p-2 text-slate-600 hover:bg-slate-100" title="Cancelar edición">
-                                <X size={16} />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex justify-end gap-2">
-                              <button type="button" onClick={() => startEditingEntry(movement)} disabled={deletingEntryId === movement.id} className="rounded-lg border border-slate-300 p-2 text-slate-600 hover:border-emerald-400 hover:text-emerald-700 disabled:opacity-50" title="Editar ingreso">
-                                <Pencil size={16} />
-                              </button>
-                              <button type="button" onClick={() => deleteMovement(movement)} disabled={deletingEntryId === movement.id} className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50 disabled:opacity-50" title="Eliminar movimiento">
-                                {deletingEntryId === movement.id ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          {!report?.puedeCerrar && report?.motivoNoCierre && (
+            <p className="mt-3 text-xs font-semibold text-slate-500">Cierre no disponible: {report.motivoNoCierre}</p>
           )}
         </section>
+
+        {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+
+        {(report?.incidencias || []).length > 0 && (
+          <section className="rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm">
+            <h2 className="flex items-center gap-2 font-bold text-red-800"><AlertTriangle size={19} /> Incidencias pendientes</h2>
+            <p className="mt-1 text-sm text-red-700">Estas salidas no tienen existencias suficientes y bloquean el cierre.</p>
+            <div className="mt-3 space-y-2">
+              {report.incidencias.map((incident, index) => (
+                <div key={`${incident.tipo}-${incident.referenciaId}-${index}`} className="rounded-lg bg-white p-3 text-sm text-red-800">
+                  <strong>{incident.producto}</strong> · {formatDate(incident.fecha)} · faltante {formatNumber(incident.faltante)}. {incident.mensaje}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="flex items-center gap-2 font-bold text-slate-800">
-                <Boxes size={19} className="text-emerald-600" /> Control por período
-              </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Ejemplo: STOCK PROVEEDOR 90, STOCK CREDITEK 7 y ventas 23 → VENTAS PROVEEDOR 16 y TOTAL BODEGA 74.
-              </p>
+              <h2 className="flex items-center gap-2 font-bold text-slate-800"><Boxes size={19} className="text-emerald-600" /> Control semanal</h2>
+              <p className="mt-1 text-xs text-slate-500">Stock inicial arrastrado, movimientos del período y saldo final por origen.</p>
             </div>
-            <div className="text-right text-xs font-semibold text-slate-500">
-              <p>Zona horaria: America/Guayaquil</p>
-              {report && (
-                <p className="mt-1">Rango consultado: {formatDate(report.fechaInicioSolicitada)} al {formatDate(report.fechaFinSolicitada)}</p>
-              )}
-            </div>
+            {closed && report?.cierre && <p className="text-xs font-semibold text-slate-500">Cierre #{report.cierre.id} · {formatDateTime(report.cierre.cerradoEn)}</p>}
           </div>
-
-          {error && (
-            <div className="m-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
-          )}
           {loading ? (
-            <div className="flex min-h-48 items-center justify-center text-sm text-slate-500">
-              <RefreshCw className="mr-2 animate-spin" size={18} /> Cargando control...
-            </div>
+            <div className="flex min-h-48 items-center justify-center text-sm text-slate-500"><RefreshCw className="mr-2 animate-spin" size={18} /> Cargando control...</div>
           ) : tableRows.length === 0 ? (
-            <div className="flex min-h-48 flex-col items-center justify-center p-6 text-center text-slate-500">
-              <Boxes size={36} className="text-slate-300" />
-              <p className="mt-3 font-semibold">No existen ingresos acumulados para este período.</p>
-            </div>
+            <div className="flex min-h-48 flex-col items-center justify-center p-6 text-center text-slate-500"><Boxes size={36} className="text-slate-300" /><p className="mt-3 font-semibold">No hay saldos ni movimientos para esta semana.</p></div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1080px] border-collapse text-sm">
-                <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-600">
+              <table className="w-full min-w-[1600px] border-collapse text-sm">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-600">
                   <tr>
-                    <th className="border-b border-slate-200 px-4 py-3 text-left">PRODUCTO</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">STOCK PROVEEDOR</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">STOCK CREDITEK</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">VENTAS TOTALES SEMANA</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">VENTAS PROVEEDOR</th>
-                    <th className="border-b border-slate-200 px-4 py-3 text-right">TOTAL BODEGA</th>
+                    <th className="px-3 py-3 text-left">Producto</th>
+                    <th className="px-3 py-3 text-right">Inicial Creditek</th><th className="px-3 py-3 text-right">Inicial Proveedor</th>
+                    <th className="px-3 py-3 text-right">Ingresos Creditek</th><th className="px-3 py-3 text-right">Ingresos Proveedor</th>
+                    <th className="px-3 py-3 text-right">Ventas totales</th><th className="px-3 py-3 text-right">Desde Creditek</th><th className="px-3 py-3 text-right">Desde proveedor</th>
+                    <th className="px-3 py-3 text-right">Ajuste Creditek</th><th className="px-3 py-3 text-right">Ajuste Proveedor</th>
+                    <th className="px-3 py-3 text-right">Final Creditek</th><th className="px-3 py-3 text-right">Final Proveedor</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {tableRows.map((row) => (
-                    <tr key={row.modeloId} className="hover:bg-slate-50/70">
-                      <td className="px-4 py-3">
-                        <p className="font-bold text-slate-800">{row.producto}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Control desde {formatDate(row.fechaInicioControl)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        <p className="font-bold text-slate-800">{formatNumber(row.stockProveedor)}</p>
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                        {formatNumber(row.stockCreditek)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatNumber(row.ventasTotalesSemana)}</td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                        {row.ventasProveedor === null ? <PendingValue /> : formatNumber(row.ventasProveedor)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold tabular-nums text-slate-800">
-                        {row.totalBodega === null ? <PendingValue /> : formatNumber(row.totalBodega)}
-                      </td>
+                    <tr key={row.modeloId} className={row.incidencias?.length ? "bg-red-50" : "hover:bg-slate-50/70"}>
+                      <td className="px-3 py-3 font-bold text-slate-800">{row.producto}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-slate-600">{formatNumber(row.stockInicialCreditek)}</td><td className="px-3 py-3 text-right tabular-nums text-slate-600">{formatNumber(row.stockInicialProveedor)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.ingresosCreditek)}</td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.ingresosProveedor)}</td>
+                      <td className="px-3 py-3 text-right font-bold tabular-nums">{formatNumber(row.ventasTotales)}</td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.ventasCreditek)}</td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(row.ventasProveedor)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{formatSigned(row.ajustesCreditek)}</td><td className="px-3 py-3 text-right tabular-nums">{formatSigned(row.ajustesProveedor)}</td>
+                      <td className="px-3 py-3 text-right font-bold tabular-nums text-emerald-700">{formatNumber(row.saldoFinalCreditek)}</td><td className="px-3 py-3 text-right font-bold tabular-nums text-emerald-700">{formatNumber(row.saldoFinalProveedor)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="border-t-2 border-slate-300 bg-slate-100 font-bold text-slate-800">
                   <tr>
-                    <td className="px-4 py-3 text-left">TOTALES</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatNumber(totals?.stockProveedor)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {totals?.stockCreditek === null ? <PendingValue /> : formatNumber(totals?.stockCreditek)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{formatNumber(totals?.ventasTotalesSemana)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {totals?.ventasProveedor === null ? <PendingValue /> : formatNumber(totals?.ventasProveedor)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {totals?.totalBodega === null ? <PendingValue /> : formatNumber(totals?.totalBodega)}
-                    </td>
+                    <td className="px-3 py-3">Totales</td>
+                    {['stockInicialCreditek','stockInicialProveedor','ingresosCreditek','ingresosProveedor','ventasTotales','ventasCreditek','ventasProveedor'].map((field) => <td key={field} className="px-3 py-3 text-right tabular-nums">{formatNumber(totals[field])}</td>)}
+                    <td className="px-3 py-3 text-right tabular-nums">{formatSigned(totals.ajustesCreditek)}</td><td className="px-3 py-3 text-right tabular-nums">{formatSigned(totals.ajustesProveedor)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{formatNumber(totals.saldoFinalCreditek)}</td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(totals.saldoFinalProveedor)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           )}
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 p-4">
+            <div><h2 className="font-bold text-slate-800">Ingresos del período</h2><p className="mt-1 text-xs text-slate-500">Los saldos iniciales no se incluyen en esta lista.</p></div>
+            <span className="text-xs font-semibold text-slate-500">{entries.length} movimiento(s)</span>
+          </div>
+          {entries.length === 0 ? <p className="p-5 text-center text-sm text-slate-500">No hay ingresos en esta semana.</p> : (
+            <div className="overflow-x-auto"><table className="w-full min-w-[1300px] text-sm">
+              <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-600"><tr><th className="px-4 py-3 text-left">Fecha</th><th className="px-4 py-3 text-left">Producto</th><th className="px-4 py-3 text-left">Origen</th><th className="px-4 py-3 text-right">Cantidad</th><th className="px-4 py-3 text-right">Precio</th><th className="px-4 py-3 text-right">Subtotal</th><th className="px-4 py-3 text-right">IVA</th><th className="px-4 py-3 text-right">Total</th><th className="px-4 py-3 text-right">Acciones</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">{entries.map((movement) => {
+                const editing = editingEntryId === movement.id;
+                return <tr key={movement.id} className="align-top hover:bg-slate-50/70">
+                  <td className="px-4 py-3">{editing ? <input type="datetime-local" value={editDraft.fechaIngreso} onChange={(event) => setEditDraft((current) => ({ ...current, fechaIngreso: event.target.value }))} className="rounded-lg border border-slate-300 px-2 py-1.5" /> : formatDateTime(movement.fechaIngreso)}</td>
+                  <td className="px-4 py-3">{editing ? <div className="grid min-w-80 grid-cols-2 gap-2"><select value={editDraft.marcaId} onChange={(event) => setEditDraft((current) => ({ ...current, marcaId: event.target.value, modeloId: "" }))} className="rounded-lg border border-slate-300 px-2 py-1.5">{catalog.marcas.map((brand) => <option key={brand.id} value={brand.id}>{brand.nombre}</option>)}</select><select value={editDraft.modeloId} onChange={(event) => setEditDraft((current) => ({ ...current, modeloId: event.target.value }))} className="rounded-lg border border-slate-300 px-2 py-1.5">{editModels.map((model) => <option key={model.id} value={model.id}>{model.nombre}</option>)}</select></div> : <span className="font-semibold">{movement.producto}</span>}</td>
+                  <td className="px-4 py-3">{editing ? <select value={editDraft.bodega} onChange={(event) => setEditDraft((current) => ({ ...current, bodega: event.target.value }))} className="rounded-lg border border-slate-300 px-2 py-1.5"><option value="CREDITEK">Creditek</option><option value="PROVEEDOR">Proveedor</option></select> : movement.bodega}</td>
+                  <td className="px-4 py-3 text-right">{editing ? <input type="number" min="1" step="1" value={editDraft.cantidad} onChange={(event) => setEditDraft((current) => ({ ...current, cantidad: event.target.value }))} className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-right" /> : formatNumber(movement.cantidad)}</td>
+                  <td className="px-4 py-3 text-right">{editing ? <input type="text" value={editDraft.precioUnitario} onChange={(event) => setEditDraft((current) => ({ ...current, precioUnitario: event.target.value }))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right" /> : formatCurrency(movement.precioUnitario)}</td>
+                  <td className="px-4 py-3 text-right">{formatCurrency(editing ? editAmounts.subtotal : movement.subtotal)}</td><td className="px-4 py-3 text-right">{formatCurrency(editing ? editAmounts.iva : movement.iva)}</td><td className="px-4 py-3 text-right font-bold">{formatCurrency(editing ? editAmounts.total : movement.total)}</td>
+                  <td className="px-4 py-3 text-right">{editing ? <div className="flex justify-end gap-2"><button type="button" onClick={saveEditedEntry} disabled={savingEntryEdit} className="rounded-lg bg-emerald-600 p-2 text-white">{savingEntryEdit ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}</button><button type="button" onClick={() => { setEditingEntryId(null); setEditDraft(null); }} className="rounded-lg border border-slate-300 p-2"><X size={16} /></button></div> : <div className="flex justify-end gap-2"><button type="button" onClick={() => startEditingEntry(movement)} disabled={closed || deletingEntryId === movement.id} className="rounded-lg border border-slate-300 p-2 disabled:opacity-40"><Pencil size={16} /></button><button type="button" onClick={() => deleteMovement(movement)} disabled={closed || deletingEntryId === movement.id} className="rounded-lg border border-red-200 p-2 text-red-600 disabled:opacity-40">{deletingEntryId === movement.id ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}</button></div>}</td>
+                </tr>;
+              })}</tbody>
+            </table></div>
+          )}
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 p-4"><div><h2 className="font-bold text-slate-800">Ajustes del período</h2><p className="mt-1 text-xs text-slate-500">Son inmutables; una corrección se registra con otro ajuste y motivo.</p></div><span className="text-xs font-semibold text-slate-500">{adjustments.length} ajuste(s)</span></div>
+          {adjustments.length === 0 ? <p className="p-5 text-center text-sm text-slate-500">No hay ajustes en esta semana.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-xs font-bold uppercase text-slate-600"><tr><th className="px-4 py-3 text-left">Fecha</th><th className="px-4 py-3 text-left">Producto</th><th className="px-4 py-3 text-left">Origen</th><th className="px-4 py-3 text-right">Cantidad</th><th className="px-4 py-3 text-left">Motivo</th><th className="px-4 py-3 text-left">Tipo</th></tr></thead><tbody className="divide-y divide-slate-100">{adjustments.map((item) => <tr key={item.id}><td className="px-4 py-3">{formatDateTime(item.fechaAjuste)}</td><td className="px-4 py-3 font-semibold">{item.producto}</td><td className="px-4 py-3">{item.origen}</td><td className="px-4 py-3 text-right font-bold tabular-nums">{formatSigned(item.cantidad)}</td><td className="px-4 py-3">{item.motivo}</td><td className="px-4 py-3">{item.tipo === "CORRECCION_CIERRE" ? <span className="inline-flex items-center gap-1 text-blue-700"><CheckCircle2 size={15} /> Corrección cierre #{item.cierreCorregidoId}</span> : "Ajuste"}</td></tr>)}</tbody></table></div>}
         </section>
       </div>
     </div>

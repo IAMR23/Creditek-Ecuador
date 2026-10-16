@@ -29,8 +29,8 @@ export default function Sidebar() {
   const role = normalizeRole(auth?.user?.rol?.nombre);
   const isUser = role === "USUARIO";
   const isAdmin = role === "ADMIN";
-  const [simuladorAbierto, setSimuladorAbierto] = useState(true);
-  const [administracionAbierta, setAdministracionAbierta] = useState(true);
+  const [simuladorAbierto, setSimuladorAbierto] = useState(false);
+  const [administracionAbierta, setAdministracionAbierta] = useState(false);
   const [resumenPostulaciones, setResumenPostulaciones] = useState({
     totalGeneral: 0,
     total: 0,
@@ -45,18 +45,18 @@ export default function Sidebar() {
     [
       "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold",
       isActive
-        ? "bg-slate-900 text-white shadow-sm"
-        : "text-slate-700 hover:bg-white border border-transparent hover:border-slate-200",
+        ? "bg-orange-500 text-white shadow-sm"
+        : "border border-transparent text-white hover:border-white/15 hover:bg-white/10",
     ].join(" ");
 
   const simuladorMenu = (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
+    <div className="rounded-xl border border-white/15 bg-white/5 p-1">
       <button
         type="button"
         onClick={() => setSimuladorAbierto((current) => !current)}
         aria-expanded={simuladorAbierto}
         aria-controls="simulador-menu"
-        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-extrabold text-slate-800 transition hover:bg-white"
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-extrabold text-white transition hover:bg-white/10"
       >
         <MonitorPlay size={18} className="text-orange-500" aria-hidden="true" />
         <span className="flex-1 text-left">Simulador</span>
@@ -68,7 +68,7 @@ export default function Sidebar() {
       </button>
 
       {simuladorAbierto && (
-        <div id="simulador-menu" className="mt-1 border-l border-slate-300 pl-3">
+        <div id="simulador-menu" className="mt-1 border-l border-white/20 pl-3">
           <NavLink to="/simulador" className={linkClass}>
             <MonitorPlay size={17} aria-hidden="true" /> Ingreso al sistema
           </NavLink>
@@ -78,13 +78,13 @@ export default function Sidebar() {
   );
 
   const administracionMenu = (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-1">
+    <div className="rounded-xl border border-white/15 bg-white/5 p-1">
       <button
         type="button"
         onClick={() => setAdministracionAbierta((current) => !current)}
         aria-expanded={administracionAbierta}
         aria-controls="administracion-menu"
-        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-extrabold text-slate-800 transition hover:bg-white"
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-extrabold text-white transition hover:bg-white/10"
       >
         <Settings size={18} className="text-orange-500" aria-hidden="true" />
         <span className="flex-1 text-left">Administración</span>
@@ -96,7 +96,7 @@ export default function Sidebar() {
       </button>
 
       {administracionAbierta && (
-        <div id="administracion-menu" className="mt-1 border-l border-slate-300 pl-3">
+        <div id="administracion-menu" className="mt-1 border-l border-white/20 pl-3">
           <NavLink to="/usuarios" className={linkClass}>
             <Users size={17} aria-hidden="true" /> Usuarios
           </NavLink>
@@ -136,15 +136,15 @@ export default function Sidebar() {
   }, [isUser]);
 
   return (
-    <aside className="w-full bg-white/80 backdrop-blur border-r border-slate-200 flex flex-col md:fixed md:inset-y-0 md:left-0 md:z-40 md:h-screen md:w-64 md:overflow-y-auto">
-      <div className="p-5 border-b border-slate-200">
+    <aside className="flex w-full flex-col border-r border-white/10 bg-black text-white md:fixed md:inset-y-0 md:left-0 md:z-40 md:h-screen md:w-64 md:overflow-y-auto">
+      <div className="border-b border-white/10 p-5">
         <div className="flex items-baseline gap-3">
           <div className="text-2xl font-extrabold tracking-tight">
-            <span className="text-black">A</span><span className="text-orange-500">B</span><span className="text-black">S</span>
+            <span className="text-white">A</span><span className="text-orange-500">B</span><span className="text-white">S</span>
           </div>
           <div className="h-px flex-1 bg-gradient-to-r from-orange-200 to-transparent" />
         </div>
-        <div className="mt-2 text-xs uppercase tracking-[0.22em] text-slate-500">ABS</div>
+        <div className="mt-2 text-xs uppercase tracking-[0.22em] text-white">ABS</div>
       </div>
 
       <nav className="p-3 flex flex-col gap-2">
@@ -173,9 +173,9 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className="mt-auto p-3 border-t border-slate-200">
-        <div className="text-xs text-slate-500 px-3 pb-2 truncate">{auth?.user?.email || ""}</div>
-        <button type="button" onClick={auth?.logout} className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 hover:bg-slate-50">Cerrar sesión</button>
+      <div className="mt-auto border-t border-white/10 p-3">
+        <div className="truncate px-3 pb-2 text-xs text-white">{auth?.user?.email || ""}</div>
+        <button type="button" onClick={auth?.logout} className="w-full rounded-xl border border-white/20 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Cerrar sesión</button>
       </div>
     </aside>
   );
