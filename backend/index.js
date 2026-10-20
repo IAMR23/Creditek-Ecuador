@@ -240,6 +240,7 @@ connectDB()
     app.use("/api/gerencia", require("./routes/Gerencia/costoVentaMarketingRoutes"));
     app.use("/api/gerencia/facturas-fisicas", require("./routes/Gerencia/facturasFisicasRoutes"));
     app.use("/api/gerencia/facturas-ia", require("./routes/Gerencia/facturasIaRoutes"));
+    app.use("/api/gerencia/facturas", require("./routes/Gerencia/facturasRoutes"));
     app.use("/api/uphone/solicitudes", require("./routes/Gerencia/uphoneSolicitudesRoutes"));
     app.use("/api/marketing/pautas", require("./routes/Marketing/pautaMarketingRoutes"));
     app.use("/api/marketing/copa-creditek", require("./routes/Marketing/copaCreditekRoutes"));

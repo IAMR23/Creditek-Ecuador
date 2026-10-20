@@ -118,6 +118,8 @@ RolDescuentoCreditek.belongsTo(Usuario, { as: 'usuario', foreignKey: 'usuarioId'
 const FacturaFisica = require('./FacturaFisica');
 const FacturaFisicaProductoOcr = require('./FacturaFisicaProductoOcr');
 const FacturaIaResultado = require('./FacturaIaResultado');
+// Se registra para sequelize.sync(), pero permanece como tabla independiente.
+require('./FacturaRegistro');
 const UphoneSolicitud = require('./UphoneSolicitud');
 
 // -------------------- Usuario, Rol, Agencia --------------------

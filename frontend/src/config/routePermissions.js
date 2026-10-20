@@ -73,6 +73,7 @@ export const ROUTE_PERMISSIONS = {
   "/bonos": "Gerencia",
   "/secretarios-ejecutivos": "Gerencia",
   "/consejo-ejecutivo": ["Gerencia", "Administracion"],
+  "/gerencia/facturas": ["Gerencia", "Administracion"],
   "/gerencia/facturas-fisicas": ["Gerencia", "Administracion"],
   "/gerencia/facturas-ia": ["Gerencia", "Administracion"],
   "/ver-planes-batalla": "Gerencia",

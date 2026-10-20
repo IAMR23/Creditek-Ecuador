@@ -2096,6 +2096,59 @@ const ensureFacturasFisicasOcrPreSyncSchema = async (queryInterface) => {
   }
 };
 
+const ensureFacturasPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("facturas")) return;
+
+  const columns = await queryInterface.describeTable("facturas");
+  const optionalColumns = [
+    "fechaFactura",
+    "proveedor",
+    "identificacionProveedor",
+    "numeroFactura",
+    "subtotal",
+    "iva",
+    "total",
+    "formaPago",
+    "estado",
+    "enlaceFoto",
+    "observaciones",
+    "tipo",
+    "nombreArchivoJson",
+    "payloadOriginal",
+    // Puede existir en instalaciones anteriores. Se conserva como dato
+    // historico, pero sin una relacion ni obligatoriedad.
+    "cargadoPorId",
+  ].filter((columnName) => columns[columnName]);
+
+  const nullableChanges = optionalColumns
+    .map((columnName) => `ALTER COLUMN "${columnName}" DROP NOT NULL`)
+    .join(",\n      ");
+
+  await sequelize.query(`
+    ${nullableChanges
+      ? `ALTER TABLE public.facturas\n      ${nullableChanges};`
+      : ""}
+
+    DO $$
+    DECLARE
+      relacion RECORD;
+    BEGIN
+      FOR relacion IN
+        SELECT conname
+        FROM pg_constraint
+        WHERE conrelid = 'public.facturas'::regclass
+          AND contype = 'f'
+      LOOP
+        EXECUTE format(
+          'ALTER TABLE public.facturas DROP CONSTRAINT %I',
+          relacion.conname
+        );
+      END LOOP;
+    END $$;
+  `);
+};
+
 const ensureConsejoEjecutivoSchema = async (tables) => {
   if (
     !tables.includes("consejo_ejecutivo_planes") ||
@@ -2267,6 +2320,7 @@ const connectDB = async () => {
     await ensureGhlFlowScheduleSchema(queryInterface);
     await ensureControlFinancieroPreSyncSchema(queryInterface);
     await ensureConsejoEjecutivoPreSyncSchema(queryInterface);
+    await ensureFacturasPreSyncSchema(queryInterface);
     await ensureFacturasFisicasOcrPreSyncSchema(queryInterface);
     await ensureReporteCajaUsuarioAgenciaPreSyncSchema(queryInterface);
     await ensureEgresosCreditekEntradasPreSyncSchema(queryInterface);
@@ -2514,6 +2568,7 @@ module.exports = {
   connectDB,
   ensureEntregaOperacionSchema,
   ensureEntregaTipoSchema,
+  ensureFacturasPreSyncSchema,
   ensureFacturasFisicasOcrPreSyncSchema,
   ensureGhlAdvisorAvailabilitySchema,
   ensureGhlRepartoCapacitySchema,

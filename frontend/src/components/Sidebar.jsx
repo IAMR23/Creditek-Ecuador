@@ -36,6 +36,7 @@ import {
   CalendarClock,
   Send,
   Fuel,
+  ReceiptText,
 } from "lucide-react";
 import { MdSecurity } from "react-icons/md";
 import {
@@ -140,6 +141,11 @@ export default function Sidebar({ auth }) {
             label: "Consejo Ejecutivo",
             icon: <UsersRound size={20} />,
             path: "/consejo-ejecutivo",
+          },
+          {
+            label: "Facturas",
+            icon: <ReceiptText size={20} />,
+            path: "/gerencia/facturas",
           },
           /*           {
             label: "Facturas fisicas",

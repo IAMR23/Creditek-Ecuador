@@ -46,6 +46,7 @@ jest.mock("../services/notificacionesPersonalService", () => ({
 }));
 
 const Usuario = require("../models/Usuario");
+const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Rol = require("../models/Rol");
 const RolPago = require("../models/RolPago");
 const UsuarioRolPago = require("../models/UsuarioRolPago");
@@ -438,6 +439,36 @@ describe("PUT /usuarios/:id", () => {
     expect(usuario.save).toHaveBeenCalled();
   });
 
+  test("libera el usuario Uphone cuando se inhabilita", async () => {
+    const usuario = {
+      id: 26,
+      activo: true,
+      usuarioUphone: "ASESOR2028",
+      save: jest.fn().mockResolvedValue(undefined),
+      toJSON() {
+        return {
+          id: this.id,
+          activo: this.activo,
+          usuarioUphone: this.usuarioUphone,
+        };
+      },
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/26")
+      .send({ activo: false, usuarioUphone: "ASESOR2028" });
+
+    expect(response.status).toBe(200);
+    expect(usuario.activo).toBe(false);
+    expect(usuario.usuarioUphone).toBeNull();
+    expect(usuario.save).toHaveBeenCalled();
+    expect(UsuarioAgencia.update).toHaveBeenCalledWith(
+      { activo: false },
+      { where: { usuarioId: 26 } },
+    );
+  });
+
   test("rechaza una jornada laboral desconocida", async () => {
     const usuario = {
       id: 25,
@@ -454,5 +485,31 @@ describe("PUT /usuarios/:id", () => {
       "La jornada laboral debe ser tiempo completo o medio tiempo.",
     );
     expect(usuario.save).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /usuarios/:id", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("inhabilita al usuario y libera su usuario Uphone", async () => {
+    const usuario = {
+      id: 27,
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+
+    const response = await request(crearAplicacion()).delete("/usuarios/27");
+
+    expect(response.status).toBe(200);
+    expect(usuario.update).toHaveBeenCalledWith({
+      activo: false,
+      usuarioUphone: null,
+    });
+    expect(UsuarioAgencia.update).toHaveBeenCalledWith(
+      { activo: false },
+      { where: { usuarioId: 27 } },
+    );
   });
 });

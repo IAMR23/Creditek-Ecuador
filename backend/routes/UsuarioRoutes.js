@@ -588,7 +588,7 @@ const actualizarUsuario = async (req, res) => {
       usuario.usuario = usuarioNormalizado;
     }
 
-    if (usuarioUphone !== undefined) {
+    if (usuarioUphone !== undefined && activo !== false) {
       const usuarioUphoneNormalizado = String(usuarioUphone || "").trim() || null;
       const existeUsuarioUphone = usuarioUphoneNormalizado
         ? await buscarUsuarioPorUphone(usuarioUphoneNormalizado)
@@ -664,7 +664,10 @@ const actualizarUsuario = async (req, res) => {
     // ========== CAMPOS NORMALES (solo si vienen) ==========
     if (nombre !== undefined) usuario.nombre = nombre;
     if (cedula !== undefined) usuario.cedula = cedula;
-    if (activo !== undefined) usuario.activo = activo;
+    if (activo !== undefined) {
+      usuario.activo = activo;
+      if (activo === false) usuario.usuarioUphone = null;
+    }
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
     if (jornadaLaboral !== undefined) usuario.jornadaLaboral = jornadaLaboral;
     if (afiliadoIess !== undefined) usuario.afiliadoIess = afiliadoIess;
@@ -743,7 +746,7 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    await usuario.update({ activo: false });
+    await usuario.update({ activo: false, usuarioUphone: null });
     await UsuarioAgencia.update(
       { activo: false },
       { where: { usuarioId: usuario.id } },

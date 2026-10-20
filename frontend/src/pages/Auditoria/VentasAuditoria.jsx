@@ -114,6 +114,11 @@ const getModeloLabel = (modelo) =>
     ? `${modelo.dispositivoMarca.marca.nombre} ${modelo.nombre}`
     : modelo.nombre;
 
+const getVendedorDetalle = (usuario) => {
+  const detalle = usuario.cargoComision || usuario.cargo || usuario.rol;
+  return typeof detalle === "object" ? detalle?.nombre || "" : detalle || "";
+};
+
 const getFilaEditableId = (fila) =>
   fila.detalleVentaId ? String(fila.detalleVentaId) : "";
 
@@ -1662,6 +1667,7 @@ export default function VentasAuditoria() {
 
           <CollaboratorSearchInput
             options={usuarios}
+            getOptionDetail={getVendedorDetalle}
             searchValue={vendedorBusqueda}
             selectedId={vendedorId}
             open={vendedorSelectorOpen}

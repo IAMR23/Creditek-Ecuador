@@ -109,6 +109,27 @@ test("ruta configurada con Gerencia o Administracion acepta cualquiera de los do
   );
 });
 
+test("facturas permite Gerencia o Administracion", () => {
+  for (const permiso of ["Gerencia", "Administracion"]) {
+    assert.equal(
+      hasRouteAccess({
+        rol: "administrador",
+        permisos: [permiso],
+        path: "/gerencia/facturas",
+      }),
+      true,
+    );
+  }
+  assert.equal(
+    hasRouteAccess({
+      rol: "administrador",
+      permisos: ["Contabilidad"],
+      path: "/gerencia/facturas",
+    }),
+    false,
+  );
+});
+
 test("usuario sin permisos no obtiene permisos administrativos implicitos", () => {
   assert.equal(
     hasRouteAccess({

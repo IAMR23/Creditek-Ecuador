@@ -68,6 +68,11 @@ const getModeloLabel = (modelo) =>
     ? `${modelo.dispositivoMarca.marca.nombre} ${modelo.nombre}`
     : modelo.nombre;
 
+const getVendedorDetalle = (usuario) => {
+  const detalle = usuario.cargoComision || usuario.cargo || usuario.rol;
+  return typeof detalle === "object" ? detalle?.nombre || "" : detalle || "";
+};
+
 const coincideBusquedaCliente = (fila, busqueda) => {
   const termino = normalizarBusqueda(busqueda);
   if (!termino) return true;
@@ -407,6 +412,7 @@ export default function EntregasAuditoria() {
           />
           <CollaboratorSearchInput
             options={usuarios}
+            getOptionDetail={getVendedorDetalle}
             searchValue={vendedorBusqueda}
             selectedId={vendedorId}
             open={vendedorSelectorOpen}
