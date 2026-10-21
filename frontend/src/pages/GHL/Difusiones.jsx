@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Eye,
   History,
+  ImagePlus,
   ListFilter,
   LoaderCircle,
   MessageSquareText,
@@ -86,8 +87,25 @@ const emptySmartListForm = () => ({ nombre: "", logic: "AND", rules: [newFilterR
 const newMessageVariant = (content = "") => ({
   key: `message-variant-${messageVariantSequence += 1}`,
   content,
+  imageUrl: "",
+  imageName: "",
 });
-const emptySavedMessageForm = () => ({ nombre: "", contenido: "" });
+const emptySavedMessageForm = () => ({
+  nombre: "",
+  contenido: "",
+  categoriaId: "",
+  imagenUrl: "",
+  imagenNombre: "",
+});
+const resolveMediaUrl = (value) => {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  try {
+    return new URL(value, api.defaults.baseURL || window.location.origin).toString();
+  } catch {
+    return value;
+  }
+};
 const toDateTimeLocal = (date) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Guayaquil",
@@ -151,6 +169,9 @@ export default function Difusiones() {
   const [instances, setInstances] = useState(initialInstances);
   const [messages, setMessages] = useState(() => [newMessageVariant()]);
   const [savedMessages, setSavedMessages] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [libraryCategoryId, setLibraryCategoryId] = useState("");
+  const [newCategoryName, setNewCategoryName] = useState("");
   const [savedMessageForm, setSavedMessageForm] = useState(emptySavedMessageForm);
   const [editingSavedMessageId, setEditingSavedMessageId] = useState(null);
   const [savedMessageEditorOpen, setSavedMessageEditorOpen] = useState(false);
@@ -175,6 +196,8 @@ export default function Difusiones() {
   const [savingSmartList, setSavingSmartList] = useState(false);
   const [savedMessagesLoading, setSavedMessagesLoading] = useState(false);
   const [savingSavedMessage, setSavingSavedMessage] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [uploadingImageKey, setUploadingImageKey] = useState(null);
   const [error, setError] = useState("");
 
   const selectedList = useMemo(() => Object.values(selectedContacts), [selectedContacts]);
@@ -192,6 +215,10 @@ export default function Difusiones() {
     [activeSmartListId, smartLists],
   );
   const messageContents = messages.map((item) => item.content);
+  const libraryMessages = useMemo(
+    () => savedMessages.filter((item) => !libraryCategoryId || String(item.categoriaId) === String(libraryCategoryId)),
+    [libraryCategoryId, savedMessages],
+  );
   const allMessagesValid = messageContents.length > 0
     && messageContents.every((content) => content.trim());
   const effectiveBatchSize = Math.min(batchSize, selectedInstances.length);
@@ -298,6 +325,16 @@ export default function Difusiones() {
     }
   }, [isAdmin]);
 
+  const loadCategories = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const response = await api.get("/api/ghl/difusiones/categorias");
+      setCategories(response.data.categorias || []);
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    }
+  }, [isAdmin]);
+
   const loadActiveExecution = useCallback(async () => {
     if (!isAdmin) return;
     try {
@@ -354,6 +391,10 @@ export default function Difusiones() {
   useEffect(() => {
     loadSavedMessages();
   }, [loadSavedMessages]);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   useEffect(() => {
     loadActiveExecution();
@@ -506,6 +547,8 @@ export default function Difusiones() {
     phoneNumbers: externalSelectedList.map((contact) => contact.phone),
     instanceIndexes: selectedInstances.map((instance) => instance.index),
     messages: messageContents,
+    imageUrls: messages.map((item) => item.imageUrl || ""),
+    imageNames: messages.map((item) => item.imageName || ""),
     batchSize,
     intervalMinutes,
     scheduledAt: sendMode === "scheduled" && scheduledAt
@@ -723,15 +766,46 @@ export default function Difusiones() {
     setMessages((current) => current.map((item) => item.key === key ? { ...item, content } : item));
   };
 
-  const addMessageVariant = (content = "") => {
+  const addMessageVariant = (content = "", imageUrl = "", imageName = "") => {
     invalidatePreview();
     setMessages((current) => {
       if (current.length >= 10) return current;
       if (content && current.length === 1 && !current[0].content.trim()) {
-        return [{ ...current[0], content }];
+        return [{ ...current[0], content, imageUrl, imageName }];
       }
-      return [...current, newMessageVariant(content)];
+      return [...current, { ...newMessageVariant(content), imageUrl, imageName }];
     });
+  };
+
+  const uploadBroadcastImage = async (file) => {
+    if (!file) return null;
+    if (!(["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
+      throw new Error("La imagen debe ser JPG, PNG o WEBP.");
+    }
+    if (file.size > 5 * 1024 * 1024) throw new Error("La imagen no puede superar los 5 MB.");
+    const formData = new FormData();
+    formData.append("imagen", file);
+    const response = await api.post("/api/ghl/difusiones/imagenes", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data.imagen;
+  };
+
+  const uploadVariantImage = async (key, file) => {
+    if (!file) return;
+    setUploadingImageKey(key);
+    setError("");
+    try {
+      const image = await uploadBroadcastImage(file);
+      invalidatePreview();
+      setMessages((current) => current.map((item) => item.key === key
+        ? { ...item, imageUrl: image.url, imageName: image.nombre }
+        : item));
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setUploadingImageKey(null);
+    }
   };
 
   const removeMessageVariant = (key) => {
@@ -741,15 +815,27 @@ export default function Difusiones() {
       : current.filter((item) => item.key !== key));
   };
 
-  const openNewSavedMessage = (content = "") => {
+  const openNewSavedMessage = (content = "", imageUrl = "", imageName = "") => {
     setEditingSavedMessageId(null);
-    setSavedMessageForm({ nombre: "", contenido: content });
+    setSavedMessageForm({
+      ...emptySavedMessageForm(),
+      contenido: content,
+      categoriaId: libraryCategoryId,
+      imagenUrl: imageUrl,
+      imagenNombre: imageName,
+    });
     setSavedMessageEditorOpen(true);
   };
 
   const openEditSavedMessage = (savedMessage) => {
     setEditingSavedMessageId(savedMessage.id);
-    setSavedMessageForm({ nombre: savedMessage.nombre, contenido: savedMessage.contenido });
+    setSavedMessageForm({
+      nombre: savedMessage.nombre,
+      contenido: savedMessage.contenido,
+      categoriaId: savedMessage.categoriaId || "",
+      imagenUrl: savedMessage.imagenUrl || "",
+      imagenNombre: savedMessage.imagenNombre || "",
+    });
     setSavedMessageEditorOpen(true);
   };
 
@@ -790,6 +876,68 @@ export default function Difusiones() {
     }
   };
 
+  const uploadSavedMessageImage = async (file) => {
+    if (!file) return;
+    setUploadingImageKey("saved-message");
+    setError("");
+    try {
+      const image = await uploadBroadcastImage(file);
+      setSavedMessageForm((current) => ({
+        ...current,
+        imagenUrl: image.url,
+        imagenNombre: image.nombre,
+      }));
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setUploadingImageKey(null);
+    }
+  };
+
+  const createCategory = async (event) => {
+    event.preventDefault();
+    if (!newCategoryName.trim()) return;
+    setSavingCategory(true);
+    setError("");
+    try {
+      const response = await api.post("/api/ghl/difusiones/categorias", {
+        nombre: newCategoryName.trim(),
+      });
+      setNewCategoryName("");
+      await loadCategories();
+      setLibraryCategoryId(String(response.data.categoria.id));
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
+  const useCategoryMessages = () => {
+    if (!libraryCategoryId) {
+      setError("Seleccione una categoria para usar todos sus mensajes.");
+      return;
+    }
+    if (!libraryMessages.length) return;
+    if (libraryMessages.length > 10) {
+      setError("La categoria tiene mas de 10 mensajes; se seleccionaron los primeros 10.");
+    } else {
+      setError("");
+    }
+    invalidatePreview();
+    setMessages(libraryMessages.slice(0, 10).map((item) => ({
+      ...newMessageVariant(item.contenido),
+      imageUrl: item.imagenUrl || "",
+      imageName: item.imagenNombre || "",
+    })));
+  };
+
+  const toggleAllInstances = () => {
+    invalidatePreview();
+    const shouldSelect = !instances.every((instance) => instance.selected);
+    setInstances((current) => current.map((instance) => ({ ...instance, selected: shouldSelect })));
+  };
+
   return (
     <div className="min-h-screen space-y-5 bg-gray-50 p-4 md:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -802,7 +950,7 @@ export default function Difusiones() {
         </div>
         <button
           type="button"
-          onClick={() => { loadStatus(); loadContacts(); loadSmartLists(); loadGhlTags(); loadPipelines(); loadSavedMessages(); }}
+          onClick={() => { loadStatus(); loadContacts(); loadSmartLists(); loadGhlTags(); loadPipelines(); loadSavedMessages(); loadCategories(); }}
           disabled={loading || contactsLoading}
           className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-bold text-gray-700 shadow-sm disabled:opacity-50"
         >
@@ -1049,6 +1197,17 @@ export default function Difusiones() {
                   />
                 </label>
                 <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
+                  Categoria
+                  <select
+                    value={savedMessageForm.categoriaId}
+                    onChange={(event) => setSavedMessageForm((current) => ({ ...current, categoriaId: event.target.value }))}
+                    className="mt-2 h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-normal normal-case tracking-normal outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+                  >
+                    <option value="">Sin categoria</option>
+                    {categories.map((category) => <option key={category.id} value={category.id}>{category.nombre}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-gray-500">
                   Contenido
                   <textarea
                     value={savedMessageForm.contenido}
@@ -1060,10 +1219,42 @@ export default function Difusiones() {
                   />
                 </label>
                 <div className="text-right text-xs text-gray-500">{savedMessageForm.contenido.length}/4000</div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Imagen opcional</div>
+                      <div className="mt-1 text-xs text-gray-500">JPG, PNG o WEBP · máximo 5 MB</div>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-green-700">
+                      {uploadingImageKey === "saved-message" ? <LoaderCircle size={15} className="animate-spin" /> : <ImagePlus size={15} />}
+                      Seleccionar imagen
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={uploadingImageKey !== null}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          uploadSavedMessageImage(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {savedMessageForm.imagenUrl && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <img src={resolveMediaUrl(savedMessageForm.imagenUrl)} alt="Vista previa" className="h-20 w-20 rounded-lg border bg-white object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-gray-700">{savedMessageForm.imagenNombre}</p>
+                        <button type="button" onClick={() => setSavedMessageForm((current) => ({ ...current, imagenUrl: "", imagenNombre: "" }))} className="mt-2 text-xs font-bold text-red-600">Quitar imagen</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex justify-end gap-2 border-t bg-gray-50 p-4">
                 <button type="button" onClick={closeSavedMessageEditor} className="rounded-lg border bg-white px-4 py-2 text-sm font-bold text-gray-600">Cancelar</button>
-                <button type="submit" disabled={savingSavedMessage} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                <button type="submit" disabled={savingSavedMessage || uploadingImageKey !== null} className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
                   {savingSavedMessage ? <LoaderCircle size={17} className="animate-spin" /> : <Save size={17} />} Guardar
                 </button>
               </div>
@@ -1259,7 +1450,7 @@ export default function Difusiones() {
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-gray-600">Variante {index + 1}</span>
                     <div className="flex gap-1">
-                      <button type="button" onClick={() => openNewSavedMessage(item.content)} disabled={!item.content.trim()} className="rounded p-1.5 text-green-700 hover:bg-green-100 disabled:opacity-30" title="Guardar en biblioteca"><Save size={15} /></button>
+                      <button type="button" onClick={() => openNewSavedMessage(item.content, item.imageUrl, item.imageName)} disabled={!item.content.trim()} className="rounded p-1.5 text-green-700 hover:bg-green-100 disabled:opacity-30" title="Guardar en biblioteca"><Save size={15} /></button>
                       <button type="button" onClick={() => removeMessageVariant(item.key)} className="rounded p-1.5 text-red-600 hover:bg-red-100" title="Quitar variante"><Trash2 size={15} /></button>
                     </div>
                   </div>
@@ -1272,6 +1463,41 @@ export default function Difusiones() {
                     className="w-full resize-y rounded-lg border border-gray-300 bg-white p-3 text-sm outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
                   />
                   <div className="mt-1 text-right text-xs text-gray-500">{item.content.length}/4000</div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-bold text-green-700">
+                      {uploadingImageKey === item.key ? <LoaderCircle size={14} className="animate-spin" /> : <ImagePlus size={14} />}
+                      {item.imageUrl ? "Cambiar imagen" : "Agregar imagen"}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={uploadingImageKey !== null}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          uploadVariantImage(item.key, file);
+                        }}
+                      />
+                    </label>
+                    {item.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          invalidatePreview();
+                          setMessages((current) => current.map((variant) => variant.key === item.key ? { ...variant, imageUrl: "", imageName: "" } : variant));
+                        }}
+                        className="text-xs font-bold text-red-600"
+                      >
+                        Quitar imagen
+                      </button>
+                    )}
+                  </div>
+                  {item.imageUrl && (
+                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 p-2">
+                      <img src={resolveMediaUrl(item.imageUrl)} alt="Imagen de la variante" className="h-14 w-14 rounded-md object-cover" />
+                      <span className="min-w-0 truncate text-xs font-semibold text-green-800">{item.imageName || "Imagen adjunta"}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1282,16 +1508,43 @@ export default function Difusiones() {
               <div className="flex items-center gap-2"><BookOpen size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Biblioteca</h2></div>
               <button type="button" onClick={() => openNewSavedMessage()} className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold text-gray-700"><Plus size={15} /> Nuevo</button>
             </div>
+            <form onSubmit={createCategory} className="mb-3 flex gap-2">
+              <input
+                value={newCategoryName}
+                onChange={(event) => setNewCategoryName(event.target.value)}
+                maxLength="80"
+                placeholder="Nueva categoria"
+                className="h-9 min-w-0 flex-1 rounded-lg border border-gray-300 px-3 text-xs outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              />
+              <button type="submit" disabled={savingCategory || newCategoryName.trim().length < 2} className="inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-bold text-gray-700 disabled:opacity-40">
+                {savingCategory ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14} />} Categoria
+              </button>
+            </form>
+            <div className="mb-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <select
+                value={libraryCategoryId}
+                onChange={(event) => setLibraryCategoryId(event.target.value)}
+                className="h-9 min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
+              >
+                <option value="">Todas las categorias</option>
+                {categories.map((category) => <option key={category.id} value={category.id}>{category.nombre}</option>)}
+              </select>
+              <button type="button" onClick={useCategoryMessages} disabled={!libraryCategoryId || !libraryMessages.length} className="h-9 rounded-lg bg-green-600 px-3 text-xs font-bold text-white disabled:opacity-40">
+                Usar toda la categoria
+              </button>
+            </div>
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-              {savedMessages.map((savedMessage) => (
+              {libraryMessages.map((savedMessage) => (
                 <div key={savedMessage.id} className="rounded-lg border border-gray-200 p-3">
                   <div className="flex items-start justify-between gap-2">
+                    {savedMessage.imagenUrl && <img src={resolveMediaUrl(savedMessage.imagenUrl)} alt="" className="h-12 w-12 shrink-0 rounded-md border object-cover" />}
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold text-gray-800" title={savedMessage.nombre}>{savedMessage.nombre}</div>
+                      {savedMessage.categoriaId && <span className="mt-1 inline-flex rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">{categories.find((category) => String(category.id) === String(savedMessage.categoriaId))?.nombre || "Categoria"}</span>}
                       <p className="mt-1 line-clamp-2 text-xs text-gray-500">{savedMessage.contenido}</p>
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <button type="button" onClick={() => addMessageVariant(savedMessage.contenido)} disabled={messages.length >= 10} className="rounded bg-green-50 px-2 py-1 text-xs font-bold text-green-700 disabled:opacity-40">Usar</button>
+                      <button type="button" onClick={() => addMessageVariant(savedMessage.contenido, savedMessage.imagenUrl, savedMessage.imagenNombre)} disabled={messages.length >= 10} className="rounded bg-green-50 px-2 py-1 text-xs font-bold text-green-700 disabled:opacity-40">Usar</button>
                       <button type="button" onClick={() => openEditSavedMessage(savedMessage)} className="rounded p-1.5 text-gray-600 hover:bg-gray-100" title="Editar"><Pencil size={14} /></button>
                       <button type="button" onClick={() => deleteSavedMessage(savedMessage)} className="rounded p-1.5 text-red-600 hover:bg-red-50" title="Eliminar"><Trash2 size={14} /></button>
                     </div>
@@ -1299,14 +1552,19 @@ export default function Difusiones() {
                 </div>
               ))}
               {savedMessagesLoading && <div className="py-5 text-center text-xs text-gray-500"><LoaderCircle size={17} className="mr-2 inline animate-spin" />Cargando mensajes...</div>}
-              {!savedMessagesLoading && !savedMessages.length && <div className="rounded-lg bg-gray-50 p-4 text-center text-xs text-gray-500">Aun no hay mensajes guardados.</div>}
+              {!savedMessagesLoading && !libraryMessages.length && <div className="rounded-lg bg-gray-50 p-4 text-center text-xs text-gray-500">No hay mensajes en esta categoria.</div>}
             </div>
           </section>
 
           <section className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2"><Smartphone size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Canales de salida</h2></div>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2"><Smartphone size={19} className="text-green-700" /><h2 className="font-bold text-gray-900">Canales de salida</h2></div>
+              <button type="button" onClick={toggleAllInstances} className="rounded-lg border px-2.5 py-1.5 text-xs font-bold text-gray-700">
+                {instances.every((instance) => instance.selected) ? "Quitar todas" : "Seleccionar todas"}
+              </button>
+            </div>
             <p className="mb-3 text-xs text-gray-500">
-              Ninguna instancia se selecciona automaticamente. Marque solo las que esten conectadas en Message Hub.
+              Puede seleccionar todas o marcar solamente las instancias conectadas en Message Hub.
             </p>
             <div className="space-y-2">
               {instances.map((instance) => (

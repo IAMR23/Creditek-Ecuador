@@ -8,6 +8,8 @@ const GhlDifusionEjecucionDetalle = sequelize.define("GhlDifusionEjecucionDetall
   contactName: { type: DataTypes.STRING(250), allowNull: false },
   instanceIndex: { type: DataTypes.INTEGER, allowNull: false },
   mensaje: { type: DataTypes.TEXT, allowNull: true },
+  imagenUrl: { type: DataTypes.TEXT, allowNull: true },
+  imagenNombre: { type: DataTypes.STRING(255), allowNull: true },
   estado: { type: DataTypes.STRING(30), allowNull: false, defaultValue: "pending" },
   messageId: { type: DataTypes.STRING(150), allowNull: true },
   sendError: { type: DataTypes.TEXT, allowNull: true },

@@ -102,5 +102,6 @@ router.post(
 );
 router.post("/carga-excel", cargarArchivoExcel, controller.cargarExcel);
 router.post("/:id/foto", cargarFotoFactura, controller.cargarFoto);
+router.patch("/:id", controller.actualizar);
 
 module.exports = router;

@@ -12,6 +12,7 @@ jest.mock("../../middleware/authMiddleware", () => ({
       : res.status(403).json({ ok: false, message: "Sin permiso" }),
 }));
 jest.mock("../../controllers/Gerencia/facturasController", () => ({
+  actualizar: (_req, res) => res.json({ ok: true }),
   cargarExcel: (_req, res) => res.status(201).json({ ok: true }),
   cargarFoto: (_req, res) => res.json({ ok: true }),
   listar: (_req, res) => res.json({ ok: true, facturas: [] }),
@@ -49,6 +50,14 @@ describe("rutas de facturas", () => {
       .get("/api/gerencia/facturas")
       .set("x-test-permisos", "Ventas")
       .expect(403);
+  });
+
+  test("permite editar una factura con permiso de Gerencia", async () => {
+    await request(createApp())
+      .patch("/api/gerencia/facturas/7")
+      .set("x-test-permisos", "Gerencia")
+      .send({ proveedor: "Proveedor actualizado" })
+      .expect(200);
   });
 
   test("rechaza archivos que no sean JSON", async () => {

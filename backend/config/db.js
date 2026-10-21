@@ -288,6 +288,7 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
   await sequelize.query(`
     ALTER TABLE ghl_difusion_ejecuciones
       ADD COLUMN IF NOT EXISTS mensajes JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS imagenes JSONB NOT NULL DEFAULT '[]'::jsonb,
       ADD COLUMN IF NOT EXISTS "scheduledAt" TIMESTAMPTZ;
     UPDATE ghl_difusion_ejecuciones
     SET "scheduledAt" = COALESCE("scheduledAt", "createdAt");
@@ -309,7 +310,9 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
   if (!tables.includes("ghl_difusion_ejecucion_detalles")) return;
   await sequelize.query(`
     ALTER TABLE ghl_difusion_ejecucion_detalles
-      ADD COLUMN IF NOT EXISTS mensaje TEXT;
+      ADD COLUMN IF NOT EXISTS mensaje TEXT,
+      ADD COLUMN IF NOT EXISTS "imagenUrl" TEXT,
+      ADD COLUMN IF NOT EXISTS "imagenNombre" VARCHAR(255);
     DO $$
     DECLARE
       tag_status_constraint TEXT;
@@ -331,6 +334,10 @@ const ensureGhlBroadcastQueueSchema = async (tables) => {
   `);
   if (tables.includes("ghl_difusion_mensajes")) {
     await sequelize.query(`
+      ALTER TABLE ghl_difusion_mensajes
+        ADD COLUMN IF NOT EXISTS "categoriaId" INTEGER,
+        ADD COLUMN IF NOT EXISTS "imagenUrl" TEXT,
+        ADD COLUMN IF NOT EXISTS "imagenNombre" VARCHAR(255);
       CREATE UNIQUE INDEX IF NOT EXISTS ghl_difusion_mensajes_nombre_unique
       ON ghl_difusion_mensajes (LOWER(TRIM(nombre)));
       CREATE INDEX IF NOT EXISTS ghl_difusion_mensajes_updated_at_idx
@@ -1482,12 +1489,14 @@ const ensureRequiredFeatureTables = async (queryInterface) => {
       || !tables.has("ghl_difusion_ejecuciones")
       || !tables.has("ghl_difusion_ejecucion_detalles")
       || !tables.has("ghl_difusion_mensajes")
+      || !tables.has("ghl_difusion_categorias")
     )
   ) {
     await ejecutarMigraciones([
       "202609280002-create-ghl-difusion-listas.sql",
       "202609280003-create-ghl-difusion-ejecuciones.sql",
       "202609290001-create-ghl-difusion-mensajes-y-variantes.sql",
+      "202610210001-add-ghl-difusion-media-categorias.sql",
     ]);
   }
 

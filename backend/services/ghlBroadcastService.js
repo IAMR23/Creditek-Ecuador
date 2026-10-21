@@ -9,6 +9,7 @@ const {
   requestGhl,
   toId,
 } = require("./ghlService");
+const { normalizeStoredImageUrl, publicImageUrl } = require("./ghlBroadcastMediaService");
 
 const CONTACTS_VERSION = process.env.GHL_CONTACTS_API_VERSION || "2021-07-28";
 const MESSAGE_HUB_VERSION = "v3";
@@ -598,6 +599,18 @@ const normalizeMessages = (input = {}) => {
   return source.map(validateMessage);
 };
 
+const normalizeMessageImages = (input = {}, messageCount = normalizeMessages(input).length) => {
+  const source = Array.isArray(input.imageUrls) ? input.imageUrls : [];
+  if (source.length > messageCount) {
+    throw createError("Hay mas imagenes que variantes de mensaje", "GHL_BROADCAST_IMAGE_VARIANT_MISMATCH");
+  }
+  return Array.from({ length: messageCount }, (_, index) => {
+    const imageUrl = normalizeStoredImageUrl(source[index]);
+    if (imageUrl) publicImageUrl(imageUrl);
+    return imageUrl;
+  });
+};
+
 const buildBalancedDistribution = (contacts, instanceIndexes) => {
   const instances = normalizeInstanceIndexes(instanceIndexes);
   const base = Math.floor(contacts.length / instances.length);
@@ -885,6 +898,7 @@ const resolveExternalRecipients = async (input = {}, dependencies = {}) => {
 
 const previewBroadcast = async (input = {}, dependencies = {}) => {
   const cleanMessages = normalizeMessages(input);
+  const cleanImages = normalizeMessageImages(input, cleanMessages.length);
   const contactIds = normalizeContactIds(input.contactIds, { required: false });
   const phoneNumbers = normalizeExternalPhoneNumbers(input.phoneNumbers);
   validateRecipientLimit(contactIds, phoneNumbers);
@@ -923,6 +937,7 @@ const previewBroadcast = async (input = {}, dependencies = {}) => {
     messageLength: cleanMessages[0].length,
     messageLengths: cleanMessages.map((message) => message.length),
     messageCount: cleanMessages.length,
+    imageCount: cleanImages.filter(Boolean).length,
     totalSelected: allEligible.length + excluded.length,
     totalEligible: allEligible.length,
     totalExcluded: excluded.length,
@@ -1018,6 +1033,7 @@ module.exports = {
   normalizeEcuadorMobilePhone,
   normalizeExternalPhoneNumbers,
   normalizeInstanceIndexes,
+  normalizeMessageImages,
   normalizeMessages,
   previewBroadcast,
   resolveExternalRecipients,

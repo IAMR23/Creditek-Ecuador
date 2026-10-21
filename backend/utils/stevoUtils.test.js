@@ -1,4 +1,5 @@
 const {
+  extraerMensajeStevo,
   extraerTelefonoStevo,
   limpiarTelefono,
 } = require("./stevoUtils");
@@ -56,5 +57,26 @@ describe("normalizacion segura de telefonos Stevo", () => {
         },
       },
     }, { isFromMe: true })).toBe("+593991234567");
+  });
+
+  test("prioriza el numero del contacto sobre el numero del dispositivo nuevo", () => {
+    expect(extraerTelefonoStevo({
+      device: { number: "0991111111", name: "Recepcion" },
+      contact: { id: "contact-1", number: "0987981946" },
+      message: { text: "Hola" },
+    })).toBe("+593987981946");
+  });
+
+  test("extrae texto y transcripcion del nuevo payload sin duplicarlos", () => {
+    expect(extraerMensajeStevo({
+      message: { text: "Adjunto nota de voz" },
+      transcribedAudio: "Mi cedula es 1710034065",
+    })).toBe("Adjunto nota de voz\nMi cedula es 1710034065");
+  });
+
+  test("mantiene compatibilidad con el mensaje anterior", () => {
+    expect(extraerMensajeStevo({
+      data: { conversation: "Mi cedula es 1710034065" },
+    })).toBe("Mi cedula es 1710034065");
   });
 });

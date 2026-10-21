@@ -5,6 +5,7 @@ jest.mock("../models/FacturaRegistro", () => ({}));
 jest.mock("../models/Usuario", () => ({}));
 
 const {
+  actualizarFactura,
   cargarJsonTexto,
   extraerFacturas,
   normalizarFactura,
@@ -265,5 +266,53 @@ describe("facturasService", () => {
     await expect(
       validarNumerosFacturaDisponibles([{ numeroFactura: "001-001-0002" }]),
     ).rejects.toMatchObject({ statusCode: 409, duplicados: ["001-001-0002"] });
+  });
+
+  test("actualiza los campos editables de una factura", async () => {
+    const factura = {
+      id: 7,
+      numeroFactura: "001-001-0001",
+      update: jest.fn(async function update(datos) {
+        Object.assign(this, datos);
+      }),
+      toJSON() {
+        return { ...this, update: undefined, toJSON: undefined };
+      },
+    };
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue(factura);
+    FacturaRegistro.findOne = jest.fn().mockResolvedValue(null);
+
+    await expect(
+      actualizarFactura({
+        id: 7,
+        payload: {
+          proveedor: " Proveedor actualizado ",
+          numeroFactura: "001-001-0002",
+          subtotal: "100,50",
+          iva: "15,08",
+          total: "115,58",
+        },
+      }),
+    ).resolves.toMatchObject({
+      id: 7,
+      proveedor: "Proveedor actualizado",
+      numeroFactura: "001-001-0002",
+      subtotal: 100.5,
+      iva: 15.08,
+      total: 115.58,
+    });
+    expect(factura.update).toHaveBeenCalled();
+  });
+
+  test("impide editar una factura con un numero ya registrado", async () => {
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue({
+      id: 7,
+      numeroFactura: "001-001-0001",
+    });
+    FacturaRegistro.findOne = jest.fn().mockResolvedValue({ id: 8 });
+
+    await expect(
+      actualizarFactura({ id: 7, payload: { numeroFactura: "001-001-0002" } }),
+    ).rejects.toMatchObject({ statusCode: 409 });
   });
 });

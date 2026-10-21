@@ -233,8 +233,9 @@ export default function EgresosCreditek() {
     SECCIONES.find((item) => item.id === seccionActiva) || SECCIONES[0];
   const SeccionIcon = seccion.icon;
   const seccionRequiereFecha = requiereFechaRegistro(seccionActiva);
-  const historialGridClass =
-    "xl:grid-cols-[minmax(170px,1.05fr)_130px_110px_120px_100px_minmax(170px,1fr)_minmax(170px,1fr)_88px]";
+  const historialGridClass = esPrestamo
+    ? "xl:grid-cols-[minmax(150px,1.05fr)_120px_100px_210px_90px_minmax(150px,1fr)_minmax(150px,1fr)_88px]"
+    : "xl:grid-cols-[minmax(170px,1.05fr)_130px_110px_120px_100px_minmax(170px,1fr)_minmax(170px,1fr)_88px]";
   const editandoControlFinanciero =
     registroEditando && esRegistroControlFinanciero(registroEditando);
 
@@ -1090,7 +1091,7 @@ export default function EgresosCreditek() {
                     {seccionRequiereFecha && (
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase text-slate-400 xl:hidden">{esPrestamo ? "Inicio / Fin" : "Fecha sanción"}</p>
-                        <p className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                        <p className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                           <CalendarDays size={13} className="shrink-0 text-slate-400" />
                           {registro.fecha || "-"}{esPrestamo ? ` / ${registro.fechaFin || "Sin fecha final"}` : ""}
                         </p>

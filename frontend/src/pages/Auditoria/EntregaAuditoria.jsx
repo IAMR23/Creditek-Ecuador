@@ -122,7 +122,16 @@ export default function EntregaAuditoria() {
 
     try {
       const { data } = await axios.get(`${API_URL}/dispositivoMarca/${dispositivoMarcaId}`);
-      setModelos(data || []);
+      setModelos(
+        (Array.isArray(data) ? data : [])
+          .filter((modelo) => modelo.activo === true)
+          .sort((a, b) =>
+            String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", {
+              sensitivity: "base",
+              numeric: true,
+            }),
+          ),
+      );
     } catch (error) {
       console.error("Error cargando modelos:", error);
       setModelos([]);

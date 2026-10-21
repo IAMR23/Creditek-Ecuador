@@ -12,6 +12,7 @@ async function run() {
     "202609290001-create-ghl-difusion-mensajes-y-variantes.sql",
     "202610020001-add-ghl-difusion-scheduled-at.sql",
     "202610060005-allow-multiple-ghl-broadcasts.sql",
+    "202610210001-add-ghl-difusion-media-categorias.sql",
   ];
   for (const migration of migrations) {
     const sql = fs.readFileSync(path.join(__dirname, "../migrations", migration), "utf8");

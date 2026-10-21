@@ -1,6 +1,8 @@
 const { Op, fn, col, where } = require("sequelize");
 const GhlDifusionMensaje = require("../models/GhlDifusionMensaje");
+const GhlDifusionCategoria = require("../models/GhlDifusionCategoria");
 const { validateMessage } = require("./ghlBroadcastService");
+const { normalizeStoredImageUrl } = require("./ghlBroadcastMediaService");
 
 const compactString = (value) => String(value || "").trim();
 
@@ -19,7 +21,23 @@ const normalizePayload = (input = {}) => {
       "GHL_BROADCAST_SAVED_MESSAGE_NAME_INVALID",
     );
   }
-  return { nombre, contenido: validateMessage(input.contenido) };
+  const categoriaId = input.categoriaId === "" || input.categoriaId === null || input.categoriaId === undefined
+    ? null
+    : Number.parseInt(input.categoriaId, 10);
+  if (categoriaId !== null && (!Number.isInteger(categoriaId) || categoriaId <= 0)) {
+    throw createError("La categoria seleccionada no es valida", "GHL_BROADCAST_CATEGORY_ID_INVALID");
+  }
+  const imagenUrl = normalizeStoredImageUrl(input.imagenUrl);
+  const imagenNombre = imagenUrl
+    ? compactString(input.imagenNombre).slice(0, 255) || "imagen"
+    : null;
+  return {
+    nombre,
+    contenido: validateMessage(input.contenido),
+    categoriaId,
+    imagenUrl,
+    imagenNombre,
+  };
 };
 
 const serialize = (row) => {
@@ -28,11 +46,21 @@ const serialize = (row) => {
     id: value.id,
     nombre: value.nombre,
     contenido: value.contenido,
+    categoriaId: value.categoriaId,
+    imagenUrl: value.imagenUrl,
+    imagenNombre: value.imagenNombre,
     creadoPorId: value.creadoPorId,
     actualizadoPorId: value.actualizadoPorId,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   };
+};
+
+const ensureCategoryExists = async (categoryModel, categoriaId) => {
+  if (!categoriaId) return;
+  if (!await categoryModel.findByPk(categoriaId, { attributes: ["id"] })) {
+    throw createError("La categoria seleccionada no existe", "GHL_BROADCAST_CATEGORY_NOT_FOUND", 404);
+  }
 };
 
 const ensureUniqueName = async (model, nombre, excludedId = null) => {
@@ -71,7 +99,9 @@ const listSavedMessages = async (dependencies = {}) => {
 
 const createSavedMessage = async (input, userId, dependencies = {}) => {
   const model = dependencies.model || GhlDifusionMensaje;
+  const categoryModel = dependencies.categoryModel || GhlDifusionCategoria;
   const payload = normalizePayload(input);
+  await ensureCategoryExists(categoryModel, payload.categoriaId);
   await ensureUniqueName(model, payload.nombre);
   const row = await model.create({
     ...payload,
@@ -83,8 +113,10 @@ const createSavedMessage = async (input, userId, dependencies = {}) => {
 
 const updateSavedMessage = async (id, input, userId, dependencies = {}) => {
   const model = dependencies.model || GhlDifusionMensaje;
+  const categoryModel = dependencies.categoryModel || GhlDifusionCategoria;
   const row = await findSavedMessage(id, model);
   const payload = normalizePayload(input);
+  await ensureCategoryExists(categoryModel, payload.categoriaId);
   await ensureUniqueName(model, payload.nombre, row.id);
   await row.update({ ...payload, actualizadoPorId: userId });
   return serialize(row);

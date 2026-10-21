@@ -37,6 +37,7 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
         "ghl_difusion_ejecuciones",
         "ghl_difusion_ejecucion_detalles",
         "ghl_difusion_mensajes",
+        "ghl_difusion_categorias",
         "uphone_solicitudes",
         "logistica_contifico_cache",
       ]),

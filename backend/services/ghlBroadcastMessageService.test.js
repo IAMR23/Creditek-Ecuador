@@ -16,6 +16,9 @@ describe("ghlBroadcastMessageService", () => {
     })).toEqual({
       nombre: "Seguimiento inicial",
       contenido: "Hola, queremos ayudarte.",
+      categoriaId: null,
+      imagenUrl: null,
+      imagenNombre: null,
     });
     expect(() => service.normalizePayload({ nombre: "Ok", contenido: "Hola" }))
       .toThrow(expect.objectContaining({ code: "GHL_BROADCAST_SAVED_MESSAGE_NAME_INVALID" }));

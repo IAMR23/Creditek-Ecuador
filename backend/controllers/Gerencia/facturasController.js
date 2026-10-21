@@ -78,4 +78,20 @@ const listar = async (req, res) => {
   }
 };
 
-module.exports = { cargarExcel, cargarFoto, cargarJson, cargarJsonTexto, listar };
+const actualizar = async (req, res) => {
+  try {
+    const factura = await facturasService.actualizarFactura({
+      id: req.params.id,
+      payload: req.body,
+    });
+    return res.json({
+      ok: true,
+      message: "Factura actualizada correctamente.",
+      factura,
+    });
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
+module.exports = { actualizar, cargarExcel, cargarFoto, cargarJson, cargarJsonTexto, listar };

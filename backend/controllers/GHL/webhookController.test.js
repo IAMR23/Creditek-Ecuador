@@ -125,4 +125,67 @@ describe("recibirWebhookStevo con actualizacion de cedula", () => {
     );
     consoleWarn.mockRestore();
   });
+
+  test("procesa el nuevo payload usando contact.number y message.text", async () => {
+    const req = {
+      body: {
+        messageId: "wamid.nuevo",
+        locationId: "loc-1",
+        device: { number: "0991111111", name: "Recepcion" },
+        contact: {
+          id: "contact-7",
+          name: "Jane Doe",
+          number: "0987981946",
+        },
+        message: {
+          text: "Mi cedula es 1710034065",
+          media: [],
+        },
+      },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    await recibirWebhookStevo(req, res);
+
+    expect(enviarAGHL).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: "+593987981946",
+        message: "Mi cedula es 1710034065",
+        isFromMe: false,
+      }),
+    );
+    expect(actualizarCedulaContactoDesdeMensaje).toHaveBeenCalledWith({
+      phone: "+593987981946",
+      message: "Mi cedula es 1710034065",
+      isFromMe: false,
+      upsertResponse: { ok: true },
+    });
+  });
+
+  test("detecta la cedula cuando llega solamente en transcribedAudio", async () => {
+    const req = {
+      body: {
+        device: { number: "0991111111" },
+        contact: { id: "contact-7", number: "0987981946" },
+        message: { text: "Nota de voz", media: [] },
+        transcribedAudio: "Mi cedula es 1710034065",
+      },
+    };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    await recibirWebhookStevo(req, res);
+
+    expect(actualizarCedulaContactoDesdeMensaje).toHaveBeenCalledWith({
+      phone: "+593987981946",
+      message: "Nota de voz\nMi cedula es 1710034065",
+      isFromMe: false,
+      upsertResponse: { ok: true },
+    });
+  });
 });

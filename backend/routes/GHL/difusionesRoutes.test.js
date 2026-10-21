@@ -17,6 +17,11 @@ describe("rutas de difusiones GHL", () => {
     expect(source).toContain('router.post("/mensajes"');
     expect(source).toContain('router.put("/mensajes/:id"');
     expect(source).toContain('router.delete("/mensajes/:id"');
+    expect(source).toContain('router.post("/imagenes"');
+    expect(source).toContain('router.get("/categorias"');
+    expect(source).toContain('router.post("/categorias"');
+    expect(source).toContain('router.put("/categorias/:id"');
+    expect(source).toContain('router.delete("/categorias/:id"');
     expect(source).toContain('router.post("/vista-previa"');
     expect(source).toContain('router.post("/enviar"');
     expect(source).toContain('router.get("/ejecuciones/activa"');

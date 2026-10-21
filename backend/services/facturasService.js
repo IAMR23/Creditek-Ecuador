@@ -493,6 +493,81 @@ const guardarFotoFactura = async ({ id, file }) => {
   return serializar(factura);
 };
 
+const normalizarDatosEdicion = (payload) => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw crearError("Los datos de la factura no son validos");
+  }
+
+  const datos = {};
+  const tieneCampo = (campo) => Object.prototype.hasOwnProperty.call(payload, campo);
+
+  if (tieneCampo("fechaFactura")) {
+    datos.fechaFactura = normalizarFecha(payload.fechaFactura);
+    if (payload.fechaFactura && !datos.fechaFactura) {
+      throw crearError("La fecha de la factura no es valida");
+    }
+  }
+
+  for (const [campo, maxLength, normalizador] of [
+    ["proveedor", 255, normalizarTexto],
+    ["identificacionProveedor", 30, normalizarTexto],
+    ["numeroFactura", 100, normalizarNumeroFactura],
+    ["formaPago", 120, normalizarTexto],
+    ["estado", 80, normalizarTexto],
+    ["observaciones", 5000, normalizarTexto],
+    ["tipo", 100, normalizarTexto],
+  ]) {
+    if (tieneCampo(campo)) datos[campo] = normalizador(payload[campo], maxLength);
+  }
+
+  for (const campo of CAMPOS_MONETARIOS) {
+    if (!tieneCampo(campo)) continue;
+    datos[campo] = normalizarMonto(payload[campo]);
+    if (payload[campo] !== "" && payload[campo] !== null && payload[campo] !== undefined && datos[campo] === null) {
+      throw crearError(`${campo} debe ser un valor numerico mayor o igual a cero`);
+    }
+  }
+
+  if (!Object.keys(datos).length) {
+    throw crearError("No se enviaron campos editables");
+  }
+  return datos;
+};
+
+const actualizarFactura = async ({ id, payload }) => {
+  const facturaId = normalizarId(id);
+  const datos = normalizarDatosEdicion(payload);
+  const factura = await FacturaRegistro.findByPk(facturaId);
+  if (!factura) throw crearError("Factura no encontrada", 404);
+
+  if (datos.numeroFactura && datos.numeroFactura !== factura.numeroFactura) {
+    const existente = await FacturaRegistro.findOne({
+      where: {
+        numeroFactura: datos.numeroFactura,
+        id: { [Op.ne]: facturaId },
+      },
+      attributes: ["id"],
+    });
+    if (existente) {
+      throw crearError("El numero de factura ya existe", 409, {
+        duplicados: [datos.numeroFactura],
+      });
+    }
+  }
+
+  try {
+    await factura.update(datos);
+  } catch (error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      throw crearError("El numero de factura ya existe", 409, {
+        duplicados: datos.numeroFactura ? [datos.numeroFactura] : [],
+      });
+    }
+    throw error;
+  }
+  return serializar(factura);
+};
+
 const normalizarFiltros = (query = {}) => {
   const where = {};
   const search = normalizarTexto(query.busqueda, 120);
@@ -573,6 +648,7 @@ module.exports = {
   FACTURA_IMAGE_EXTENSIONS,
   MAX_FACTURA_IMAGE_BYTES,
   MAX_JSON_BYTES,
+  actualizarFactura,
   cargarExcel,
   cargarJson,
   cargarJsonTexto,

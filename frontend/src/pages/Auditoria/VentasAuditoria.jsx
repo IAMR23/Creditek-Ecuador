@@ -114,6 +114,16 @@ const getModeloLabel = (modelo) =>
     ? `${modelo.dispositivoMarca.marca.nombre} ${modelo.nombre}`
     : modelo.nombre;
 
+const ordenarModelosActivos = (items) =>
+  (Array.isArray(items) ? items : [])
+    .filter((modelo) => modelo.activo === true)
+    .sort((a, b) =>
+      getModeloLabel(a).localeCompare(getModeloLabel(b), "es", {
+        sensitivity: "base",
+        numeric: true,
+      }),
+    );
+
 const getVendedorDetalle = (usuario) => {
   const detalle = usuario.cargoComision || usuario.cargo || usuario.rol;
   return typeof detalle === "object" ? detalle?.nombre || "" : detalle || "";
@@ -490,12 +500,12 @@ export default function VentasAuditoria() {
   const cargarCatalogosFiltros = async () => {
     try {
       const [modelosRes, origenesRes, dispositivosRes] = await Promise.all([
-        axios.get(`${API_URL}/modelos`),
+        axios.get(`${API_URL}/modelos/activos`),
         axios.get(`${API_URL}/origen`),
         axios.get(`${API_URL}/dispositivos`),
       ]);
 
-      setModelos(modelosRes.data || []);
+      setModelos(ordenarModelosActivos(modelosRes.data));
       setOrigenes(origenesRes.data || []);
       setDispositivos(dispositivosRes.data || []);
     } catch (error) {

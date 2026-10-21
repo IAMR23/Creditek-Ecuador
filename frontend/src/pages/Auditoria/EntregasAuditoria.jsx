@@ -68,6 +68,16 @@ const getModeloLabel = (modelo) =>
     ? `${modelo.dispositivoMarca.marca.nombre} ${modelo.nombre}`
     : modelo.nombre;
 
+const ordenarModelosActivos = (items) =>
+  (Array.isArray(items) ? items : [])
+    .filter((modelo) => modelo.activo === true)
+    .sort((a, b) =>
+      getModeloLabel(a).localeCompare(getModeloLabel(b), "es", {
+        sensitivity: "base",
+        numeric: true,
+      }),
+    );
+
 const getVendedorDetalle = (usuario) => {
   const detalle = usuario.cargoComision || usuario.cargo || usuario.rol;
   return typeof detalle === "object" ? detalle?.nombre || "" : detalle || "";
@@ -172,13 +182,13 @@ export default function EntregasAuditoria() {
         await Promise.all([
           axios.get(`${API_URL}/agencias`),
           axios.get(`${API_URL}/usuarios`, { params: { rol: "Vendedor" } }),
-          axios.get(`${API_URL}/modelos`),
+          axios.get(`${API_URL}/modelos/activos`),
           axios.get(`${API_URL}/dispositivos`),
         ]);
 
       setAgencias(agenciasRes.data || []);
       setUsuarios(usuariosRes.data || []);
-      setModelos(modelosRes.data || []);
+      setModelos(ordenarModelosActivos(modelosRes.data));
       setDispositivos(dispositivosRes.data || []);
     } catch (error) {
       console.error("Error cargando catalogos entregas auditoria:", error);

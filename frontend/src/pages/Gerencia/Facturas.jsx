@@ -6,8 +6,10 @@ import {
   FileJson,
   FileSpreadsheet,
   ImageUp,
+  Pencil,
   ReceiptText,
   RefreshCw,
+  Save,
   Search,
   Upload,
   X,
@@ -26,6 +28,19 @@ const filtrosIniciales = {
   formaPago: "",
   fechaInicio: "",
   fechaFin: "",
+};
+const edicionInicial = {
+  fechaFactura: "",
+  proveedor: "",
+  identificacionProveedor: "",
+  numeroFactura: "",
+  subtotal: "",
+  iva: "",
+  total: "",
+  formaPago: "",
+  estado: "",
+  observaciones: "",
+  tipo: "",
 };
 
 const money = new Intl.NumberFormat("es-EC", {
@@ -107,6 +122,9 @@ export default function Facturas() {
   const [subiendo, setSubiendo] = useState(false);
   const [fotoSubiendoId, setFotoSubiendoId] = useState(null);
   const [fotoVista, setFotoVista] = useState(null);
+  const [facturaEditando, setFacturaEditando] = useState(null);
+  const [edicion, setEdicion] = useState(edicionInicial);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   const cargar = useCallback(async ({ page = 1, silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -297,6 +315,57 @@ export default function Facturas() {
     setModalCarga(true);
   };
 
+  const abrirEdicion = (factura) => {
+    setFacturaEditando(factura);
+    setEdicion({
+      fechaFactura: factura.fechaFactura || "",
+      proveedor: factura.proveedor || "",
+      identificacionProveedor: factura.identificacionProveedor || "",
+      numeroFactura: factura.numeroFactura || "",
+      subtotal: factura.subtotal ?? "",
+      iva: factura.iva ?? "",
+      total: factura.total ?? "",
+      formaPago: factura.formaPago || "",
+      estado: factura.estado || "",
+      observaciones: factura.observaciones || "",
+      tipo: factura.tipo || "",
+    });
+  };
+
+  const cerrarEdicion = () => {
+    if (guardandoEdicion) return;
+    setFacturaEditando(null);
+    setEdicion(edicionInicial);
+  };
+
+  const actualizarCampoEdicion = (campo, value) => {
+    setEdicion((current) => ({ ...current, [campo]: value }));
+  };
+
+  const guardarEdicion = async (event) => {
+    event.preventDefault();
+    if (!facturaEditando || guardandoEdicion) return;
+
+    setGuardandoEdicion(true);
+    try {
+      const { data } = await api.patch(`${API_BASE}/${facturaEditando.id}`, edicion);
+      setFacturaEditando(null);
+      setEdicion(edicionInicial);
+      await cargar({ page: paginacion.page, silent: true });
+      await Swal.fire({
+        title: "Factura actualizada",
+        text: data.message,
+        icon: "success",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      await Swal.fire("No se pudo actualizar la factura", mensajeError(error), "error");
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-100 p-3 sm:p-5">
       <div className="mx-auto max-w-[1800px] space-y-4">
@@ -389,13 +458,13 @@ export default function Facturas() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1750px] text-left text-xs">
+              <table className="w-full min-w-[1830px] text-left text-xs">
                 <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                   <tr>
                     {[
                       "ID", "Fecha de factura", "Fecha de carga", "Proveedor", "RUC / Cédula",
                       "N.º de factura", "Subtotal", "IVA", "Total", "Forma de pago", "Estado",
-                      "Foto / nota de venta", "Observaciones", "Tipo",
+                      "Foto / nota de venta", "Observaciones", "Tipo", "Acciones",
                     ].map((label) => <th key={label} className="whitespace-nowrap px-3 py-3">{label}</th>)}
                   </tr>
                 </thead>
@@ -450,6 +519,16 @@ export default function Facturas() {
                       </td>
                       <td className="max-w-72 px-3 py-3 text-slate-600"><span className="line-clamp-2" title={factura.observaciones || ""}>{factura.observaciones || "-"}</span></td>
                       <td className="px-3 py-3"><span className="inline-flex rounded bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700">{factura.tipo}</span></td>
+                      <td className="px-3 py-3">
+                        <button
+                          type="button"
+                          onClick={() => abrirEdicion(factura)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 font-semibold text-slate-700 hover:border-teal-400 hover:bg-teal-50 hover:text-teal-800"
+                          title={`Editar factura ${factura.numeroFactura || `#${factura.id}`}`}
+                        >
+                          <Pencil size={13} /> Editar
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -565,6 +644,189 @@ export default function Facturas() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {facturaEditando && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="editar-factura-titulo"
+          onClick={cerrarEdicion}
+        >
+          <form
+            onSubmit={guardarEdicion}
+            className="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
+              <div>
+                <h2 id="editar-factura-titulo" className="text-sm font-bold text-slate-900">
+                  Editar factura
+                </h2>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Registro #{facturaEditando.id} · cargado {formatoFecha(facturaEditando.fechaCarga, true)}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={guardandoEdicion}
+                onClick={cerrarEdicion}
+                aria-label="Cerrar edición"
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+              >
+                <X size={19} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Fecha de factura
+                  <input
+                    type="date"
+                    value={edicion.fechaFactura}
+                    onChange={(event) => actualizarCampoEdicion("fechaFactura", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Número de factura
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={edicion.numeroFactura}
+                    onChange={(event) => actualizarCampoEdicion("numeroFactura", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">
+                  Proveedor
+                  <input
+                    type="text"
+                    maxLength={255}
+                    value={edicion.proveedor}
+                    onChange={(event) => actualizarCampoEdicion("proveedor", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">
+                  RUC / Cédula
+                  <input
+                    type="text"
+                    maxLength={30}
+                    value={edicion.identificacionProveedor}
+                    onChange={(event) => actualizarCampoEdicion("identificacionProveedor", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                {[
+                  ["subtotal", "Subtotal"],
+                  ["iva", "IVA"],
+                  ["total", "Total"],
+                ].map(([campo, label]) => (
+                  <label key={campo} className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                    {label}
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={edicion[campo]}
+                      onChange={(event) => actualizarCampoEdicion(campo, event.target.value)}
+                      disabled={guardandoEdicion}
+                      className="h-10 rounded-md border border-slate-300 px-3 text-right text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    />
+                  </label>
+                ))}
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Forma de pago
+                  <input
+                    type="text"
+                    list="formas-pago-facturas"
+                    maxLength={120}
+                    value={edicion.formaPago}
+                    onChange={(event) => actualizarCampoEdicion("formaPago", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Estado
+                  <input
+                    type="text"
+                    list="estados-facturas"
+                    maxLength={80}
+                    value={edicion.estado}
+                    onChange={(event) => actualizarCampoEdicion("estado", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Tipo
+                  <input
+                    type="text"
+                    list="tipos-facturas"
+                    maxLength={100}
+                    value={edicion.tipo}
+                    onChange={(event) => actualizarCampoEdicion("tipo", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">
+                  Observaciones
+                  <textarea
+                    rows={4}
+                    maxLength={5000}
+                    value={edicion.observaciones}
+                    onChange={(event) => actualizarCampoEdicion("observaciones", event.target.value)}
+                    disabled={guardandoEdicion}
+                    className="resize-y rounded-md border border-slate-300 px-3 py-2 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+              </div>
+
+              <datalist id="formas-pago-facturas">
+                {catalogos.formasPago.map((value) => <option key={value} value={value} />)}
+              </datalist>
+              <datalist id="estados-facturas">
+                {catalogos.estados.map((value) => <option key={value} value={value} />)}
+              </datalist>
+              <datalist id="tipos-facturas">
+                {catalogos.tipos.map((value) => <option key={value} value={value} />)}
+              </datalist>
+
+              <div className="mt-4 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <p>La foto se administra desde la tabla. El ID y la fecha de carga no se modifican.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3 sm:px-5">
+              <button
+                type="button"
+                disabled={guardandoEdicion}
+                onClick={cerrarEdicion}
+                className="h-9 rounded-md border border-slate-300 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={guardandoEdicion}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-teal-700 px-4 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
+              >
+                {guardandoEdicion ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+                {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

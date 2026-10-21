@@ -251,6 +251,7 @@ describe("ghlBroadcastQueueService", () => {
       contactName: "Uno",
       instanceIndex: 2,
       mensaje: "Variante asignada",
+      imagenUrl: "https://rve.example.test/uploads/ghl-difusiones/123e4567-e89b-12d3-a456-426614174000.webp",
       estado: "pending",
     };
     const Ejecucion = {
@@ -286,7 +287,10 @@ describe("ghlBroadcastQueueService", () => {
 
     expect(requestGhl).toHaveBeenNthCalledWith(1, expect.anything(), expect.objectContaining({
       url: "/conversations/messages",
-      data: expect.objectContaining({ message: "Variante asignada\n\n{ WA#2 }" }),
+      data: expect.objectContaining({
+        message: "Variante asignada\n\n{ WA#2 }",
+        attachments: ["https://rve.example.test/uploads/ghl-difusiones/123e4567-e89b-12d3-a456-426614174000.webp"],
+      }),
       maxRetries: 0,
     }));
     expect(requestGhl).toHaveBeenNthCalledWith(2, expect.anything(), expect.objectContaining({

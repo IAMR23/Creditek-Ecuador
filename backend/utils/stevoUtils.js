@@ -75,8 +75,8 @@ function findValuesDeep(obj, key, values = [], seen = new Set()) {
 function extraerTelefonoStevo(payload, { isFromMe = false } = {}) {
   const info = payload?.data?.Info || findValueDeep(payload, ["Info"]) || {};
   const explicitCandidates = isFromMe
-    ? [info?.RecipientAlt, info?.Chat, info?.SenderAlt, info?.Sender]
-    : [info?.SenderAlt, info?.ChatAlt, info?.Sender, info?.Chat];
+    ? [payload?.contact?.number, info?.RecipientAlt, info?.Chat, info?.SenderAlt, info?.Sender]
+    : [payload?.contact?.number, info?.SenderAlt, info?.ChatAlt, info?.Sender, info?.Chat];
   const fallbackKeys = isFromMe
     ? ["RecipientAlt", "phone", "number", "remoteJid", "Chat"]
     : ["SenderAlt", "phone", "number", "remoteJid", "Sender", "sender", "from", "Chat"];
@@ -92,6 +92,34 @@ function extraerTelefonoStevo(payload, { isFromMe = false } = {}) {
   }
 
   return null;
+}
+
+function extraerMensajeStevo(payload) {
+  const messageParts = [
+    payload?.message?.text,
+    payload?.transcribedAudio,
+    payload?.message?.transcribedAudio,
+  ];
+  const legacyMessage = findValueDeep(payload, [
+    "conversation",
+    "body",
+    "Body",
+    "caption",
+    "Caption",
+    "extendedTextMessage",
+    "text",
+  ]);
+  messageParts.push(legacyMessage);
+
+  const normalizedParts = messageParts
+    .map((value) => {
+      if (value === null || value === undefined) return "";
+      return typeof value === "object" ? JSON.stringify(value) : String(value).trim();
+    })
+    .filter(Boolean);
+
+  const uniqueParts = [...new Set(normalizedParts)];
+  return uniqueParts.length ? uniqueParts.join("\n") : null;
 }
 
 function parseJsonSafe(value) {
@@ -174,5 +202,6 @@ module.exports = {
   decodeBase64,
   limpiarTelefono,
   extraerTelefonoStevo,
+  extraerMensajeStevo,
   detectarCampania,
 };

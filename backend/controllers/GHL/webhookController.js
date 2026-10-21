@@ -8,6 +8,7 @@ const opportunityWebhookService = require("../../services/ghlOpportunityWebhookS
 const {
   findValueDeep,
   extraerTelefonoStevo,
+  extraerMensajeStevo,
   decodeBase64,
   detectarCampania,
 } = require("../../utils/stevoUtils");
@@ -52,22 +53,8 @@ async function recibirWebhookStevo(req, res) {
       "ctwa_clid",
     ]);
 
-    const rawMessage = findValueDeep(payload, [
-      "conversation",
-      "text",
-      "body",
-      "Body",
-      "caption",
-      "Caption",
-      "extendedTextMessage",
-    ]);
-
     const phone = extraerTelefonoStevo(payload, { isFromMe });
-
-    const message =
-      typeof rawMessage === "object"
-        ? JSON.stringify(rawMessage)
-        : rawMessage;
+    const message = extraerMensajeStevo(payload);
 
     const decoded = decodeBase64(ctwaPayload);
 

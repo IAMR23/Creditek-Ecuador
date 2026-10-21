@@ -5,11 +5,13 @@ const Detalle = require("../models/GhlDifusionEjecucionDetalle");
 const {
   getMessageHubProvider,
   normalizeInstanceIndexes,
+  normalizeMessageImages,
   normalizeMessages,
   previewBroadcast,
   resolveExternalRecipients,
 } = require("./ghlBroadcastService");
 const { requestGhl, toId } = require("./ghlService");
+const { publicImageUrl } = require("./ghlBroadcastMediaService");
 
 const MESSAGE_HUB_VERSION = "v3";
 const ACTIVE_STATES = ["pending", "running"];
@@ -140,6 +142,8 @@ const serializeExecution = (row, { includeDetails = false } = {}) => {
       contactId: detail.contactId,
       contactName: detail.contactName,
       instanceIndex: detail.instanceIndex,
+      imagenUrl: detail.imagenUrl || null,
+      imagenNombre: detail.imagenNombre || null,
       estado: detail.estado,
       sendError: detail.sendError,
       tagStatus: detail.tagStatus,
@@ -167,6 +171,9 @@ async function createExecution(input, userId, dependencies = {}) {
     : dependencies.now || new Date();
   const scheduledAt = normalizeScheduledAt(input?.scheduledAt, currentTime);
   const messages = normalizeMessages(input);
+  const images = normalizeMessageImages(input, messages.length);
+  const imageNames = Array.from({ length: messages.length }, (_, index) =>
+    String(input?.imageNames?.[index] || "").trim().slice(0, 255) || null);
   normalizeInstanceIndexes(input?.instanceIndexes);
   const resolvedInput = await recipientResolver(input, dependencies);
   const preview = await previewer(resolvedInput, dependencies);
@@ -178,6 +185,7 @@ async function createExecution(input, userId, dependencies = {}) {
       estado: "pending",
       mensaje: messages[0],
       mensajes: messages,
+      imagenes: images,
       instanceIndexes: preview.distribution.map((group) => group.instanceIndex),
       ...rate,
       tagName: "regestion",
@@ -189,15 +197,20 @@ async function createExecution(input, userId, dependencies = {}) {
     }, { transaction });
     const totalInstances = preview.distribution.length;
     const details = preview.distribution.flatMap((group, instancePosition) =>
-      group.contacts.map((contact, contactPosition) => ({
-        ejecucionId: created.id,
-        contactId: contact.id,
-        contactName: contact.name,
-        instanceIndex: group.instanceIndex,
-        mensaje: messages[(contactPosition * totalInstances + instancePosition) % messages.length],
-        estado: "pending",
-        tagStatus: "pending",
-      })));
+      group.contacts.map((contact, contactPosition) => {
+        const variantIndex = (contactPosition * totalInstances + instancePosition) % messages.length;
+        return {
+          ejecucionId: created.id,
+          contactId: contact.id,
+          contactName: contact.name,
+          instanceIndex: group.instanceIndex,
+          mensaje: messages[variantIndex],
+          imagenUrl: images[variantIndex],
+          imagenNombre: imageNames[variantIndex],
+          estado: "pending",
+          tagStatus: "pending",
+        };
+      }));
     await detailModel.bulkCreate(details, { transaction });
     return created;
   });
@@ -308,6 +321,7 @@ async function processBatch(executionId, now = new Date(), dependencies = {}) {
             contactId: detail.contactId,
             conversationProviderId: providerId,
             message: `${detail.mensaje || claimed.execution.mensaje}\n\n{ WA#${detail.instanceIndex} }`,
+            ...(detail.imagenUrl ? { attachments: [publicImageUrl(detail.imagenUrl)] } : {}),
           },
           maxRetries: 0,
         });

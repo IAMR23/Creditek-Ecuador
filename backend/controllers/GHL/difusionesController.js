@@ -1,5 +1,7 @@
 const broadcastService = require("../../services/ghlBroadcastService");
 const messageService = require("../../services/ghlBroadcastMessageService");
+const categoryService = require("../../services/ghlBroadcastCategoryService");
+const mediaService = require("../../services/ghlBroadcastMediaService");
 const smartListService = require("../../services/ghlSmartListService");
 const queueService = require("../../services/ghlBroadcastQueueService");
 const broadcastScheduler = require("../../services/ghlBroadcastScheduler");
@@ -190,14 +192,68 @@ async function deleteSavedMessage(req, res) {
   }
 }
 
+async function categories(_req, res) {
+  try {
+    return res.json({ ok: true, categorias: await categoryService.listCategories() });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function createCategory(req, res) {
+  try {
+    const categoria = await categoryService.createCategory(req.body || {}, req.user.id);
+    return res.status(201).json({ ok: true, categoria });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function updateCategory(req, res) {
+  try {
+    const categoria = await categoryService.updateCategory(req.params.id, req.body || {}, req.user.id);
+    return res.json({ ok: true, categoria });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function deleteCategory(req, res) {
+  try {
+    return res.json({ ok: true, deleted: await categoryService.deleteCategory(req.params.id) });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
+async function uploadImage(req, res) {
+  try {
+    const forwardedProtocol = String(req.get("x-forwarded-proto") || "").split(",")[0].trim();
+    const forwardedHost = String(req.get("x-forwarded-host") || "").split(",")[0].trim();
+    const protocol = forwardedProtocol || req.protocol;
+    const host = forwardedHost || req.get("host");
+    const proxyOrigin = `${protocol}://${host}`;
+    const browserOrigin = String(req.get("origin") || "").trim();
+    const requestOrigin = /^https:\/\//i.test(proxyOrigin) ? proxyOrigin : browserOrigin || proxyOrigin;
+    const imagen = await mediaService.saveBroadcastImage(req.file);
+    imagen.url = mediaService.publicImageUrl(imagen.url, requestOrigin);
+    return res.status(201).json({ ok: true, imagen });
+  } catch (error) {
+    return respondError(res, error);
+  }
+}
+
 module.exports = {
   contacts,
   activeExecution,
   cancelExecution,
+  categories,
+  createCategory,
   createSavedMessage,
   createSmartList,
   deleteSmartList,
   deleteSavedMessage,
+  deleteCategory,
   execution,
   executions,
   pipelines,
@@ -208,6 +264,8 @@ module.exports = {
   smartLists,
   status,
   tags,
+  updateCategory,
   updateSavedMessage,
   updateSmartList,
+  uploadImage,
 };
