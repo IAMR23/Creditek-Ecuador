@@ -4,10 +4,16 @@ const {
   getNewPersonnelPenaltyStartDate,
   isApplicableSellerCargo,
   isNewPersonnelDuringWeek,
+  resolveSellerMinimum,
   resolveApplicableConfig,
 } = require("./metaMinimaMultaService");
 
 describe("metaMinimaMultaService", () => {
+  test("la meta individual del vendedor tiene prioridad sobre la meta por rol", () => {
+    expect(resolveSellerMinimum({ metaMinimaSemanal: 8 }, 11)).toBe(8);
+    expect(resolveSellerMinimum({ metaMinimaSemanal: null }, 11)).toBe(11);
+  });
+
   test("vendedor de piso con 11 ventas cumple", () => {
     expect(
       calculateCompliance({

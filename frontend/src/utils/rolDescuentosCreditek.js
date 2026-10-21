@@ -4,6 +4,7 @@ export const ESTADOS_DESCUENTOS = {
   APLICADO: { label: "Aplicado", color: "00B050" },
   RECURRENTE: { label: "Recurrente", color: "FFFF00" },
   REVISAR: { label: "Por revisar", color: "E879F9" },
+  PRORROGA: { label: "Prórroga", color: "BFDBFE" },
 };
 export const mesesDesde = (inicio, cantidad) => {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(inicio)) return [];
@@ -59,14 +60,17 @@ export const crearExcelDescuentos = async (grupos, meses) => {
   grupos.forEach((grupo) => {
     const primera = sheet.rowCount + 1;
     grupo.filas.forEach((fila) => {
-      const row = sheet.addRow([grupo.nombre.toUpperCase(), motivoExcel(fila), ...meses.map((mes) => fila.cuotasPorMes[mes.key]?.valor ?? null)]);
+      const row = sheet.addRow([grupo.nombre.toUpperCase(), motivoExcel(fila), ...meses.map((mes) => {
+        const cuota = fila.cuotasPorMes[mes.key];
+        return cuota?.prorroga ? "PRÓRROGA" : cuota?.valor ?? null;
+      })]);
       row.height = fila.origen === "EGRESOS_CREDITEK" ? 36 : 24;
       for (let col = 1; col <= columns; col += 1) {
         const mes = meses[col - 3];
         const cuota = mes && fila.cuotasPorMes[mes.key];
         const cell = row.getCell(col);
         style(cell, mes ? colorCuota(cuota, mes.mes) : "FFFFFF", col === 2);
-        if (mes) cell.numFmt = '"$"#,##0.00';
+        if (mes && !cuota?.prorroga) cell.numFmt = '"$"#,##0.00';
         if (cuota) cell.note = ESTADOS_DESCUENTOS[cuota.estado]?.label || "Pendiente";
       }
     });

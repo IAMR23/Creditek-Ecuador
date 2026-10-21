@@ -82,7 +82,7 @@ export default function NominaNovedadModal({ persona, anio, mes, novedadIdInicia
       </header>
       <form onSubmit={previsualizar} className="space-y-4 p-4">
         {error && <p role="alert" className="rounded bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
-        {Object.keys(ajustesPendientes).length > 0 && <p className="rounded bg-amber-50 p-3 text-sm text-amber-900">La vista previa incluye tus cambios pendientes de fondos y extras. Se conservarán en Nómina para que puedas guardarlos con Guardar todo.</p>}
+        {Object.keys(ajustesPendientes).length > 0 && <p className="rounded bg-amber-50 p-3 text-sm text-amber-900">La vista previa incluye tus cambios pendientes de faltas, fondos y extras. Se conservarán en Nómina para que puedas guardarlos con Guardar todo.</p>}
         {loading ? <p>Cargando novedades…</p> : (
           <fieldset disabled={busy} className="space-y-4 disabled:opacity-70">
             <label className="block text-sm font-semibold">Novedad que deseas editar

@@ -16,6 +16,7 @@ router.delete("/:seccion/tipos/:tipoId", tiposController.desactivar);
 router.get("/:seccion", controller.obtenerSeccion);
 router.post("/:seccion", controller.crearRegistro);
 router.put("/:seccion/:id", controller.actualizarRegistro);
+router.patch("/prestamos/:id/prorroga", controller.cambiarProrrogaPrestamo);
 router.delete("/:seccion/:id", controller.eliminarRegistro);
 router.patch("/:seccion/:id/estado", controller.cambiarEstadoRegistro);
 

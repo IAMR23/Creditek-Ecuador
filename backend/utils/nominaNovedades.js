@@ -84,10 +84,13 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
   const lactancias = vigentes.filter((item) => item.tipo === 'LACTANCIA' &&
     diasEnMes30(item.fechaRetorno && item.fechaRetorno > item.fechaInicio ? item.fechaRetorno : item.fechaInicio, item.fechaFin, periodo) > 0);
   const tieneMaternidad = maternidades.length > 0;
-  let diasTrabajados = row.fechaIngreso?.slice(0, 7) > key ? 0
+  const diasFalta = Math.max(0, Math.min(30, Math.trunc(numero(row.diasFalta))));
+  const diasBasePeriodo = row.fechaIngreso?.slice(0, 7) > key ? 0
     : row.fechaIngreso?.slice(0, 7) === key ? Math.max(0, Math.min(30, 31 - Number(row.fechaIngreso.slice(8, 10)))) : 30;
+  let diasTrabajados = Math.max(0, diasBasePeriodo - diasFalta);
   let diasMaternidad25 = 0;
   let diasSueldoCompleto = diasTrabajados;
+  let diasSueldoCompletoBase = diasBasePeriodo;
   let sueldoMaternidadEmpresa = 0;
   let subsidioIessInformativo = 0;
   const valorDia = salarioJornada / 30;
@@ -103,12 +106,14 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
       : 0;
   }
   if (tieneMaternidad) {
-    diasSueldoCompleto = 30 - diasMaternidad25;
+    diasSueldoCompletoBase = 30 - diasMaternidad25;
+    diasSueldoCompleto = Math.max(0, diasSueldoCompletoBase - diasFalta);
     validarDias(diasMaternidad25, diasSueldoCompleto);
     diasTrabajados = diasMaternidad25 + diasSueldoCompleto;
   } else if (lactancias.length) {
-    diasTrabajados = 30;
-    diasSueldoCompleto = 30;
+    diasSueldoCompletoBase = 30;
+    diasSueldoCompleto = Math.max(0, diasSueldoCompletoBase - diasFalta);
+    diasTrabajados = diasSueldoCompleto;
   }
   sueldoMaternidadEmpresa = redondear(sueldoMaternidadEmpresa);
   subsidioIessInformativo = redondear(subsidioIessInformativo);
@@ -133,7 +138,7 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
   const valorRecibir = redondear(totalIngresos - totalEgresos);
   const aplicables = [...maternidades, ...lactancias];
   return { salario: salarioJornada, jornadaLaboral: row.jornadaLaboral || 'tiempo_completo', afiliadoIess,
-    diasTrabajados, diasMaternidad25, diasSueldoCompleto, sueldoCompletoPeriodo,
+    diasBasePeriodo, diasFalta, diasTrabajados, diasMaternidad25, diasSueldoCompletoBase, diasSueldoCompleto, sueldoCompletoPeriodo,
     sueldoMaternidadEmpresa, subsidioIessInformativo, sueldoAPagar, sueldosExtras, fondosReserva, comisionVenta,
     totalIngresos, totalIngresosEmpresa: totalIngresos, baseIess, iess, anticipo, prestamo, sancionMeta, totalEgresos,
     valorRecibir, valorRecibirEmpresa: valorRecibir, tieneMaternidad,

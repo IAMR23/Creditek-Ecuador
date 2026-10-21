@@ -15,6 +15,7 @@ const {
   getUsuarioPayload,
   isAvailableForTeamWeek,
   calculateSalesPenalty,
+  applySellerMinimum,
   calculateWeeklyPenalty,
   calculateMonthlyBonus,
   calculateProportionalChiefBonus,
@@ -843,6 +844,32 @@ describe("pagosComisionesService", () => {
     expect(calculateSalesPenalty({ config, unidadesVendidas: 12 })).toBe(0);
   });
 
+  test("usa la meta individual del vendedor para calcular la sancion semanal", () => {
+    const config = applySellerMinimum(
+      { minimoUnidades: 11, valorMultaUnidad: 7 },
+      8,
+    );
+
+    expect(calculateWeeklyPenalty({
+      config,
+      unidadesVendidas: 8,
+      aplicaDescuento: true,
+    })).toMatchObject({
+      metaMinima: 8,
+      noCumpleMetas: 0,
+      valorDescontar: 0,
+    });
+    expect(calculateWeeklyPenalty({
+      config,
+      unidadesVendidas: 4,
+      aplicaDescuento: true,
+    })).toMatchObject({
+      metaMinima: 8,
+      noCumpleMetas: 4,
+      valorDescontar: 28,
+    });
+  });
+
   test("omitir multa conserva las unidades faltantes y perdona solo el valor a descontar", () => {
     const config = { minimoUnidades: 9, valorMultaUnidad: 8 };
 
@@ -854,6 +881,7 @@ describe("pagosComisionesService", () => {
         multaOmitida: true,
       }),
     ).toEqual({
+      metaMinima: 9,
       noCumpleMetas: 2,
       valorMultaCalculado: 16,
       valorDescontar: 0,
@@ -869,6 +897,7 @@ describe("pagosComisionesService", () => {
         multaOmitida: false,
       }),
     ).toEqual({
+      metaMinima: 9,
       noCumpleMetas: 2,
       valorMultaCalculado: 16,
       valorDescontar: 16,
@@ -886,6 +915,7 @@ describe("pagosComisionesService", () => {
         valorDescontarAjustado: 11.5,
       }),
     ).toEqual({
+      metaMinima: 9,
       noCumpleMetas: 2,
       valorMultaCalculado: 16,
       valorDescontar: 11.5,
@@ -1464,6 +1494,7 @@ describe("pagosComisionesService", () => {
         multaOmitida: false,
       }),
     ).toEqual({
+      metaMinima: 9,
       noCumpleMetas: 7,
       valorMultaCalculado: 56,
       valorDescontar: 56,

@@ -439,11 +439,11 @@ export default function Sidebar({ auth }) {
                 icon: <RefreshCcw size={18} />,
                 path: "/ghl/refresco-oportunidades",
               },
-/*               {
+              {
                 label: "Disponibilidad de asesores",
                 icon: <UserPlus size={18} />,
                 path: "/ghl/disponibilidad-asesores",
-              }, */
+              },
               {
                 label: "Horarios de flujo",
                 icon: <CalendarClock size={18} />,

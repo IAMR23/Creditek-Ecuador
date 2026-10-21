@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calcularBaseIessNomina,
+  calcularDiasTrabajadosNomina,
   calcularIessNomina,
   calcularValorPorJornada,
   calcularEgresosNomina,
@@ -10,6 +11,12 @@ import {
   normalizarIdsNomina,
   ordenarFilasNomina,
 } from "./rolesCreditekNomina.js";
+
+test('calcula dias trabajados restando faltas y limita el resultado a cero', () => {
+  assert.equal(calcularDiasTrabajadosNomina(30, 4), 26);
+  assert.equal(calcularDiasTrabajadosNomina(11, 20), 0);
+  assert.equal(calcularDiasTrabajadosNomina(30, -2), 30);
+});
 
 test('excluye fondos de reserva de la base y del calculo del IESS', () => {
   const valores = { sueldoAPagar: 482, sueldosExtras: 0, comisionVenta: 20, fondosReserva: 100 };

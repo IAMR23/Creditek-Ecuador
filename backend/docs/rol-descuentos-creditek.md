@@ -6,8 +6,10 @@ Permisos: `authenticate` y `requirePermission("Contabilidad", "Administracion")`
 
 ## Funcionamiento
 
-- Los préstamos activos de Egresos Creditek aparecen automáticamente como una línea de tiempo mensual entre su fecha inicial y final. Si no tienen fecha final, continúan hasta el último mes visible.
-- Las filas provenientes de Egresos son de solo lectura en esta pantalla, muestran su origen y fechas, y deben editarse desde Egresos Creditek.
+- Los préstamos nuevos se registran desde Rol de descuentos Creditek con monto total, fecha inicial y plazo de 1 a 120 meses. La cuota se calcula automáticamente y cualquier diferencia de centavos queda en la última cuota.
+- Los préstamos aparecen automáticamente como una línea de tiempo mensual. Desde cada cuota puede registrarse o retirar una prórroga; el mes prorrogado queda en cero y desplaza el saldo al siguiente mes disponible.
+- Los préstamos por monto total y plazo se administran únicamente desde Rol de descuentos. Egresos Creditek conserva su formulario anterior de cuota mensual y fecha final para los registros históricos y operativos existentes.
+- Los préstamos históricos sin monto total y plazo conservan el comportamiento anterior hasta que sean editados y convertidos al nuevo esquema.
 
 - Registro manual por usuario, motivo y cuotas mensuales. Admite varios motivos para una persona y cuotas entre años.
 - Cada cuota tiene importe y estado: pendiente, aplicado, recurrente o por revisar. Los estados son anotaciones de seguimiento; no ejecutan descuentos ni pagos automáticamente.

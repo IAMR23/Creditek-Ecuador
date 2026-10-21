@@ -19,6 +19,7 @@ test("los estados definen el color y diciembre no implica que la cuota esté apl
   assert.equal(colorCuota({ estado: "PENDIENTE" }, 11), "FBBF24");
   assert.equal(colorCuota({ estado: "APLICADO" }, 11), "00B050");
   assert.equal(colorCuota(null, 0), "FFFFFF");
+  assert.equal(colorCuota({ estado: "PRORROGA", prorroga: true }, 0), "BFDBFE");
 });
 test("Excel conserva importes, años, colores, nombres agrupados y totales", async () => {
   const workbook = await crearExcelDescuentos(agruparDescuentos(registros), mesesDesde("2026-12", 2));
@@ -45,7 +46,7 @@ test("Excel identifica la linea de tiempo que proviene de Egresos", async () => 
     fechaInicio: "2026-12-15", fechaFin: "2027-01-20",
     cuotas: [
       { periodo: "2026-12", valor: 35.5, estado: "RECURRENTE" },
-      { periodo: "2027-01", valor: 35.5, estado: "RECURRENTE" },
+      { periodo: "2027-01", valor: 0, estado: "PRORROGA", prorroga: true },
     ],
   }];
   const workbook = await crearExcelDescuentos(agruparDescuentos(automatico), mesesDesde("2026-12", 2));
@@ -53,6 +54,7 @@ test("Excel identifica la linea de tiempo que proviene de Egresos", async () => 
 
   assert.match(sheet.getCell("B3").value, /EGRESOS.*2026-12-15.*2027-01-20/s);
   assert.equal(sheet.getCell("C3").value, 35.5);
-  assert.equal(sheet.getCell("D3").value, 35.5);
+  assert.equal(sheet.getCell("D3").value, "PRÓRROGA");
   assert.equal(sheet.getCell("C3").fill.fgColor.argb, "FFFFFF00");
+  assert.equal(sheet.getCell("D3").fill.fgColor.argb, "FFBFDBFE");
 });

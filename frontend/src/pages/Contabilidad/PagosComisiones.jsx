@@ -80,6 +80,7 @@ const emptyWeekValues = {
   venden: 0,
   valorVendido: 0,
   totalComisiones: 0,
+  metaMinima: null,
   noCumpleMetas: 0,
   valorDescontar: 0,
 };
@@ -660,10 +661,12 @@ const createGroupedExcelSheet = ({
   weeks.forEach((week) => {
     weekColumns.forEach((column) => {
       const cell = totalRow.getCell(columnIndex);
-      cell.value = rows.reduce((sum, row) => {
-        const values = getRowWeekValues(row, week);
-        return values.semanaFutura ? sum : sum + Number(column.getValue(values, row) || 0);
-      }, 0);
+      cell.value = column.aggregate === false
+        ? ""
+        : rows.reduce((sum, row) => {
+          const values = getRowWeekValues(row, week);
+          return values.semanaFutura ? sum : sum + Number(column.getValue(values, row) || 0);
+        }, 0);
       styleExcelCell(cell, "FFFF00FF", { bold: true });
       cell.numFmt = column.numFmt;
       columnIndex += 1;
@@ -766,6 +769,13 @@ const createPenaltiesExcelSheet = ({ workbook, rows, weeks, observaciones = {} }
     weeks,
     weekColumns: [
       {
+        label: "Meta minima",
+        width: 14,
+        numFmt: EXCEL_INTEGER_FORMAT,
+        aggregate: false,
+        getValue: (values) => values.metaMinima ?? null,
+      },
+      {
         label: "Unidades vendidas",
         width: 16,
         numFmt: EXCEL_INTEGER_FORMAT,
@@ -801,7 +811,7 @@ const createPenaltiesExcelSheet = ({ workbook, rows, weeks, observaciones = {} }
 
   rows.forEach((row, index) => {
     const excelRow = worksheet.getRow(index + 3);
-    excelRow.getCell(weeks.length * 3 + 3).alignment = { wrapText: true, vertical: "top", horizontal: "left" };
+    excelRow.getCell(weeks.length * 4 + 3).alignment = { wrapText: true, vertical: "top", horizontal: "left" };
     const lines = String(observaciones[row.usuarioId] || "").split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 48)), 0);
     excelRow.height = Math.min(409, Math.max(28, lines * 15));
   });
@@ -2709,7 +2719,7 @@ function SalesPenaltiesTable({
                 Vendedor
               </th>
               {weeks.map((week) => (
-                <th key={week.startDate} scope="colgroup" colSpan={3} className={`min-w-[160px] border border-slate-950 bg-sky-200 px-2 py-2 font-bold`}>
+                <th key={week.startDate} scope="colgroup" colSpan={4} className={`min-w-[220px] border border-slate-950 bg-sky-200 px-2 py-2 font-bold`}>
                   {week.label}
                 </th>
               ))}
@@ -2721,7 +2731,7 @@ function SalesPenaltiesTable({
             <tr>
               {weeks.map((week) => (
                 <Fragment key={week.startDate}>
-                  {["Unidades vendidas", "Unidades faltantes para meta", "Valor a descontar"].map((label) => (
+                  {["Meta minima", "Unidades vendidas", "Unidades faltantes para meta", "Valor a descontar"].map((label) => (
                     <th key={label} scope="col" className={`min-w-[90px] border border-slate-950 bg-sky-100 px-2 py-2 font-bold`}>
                       {label}
                     </th>
@@ -2733,7 +2743,7 @@ function SalesPenaltiesTable({
           <tbody>
             {loading || !rows.length ? (
               <tr>
-                <td colSpan={weeks.length * 3 + 3} className="px-4 py-10 text-slate-500">
+                <td colSpan={weeks.length * 4 + 3} className="px-4 py-10 text-slate-500">
                   {loading ? "Cargando reporte..." : "No hay registros en esta sección para el mes seleccionado."}
                 </td>
               </tr>
@@ -2754,6 +2764,9 @@ function SalesPenaltiesTable({
                         : null;
                   return (
                     <Fragment key={week.startDate}>
+                      <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
+                        {values.metaMinima ?? "-"}
+                      </td>
                       <td className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
                         {values.semanaFutura ? "-" : Number(values.venden || 0)}
                       </td>
@@ -2809,6 +2822,7 @@ function SalesPenaltiesTable({
                 <th scope="row" className="sticky left-0 z-10 border border-slate-950 bg-sky-700 px-3 py-2 text-left">TOTAL</th>
                 {weeks.map((week) => (
                   <Fragment key={week.startDate}>
+                    <td className="border border-slate-950 px-2 py-1.5 font-semibold">-</td>
                     {["venden", "noCumpleMetas"].map((field) => (
                       <td key={field} className="border border-slate-950 px-2 py-1.5 font-semibold tabular-nums">
                         {rows.every((row) => getPenaltyWeekValues(row, week).semanaFutura)

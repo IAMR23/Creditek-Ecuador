@@ -33,6 +33,7 @@ const { Op } = require("sequelize");
 const {
   actualizarRegistro,
   cambiarEstadoRegistro,
+  cambiarProrrogaPrestamo,
   crearEntrada,
   crearRegistro,
   eliminarRegistro,
@@ -41,12 +42,36 @@ const {
 } = require("./egresosCreditekService");
 
 describe("egresosCreditekService", () => {
+  test("prorroga una cuota y extiende automaticamente la fecha final", async () => {
+    const registro = {
+      id: 40, seccion: "PRESTAMOS", fecha: "2026-11-20", montoTotal: "100.00", plazoMeses: 3,
+      prorrogas: [], update: jest.fn().mockResolvedValue(undefined),
+    };
+    EgresoCreditekEntrada.findOne.mockResolvedValue(registro);
+    EgresoCreditekEntrada.findByPk.mockResolvedValue(null);
+    await cambiarProrrogaPrestamo(40, { periodo: "2026-12", prorroga: true }, 7);
+    expect(registro.update).toHaveBeenCalledWith({
+      prorrogas: ["2026-12"], fechaFin: "2027-02-28", actualizadoPorId: 7, ultimaAccion: "EDITADO",
+    });
+  });
   test.each(["PLAN_MOVISTAR", "MECANICA", "LENTES", "PRESTAMO_EMPRESARIAL", "CUOTAS_TELEFONO", "OTROS"])("guarda prestamo %s con inicio y fin", async (tipo) => {
     Usuario.findOne.mockResolvedValue({ id: 3 });
     EgresoCreditekEntrada.create.mockImplementation(async (payload) => ({ id: 90, ...payload }));
     EgresoCreditekEntrada.findByPk.mockResolvedValue(null);
     const row = await crearRegistro("prestamos", { usuarioId: 3, tipo, valor: 25, fecha: "2026-09-01", fechaFin: "2026-12-31" }, 7);
     expect(row).toMatchObject({ tipo, valor: 25, fecha: "2026-09-01", fechaFin: "2026-12-31" });
+  });
+  test("crea un prestamo con monto total, plazo y cuota calculada", async () => {
+    Usuario.findOne.mockResolvedValue({ id: 3 });
+    EgresoCreditekEntrada.create.mockImplementation(async (payload) => ({ id: 91, ...payload }));
+    EgresoCreditekEntrada.findByPk.mockResolvedValue(null);
+    const row = await crearRegistro("prestamos", {
+      usuarioId: 3, tipo: "MECANICA", montoTotal: "100,00", plazoMeses: 3, fecha: "2026-11-20",
+    }, 7);
+    expect(row).toMatchObject({ montoTotal: 100, plazoMeses: 3, valor: 33.33, fechaFin: "2027-01-31", prorrogas: [] });
+    expect(EgresoCreditekEntrada.create).toHaveBeenCalledWith(expect.objectContaining({
+      montoTotal: 100, plazoMeses: 3, valor: 33.33, fechaFin: "2027-01-31", prorrogas: [],
+    }));
   });
   test.each([undefined, null, ""])("permite guardar sin fecha final: %s", async (fechaFin) => {
     Usuario.findOne.mockResolvedValue({ id: 3 });
@@ -104,6 +129,9 @@ describe("egresosCreditekService", () => {
     const resultado = await obtenerRegistros("prestamos");
 
     expect(ControlFinancieroRegistro.findAll).not.toHaveBeenCalled();
+    expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(expect.objectContaining({
+      where: { seccion: "PRESTAMOS", montoTotal: { [Op.is]: null } },
+    }));
     expect(resultado.registros).toEqual([
       expect.objectContaining({ id: 8, origen: "MANUAL", valor: 10 }),
     ]);

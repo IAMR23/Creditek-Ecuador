@@ -3,6 +3,20 @@ const periodo = { anio: 2026, mes: 8 };
 const madre = (extra = {}) => ({ usuarioId: 10, tipo: 'MATERNIDAD', fechaInicio: '2026-08-01', fechaFin: '2026-08-31',
   fechaRetorno: null, porcentajeEmpleador: 25, porcentajeIess: 75, activo: true, ajustesMensuales: {}, ...extra });
 const datos = { usuarioId: 10, tipo: 'MATERNIDAD', fechaInicio: '2026-08-01', fechaFin: '2026-08-31', ...periodo };
+test('las faltas reducen automaticamente dias trabajados, sueldo y extras sin producir dias negativos', () => {
+  expect(calcularNominaPeriodo({ diasFalta: 4, rolPagoSueldoExtra: 60 }, periodo)).toMatchObject({
+    diasBasePeriodo: 30, diasFalta: 4, diasTrabajados: 26, sueldoAPagar: 417.73, sueldosExtras: 52,
+  });
+  expect(calcularNominaPeriodo({ fechaIngreso: '2026-08-20', diasFalta: 20 }, periodo)).toMatchObject({
+    diasBasePeriodo: 11, diasTrabajados: 0, sueldoAPagar: 0,
+  });
+});
+test('las faltas no descuentan los dias cubiertos por maternidad', () => {
+  expect(calcularNominaPeriodo({ diasFalta: 4 }, periodo, [madre({ fechaRetorno: '2026-08-16' })])).toMatchObject({
+    diasMaternidad25: 15, diasSueldoCompletoBase: 15, diasSueldoCompleto: 11,
+    diasTrabajados: 26, sueldoCompletoPeriodo: 176.73, sueldoAPagar: 236.98,
+  });
+});
 test('empleado sin novedad: 30 días y sueldo completo con comportamiento previo', () => {
   expect(calcularNominaPeriodo({}, periodo)).toMatchObject({ diasTrabajados: 30, sueldoAPagar: 482, iess: 45.55, valorRecibir: 436.45 });
   expect(calcularNominaPeriodo({ fondoReservaActivo: true, ingresosComisiones: 20 }, periodo)).toMatchObject({

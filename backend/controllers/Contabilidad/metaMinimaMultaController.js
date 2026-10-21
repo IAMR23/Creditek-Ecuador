@@ -63,6 +63,18 @@ const cambiarEstadoConfiguracion = async (req, res) => {
   }
 };
 
+const actualizarMetaMinimaVendedor = async (req, res) => {
+  try {
+    const resultado = await metaMinimaMultaService.actualizarMetaMinimaVendedor(
+      req.params.usuarioId,
+      req.body,
+    );
+    res.json(resultado);
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
 const obtenerDashboard = async (req, res) => {
   try {
     const resultado = await metaMinimaMultaService.obtenerMetaMinimaDashboard(
@@ -80,5 +92,6 @@ module.exports = {
   crearConfiguracion,
   actualizarConfiguracion,
   cambiarEstadoConfiguracion,
+  actualizarMetaMinimaVendedor,
   obtenerDashboard,
 };

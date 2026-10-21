@@ -80,6 +80,19 @@ const cambiarEstadoRegistro = async (req, res) => {
   }
 };
 
+const cambiarProrrogaPrestamo = async (req, res) => {
+  try {
+    const registro = await egresosCreditekService.cambiarProrrogaPrestamo(
+      req.params.id,
+      req.body,
+      req.user.id,
+    );
+    res.json({ message: "Prorroga actualizada correctamente", registro });
+  } catch (error) {
+    responderError(res, error);
+  }
+};
+
 const eliminarRegistro = async (req, res) => {
   try {
     const registro = await egresosCreditekService.eliminarRegistro(
@@ -95,6 +108,7 @@ const eliminarRegistro = async (req, res) => {
 module.exports = {
   actualizarRegistro,
   cambiarEstadoRegistro,
+  cambiarProrrogaPrestamo,
   crearEntrada,
   crearRegistro,
   eliminarRegistro,

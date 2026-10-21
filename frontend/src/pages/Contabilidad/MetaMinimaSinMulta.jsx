@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
-import { BadgeDollarSign, Download, Eye, RefreshCw, ShieldMinus, XCircle } from "lucide-react";
+import { Download, Eye, Pencil, RefreshCw, Save, ShieldMinus, X, XCircle } from "lucide-react";
 import { api } from "../../api/client";
 
 const moneyFormatter = new Intl.NumberFormat("es-EC", {
@@ -65,6 +65,8 @@ export default function MetaMinimaSinMulta() {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [detalle, setDetalle] = useState(null);
+  const [metaEditor, setMetaEditor] = useState(null);
+  const [savingMeta, setSavingMeta] = useState(false);
 
   const params = useMemo(
     () => ({
@@ -155,10 +157,37 @@ export default function MetaMinimaSinMulta() {
         workbook,
         `Meta_minima_sin_multa_${filters.fechaInicio}_a_${filters.fechaFin}.xlsx`,
       );
-    } catch (error) {
+    } catch {
       Swal.fire("Error", "No se pudo generar el Excel", "error");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const guardarMetaVendedor = async () => {
+    const meta = Number(metaEditor?.metaMinimaSemanal);
+    if (!Number.isInteger(meta) || meta < 0 || meta > 1000) {
+      Swal.fire("Atencion", "La meta minima debe ser un entero entre 0 y 1000", "warning");
+      return;
+    }
+
+    setSavingMeta(true);
+    try {
+      await api.put(
+        `/api/contabilidad/metas-minimas-multas/vendedores/${metaEditor.usuarioId}`,
+        { metaMinimaSemanal: meta },
+      );
+      setMetaEditor(null);
+      await cargarReporte();
+      Swal.fire("Listo", "Meta minima del vendedor actualizada", "success");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "No se pudo actualizar la meta minima",
+        "error",
+      );
+    } finally {
+      setSavingMeta(false);
     }
   };
 
@@ -176,7 +205,7 @@ export default function MetaMinimaSinMulta() {
                 Meta minima sin multa
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Meta semanal predefinida segun el rol de pago.
+                Define y revisa la meta semanal individual de cada vendedor.
               </p>
             </div>
             <button
@@ -303,12 +332,13 @@ export default function MetaMinimaSinMulta() {
                   <th className="border border-slate-200 px-3 py-2">Multa por unidad</th>
                   <th className="border border-slate-200 px-3 py-2">Multa estimada</th>
                   <th className="border border-slate-200 px-3 py-2">Ver detalle</th>
+                  <th className="border border-slate-200 px-3 py-2">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
+                    <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
                       Cargando...
                     </td>
                   </tr>
@@ -319,7 +349,12 @@ export default function MetaMinimaSinMulta() {
                         {row.nombre}
                       </td>
                       <td className="border border-slate-200 px-3 py-2">{row.cargo || "-"}</td>
-                      <td className="border border-slate-200 px-3 py-2">{row.metaMinima ?? "-"}</td>
+                      <td className="border border-slate-200 px-3 py-2">
+                        <span className="font-semibold">{row.metaMinima ?? "-"}</span>
+                        <span className="block text-[11px] text-slate-500">
+                          {row.metaMinimaIndividual ? "Meta individual" : "Valor por rol"}
+                        </span>
+                      </td>
                       <td className="border border-slate-200 px-3 py-2">{row.ventas || 0}</td>
                       <td className="border border-slate-200 px-3 py-2">{row.faltan ?? "-"}</td>
                       <td className="border border-slate-200 px-3 py-2">
@@ -338,11 +373,25 @@ export default function MetaMinimaSinMulta() {
                           Ver detalle
                         </button>
                       </td>
+                      <td className="border border-slate-200 px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => setMetaEditor({
+                            usuarioId: row.usuarioId,
+                            nombre: row.nombre,
+                            metaMinimaSemanal: row.metaMinima ?? 0,
+                          })}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                        >
+                          <Pencil size={14} />
+                          Editar meta
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
+                    <td colSpan={9} className="px-3 py-10 text-center text-slate-500">
                       No hay vendedores para los filtros seleccionados.
                     </td>
                   </tr>
@@ -353,6 +402,63 @@ export default function MetaMinimaSinMulta() {
         </section>
 
         {detalle ? <DetalleModal row={detalle} onClose={() => setDetalle(null)} /> : null}
+        {metaEditor ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4 py-6">
+            <section className="w-full max-w-md rounded-xl bg-white shadow-xl">
+              <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Meta individual</p>
+                  <h2 className="mt-1 text-lg font-bold text-slate-900">{metaEditor.nombre}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMetaEditor(null)}
+                  aria-label="Cerrar edicion"
+                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Meta minima semanal sin multa
+                  <input
+                    type="number"
+                    min="0"
+                    max="1000"
+                    step="1"
+                    value={metaEditor.metaMinimaSemanal}
+                    onChange={(event) => setMetaEditor((current) => ({
+                      ...current,
+                      metaMinimaSemanal: event.target.value,
+                    }))}
+                    className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Si vende menos unidades que esta meta, la diferencia se sanciona por cada dispositivo faltante.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => setMetaEditor(null)}
+                  className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={guardarMetaVendedor}
+                  disabled={savingMeta}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  <Save size={16} /> {savingMeta ? "Guardando..." : "Guardar meta"}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </div>
     </div>
   );

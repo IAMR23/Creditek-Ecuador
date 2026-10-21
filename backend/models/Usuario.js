@@ -154,6 +154,12 @@ const Usuario = sequelize.define(
       defaultValue: true,
     },
 
+    metaMinimaSemanal: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: { min: 0 },
+    },
+
     numeroCuenta: {
       type: DataTypes.STRING,
       allowNull: true,

@@ -12,6 +12,13 @@ const fechaCorta = (fecha) => {
   return anio && mes && dia ? `${dia}/${mes}/${anio}` : "continúa";
 };
 const inputClass = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
+const fechaHoyEcuador = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Guayaquil",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
+const prestamoInicial = () => ({ usuarioId: "", tipo: "", montoTotal: "", plazoMeses: "1", fecha: fechaHoyEcuador(), observacion: "" });
 
 export default function RolDescuentosCreditek() {
   const [inicio, setInicio] = useState(`${new Date().getFullYear()}-03`);
@@ -28,6 +35,11 @@ export default function RolDescuentosCreditek() {
   const [errorEditor, setErrorEditor] = useState("");
   const [colaboradorBusqueda, setColaboradorBusqueda] = useState("");
   const [colaboradorSelectorOpen, setColaboradorSelectorOpen] = useState(false);
+  const [prestamoEditor, setPrestamoEditor] = useState(null);
+  const [tiposPrestamo, setTiposPrestamo] = useState([]);
+  const [prestamoBusqueda, setPrestamoBusqueda] = useState("");
+  const [prestamoSelectorOpen, setPrestamoSelectorOpen] = useState(false);
+  const [errorPrestamo, setErrorPrestamo] = useState("");
   const [plan, setPlan] = useState({ inicio: "", cantidad: 1, valor: "" });
   const meses = useMemo(() => mesesDesde(inicio, cantidad), [inicio, cantidad]);
   const fin = meses.at(-1)?.key;
@@ -103,6 +115,83 @@ export default function RolDescuentosCreditek() {
     } catch (err) { Swal.fire("Error", err.response?.data?.message || "No se pudo cambiar el estado", "error"); }
     finally { setGuardando(false); }
   };
+  const cambiarProrroga = async (fila, periodo, cuota) => {
+    const activar = !cuota?.prorroga;
+    if (activar) {
+      const respuesta = await Swal.fire({ title: "¿Prorrogar esta cuota?", text: "Este mes quedará sin descuento y la cuota se moverá al siguiente mes disponible.", icon: "question", showCancelButton: true, confirmButtonText: "Sí, prorrogar", cancelButtonText: "Cancelar" });
+      if (!respuesta.isConfirmed) return;
+    }
+    setGuardando(true);
+    try {
+      await api.patch(`/api/contabilidad/egresos-creditek/prestamos/${fila.egresoId}/prorroga`, { periodo, prorroga: activar });
+      setRevision((value) => value + 1);
+      Swal.fire({ icon: "success", title: activar ? "Cuota prorrogada" : "Prórroga retirada", timer: 1300, showConfirmButton: false });
+    } catch (err) { Swal.fire("Error", err.response?.data?.message || "No se pudo actualizar la prórroga", "error"); }
+    finally { setGuardando(false); }
+  };
+  const abrirPrestamo = async (fila = null) => {
+    setGuardando(true);
+    try {
+      const { data } = await api.get("/api/contabilidad/egresos-creditek/prestamos/tipos");
+      const tipos = (Array.isArray(data.tipos) ? data.tipos : []).filter((item) => item.activo);
+      if (!tipos.length) {
+        Swal.fire("Sin tipos de préstamo", "Primero debe existir al menos un tipo de préstamo activo.", "warning");
+        return;
+      }
+      setTiposPrestamo(tipos);
+      setPrestamoEditor(fila ? {
+        id: fila.egresoId,
+        usuarioId: String(fila.usuarioId),
+        tipo: String(fila.tipo || tipos[0].codigo).toLowerCase(),
+        montoTotal: String(fila.montoTotal || ""),
+        plazoMeses: String(fila.plazoMeses || 1),
+        fecha: fila.fechaInicio || fechaHoyEcuador(),
+        observacion: fila.observacion || "",
+      } : { ...prestamoInicial(), tipo: tipos[0].codigo.toLowerCase() });
+      setPrestamoBusqueda(fila?.usuario?.nombre || "");
+      setPrestamoSelectorOpen(false);
+      setErrorPrestamo("");
+    } catch (err) {
+      Swal.fire("Error", err.response?.data?.message || "No se pudieron cargar los tipos de préstamo", "error");
+    } finally { setGuardando(false); }
+  };
+  const guardarPrestamo = async (event) => {
+    event.preventDefault();
+    const monto = Number(prestamoEditor.montoTotal);
+    const plazo = Number(prestamoEditor.plazoMeses);
+    if (!prestamoEditor.usuarioId) { setErrorPrestamo("Seleccione un colaborador de la lista"); return; }
+    if (!Number.isFinite(monto) || monto <= 0) { setErrorPrestamo("Ingrese un monto total mayor a cero"); return; }
+    if (!Number.isInteger(plazo) || plazo < 1 || plazo > 120) { setErrorPrestamo("El plazo debe estar entre 1 y 120 meses"); return; }
+    if (!prestamoEditor.fecha) { setErrorPrestamo("Ingrese la fecha inicial del préstamo"); return; }
+    setGuardando(true);
+    setErrorPrestamo("");
+    try {
+      const payload = {
+        usuarioId: Number(prestamoEditor.usuarioId),
+        tipo: prestamoEditor.tipo,
+        montoTotal: prestamoEditor.montoTotal,
+        plazoMeses: plazo,
+        fecha: prestamoEditor.fecha,
+        observacion: prestamoEditor.observacion,
+      };
+      if (prestamoEditor.id) await api.put(`/api/contabilidad/egresos-creditek/prestamos/${prestamoEditor.id}`, payload);
+      else await api.post("/api/contabilidad/egresos-creditek/prestamos", payload);
+      setPrestamoEditor(null);
+      setRevision((value) => value + 1);
+      Swal.fire({ icon: "success", title: prestamoEditor.id ? "Préstamo actualizado" : "Préstamo guardado", timer: 1400, showConfirmButton: false });
+    } catch (err) { setErrorPrestamo(err.response?.data?.message || "No se pudo guardar el préstamo"); }
+    finally { setGuardando(false); }
+  };
+  const cambiarEstadoPrestamo = async (fila) => {
+    const respuesta = await Swal.fire({ title: fila.activo ? "¿Archivar este préstamo?" : "¿Restaurar este préstamo?", text: `${fila.usuario?.nombre}: ${fila.motivo}`, icon: "question", showCancelButton: true, confirmButtonText: fila.activo ? "Archivar" : "Restaurar", cancelButtonText: "Cancelar" });
+    if (!respuesta.isConfirmed) return;
+    setGuardando(true);
+    try {
+      await api.patch(`/api/contabilidad/egresos-creditek/prestamos/${fila.egresoId}/estado`, { activo: !fila.activo });
+      setRevision((value) => value + 1);
+    } catch (err) { Swal.fire("Error", err.response?.data?.message || "No se pudo cambiar el estado del préstamo", "error"); }
+    finally { setGuardando(false); }
+  };
   const exportar = async () => {
     setExportando(true);
     try {
@@ -129,6 +218,7 @@ export default function RolDescuentosCreditek() {
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={loading || guardando || !inicio || !fin} onClick={() => setRevision((v) => v + 1)} className={`${inputClass} flex items-center gap-2 disabled:opacity-50`}><RefreshCw size={16} />Actualizar</button>
             <button type="button" disabled={loading || exportando || !grupos.length} onClick={exportar} className={`${inputClass} flex items-center gap-2 disabled:opacity-50`}><FileSpreadsheet size={16} />{exportando ? "Exportando…" : "Excel"}</button>
+            <button type="button" disabled={loading || guardando || !datos.usuarios.length} onClick={() => abrirPrestamo()} className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16} />Nuevo préstamo</button>
             <button type="button" disabled={loading || guardando || !datos.usuarios.length} onClick={() => abrirEditor()} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16} />Nuevo motivo</button>
           </div>
         </header>
@@ -138,7 +228,7 @@ export default function RolDescuentosCreditek() {
           <label className="grid gap-1 text-sm text-slate-600">Registros<select value={String(archivados)} onChange={(e) => setArchivados(e.target.value === "true")} className={inputClass}><option value="false">Activos</option><option value="true">Archivados</option></select></label>
           <label className="grid flex-1 gap-1 text-sm text-slate-600">Buscar<div className="flex items-center gap-2"><Search size={16} /><input aria-label="Buscar nombre o motivo" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre o motivo" className={`${inputClass} w-full min-w-[180px]`} /></div></label>
         </div>
-        <div className="flex flex-wrap gap-4 text-xs text-slate-600">{Object.entries(ESTADOS_DESCUENTOS).map(([key, estado]) => <span key={key} className="flex items-center gap-2"><span className="h-3 w-3 border border-slate-400" style={{ backgroundColor: `#${estado.color}` }} />{estado.label}</span>)}<span>Diciembre resaltado en naranja</span><span className="flex items-center gap-1"><CalendarRange size={14} className="text-indigo-600" />Los préstamos de Egresos se muestran automáticamente en su período de vigencia</span></div>
+        <div className="flex flex-wrap gap-4 text-xs text-slate-600">{Object.entries(ESTADOS_DESCUENTOS).map(([key, estado]) => <span key={key} className="flex items-center gap-2"><span className="h-3 w-3 border border-slate-400" style={{ backgroundColor: `#${estado.color}` }} />{estado.label}</span>)}<span>Diciembre resaltado en naranja</span><span className="flex items-center gap-1"><CalendarRange size={14} className="text-indigo-600" />Los préstamos se ingresan aquí, calculan sus cuotas automáticamente y permiten prórroga mensual</span></div>
         {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>}
         <section className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm" aria-busy={loading}>
           <div className="max-h-[70vh] overflow-auto">
@@ -158,11 +248,22 @@ export default function RolDescuentosCreditek() {
                       {index === 0 && <th scope="rowgroup" rowSpan={grupo.filas.length} className="sticky left-0 z-20 w-[200px] min-w-[200px] max-w-[200px] border border-slate-500 bg-white px-3 py-2 text-left align-top font-medium italic uppercase">{grupo.nombre}</th>}
                       <th scope="row" className="sticky left-[200px] z-10 min-w-[240px] border border-slate-500 bg-white px-3 py-2 text-left uppercase">
                         <span className="block">{fila.motivo}</span>
-                        {fila.origen === "EGRESOS_CREDITEK" && <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold normal-case text-indigo-700"><CalendarRange size={12} />Egresos · {fechaCorta(fila.fechaInicio)} a {fechaCorta(fila.fechaFin)}</span>}
+                        {fila.origen === "EGRESOS_CREDITEK" && <>
+                          <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold normal-case text-indigo-700"><CalendarRange size={12} />Préstamo · {fechaCorta(fila.fechaInicio)} a {fechaCorta(fila.fechaFin)}</span>
+                          {fila.plazoMeses && <span className="mt-1 block text-[10px] font-medium normal-case text-slate-500">Monto total {moneda(fila.montoTotal)} · {fila.plazoMeses} meses</span>}
+                        </>}
                       </th>
-                      {meses.map((mes) => { const cuota = fila.cuotasPorMes[mes.key]; return <td key={mes.key} title={cuota ? `${ESTADOS_DESCUENTOS[cuota.estado]?.label}: ${moneda(cuota.valor)}` : "Sin cuota"} className="border border-slate-400 px-2 py-2 text-right tabular-nums" style={{ backgroundColor: `#${colorCuota(cuota, mes.mes)}` }}>{cuota ? moneda(cuota.valor) : ""}</td>; })}
+                      {meses.map((mes) => { const cuota = fila.cuotasPorMes[mes.key]; return <td key={mes.key} title={cuota ? `${ESTADOS_DESCUENTOS[cuota.estado]?.label}: ${moneda(cuota.valor)}` : "Sin cuota"} className="border border-slate-400 px-1 py-2 text-right tabular-nums" style={{ backgroundColor: `#${colorCuota(cuota, mes.mes)}` }}>
+                        {cuota && <div className="grid justify-items-end gap-1">
+                          <span>{cuota.prorroga ? "PRÓRROGA" : moneda(cuota.valor)}</span>
+                          {fila.origen === "EGRESOS_CREDITEK" && fila.plazoMeses && <button type="button" disabled={guardando || archivados}
+                            onClick={() => cambiarProrroga(fila, mes.key, cuota)} className="rounded border border-indigo-300 bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 disabled:opacity-50">
+                            {cuota.prorroga ? "Quitar" : "Prorrogar"}
+                          </button>}
+                        </div>}
+                      </td>; })}
                       <td className="border border-slate-400 px-2 py-1">{fila.soloLectura
-                        ? <span className="block text-center text-[10px] font-semibold uppercase text-indigo-700">Automático</span>
+                        ? <div className="flex justify-center gap-1"><button type="button" title="Editar préstamo" aria-label={`Editar préstamo de ${grupo.nombre}`} disabled={guardando} onClick={() => abrirPrestamo(fila)} className="rounded p-2 text-indigo-700 hover:bg-indigo-50"><Pencil size={15} /></button><button type="button" title={fila.activo ? "Archivar préstamo" : "Restaurar préstamo"} aria-label={`${fila.activo ? "Archivar" : "Restaurar"} préstamo de ${grupo.nombre}`} disabled={guardando} onClick={() => cambiarEstadoPrestamo(fila)} className="rounded p-2 text-slate-600 hover:bg-slate-100">{fila.activo ? <Archive size={15} /> : <RotateCcw size={15} />}</button></div>
                         : <div className="flex gap-2"><button type="button" title={`Editar ${fila.motivo} de ${grupo.nombre}`} aria-label={`Editar ${fila.motivo} de ${grupo.nombre}`} disabled={guardando} onClick={() => abrirEditor(fila)} className="rounded p-2 text-blue-700 hover:bg-blue-50"><Pencil size={15} /></button><button type="button" title={fila.activo ? "Archivar motivo" : "Restaurar motivo"} aria-label={`${fila.activo ? "Archivar" : "Restaurar"} ${fila.motivo} de ${grupo.nombre}`} disabled={guardando} onClick={() => cambiarEstado(fila)} className="rounded p-2 text-slate-600 hover:bg-slate-100">{fila.activo ? <Archive size={15} /> : <RotateCcw size={15} />}</button></div>}
                       </td>
                     </tr>))}
@@ -172,6 +273,34 @@ export default function RolDescuentosCreditek() {
           </div>
         </section>
       </div>
+      {prestamoEditor && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
+        <form onSubmit={guardarPrestamo} role="dialog" aria-modal="true" aria-labelledby="titulo-prestamo" className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
+          <div className="mb-4 flex items-center justify-between"><div><h2 id="titulo-prestamo" className="text-xl font-bold">{prestamoEditor.id ? "Editar préstamo" : "Nuevo préstamo"}</h2><p className="mt-1 text-sm text-slate-500">Ingrese el monto completo y el número de meses; las cuotas se calculan automáticamente.</p></div><button type="button" disabled={guardando} onClick={() => setPrestamoEditor(null)} aria-label="Cerrar préstamo"><X size={22} /></button></div>
+          <fieldset disabled={guardando} className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2"><CollaboratorSearchInput
+              options={datos.usuarios}
+              searchValue={prestamoBusqueda}
+              selectedId={prestamoEditor.usuarioId}
+              open={prestamoSelectorOpen}
+              placeholder="Seleccione un colaborador"
+              disabled={Boolean(prestamoEditor.id)}
+              getOptionLabel={(usuario) => `${usuario.nombre}${usuario.activo === false ? " (inactivo)" : ""}`}
+              onOpenChange={setPrestamoSelectorOpen}
+              onSearchChange={(value) => { setPrestamoBusqueda(value); setPrestamoEditor({ ...prestamoEditor, usuarioId: "" }); setPrestamoSelectorOpen(true); }}
+              onShowAll={() => { setPrestamoBusqueda(""); setPrestamoEditor({ ...prestamoEditor, usuarioId: "" }); setPrestamoSelectorOpen(true); }}
+              onSelect={(usuario) => { setPrestamoEditor({ ...prestamoEditor, usuarioId: String(usuario.id) }); setPrestamoBusqueda(`${usuario.nombre}${usuario.activo === false ? " (inactivo)" : ""}`); setPrestamoSelectorOpen(false); }}
+            /></div>
+            <label className="grid gap-1 text-sm">Tipo de préstamo<select required value={prestamoEditor.tipo} onChange={(e) => setPrestamoEditor({ ...prestamoEditor, tipo: e.target.value })} className={inputClass}>{tiposPrestamo.map((item) => <option key={item.id} value={item.codigo.toLowerCase()}>{item.nombre}</option>)}</select></label>
+            <label className="grid gap-1 text-sm">Fecha inicial<input required type="date" value={prestamoEditor.fecha} onChange={(e) => setPrestamoEditor({ ...prestamoEditor, fecha: e.target.value })} className={inputClass} /></label>
+            <label className="grid gap-1 text-sm">Monto total ($)<input required type="number" min="0.01" max="9999999999.99" step="0.01" value={prestamoEditor.montoTotal} onChange={(e) => setPrestamoEditor({ ...prestamoEditor, montoTotal: e.target.value })} placeholder="500.00" className={inputClass} /></label>
+            <label className="grid gap-1 text-sm">Plazo en meses<input required type="number" min="1" max="120" step="1" value={prestamoEditor.plazoMeses} onChange={(e) => setPrestamoEditor({ ...prestamoEditor, plazoMeses: e.target.value })} className={inputClass} /></label>
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900 sm:col-span-2">Cuota aproximada: <strong>{moneda(Number(prestamoEditor.montoTotal || 0) / Math.max(1, Number(prestamoEditor.plazoMeses) || 1))}</strong>. La diferencia de centavos se ajustará en la última cuota.</div>
+            <label className="grid gap-1 text-sm sm:col-span-2">Observación<textarea maxLength={500} rows={3} value={prestamoEditor.observacion} onChange={(e) => setPrestamoEditor({ ...prestamoEditor, observacion: e.target.value })} className={inputClass} /></label>
+            {errorPrestamo && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700 sm:col-span-2">{errorPrestamo}</p>}
+            <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" disabled={guardando} onClick={() => setPrestamoEditor(null)} className={inputClass}>Cancelar</button><button type="submit" className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"><Save size={16} />{guardando ? "Guardando…" : prestamoEditor.id ? "Actualizar préstamo" : "Guardar préstamo"}</button></div>
+          </fieldset>
+        </form>
+      </div>}
       {editor && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
         <form onSubmit={guardar} role="dialog" aria-modal="true" aria-labelledby="titulo-descuento" className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-xl bg-white p-5 shadow-xl">
           <div className="mb-4 flex items-center justify-between"><h2 id="titulo-descuento" className="text-xl font-bold">{editor.id ? "Editar motivo" : "Nuevo motivo"}</h2><button type="button" disabled={guardando} onClick={() => setEditor(null)} aria-label="Cerrar editor"><X size={22} /></button></div>
@@ -212,7 +341,7 @@ export default function RolDescuentosCreditek() {
             <div className="max-h-64 overflow-auto"><table className="w-full text-sm"><thead><tr className="text-left"><th>Mes</th><th>Valor ($)</th><th>Estado</th><th><span className="sr-only">Quitar</span></th></tr></thead><tbody>{editor.cuotas.map((cuota, index) => <tr key={cuota.periodo}>
               <td className="py-1">{MESES_DESCUENTOS[Number(cuota.periodo.slice(5)) - 1]} {cuota.periodo.slice(0, 4)}</td>
               <td><input aria-label={`Valor ${cuota.periodo}`} type="number" min="0.01" max="9999999999.99" step="0.01" required value={cuota.valor} onChange={(e) => editarCuota(index, "valor", e.target.value)} className={`${inputClass} w-32`} /></td>
-              <td><select aria-label={`Estado ${cuota.periodo}`} value={cuota.estado} onChange={(e) => editarCuota(index, "estado", e.target.value)} className={inputClass}>{Object.entries(ESTADOS_DESCUENTOS).map(([key, estado]) => <option key={key} value={key}>{estado.label}</option>)}</select></td>
+              <td><select aria-label={`Estado ${cuota.periodo}`} value={cuota.estado} onChange={(e) => editarCuota(index, "estado", e.target.value)} className={inputClass}>{Object.entries(ESTADOS_DESCUENTOS).filter(([key]) => key !== "PRORROGA").map(([key, estado]) => <option key={key} value={key}>{estado.label}</option>)}</select></td>
               <td><button type="button" aria-label={`Quitar cuota ${cuota.periodo}`} onClick={() => setEditor({ ...editor, cuotas: editor.cuotas.filter((_cuota, i) => i !== index) })} className="p-2 text-red-600"><Trash2 size={16} /></button></td>
             </tr>)}</tbody></table></div>
             {errorEditor && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{errorEditor}</p>}

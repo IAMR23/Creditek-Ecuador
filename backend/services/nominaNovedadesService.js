@@ -78,7 +78,7 @@ const vistaPrevia = async (payload) => {
   const candidato = { ...preparar(payload, actual), ...(id == null ? {} : { id }) };
   const conjunto = validarConjunto(candidato, registros, payload);
   // Se usan sueldo, fondos históricos y descuentos del servidor; no importes enviados por el cliente.
-  const { obtenerResumen, normalizarValor } = require('./rolesCreditekResumenService');
+  const { obtenerResumen, normalizarDiasFalta, normalizarValor } = require('./rolesCreditekResumenService');
   const resumen = await obtenerResumen({ anio: payload.anio, mes: payload.mes });
   const row = resumen.registros.find((item) => item.usuarioId === valores.usuarioId);
   if (!row) throw fallo('El empleado no aparece en la nómina del período', 404);
@@ -87,6 +87,9 @@ const vistaPrevia = async (payload) => {
     if (Object.hasOwn(payload.ajustesNomina || {}, campo)) {
       ajustes[campo] = normalizarValor(payload.ajustesNomina[campo], campo);
     }
+  }
+  if (Object.hasOwn(payload.ajustesNomina || {}, 'diasFalta')) {
+    ajustes.diasFalta = normalizarDiasFalta(payload.ajustesNomina.diasFalta);
   }
   return { calculo: calcularNominaPeriodo({ ...row, ...ajustes }, payload, conjunto), novedades: novedadesDelMes(conjunto, payload) };
 };

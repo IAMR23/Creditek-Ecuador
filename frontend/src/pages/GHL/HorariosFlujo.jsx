@@ -4,6 +4,8 @@ import {
   BookOpen,
   CalendarClock,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Gauge,
   Info,
@@ -63,7 +65,7 @@ const addUtcDays = (date, amount) => {
   result.setUTCDate(result.getUTCDate() + amount);
   return result;
 };
-const operationalWeek = (now = new Date()) => {
+const operationalWeek = (now = new Date(), weekOffset = 0) => {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Guayaquil",
     year: "numeric",
@@ -73,7 +75,7 @@ const operationalWeek = (now = new Date()) => {
     .map((part) => [part.type, part.value]));
   const today = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
   const daysSinceThursday = (today.getUTCDay() - 4 + 7) % 7;
-  const start = addUtcDays(today, -daysSinceThursday);
+  const start = addUtcDays(today, -daysSinceThursday + (weekOffset * 7));
   const todayDate = isoDate(today);
   return DAYS.map((day, index) => {
     const date = addUtcDays(start, index);
@@ -112,7 +114,9 @@ export default function HorariosFlujo() {
   const [showLevelManual, setShowLevelManual] = useState(false);
   const [assignmentEditor, setAssignmentEditor] = useState(null);
   const [assignmentCreator, setAssignmentCreator] = useState(null);
-  const week = useMemo(() => operationalWeek(), []);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const currentWeek = useMemo(() => operationalWeek(), []);
+  const week = useMemo(() => operationalWeek(new Date(), weekOffset), [weekOffset]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,17 +130,17 @@ export default function HorariosFlujo() {
       setPipelines(pipelineResponse.data.pipelines || []);
       setUsers(userResponse.data.users || []);
       const receivedBlocks = scheduleResponse.data.configuracion?.horariosFlujo || [];
-      const currentDates = new Set(week.map((day) => day.date));
-      const currentBlocks = receivedBlocks.flatMap((block) => {
-        if (block.fecha) return currentDates.has(block.fecha) ? [block] : [];
-        const day = week.find((item) => item.value === Number(block.diaSemana));
+      const currentWeekStart = currentWeek[0].date;
+      const activeAndFutureBlocks = receivedBlocks.flatMap((block) => {
+        if (block.fecha) return block.fecha >= currentWeekStart ? [block] : [];
+        const day = currentWeek.find((item) => item.value === Number(block.diaSemana));
         return day ? [{ ...block, fecha: day.date }] : [];
       });
       setConfiguration({
         ...emptyConfiguration,
         ...(scheduleResponse.data.configuracion || {}),
         stageIds: scheduleResponse.data.configuracion?.stageIds || [],
-        horariosFlujo: currentBlocks,
+        horariosFlujo: activeAndFutureBlocks,
         nivelesFlujo: scheduleResponse.data.configuracion?.nivelesFlujo || {},
       });
     } catch (requestError) {
@@ -144,7 +148,7 @@ export default function HorariosFlujo() {
     } finally {
       setLoading(false);
     }
-  }, [week]);
+  }, [currentWeek]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -242,9 +246,13 @@ export default function HorariosFlujo() {
       .sort((left, right) => String(left.horaInicio || "").localeCompare(String(right.horaInicio || ""))
         || String(left.id || "").localeCompare(String(right.id || ""))),
   ])), [configuration.horariosFlujo, week]);
+  const selectedWeekBlocks = useMemo(
+    () => configuration.horariosFlujo.filter((block) => blocksByDate.has(block.fecha)),
+    [blocksByDate, configuration.horariosFlujo],
+  );
   const calendarRange = useMemo(
-    () => buildScheduleRange(configuration.horariosFlujo),
-    [configuration.horariosFlujo],
+    () => buildScheduleRange(selectedWeekBlocks),
+    [selectedWeekBlocks],
   );
   const calendarLayouts = useMemo(
     () => new Map(week.map((day) => [
@@ -255,9 +263,9 @@ export default function HorariosFlujo() {
   );
   const weekSummary = useMemo(() => ({
     scheduledDays: week.filter((day) => (blocksByDate.get(day.date) || []).length > 0).length,
-    shifts: configuration.horariosFlujo.length,
-    advisors: new Set(configuration.horariosFlujo.flatMap((block) => block.usuariosGhl)).size,
-  }), [blocksByDate, configuration.horariosFlujo, week]);
+    shifts: selectedWeekBlocks.length,
+    advisors: new Set(selectedWeekBlocks.flatMap((block) => block.usuariosGhl)).size,
+  }), [blocksByDate, selectedWeekBlocks, week]);
 
   const openAssignmentCreator = (day = week.find((item) => item.isToday) || week[0]) => {
     setAssignmentCreator({
@@ -300,7 +308,7 @@ export default function HorariosFlujo() {
 
     const day = week.find((item) => item.date === assignmentCreator.date);
     if (!day) {
-      setError("Seleccione un día de la semana actual.");
+      setError("Seleccione un día de la semana visible.");
       return;
     }
 
@@ -452,12 +460,12 @@ export default function HorariosFlujo() {
             <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"><Workflow size={14} /> Sistemas · GoHighLevel</div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">Horarios de flujo</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Programa la recepción automática de oportunidades para la semana operativa actual.
+              Programa la recepción automática de oportunidades para la semana actual y las siguientes.
             </p>
             <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"><CalendarClock size={17} className="text-emerald-600" />{week[0].dateLabel} — {week.at(-1).dateLabel}</div>
           </div>
           <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${configuration.horariosFlujoActivo ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-            <span><span className="block text-sm font-bold text-slate-800">Flujo automático</span><span className="block text-xs text-slate-500">{configuration.horariosFlujoActivo ? "Activo esta semana" : "Programación inactiva"}</span></span>
+            <span><span className="block text-sm font-bold text-slate-800">Flujo automático</span><span className="block text-xs text-slate-500">{configuration.horariosFlujoActivo ? "Programación activa" : "Programación inactiva"}</span></span>
             <span className={`relative h-6 w-11 rounded-full transition ${configuration.horariosFlujoActivo ? "bg-emerald-500" : "bg-slate-300"}`}>
               <input type="checkbox" checked={configuration.horariosFlujoActivo} onChange={(event) => setField("horariosFlujoActivo", event.target.checked)} className="sr-only" />
               <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${configuration.horariosFlujoActivo ? "left-6" : "left-1"}`} />
@@ -548,6 +556,45 @@ export default function HorariosFlujo() {
               className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700"
             >
               <UserPlus size={15} /> Agregar asesor
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-indigo-600">
+              {weekOffset === 0 ? "Semana actual" : `Semana futura +${weekOffset}`}
+            </p>
+            <p className="text-sm font-semibold text-slate-700">
+              {week[0].dateLabel} — {week.at(-1).dateLabel}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWeekOffset((current) => Math.max(0, current - 1))}
+              disabled={weekOffset === 0}
+              aria-label="Ver semana anterior"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            {weekOffset > 0 && (
+              <button
+                type="button"
+                onClick={() => setWeekOffset(0)}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-100"
+              >
+                Ir a semana actual
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setWeekOffset((current) => current + 1)}
+              aria-label="Ver semana siguiente"
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 text-xs font-bold text-indigo-700 shadow-sm hover:bg-indigo-50"
+            >
+              Siguiente <ChevronRight size={17} />
             </button>
           </div>
         </div>

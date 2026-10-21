@@ -99,6 +99,14 @@ const normalizarValorOpcional = (value, label) => {
   return normalizarValor(value, label);
 };
 
+const normalizarDiasFalta = (value) => {
+  const dias = Number(value);
+  if (!Number.isInteger(dias) || dias < 0 || dias > 30) {
+    throw crearError("Los dias de falta deben ser un entero entre 0 y 30");
+  }
+  return dias;
+};
+
 const limitesMes = ({ anio, mes }) => {
   const inicio = new Date(Date.UTC(anio, mes - 1, 1, 5, 0, 0));
   const fin = new Date(Date.UTC(anio, mes, 1, 5, 0, 0));
@@ -222,6 +230,7 @@ const obtenerDatosPagoUsuario = (usuario, ingreso) => {
 const serializarAjuste = (row) => {
   const value = typeof row?.toJSON === "function" ? row.toJSON() : row || {};
   return {
+    diasFalta: value.diasFalta == null ? 0 : Number(value.diasFalta),
     sueldosExtrasManual: value.sueldosExtrasManual == null ? null : redondear(value.sueldosExtrasManual),
     fondosReservaManual: value.fondosReservaManual == null ? null : redondear(value.fondosReservaManual),
     ...Object.fromEntries(
@@ -365,7 +374,7 @@ const obtenerResumen = async (periodoValue) => {
             },
           ],
         },
-        attributes: ["usuarioId", "seccion", "tipo", "valor", "fecha", "fechaFin", "createdAt"],
+        attributes: ["usuarioId", "seccion", "tipo", "valor", "montoTotal", "plazoMeses", "prorrogas", "fecha", "fechaFin", "createdAt"],
       }),
       ControlFinancieroRegistro.findAll({
         where: {
@@ -608,6 +617,9 @@ const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue, sol
         return {
           usuarioId,
           ...periodo,
+          ...(registro.diasFalta !== undefined ? {
+            diasFalta: normalizarDiasFalta(registro.diasFalta),
+          } : {}),
           fondosReservaManual: normalizarValorOpcional(registro.fondosReservaManual, "Fondos de reserva"),
           ...(registro.sueldosExtrasManual !== undefined ? {
             sueldosExtrasManual: normalizarValorOpcional(registro.sueldosExtrasManual, "Sueldos extras"),
@@ -674,6 +686,7 @@ module.exports = {
   guardarNomina: (datos, usuarioId) => guardarAjustes(datos, usuarioId, true),
   guardarAjustes,
   normalizarPeriodo,
+  normalizarDiasFalta,
   normalizarValor,
   obtenerResumen,
 };

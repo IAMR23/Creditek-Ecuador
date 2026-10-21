@@ -546,6 +546,22 @@ describe("rolesCreditekResumenService", () => {
 describe("fondos de reserva de nomina", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  test("guarda dias de falta enteros del periodo y rechaza valores fuera de rango", async () => {
+    Usuario.count.mockResolvedValue(1);
+    const update = jest.fn().mockResolvedValue(undefined);
+    RolCreditekAjuste.findOrCreate.mockResolvedValue([{ update }, false]);
+    await guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: 20, diasFalta: 3 },
+    ] }, 7);
+    expect(update).toHaveBeenCalledWith(
+      { usuarioId: 4, anio: 2026, mes: 9, diasFalta: 3, fondosReservaManual: 20, actualizadoPorId: 7 },
+      { transaction: { id: "tx" } },
+    );
+    await expect(guardarNomina({ anio: 2026, mes: 9, registros: [
+      { usuarioId: 4, fondosReservaManual: 20, diasFalta: 31 },
+    ] }, 7)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
   test("guarda todos los colaboradores del periodo en una transaccion sin modificar otros ajustes", async () => {
     Usuario.count.mockResolvedValue(2);
     const update = jest.fn().mockResolvedValue(undefined);
@@ -583,12 +599,13 @@ describe("fondos de reserva de nomina", () => {
     ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({ vendedores: [] });
     RolCreditekAjuste.findAll.mockResolvedValue([
-      { usuarioId: 4, fondosReservaManual: "25.50", sueldosExtrasManual: "75.50" },
+      { usuarioId: 4, fondosReservaManual: "25.50", sueldosExtrasManual: "75.50", diasFalta: 2 },
       { usuarioId: 5, fondosReservaManual: "0.00", sueldosExtrasManual: "0.00" },
     ]);
     const resultado = await obtenerResumen({ anio: 2026, mes: 9 });
     expect(resultado.registros.map(r => r.fondosReservaManual)).toEqual([25.5, 0, null]);
     expect(resultado.registros.map(r => r.sueldosExtrasManual)).toEqual([75.5, 0, null]);
+    expect(resultado.registros.map(r => r.diasFalta)).toEqual([2, 0, 0]);
     expect(RolCreditekAjuste.findAll).toHaveBeenCalledWith({ where: { anio: 2026, mes: 9 } });
   });
 });

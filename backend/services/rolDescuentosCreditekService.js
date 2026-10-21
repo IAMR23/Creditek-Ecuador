@@ -3,6 +3,7 @@ const EgresoCreditekEntrada = require("../models/EgresoCreditekEntrada");
 const Usuario = require("../models/Usuario");
 const { Op } = require("sequelize");
 const tiposService = require("./egresosCreditekTiposService");
+const { calcularPlanPrestamo, esPlanPrestamo } = require("../utils/prestamosCreditek");
 
 const ESTADOS = ["PENDIENTE", "APLICADO", "RECURRENTE", "REVISAR"];
 const error = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
@@ -67,20 +68,28 @@ const serializarPrestamo = (registroValue, tiposPorCodigo, inicio, fin) => {
   const hasta = periodoFin < fin ? periodoFin : fin;
   const tipoNombre = tiposPorCodigo.get(registro.tipo) || textoTipo(registro.tipo);
   const observacion = String(registro.observacion || "").trim();
+  const plan = esPlanPrestamo(registro) ? calcularPlanPrestamo(registro) : null;
   return {
     id: `egreso-prestamo-${registro.id}`,
     egresoId: registro.id,
     usuarioId: registro.usuarioId,
     usuario: registro.usuario,
     motivo: observacion ? `${tipoNombre} · ${observacion}` : tipoNombre,
-    cuotas: desde <= hasta
-      ? periodosEntre(desde, hasta).map((periodo) => ({ periodo, valor: Number(registro.valor || 0), estado: "RECURRENTE" }))
-      : [],
+    cuotas: plan
+      ? plan.filter((cuota) => cuota.periodo >= inicio && cuota.periodo <= fin)
+      : desde <= hasta
+        ? periodosEntre(desde, hasta).map((periodo) => ({ periodo, valor: Number(registro.valor || 0), estado: "RECURRENTE" }))
+        : [],
     activo: registro.activo !== false,
     origen: "EGRESOS_CREDITEK",
     soloLectura: true,
     fechaInicio: registro.fecha || null,
     fechaFin: registro.fechaFin || null,
+    tipo: registro.tipo,
+    observacion,
+    montoTotal: registro.montoTotal == null ? null : Number(registro.montoTotal),
+    plazoMeses: registro.plazoMeses == null ? null : Number(registro.plazoMeses),
+    prorrogas: Array.isArray(registro.prorrogas) ? registro.prorrogas : [],
   };
 };
 const obtener = async ({ inicio, fin, archivados } = {}) => {
@@ -102,7 +111,7 @@ const obtener = async ({ inicio, fin, archivados } = {}) => {
         fecha: { [Op.lte]: ultimoDiaPeriodo(fin) },
         [Op.or]: [{ fechaFin: null }, { fechaFin: { [Op.gte]: `${inicio}-01` } }],
       },
-      attributes: ["id", "usuarioId", "valor", "observacion", "fecha", "fechaFin", "tipo", "activo", "createdAt"],
+      attributes: ["id", "usuarioId", "valor", "montoTotal", "plazoMeses", "prorrogas", "observacion", "fecha", "fechaFin", "tipo", "activo", "createdAt"],
       include: includeUsuario,
       order: [["fecha", "ASC"], ["id", "ASC"]],
     }),

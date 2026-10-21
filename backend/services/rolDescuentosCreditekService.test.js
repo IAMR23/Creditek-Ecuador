@@ -103,3 +103,20 @@ test("incluye los prestamos de Egresos como una linea de tiempo mensual de solo 
     where: expect.objectContaining({ activo: true, seccion: "PRESTAMOS" }),
   }));
 });
+test("muestra cuotas calculadas y prorrogas de prestamos por monto y plazo", async () => {
+  Model.findAll.mockResolvedValue([]);
+  Usuario.findAll.mockResolvedValue([{ id: 7, nombre: "Ana" }]);
+  tiposService.listar.mockResolvedValue([{ codigo: "MECANICA", nombre: "Mecánica" }]);
+  EgresoCreditekEntrada.findAll.mockResolvedValue([{
+    id: 12, usuarioId: 7, usuario: { id: 7, nombre: "Ana" }, tipo: "MECANICA",
+    valor: "33.33", montoTotal: "100.00", plazoMeses: 3, prorrogas: ["2026-12"],
+    fecha: "2026-11-15", fechaFin: "2027-02-28", activo: true,
+  }]);
+  const resultado = await service.obtener({ inicio: "2026-11", fin: "2027-02" });
+  expect(resultado.registros[0]).toMatchObject({ montoTotal: 100, plazoMeses: 3, cuotas: [
+    { periodo: "2026-11", valor: 33.33, numeroCuota: 1 },
+    { periodo: "2026-12", valor: 0, estado: "PRORROGA", prorroga: true },
+    { periodo: "2027-01", valor: 33.33, numeroCuota: 2 },
+    { periodo: "2027-02", valor: 33.34, numeroCuota: 3 },
+  ] });
+});

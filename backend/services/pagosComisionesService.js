@@ -151,6 +151,7 @@ const emptyWeekValues = () => ({
   venden: 0,
   valorVendido: 0,
   totalComisiones: 0,
+  metaMinima: null,
   noCumpleMetas: 0,
   valorDescontar: 0,
 });
@@ -215,6 +216,7 @@ const buildPersonalSellerView = ({
       multaOmitida: penaltyAdjustment?.multaOmitida,
       valorDescontarAjustado: penaltyAdjustment?.valorDescontarAjustado,
     });
+    values.metaMinima = penalty.metaMinima;
     values.noCumpleMetas = penalty.noCumpleMetas;
     values.valorMultaCalculado = penalty.valorMultaCalculado;
     values.valorDescontar = penalty.valorDescontar;
@@ -345,6 +347,10 @@ const getUsuarioPayload = (usuarioAgencia) => {
     usuarioId: usuario.id,
     nombre: usuario.nombre || "Sin vendedor",
     activo: Boolean(usuario.activo),
+    metaMinimaSemanal:
+      usuario.metaMinimaSemanal === null || usuario.metaMinimaSemanal === undefined
+        ? null
+        : Number(usuario.metaMinimaSemanal),
     rolPagoId: cargoPrincipal?.rolPagoId || null,
     cargo: cargoPrincipal?.cargo || "",
     nivel: cargoPrincipal?.nivel || "",
@@ -1224,6 +1230,12 @@ const calculateSalesPenalty = ({ config, unidadesVendidas }) => {
   return round(faltantes * toNumber(config.valorMultaUnidad), 2);
 };
 
+const applySellerMinimum = (config, metaMinimaSemanal) => {
+  if (!config) return null;
+  if (metaMinimaSemanal === null || metaMinimaSemanal === undefined) return config;
+  return { ...config, minimoUnidades: Number(metaMinimaSemanal) };
+};
+
 const calculateMissingUnits = ({ config, unidadesVendidas }) =>
   config ? Math.max(0, toNumber(config.minimoUnidades) - toNumber(unidadesVendidas)) : 0;
 
@@ -1236,6 +1248,7 @@ const calculateWeeklyPenalty = ({
 }) => {
   if (!aplicaDescuento) {
     return {
+      metaMinima: config ? toNumber(config.minimoUnidades) : null,
       noCumpleMetas: 0,
       valorMultaCalculado: 0,
       valorDescontar: 0,
@@ -1260,6 +1273,7 @@ const calculateWeeklyPenalty = ({
       : valorMultaCalculado;
 
   return {
+    metaMinima: config ? toNumber(config.minimoUnidades) : null,
     noCumpleMetas,
     valorMultaCalculado,
     valorDescontar,
@@ -1738,7 +1752,7 @@ const buildIncludeUsuarioAgencia = () => ({
     {
       model: Usuario,
       as: "usuario",
-      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
+      attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "metaMinimaSemanal", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
       include: [
         {
           model: RolPago,
@@ -1801,7 +1815,7 @@ const obtenerRelacionesVendedores = async () =>
       {
         model: Usuario,
         as: "usuario",
-        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
+        attributes: ["id", "nombre", "activo", "rolPagoId", "rolId", "metaMinimaSemanal", "fechaIngreso", "fechaSalida", "createdAt", "jefeComercialId", "supervisorComercialId"],
         include: [
           {
             model: RolPago,
@@ -2009,9 +2023,9 @@ const finalizarVendedor = (
     (rolSubgrupoMensualKey && monthlyRulesByGroup[rolSubgrupoMensualKey]) ||
     (grupoSubgrupoMensualKey && monthlyRulesByGroup[grupoSubgrupoMensualKey]) ||
     (rolKey && monthlyRulesByGroup[rolKey]) || (grupoKey && monthlyRulesByGroup[grupoKey]) || null;
-  const sanctionConfig = resolveSalesSanctionConfig(
-    vendedor,
-    sanctionsByRole,
+  const sanctionConfig = applySellerMinimum(
+    resolveSalesSanctionConfig(vendedor, sanctionsByRole),
+    vendedor.metaMinimaSemanal,
   );
 
   vendedor.resumenMensual = emptyMonthlyValues();
@@ -2077,6 +2091,7 @@ const finalizarVendedor = (
       multaOmitida: penaltyAdjustment?.multaOmitida,
       valorDescontarAjustado: penaltyAdjustment?.valorDescontarAjustado,
     });
+    values.metaMinima = penalty.metaMinima;
     values.noCumpleMetas = penalty.noCumpleMetas;
     values.valorMultaCalculado = penalty.valorMultaCalculado;
     values.valorDescontar = penalty.valorDescontar;
@@ -2595,9 +2610,9 @@ const construirReportePagosComisiones = async ({
           vendedor,
           weeks,
           semanasPersonales: vendedor.semanasPersonalesVendedor,
-          sanctionConfig: resolvePersonalSellerSanctionConfig(
-            vendedor,
-            sanctionsByRole,
+          sanctionConfig: applySellerMinimum(
+            resolvePersonalSellerSanctionConfig(vendedor, sanctionsByRole),
+            vendedor.metaMinimaSemanal,
           ),
           penaltyAdjustments,
         });
@@ -3696,6 +3711,7 @@ module.exports = {
   buildMonthlyRulesByGroup,
   calculateCommission,
   calculateSalesPenalty,
+  applySellerMinimum,
   calculateWeeklyPenalty,
   calculateMonthlyBonus,
   calculateProportionalChiefBonus,

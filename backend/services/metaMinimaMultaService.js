@@ -49,6 +49,11 @@ const isApplicableSellerCargo = (cargo) =>
 const hasApplicableSellerRole = (seller) =>
   (seller.rolesPago || []).some((rolPago) => isApplicableSellerCargo(rolPago.cargo));
 
+const resolveSellerMinimum = (seller, roleMinimum = null) =>
+  seller?.metaMinimaSemanal === null || seller?.metaMinimaSemanal === undefined
+    ? roleMinimum
+    : Number(seller.metaMinimaSemanal);
+
 const parseDateRange = ({ fechaInicio, fechaFin }) => {
   if (!fechaInicio || !fechaFin) {
     throw createHttpError("Debe enviar fechaInicio y fechaFin", 400);
@@ -276,6 +281,10 @@ const buildUsuarioPayload = (relacion) => {
     usuarioId: usuario.id,
     nombre: usuario.nombre || "Sin vendedor",
     rolPagoId: usuario.rolPagoId || null,
+    metaMinimaSemanal:
+      usuario.metaMinimaSemanal === null || usuario.metaMinimaSemanal === undefined
+        ? null
+        : Number(usuario.metaMinimaSemanal),
     fechaIngreso: usuario.fechaIngreso || null,
     fechaCreacionUsuario: usuario.createdAt ? toDateOnly(new Date(usuario.createdAt)) : null,
     rolesPago: [...rolesPago.values()].map((rolPago) => ({
@@ -284,6 +293,51 @@ const buildUsuarioPayload = (relacion) => {
       nivel: rolPago.nivel,
     })),
     agencias: relacion.agencia?.nombre ? [relacion.agencia.nombre] : [],
+  };
+};
+
+const actualizarMetaMinimaVendedor = async (usuarioId, payload = {}) => {
+  const id = Number(usuarioId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw createHttpError("El vendedor no es valido", 400);
+  }
+
+  const rawMinimum = payload.metaMinimaSemanal;
+  const metaMinimaSemanal = rawMinimum === null || rawMinimum === ""
+    ? null
+    : Number(rawMinimum);
+  if (metaMinimaSemanal !== null
+    && (!Number.isInteger(metaMinimaSemanal) || metaMinimaSemanal < 0 || metaMinimaSemanal > 1000)) {
+    throw createHttpError("La meta minima debe ser un entero entre 0 y 1000", 400);
+  }
+
+  const usuario = await Usuario.findByPk(id, {
+    attributes: ["id", "nombre", "rolPagoId", "metaMinimaSemanal"],
+    include: [
+      { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
+      {
+        model: RolPago,
+        as: "rolesPago",
+        attributes: ["id", "cargo", "nivel"],
+        through: { attributes: [] },
+      },
+    ],
+  });
+  if (!usuario) throw createHttpError("Vendedor no encontrado", 404);
+
+  const rolesPago = new Map();
+  if (usuario.rolPago) rolesPago.set(Number(usuario.rolPago.id), usuario.rolPago);
+  (usuario.rolesPago || []).forEach((rolPago) => rolesPago.set(Number(rolPago.id), rolPago));
+  if (![...rolesPago.values()].some((rolPago) => isApplicableSellerCargo(rolPago.cargo))) {
+    throw createHttpError("El usuario no tiene un cargo de vendedor aplicable", 409);
+  }
+
+  await usuario.update({ metaMinimaSemanal });
+  return {
+    usuarioId: usuario.id,
+    nombre: usuario.nombre,
+    metaMinimaSemanal,
+    usaMetaPorRol: metaMinimaSemanal === null,
   };
 };
 
@@ -368,7 +422,7 @@ const obtenerMetaMinimaDashboard = async (filters = {}) => {
         {
           model: Usuario,
           as: "usuario",
-          attributes: ["id", "nombre", "rolPagoId", "fechaIngreso", "createdAt"],
+          attributes: ["id", "nombre", "rolPagoId", "metaMinimaSemanal", "fechaIngreso", "createdAt"],
           required: true,
           include: [
             { model: RolPago, as: "rolPago", attributes: ["id", "cargo", "nivel"] },
@@ -441,7 +495,8 @@ const obtenerMetaMinimaDashboard = async (filters = {}) => {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
     .map((seller) => {
       const resolved = resolveApplicableConfig(seller, configsByRole);
-      const metaMinima = resolved.config?.minimoUnidades ?? null;
+      const metaMinimaRol = resolved.config?.minimoUnidades ?? null;
+      const metaMinima = resolveSellerMinimum(seller, metaMinimaRol);
       const valorMultaUnidad = resolved.config?.valorMultaUnidad ?? null;
       const detalleSemanas = weeks.map((week) => {
         const ventasSemana = toNumber(
@@ -504,6 +559,8 @@ const obtenerMetaMinimaDashboard = async (filters = {}) => {
         fechaIngreso: seller.fechaIngreso,
         fechaCreacionUsuario: seller.fechaCreacionUsuario,
         metaMinima,
+        metaMinimaRol,
+        metaMinimaIndividual: seller.metaMinimaSemanal !== null,
         ventas: ventasTotales,
         faltan: faltanTotal,
         valorMultaUnidad,
@@ -539,6 +596,7 @@ module.exports = {
   isVendedorPisoCargo,
   isVendedorCallCenterCargo,
   isApplicableSellerCargo,
+  resolveSellerMinimum,
   buildCommercialWeeksForRange,
   calculateCompliance,
   getNewPersonnelPenaltyStartDate,
@@ -549,5 +607,6 @@ module.exports = {
   crearConfiguracion,
   actualizarConfiguracion,
   cambiarEstadoConfiguracion,
+  actualizarMetaMinimaVendedor,
   obtenerMetaMinimaDashboard,
 };

@@ -951,7 +951,6 @@ const ensurePersonasSchema = async (queryInterface, tables) => {
       onDelete: "SET NULL",
     },
   );
-
   await sequelize.query(`
     DO $$
     BEGIN
@@ -1169,6 +1168,20 @@ const ensureUsuariosLaboralesPreSyncSchema = async (queryInterface) => {
     path.join(
       __dirname,
       "../migrations/202610080002-add-datos-laborales-usuarios.sql",
+    ),
+    "utf8",
+  );
+  await sequelize.query(sql);
+};
+
+const ensureUsuariosMetaMinimaPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("usuarios")) return;
+
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../migrations/202610200001-add-meta-minima-semanal-usuarios.sql",
     ),
     "utf8",
   );
@@ -1898,6 +1911,31 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
     );
   }
 
+  await addColumnIfMissing(
+    queryInterface,
+    "roles_creditek_ajustes",
+    "diasFalta",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+  );
+
+  await sequelize.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'roles_creditek_ajustes_dias_falta_rango'
+      ) THEN
+        ALTER TABLE roles_creditek_ajustes
+        ADD CONSTRAINT roles_creditek_ajustes_dias_falta_rango
+        CHECK ("diasFalta" BETWEEN 0 AND 30);
+      END IF;
+    END $$;
+  `);
+
   if (debeMigrarMultasFacturacion) {
     await sequelize.query(`
       UPDATE roles_creditek_ajustes
@@ -1922,6 +1960,26 @@ const ensureEgresosCreditekEntradasPreSyncSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("egresos_creditek_entradas")) return;
   await addColumnIfMissing(queryInterface, "egresos_creditek_entradas", "fechaFin", { type: Sequelize.DATEONLY, allowNull: true });
+  await addColumnIfMissing(queryInterface, "egresos_creditek_entradas", "montoTotal", { type: Sequelize.DECIMAL(12, 2), allowNull: true });
+  await addColumnIfMissing(queryInterface, "egresos_creditek_entradas", "plazoMeses", { type: Sequelize.INTEGER, allowNull: true });
+  await addColumnIfMissing(queryInterface, "egresos_creditek_entradas", "prorrogas", { type: Sequelize.JSONB, allowNull: false, defaultValue: [] });
+  await sequelize.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'egresos_creditek_monto_total_positivo') THEN
+        ALTER TABLE egresos_creditek_entradas ADD CONSTRAINT egresos_creditek_monto_total_positivo
+        CHECK ("montoTotal" IS NULL OR "montoTotal" > 0);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'egresos_creditek_plazo_meses_rango') THEN
+        ALTER TABLE egresos_creditek_entradas ADD CONSTRAINT egresos_creditek_plazo_meses_rango
+        CHECK ("plazoMeses" IS NULL OR "plazoMeses" BETWEEN 1 AND 120);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'egresos_creditek_prorrogas_array') THEN
+        ALTER TABLE egresos_creditek_entradas ADD CONSTRAINT egresos_creditek_prorrogas_array
+        CHECK (jsonb_typeof(prorrogas) = 'array');
+      END IF;
+    END $$;
+  `);
 
   await addColumnIfMissing(
     queryInterface,
@@ -2329,6 +2387,7 @@ const connectDB = async () => {
     await ensureTicketsTiPreSyncSchema(queryInterface);
     await ensureUphoneCedulaSchema(queryInterface);
     await ensureUsuariosLaboralesPreSyncSchema(queryInterface);
+    await ensureUsuariosMetaMinimaPreSyncSchema(queryInterface);
     await ensureGhlBroadcastQueueSchema(await queryInterface.showAllTables());
     await sequelize.sync({});
     for (const migration of [

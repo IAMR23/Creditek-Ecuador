@@ -45,6 +45,21 @@ const EgresoCreditekEntrada = sequelize.define(
       allowNull: true,
     },
     fechaFin: { type: DataTypes.DATEONLY, allowNull: true },
+    montoTotal: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      validate: { min: 0.01 },
+    },
+    plazoMeses: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: { min: 1, max: 120, isInt: true },
+    },
+    prorrogas: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
+    },
     seccion: {
       type: DataTypes.STRING(30),
       allowNull: false,

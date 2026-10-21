@@ -11,6 +11,12 @@ export const factorJornadaNomina = (jornadaLaboral) =>
 export const calcularValorPorJornada = (value, jornadaLaboral) =>
   redondear(numero(value) * factorJornadaNomina(jornadaLaboral));
 
+export const calcularDiasTrabajadosNomina = (diasBase, diasFalta) => {
+  const base = Math.max(0, Math.min(30, Math.trunc(numero(diasBase))));
+  const faltas = Math.max(0, Math.min(30, Math.trunc(numero(diasFalta))));
+  return Math.max(0, base - faltas);
+};
+
 export const calcularBaseIessNomina = ({ sueldoAPagar, sueldosExtras, comisionVenta }) =>
   redondear(numero(sueldoAPagar) + numero(sueldosExtras) + numero(comisionVenta));
 
@@ -64,27 +70,45 @@ export const calcularEgresosNomina = (row, iess) => {
 export const aplicarCalculoNovedad = (row) => {
   const calculo = row.nominaCalculada;
   if (!calculo?.tipoNovedad) return null;
-  const sueldosExtras = row.sueldosExtrasManual != null ? redondear(numero(row.sueldosExtrasManual)) : calculo.sueldosExtras;
+  const diasFalta = Math.max(0, Math.min(30, Math.trunc(numero(row.diasFalta))));
+  const puedeRecalcularDias = calculo.diasSueldoCompletoBase != null || calculo.diasSueldoCompleto != null;
+  const diasSueldoCompleto = puedeRecalcularDias
+    ? calcularDiasTrabajadosNomina(calculo.diasSueldoCompletoBase ?? calculo.diasSueldoCompleto, diasFalta)
+    : calculo.diasSueldoCompleto;
+  const diasTrabajados = puedeRecalcularDias
+    ? numero(calculo.diasMaternidad25) + diasSueldoCompleto
+    : calculo.diasTrabajados;
+  const sueldoCompletoPeriodo = puedeRecalcularDias
+    ? redondear(numero(calculo.salario) * diasSueldoCompleto / 30)
+    : calculo.sueldoCompletoPeriodo;
+  const sueldoAPagar = puedeRecalcularDias
+    ? redondear(sueldoCompletoPeriodo + numero(calculo.sueldoMaternidadEmpresa))
+    : calculo.sueldoAPagar;
+  const sueldosExtras = row.sueldosExtrasManual != null ? redondear(numero(row.sueldosExtrasManual))
+    : puedeRecalcularDias
+      ? redondear(calcularValorPorJornada(row.rolPagoSueldoExtra, row.jornadaLaboral) * diasTrabajados / 30)
+      : numero(calculo.sueldosExtras);
   const fondosReserva = row.fondosReservaManual != null ? redondear(numero(row.fondosReservaManual))
-    : row.fondoReservaActivo ? redondear(((calculo.tieneMaternidad ? calculo.salario : calculo.sueldoAPagar) + sueldosExtras) / 12) : 0;
+    : row.fondoReservaActivo ? redondear(((calculo.tieneMaternidad ? calculo.salario : sueldoAPagar) + sueldosExtras) / 12) : 0;
   const comisionVenta = numero(row.ingresosComisiones);
-  const totalIngresos = redondear(calculo.sueldoAPagar + sueldosExtras + fondosReserva + comisionVenta);
+  const totalIngresos = redondear(numero(sueldoAPagar) + sueldosExtras + fondosReserva + comisionVenta);
   const afiliadoIess = row.afiliadoIess !== false;
   const baseIess = afiliadoIess
     ? calculo.tieneMaternidad
       ? numero(calculo.baseIess ?? calculo.salario)
-      : calcularBaseIessNomina({ sueldoAPagar: calculo.sueldoAPagar, sueldosExtras, comisionVenta })
+      : calcularBaseIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta })
     : 0;
   const iess = calculo.tieneMaternidad
     ? (afiliadoIess ? calculo.iess : 0)
     : calcularIessNomina({
-        sueldoAPagar: calculo.sueldoAPagar,
+        sueldoAPagar,
         sueldosExtras,
         comisionVenta,
         afiliadoIess,
       });
   const egresos = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - egresos.totalEgresos);
-  return { ...row, ...calculo, ...egresos, fondosReserva, sueldosExtras, totalIngresos, baseIess,
+  return { ...row, ...calculo, diasFalta, diasTrabajados, diasSueldoCompleto, sueldoCompletoPeriodo,
+    sueldoAPagar, ...egresos, fondosReserva, sueldosExtras, totalIngresos, baseIess,
     totalIngresosEmpresa: totalIngresos, iess, valorRecibir, valorRecibirEmpresa: valorRecibir };
 };

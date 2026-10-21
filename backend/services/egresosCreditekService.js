@@ -7,6 +7,12 @@ const ControlFinancieroRegistro = require("../models/ControlFinancieroRegistro")
 const Usuario = require("../models/Usuario");
 const { Op } = require("sequelize");
 const tiposService = require("./egresosCreditekTiposService");
+const {
+  calcularPlanPrestamo,
+  fechaFinPlanPrestamo,
+  normalizarProrrogas,
+  periodoValido,
+} = require("../utils/prestamosCreditek");
 
 const MAX_VALOR = 9999999999.99;
 const SECCIONES = [
@@ -46,6 +52,34 @@ const normalizarValor = (value) => {
     throw crearError("El valor debe ser un numero mayor a 0");
   }
   return Number(valor.toFixed(2));
+};
+
+const normalizarPlazoMeses = (value) => {
+  const plazo = Number(value);
+  if (!Number.isInteger(plazo) || plazo < 1 || plazo > 120) {
+    throw crearError("El plazo debe ser un numero entero entre 1 y 120 meses");
+  }
+  return plazo;
+};
+
+const construirPlanPrestamo = ({ montoTotal, plazoMeses, fecha, prorrogas = [] }) => {
+  const monto = normalizarValor(montoTotal);
+  const plazo = normalizarPlazoMeses(plazoMeses);
+  const plan = { montoTotal: monto, plazoMeses: plazo, fecha, prorrogas: normalizarProrrogas(prorrogas) };
+  const cuotas = calcularPlanPrestamo(plan);
+  if (cuotas.filter((cuota) => !cuota.prorroga).length !== plazo) {
+    throw crearError("No se pudo generar el plan de cuotas dentro del rango permitido");
+  }
+  if (cuotas.at(-1)?.periodo > "2100-12") {
+    throw crearError("El plazo y las prorrogas no pueden extender el prestamo despues de diciembre de 2100");
+  }
+  return {
+    montoTotal: monto,
+    plazoMeses: plazo,
+    prorrogas: plan.prorrogas,
+    valor: cuotas.find((cuota) => !cuota.prorroga)?.valor || monto,
+    fechaFin: fechaFinPlanPrestamo(plan),
+  };
 };
 
 const normalizarObservacion = (value) => {
@@ -104,6 +138,9 @@ const serializarEntrada = (value) => {
     ...entrada,
     origen: entrada.origen || "MANUAL",
     valor: Number(entrada.valor || 0),
+    montoTotal: entrada.montoTotal == null ? null : Number(entrada.montoTotal),
+    plazoMeses: entrada.plazoMeses == null ? null : Number(entrada.plazoMeses),
+    prorrogas: normalizarProrrogas(entrada.prorrogas),
     observacion: entrada.observacion || "",
     fecha: entrada.fecha || "",
     tipo: entrada.tipo || entrada.seccion || "ENTRADAS",
@@ -260,7 +297,10 @@ const obtenerRegistros = async (seccionValue) => {
         order: [["nombre", "ASC"], ["id", "ASC"]],
       }),
       EgresoCreditekEntrada.findAll({
-        where: { seccion },
+        where: {
+          seccion,
+          ...(seccion === "PRESTAMOS" ? { montoTotal: { [Op.is]: null } } : {}),
+        },
         include: includeUsuarios,
         order: [["createdAt", "DESC"], ["id", "DESC"]],
       }),
@@ -331,18 +371,21 @@ const obtenerRegistros = async (seccionValue) => {
 
 const crearRegistro = async (
   seccionValue,
-  { usuarioId: usuarioIdValue, valor, observacion, fecha, fechaFin, tipo },
+  { usuarioId: usuarioIdValue, valor, montoTotal, plazoMeses, observacion, fecha, fechaFin, tipo },
   registradoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
   const tipoNormalizado = await normalizarTipo(tipo, seccion);
   const usuarioId = normalizarId(usuarioIdValue, "El usuario");
   const registradoPorId = normalizarId(registradoPor, "El usuario registrador");
-  const valorNormalizado = normalizarValor(valor);
   const observacionNormalizada = normalizarObservacion(observacion);
   const fechaNormalizada = normalizarFecha(fecha, {
     requerida: SECCIONES_CON_FECHA.has(seccion),
   });
+  const planPrestamo = seccion === "PRESTAMOS" && (montoTotal !== undefined || plazoMeses !== undefined)
+    ? construirPlanPrestamo({ montoTotal, plazoMeses, fecha: fechaNormalizada })
+    : null;
+  const valorNormalizado = planPrestamo?.valor ?? normalizarValor(valor);
 
   const usuario = await Usuario.findOne({
     where: { id: usuarioId, activo: true },
@@ -357,7 +400,7 @@ const crearRegistro = async (
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
     fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
-    ...(seccion === "PRESTAMOS" ? { fechaFin: validarFechaFinalPrestamo(seccion, fechaNormalizada, fechaFin) } : {}),
+    ...(seccion === "PRESTAMOS" ? planPrestamo || { fechaFin: validarFechaFinalPrestamo(seccion, fechaNormalizada, fechaFin) } : {}),
     seccion,
     tipo: tipoNormalizado,
     registradoPorId,
@@ -368,7 +411,7 @@ const crearRegistro = async (
 const actualizarRegistro = async (
   seccionValue,
   idValue,
-  { usuarioId: usuarioIdValue, valor, observacion, fecha, fechaFin, tipo },
+  { usuarioId: usuarioIdValue, valor, montoTotal, plazoMeses, observacion, fecha, fechaFin, tipo },
   actualizadoPor,
 ) => {
   const seccion = normalizarSeccion(seccionValue);
@@ -379,11 +422,20 @@ const actualizarRegistro = async (
     actualizadoPor,
     "El usuario actualizador",
   );
-  const valorNormalizado = normalizarValor(valor);
   const observacionNormalizada = normalizarObservacion(observacion);
   const fechaNormalizada = normalizarFecha(fecha, {
     requerida: SECCIONES_CON_FECHA.has(seccion),
   });
+  const quierePlan = seccion === "PRESTAMOS" && (montoTotal !== undefined || plazoMeses !== undefined || registro.montoTotal != null);
+  const planPrestamo = quierePlan
+    ? construirPlanPrestamo({
+        montoTotal: montoTotal ?? registro.montoTotal,
+        plazoMeses: plazoMeses ?? registro.plazoMeses,
+        fecha: fechaNormalizada,
+        prorrogas: registro.prorrogas,
+      })
+    : null;
+  const valorNormalizado = planPrestamo?.valor ?? normalizarValor(valor);
 
   if (Number(registro.usuarioId) !== usuarioId) {
     const usuario = await Usuario.findOne({
@@ -400,12 +452,43 @@ const actualizarRegistro = async (
     valor: valorNormalizado,
     observacion: observacionNormalizada || null,
     fecha: SECCIONES_CON_FECHA.has(seccion) ? fechaNormalizada : null,
-    ...(seccion === "PRESTAMOS" ? { fechaFin: validarFechaFinalPrestamo(seccion, fechaNormalizada, fechaFin) } : {}),
+    ...(seccion === "PRESTAMOS" ? planPrestamo || { fechaFin: validarFechaFinalPrestamo(seccion, fechaNormalizada, fechaFin) } : {}),
     tipo: tipoNormalizado,
     actualizadoPorId,
     ultimaAccion: "EDITADO",
   });
 
+  return obtenerRegistroCompleto(registro);
+};
+
+const cambiarProrrogaPrestamo = async (idValue, { periodo, prorroga }, actualizadoPor) => {
+  const registro = await obtenerRegistroDeSeccion("PRESTAMOS", idValue);
+  if (registro.montoTotal == null || registro.plazoMeses == null) {
+    throw crearError("El prestamo historico debe editarse con monto total y plazo antes de usar prorrogas");
+  }
+  if (!periodoValido(periodo)) throw crearError("El mes de la prorroga no es valido");
+  if (typeof prorroga !== "boolean") throw crearError("El estado de la prorroga no es valido");
+  const actuales = normalizarProrrogas(registro.prorrogas);
+  if (prorroga) {
+    const cuotaActual = calcularPlanPrestamo(registro).find((cuota) => cuota.periodo === periodo);
+    if (!cuotaActual || cuotaActual.prorroga) throw crearError("Solo se puede prorrogar un mes que tenga una cuota programada");
+  } else if (!actuales.includes(periodo)) {
+    throw crearError("Ese mes no tiene una prorroga registrada");
+  }
+  const prorrogas = prorroga
+    ? [...actuales, periodo].sort()
+    : actuales.filter((item) => item !== periodo);
+  const plan = { ...(registro.toJSON?.() || registro), prorrogas };
+  const ultimaCuota = calcularPlanPrestamo(plan).at(-1);
+  if (ultimaCuota?.periodo > "2100-12") {
+    throw crearError("La prorroga extenderia el prestamo despues de diciembre de 2100");
+  }
+  await registro.update({
+    prorrogas,
+    fechaFin: fechaFinPlanPrestamo(plan),
+    actualizadoPorId: normalizarId(actualizadoPor, "El usuario actualizador"),
+    ultimaAccion: "EDITADO",
+  });
   return obtenerRegistroCompleto(registro);
 };
 
@@ -453,6 +536,7 @@ const crearEntrada = (payload, registradoPor) =>
 module.exports = {
   actualizarRegistro,
   cambiarEstadoRegistro,
+  cambiarProrrogaPrestamo,
   crearEntrada,
   crearRegistro,
   eliminarRegistro,
@@ -461,6 +545,7 @@ module.exports = {
   normalizarSeccion,
   normalizarTipo,
   normalizarValor,
+  normalizarPlazoMeses,
   obtenerEntradas,
   obtenerRegistros,
 };

@@ -136,6 +136,12 @@ const RolCreditekAjuste = sequelize.define(
       allowNull: true,
       validate: { min: 0 },
     },
+    diasFalta: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      validate: { min: 0, max: 30, isInt: true },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,
