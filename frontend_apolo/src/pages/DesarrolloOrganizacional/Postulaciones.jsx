@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Send,
   Undo2,
   Upload,
   UserCheck,
@@ -179,6 +180,7 @@ export default function Postulaciones({ modo = "postulacion" }) {
   const [savingObservationId, setSavingObservationId] = useState(null);
   const [editingObservationId, setEditingObservationId] = useState(null);
   const [updatingStageId, setUpdatingStageId] = useState(null);
+  const [sendingInterviewId, setSendingInterviewId] = useState(null);
   const [entrevistaDrafts, setEntrevistaDrafts] = useState({});
   const [savingInterviewDateId, setSavingInterviewDateId] = useState(null);
   const [importingFamilyTxtId, setImportingFamilyTxtId] = useState(null);
@@ -510,6 +512,67 @@ export default function Postulaciones({ modo = "postulacion" }) {
       Swal.fire("Error", message, "error");
     } finally {
       setUpdatingStageId(null);
+    }
+  };
+
+  const mandarParaEntrevista = async (postulacion) => {
+    const datos = getDatos(postulacion);
+    const nombre = datos.nombreCompleto || postulacion.nombre || `ID ${postulacion.id}`;
+    const telefono = datos.telefono || postulacion.telefono || "";
+
+    if (!telefono) {
+      await Swal.fire(
+        "Telefono no disponible",
+        "El postulante no tiene un numero registrado para enviar la entrevista.",
+        "warning",
+      );
+      return;
+    }
+
+    const result = await Swal.fire({
+      icon: "question",
+      title: "Mandar para entrevista",
+      text: `Se enviara el enlace de entrevista a ${nombre}. Telefono: ${telefono}`,
+      input: "select",
+      inputLabel: "Instancia de salida",
+      inputOptions: {
+        1: "WA#1",
+        2: "WA#2",
+        3: "WA#3",
+        4: "WA#4",
+        5: "WA#5",
+      },
+      inputValue: "1",
+      showCancelButton: true,
+      confirmButtonColor: "#059669",
+      cancelButtonColor: "#64748b",
+      confirmButtonText: "Enviar enlace",
+      cancelButtonText: "Cancelar",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setSendingInterviewId(postulacion.id);
+      setError("");
+      const response = await api.post(
+        `/api/postulaciones/${postulacion.id}/enviar-entrevista`,
+        { instanceIndex: Number(result.value) },
+      );
+      await Swal.fire({
+        icon: "success",
+        title: "Entrevista enviada",
+        text: response.data?.message || "El enlace fue enviado correctamente.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      const message =
+        err.response?.data?.message || "No se pudo enviar el enlace de entrevista.";
+      setError(message);
+      await Swal.fire("No se pudo enviar", message, "error");
+    } finally {
+      setSendingInterviewId(null);
     }
   };
 
@@ -1532,6 +1595,25 @@ export default function Postulaciones({ modo = "postulacion" }) {
                         <td className={`${tdClass} text-right`}>
                           <p className="mb-1 text-left font-bold text-slate-500 xl:hidden">Acciones</p>
                           <div className="flex flex-wrap justify-end gap-1">
+                            {!esEntrevistas && !esDescartados && (
+                              <button
+                                type="button"
+                                onClick={() => mandarParaEntrevista(p)}
+                                disabled={sendingInterviewId === p.id}
+                                className="inline-flex h-7 items-center justify-center gap-1 rounded-md bg-orange-600 px-2 text-[10px] font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label="Mandar para entrevista"
+                                title={
+                                  sendingInterviewId === p.id
+                                    ? "Enviando enlace"
+                                    : "Mandar para entrevista"
+                                }
+                              >
+                                <Send size={14} />
+                                {sendingInterviewId === p.id
+                                  ? "Enviando..."
+                                  : "Mandar para entrevista"}
+                              </button>
+                            )}
                             {esDescartados ? (
                               <button
                                 onClick={() => actualizarDescarte(p, false)}

@@ -1,4 +1,7 @@
-import { X } from "lucide-react";
+import { useState } from "react";
+import { Send, X } from "lucide-react";
+import Swal from "sweetalert2";
+import { api } from "../api/client";
 
 const dash = "-";
 
@@ -176,6 +179,8 @@ function RecordList({ records = [], titlePrefix, emptyText, order }) {
 }
 
 export default function ModalDetalle({ postulacion, onClose }) {
+  const [instanceIndex, setInstanceIndex] = useState(1);
+  const [sendingInterview, setSendingInterview] = useState(false);
   const formulario = postulacion?.formulario || {};
   const datos = formulario.datos_personales || {};
   const residencia = formulario.residencia_quito || {};
@@ -203,11 +208,48 @@ export default function ModalDetalle({ postulacion, onClose }) {
   const otrosDatosPersonales = Object.fromEntries(
     Object.entries(datos).filter(([key]) => !knownPersonalKeys.has(key)),
   );
+  const interviewPhone = datos.telefono || postulacion?.telefono || "";
+
+  const sendInterview = async () => {
+    const confirmation = await Swal.fire({
+      icon: "question",
+      title: "Enviar entrevista",
+      text: `Se enviara el enlace al numero ${interviewPhone || "no disponible"} mediante la instancia ${instanceIndex}.`,
+      showCancelButton: true,
+      confirmButtonText: "Enviar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#ea580c",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      setSendingInterview(true);
+      const response = await api.post(
+        `/api/postulaciones/${postulacion.id}/enviar-entrevista`,
+        { instanceIndex },
+      );
+      await Swal.fire({
+        icon: "success",
+        title: "Entrevista enviada",
+        text: response.data?.message || "El enlace fue enviado correctamente.",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      await Swal.fire(
+        "No se pudo enviar",
+        error.response?.data?.message || "Ocurrio un error al enviar el enlace de entrevista.",
+        "error",
+      );
+    } finally {
+      setSendingInterview(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-3">
       <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-orange-600">
               Detalle de postulacion
@@ -220,13 +262,39 @@ export default function ModalDetalle({ postulacion, onClose }) {
             </p>
           </div>
 
-          <button
-            onClick={onClose}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-            aria-label="Cerrar detalle"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              Instancia
+              <select
+                value={instanceIndex}
+                onChange={(event) => setInstanceIndex(Number(event.target.value))}
+                disabled={sendingInterview}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-bold text-slate-700 outline-none focus:border-orange-500"
+                aria-label="Instancia para enviar entrevista"
+              >
+                {[1, 2, 3, 4, 5].map((index) => (
+                  <option key={index} value={index}>WA#{index}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={sendInterview}
+              disabled={sendingInterview || !interviewPhone}
+              className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+              title={!interviewPhone ? "El postulante no tiene telefono" : undefined}
+            >
+              <Send size={16} />
+              {sendingInterview ? "Enviando..." : "Enviar Entrevista"}
+            </button>
+            <button
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Cerrar detalle"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="overflow-y-auto px-5 py-5">

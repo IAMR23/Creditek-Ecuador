@@ -20,6 +20,7 @@ const {
   getTrainingTestTypes,
   gradeTrainingTest,
 } = require("../services/capacitacionPruebaService");
+const { sendInterviewLink } = require("../services/ghlInterviewService");
 
 const router = express.Router();
 const INTERVIEW_STATUSES = [
@@ -1560,6 +1561,54 @@ router.get("/", auth, async (req, res) => {
       ok: false,
       message: "Error al obtener postulaciones",
       error: error.message,
+    });
+  }
+});
+
+router.post("/:id/enviar-entrevista", auth, async (req, res) => {
+  try {
+    const id = parsePositiveInt(req.params.id, null);
+    const instanceIndex = Number.parseInt(req.body?.instanceIndex, 10);
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        message: "El id de la postulacion no es valido.",
+      });
+    }
+
+    const postulacion = await Postulacion.findByPk(id, {
+      attributes: ["id", "telefono", "formulario"],
+    });
+    if (!postulacion) {
+      return res.status(404).json({
+        ok: false,
+        message: "Postulacion no encontrada.",
+      });
+    }
+
+    const phone =
+      postulacion.telefono ||
+      postulacion.formulario?.datos_personales?.telefono;
+    const result = await sendInterviewLink({ phone, instanceIndex });
+
+    return res.json({
+      ok: true,
+      message: "Enlace de entrevista enviado correctamente.",
+      data: {
+        instanceIndex: result.instanceIndex,
+        messageId: result.messageId,
+      },
+    });
+  } catch (error) {
+    console.error("Error enviando enlace de entrevista:", {
+      code: error.code,
+      message: error.message,
+    });
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      code: error.code || "INTERVIEW_LINK_SEND_ERROR",
+      message: error.message || "No se pudo enviar el enlace de entrevista.",
     });
   }
 });
