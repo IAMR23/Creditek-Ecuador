@@ -117,6 +117,8 @@ services:
     build: ./backend_apolo
     restart: always
     container_name: backend_apolo
+    env_file:
+      - ./backend_apolo/.env
     environment:
       PORT: ${APOLO_PORT}
       DB_NAME: ${APOLO_DB_NAME}
