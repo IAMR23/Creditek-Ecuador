@@ -6,10 +6,12 @@ const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Asistencia = require("../models/Asistencia");
 const Postulacion = require("../models/Postulacion");
+const VacacionSolicitud = require("../models/VacacionSolicitud");
 const { sequelize } = require("../config/db");
 const {
   sincronizarSalidaUsuarioRve,
 } = require("../services/rveSyncService");
+const { combinarMarcaVacacion } = require("../services/vacacionesDomain");
 
 const router = express.Router();
 
@@ -331,6 +333,33 @@ router.get("/agencias", async (req, res) => {
         observacion: a.observacion || "",
         activoOrigen: relacion.activo,
       };
+    }
+
+    // VAC es información derivada: nunca crea ni sobrescribe filas de asistencias.
+    const vacacionesAprobadas = usuarioIds.length
+      ? await VacacionSolicitud.findAll({
+          where: {
+            usuarioId: { [Op.in]: usuarioIds },
+            estado: "APROBADA",
+            fechaInicio: { [Op.lt]: end },
+            fechaFin: { [Op.gte]: start },
+          },
+          attributes: ["id", "usuarioId", "fechaInicio", "fechaFin"],
+        })
+      : [];
+
+    for (const vacacion of vacacionesAprobadas) {
+      const desde = vacacion.fechaInicio < start ? start : vacacion.fechaInicio;
+      const ultimoMes = new Date(`${end}T00:00:00`);
+      ultimoMes.setDate(ultimoMes.getDate() - 1);
+      const hastaMes = `${ultimoMes.getFullYear()}-${String(ultimoMes.getMonth() + 1).padStart(2, "0")}-${String(ultimoMes.getDate()).padStart(2, "0")}`;
+      const hasta = vacacion.fechaFin > hastaMes ? hastaMes : vacacion.fechaFin;
+      if (!asistenciasPorUsuario.has(vacacion.usuarioId)) asistenciasPorUsuario.set(vacacion.usuarioId, {});
+      const actuales = asistenciasPorUsuario.get(vacacion.usuarioId);
+      for (const fecha of obtenerFechasEnRango(desde, hasta)) {
+        const movimiento = actuales[fecha];
+        actuales[fecha] = combinarMarcaVacacion(movimiento, vacacion.id);
+      }
     }
 
     for (const ua of usuarioAgencias) {

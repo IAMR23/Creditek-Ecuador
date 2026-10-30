@@ -3,6 +3,8 @@ const CONTACTS_VERSION = "2021-07-28";
 const MESSAGE_HUB_VERSION = "v3";
 const INTERVIEW_LINK =
   "https://api.leadconnectorhq.com/widget/booking/AykuUIDyRMCmeMRz4KgZ";
+const INTERVIEW_MESSAGE =
+  `Hola, te saluda Steeven de CREDITEK. Hemos revisado tu perfil y nos ha resultado de gran interés, por lo que nos gustaría coordinar una entrevista para conocerte mejor y conversar sobre nuestra oportunidad laboral.\n\n${INTERVIEW_LINK}`;
 
 const serviceError = (message, code, statusCode = 400) =>
   Object.assign(new Error(message), { code, statusCode });
@@ -212,7 +214,7 @@ const sendInterviewLink = async (
         type: "SMS",
         contactId,
         conversationProviderId: providerId,
-        message: `${INTERVIEW_LINK}\n\n{ WA#${instance} }`,
+        message: `${INTERVIEW_MESSAGE}\n\n{ WA#${instance} }`,
       }),
     },
     request,
@@ -227,6 +229,7 @@ const sendInterviewLink = async (
 
 module.exports = {
   INTERVIEW_LINK,
+  INTERVIEW_MESSAGE,
   normalizeEcuadorMobilePhone,
   selectMessageHubProvider,
   sendInterviewLink,

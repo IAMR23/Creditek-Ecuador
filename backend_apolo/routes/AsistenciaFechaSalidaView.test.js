@@ -6,6 +6,7 @@ const Agencia = require("../models/Agencia");
 const Asistencia = require("../models/Asistencia");
 const Postulacion = require("../models/Postulacion");
 const UsuarioAgencia = require("../models/UsuarioAgencia");
+const VacacionSolicitud = require("../models/VacacionSolicitud");
 const asistenciaRoutes = require("./AsistenciaRoutes");
 
 const getJson = async (path) => {
@@ -35,6 +36,7 @@ const getJson = async (path) => {
 };
 
 test("muestra Usuario.fechaSalida aunque aún no exista una asistencia", async () => {
+  VacacionSolicitud.findAll = async () => [];
   let agenciaOptions;
   Agencia.findAll = async (options) => {
     agenciaOptions = options;
@@ -92,6 +94,7 @@ test("muestra Usuario.fechaSalida aunque aún no exista una asistencia", async (
 });
 
 test("filtra los movimientos para mostrar solo personal activo en capacitacion", async () => {
+  VacacionSolicitud.findAll = async () => [];
   Agencia.findAll = async () => [{ id: 2, nombre: "Matriz" }];
   let postulacionOptions;
   Postulacion.findAll = async (options) => {

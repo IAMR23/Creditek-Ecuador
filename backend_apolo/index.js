@@ -12,6 +12,7 @@ const rolRoutes = require("./routes/RolRoutes");
 const authRoutes = require("./routes/authRoutes");
 const bootstrapRoutes = require("./routes/bootstrapRoutes");
 const asistenciaRoutes = require("./routes/AsistenciaRoutes");
+const vacacionesRoutes = require("./routes/VacacionesRoutes");
 const postulacionesRouter = require("./routes/postulacionesRouter");
 const pruebasRouter = require("./routes/pruebasRouter");
 const auth = require("./middleware/auth");
@@ -79,6 +80,7 @@ app.use("/agencias",  auth , agenciaRoutes);
 app.use("/usuario-agencia",  auth , usuarioAgenciaRoutes);
 app.use("/rol", auth,  rolRoutes);
 app.use("/asistencias", auth, asistenciaRoutes);
+app.use("/api/vacaciones", auth, vacacionesRoutes);
 app.use("/api/postulaciones", postulacionesRouter);
 app.use("/api/pruebas", pruebasRouter);
 

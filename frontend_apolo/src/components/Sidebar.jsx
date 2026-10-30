@@ -4,6 +4,7 @@ import {
   Archive,
   BadgeCheck,
   Building2,
+  CalendarDays,
   ChevronDown,
   ClipboardCheck,
   ClipboardList,
@@ -160,6 +161,7 @@ export default function Sidebar() {
             {isAdmin && simuladorMenu}
             {administracionMenu}
             <NavLink to="/control-asistencia" className={linkClass}><ClipboardList size={18} /> Movimientos de Terminales</NavLink>
+            {isAdmin && <NavLink to="/vacaciones" className={linkClass}><CalendarDays size={18} /> Vacaciones</NavLink>}
             <NavLink to="/pipeline" className={linkClass}><GitBranch size={18} /> Pipeline</NavLink>
             <NavLink to="/postulaciones" className={linkClass}>
               <FileText size={18} /><span className="flex flex-1 items-center gap-2">Postulaciones{resumenPostulaciones.noLeidas > 0 && <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />}</span>

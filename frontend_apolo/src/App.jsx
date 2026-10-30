@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import Usuarios from "./pages/Admin/Usuarios.jsx";
 import ControlAsistencia from "./pages/DesarrolloOrganizacional/ControlAsistencia.jsx";
+import Vacaciones from "./pages/DesarrolloOrganizacional/Vacaciones.jsx";
 import Dashboard from "./pages/DesarrolloOrganizacional/Dashboard.jsx";
 import Entrevistas from "./pages/DesarrolloOrganizacional/Entrevistas.jsx";
 import EvaluacionDesempeno from "./pages/DesarrolloOrganizacional/EvaluacionDesempeno.jsx";
@@ -75,6 +76,14 @@ export default function App() {
                     <Route path="/roles" element={<Roles />} />
                     <Route path="/usuarios-agencias" element={<UsuariosAgencias />} />
                     <Route path="/control-asistencia" element={<ControlAsistencia />} />
+                    <Route
+                      path="/vacaciones"
+                      element={
+                        <ProtectedRoute allowedRoles={["ADMIN"]}>
+                          <Vacaciones />
+                        </ProtectedRoute>
+                      }
+                    />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/pipeline" element={<Pipeline />} />
                     <Route

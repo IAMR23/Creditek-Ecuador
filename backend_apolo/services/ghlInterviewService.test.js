@@ -3,6 +3,7 @@ const { test } = require("node:test");
 
 const {
   INTERVIEW_LINK,
+  INTERVIEW_MESSAGE,
   normalizeEcuadorMobilePhone,
   sendInterviewLink,
 } = require("./ghlInterviewService");
@@ -63,8 +64,15 @@ test("envia el enlace mediante el proveedor e instancia de Message Hub", async (
     type: "SMS",
     contactId: "contact-1",
     conversationProviderId: "provider-abs",
-    message: `${INTERVIEW_LINK}\n\n{ WA#3 }`,
+    message: `${INTERVIEW_MESSAGE}\n\n{ WA#3 }`,
   });
+});
+
+test("compone el saludo de Steeven antes del enlace de entrevista", () => {
+  assert.equal(
+    INTERVIEW_MESSAGE,
+    `Hola, te saluda Steeven de CREDITEK. Hemos revisado tu perfil y nos ha resultado de gran interés, por lo que nos gustaría coordinar una entrevista para conocerte mejor y conversar sobre nuestra oportunidad laboral.\n\n${INTERVIEW_LINK}`,
+  );
 });
 
 test("rechaza instancias fuera de los cinco canales disponibles", async () => {

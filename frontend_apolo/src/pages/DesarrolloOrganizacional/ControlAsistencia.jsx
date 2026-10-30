@@ -38,6 +38,11 @@ const ESTADOS = {
     nombre: "Capacitacion",
     className: "bg-sky-300 text-black",
   },
+  vacaciones: {
+    label: "VAC",
+    nombre: "Vacaciones aprobadas (derivado)",
+    className: "bg-orange-500 text-white",
+  },
   libre: {
     label: "",
     nombre: "Libre",
@@ -97,6 +102,9 @@ const normalizarRegistro = (registro) => {
   return {
     estado: registro.estado || "libre",
     observacion: registro.observacion || "",
+    vacacion: Boolean(registro.vacacion),
+    conflictoVacacion: Boolean(registro.conflictoVacacion),
+    solicitudVacacionId: registro.solicitudVacacionId || null,
   }
 }
 
@@ -654,13 +662,17 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
                               )
                             const bloqueadoPorFechaIngreso =
                               fechaAnteriorIngreso && !tieneRegistro
+                            const bloqueadoPorVacacionDerivada =
+                              estado === "vacaciones" && !registro.conflictoVacacion
                             const esInicioSemana = esInicioSemanaOperativa(
                               item.fecha
                             )
                             const esCierreSemana = esCierreSemanaOperativa(
                               item.fecha
                             )
-                            const titulo = bloqueadoPorFechaIngreso
+                            const titulo = registro.conflictoVacacion
+                              ? `Conflicto: existe un movimiento de asistencia y una vacación aprobada (solicitud #${registro.solicitudVacacionId}).`
+                              : bloqueadoPorFechaIngreso
                               ? `No disponible. Fecha de ingreso: ${usuario.fechaIngreso}`
                               : tieneObservacion
                                 ? `${ESTADOS[estado]?.nombre || "Libre"}\nObservacion: ${
@@ -672,7 +684,7 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
                               <td
                                 key={`${usuario.usuarioAgenciaId}-${item.fecha}`}
                                 onClick={
-                                  bloqueadoPorFechaIngreso
+                                  bloqueadoPorFechaIngreso || bloqueadoPorVacacionDerivada
                                     ? undefined
                                     : () =>
                                         handleCambiarEstado({
@@ -691,7 +703,7 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
                                 aria-disabled={bloqueadoPorFechaIngreso}
                                 title={titulo}
                                 className={`relative h-6 min-w-[34px] border border-black text-center font-bold ${
-                                  bloqueadoPorFechaIngreso
+                                  bloqueadoPorFechaIngreso || bloqueadoPorVacacionDerivada
                                     ? "cursor-not-allowed bg-slate-200 text-slate-400"
                                     : `cursor-pointer ${
                                         ESTADOS[estado]?.className ||
@@ -715,6 +727,9 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
                                   <span className="absolute right-0 top-0 h-0 w-0 border-l-[10px] border-l-transparent border-t-[10px] border-t-red-600" />
                                 ) : null}
                                 {ESTADOS[estado]?.label || ""}
+                                {registro.conflictoVacacion ? (
+                                  <span className="absolute inset-0 flex items-center justify-center bg-orange-500/90 text-[9px] font-black text-white">VAC!</span>
+                                ) : null}
                               </td>
                             )
                           })}
