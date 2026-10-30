@@ -4,7 +4,7 @@ const MESSAGE_HUB_VERSION = "v3";
 const INTERVIEW_LINK =
   "https://api.leadconnectorhq.com/widget/booking/AykuUIDyRMCmeMRz4KgZ";
 const INTERVIEW_MESSAGE =
-  `Hola, te saluda Steeven de CREDITEK. Hemos revisado tu perfil y nos ha resultado de gran interés, por lo que nos gustaría coordinar una entrevista para conocerte mejor y conversar sobre nuestra oportunidad laboral.\n\n${INTERVIEW_LINK}`;
+  `Hola, te saluda Steeven de CREDITEK. Hemos revisado tu perfil y nos ha resultado de gran interés, por lo que nos gustaría coordinar una entrevista para conocerte mejor y conversar sobre nuestra oportunidad laboral. Por favor agenda tu entrevista en el siguiente enlace: \n\n${INTERVIEW_LINK}`;
 
 const serviceError = (message, code, statusCode = 400) =>
   Object.assign(new Error(message), { code, statusCode });
