@@ -117,8 +117,6 @@ services:
     build: ./backend_apolo
     restart: always
     container_name: backend_apolo
-    env_file:
-      - ./backend_apolo/.env
     environment:
       PORT: ${APOLO_PORT}
       DB_NAME: ${APOLO_DB_NAME}
@@ -128,6 +126,10 @@ services:
       DB_PORT: ${APOLO_DB_PORT}
       WEB_CORS: ${APOLO_WEB_CORS}
       JWT_SECRET: ${APOLO_JWT_SECRET}
+      ghl_token_abs: ${ghl_token_abs:?Configure ghl_token_abs en el archivo .env principal}
+      ghl_location_id_abs: ${ghl_location_id_abs:?Configure ghl_location_id_abs en el archivo .env principal}
+      GHL_BASE_URL_ABS: ${GHL_BASE_URL_ABS:-https://services.leadconnectorhq.com}
+      GHL_MESSAGE_HUB_PROVIDER_NAME_ABS: ${GHL_MESSAGE_HUB_PROVIDER_NAME_ABS:-Whatsapp}
       # ABS envía salidas a RVE y expone la consulta interna de usuarios.
       RVE_SYNC_URL: ${RVE_SYNC_URL:-http://backend:5020}
       RVE_SYNC_TOKEN: ${RVE_SYNC_TOKEN:?Configure RVE_SYNC_TOKEN en el archivo .env}
