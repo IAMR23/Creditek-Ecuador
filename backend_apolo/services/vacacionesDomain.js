@@ -17,9 +17,15 @@ const contarDiasCalendario = (inicio, fin) => {
   return Math.round((hasta - desde) / 86400000) + 1;
 };
 
-const siguienteDia = (fecha) => {
+const calcularReconocimientoOrdinario = ({ estado, diasSolicitados, diasDisfrutados }) => (
+  estado === "FORMACION" && Number(diasDisfrutados) > 0
+    ? Number(diasDisfrutados)
+    : Number(diasSolicitados || 0)
+);
+
+const siguienteDia = (fecha, desplazamiento = 1) => {
   const date = toUtcDate(fecha);
-  date.setUTCDate(date.getUTCDate() + 1);
+  date.setUTCDate(date.getUTCDate() + desplazamiento);
   return formatUtc(date);
 };
 
@@ -80,7 +86,8 @@ const generarPeriodosAniversario = (fechaIngreso, hoy = hoyGuayaquil()) => {
 };
 
 const resumenMovimientos = (movimientos = []) => {
-  const sum = (categoria) => movimientos
+  const vigentes = movimientos.filter((item) => !item.anuladoAt);
+  const sum = (categoria) => vigentes
     .filter((item) => item.categoria === categoria)
     .reduce((total, item) => total + Number(item.dias), 0);
   const reconocidosOrdinarios = sum("RECONOCIDO_ORDINARIO");
@@ -141,7 +148,7 @@ const combinarMarcaVacacion = (movimiento, solicitudId) => movimiento
   : { estado: "vacaciones", observacion: "Vacación aprobada", vacacion: true, conflictoVacacion: false, solicitudVacacionId: solicitudId };
 
 module.exports = {
-  combinarMarcaVacacion, contarDiasCalendario, distribuirConsumo, estadoTemporal,
+  calcularReconocimientoOrdinario, combinarMarcaVacacion, contarDiasCalendario, distribuirConsumo, estadoTemporal,
   generarPeriodosAniversario,
   hoyGuayaquil, siguienteDia, resumenMovimientos, seSuperponen,
   validarAsignaciones, validarPeriodoAniversario,

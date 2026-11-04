@@ -8,6 +8,9 @@ const VacacionPeriodo = sequelize.define("VacacionPeriodo", {
   fechaFin: { type: DataTypes.DATEONLY, allowNull: false },
   estado: { type: DataTypes.STRING(20), allowNull: false, validate: { isIn: [["CUMPLIDO", "FORMACION"]] } },
   fechaCorte: { type: DataTypes.DATEONLY, allowNull: false },
+  fechaInicioVacaciones: { type: DataTypes.DATEONLY, allowNull: true },
+  fechaFinVacaciones: { type: DataTypes.DATEONLY, allowNull: true },
+  fechaReincorporacion: { type: DataTypes.DATEONLY, allowNull: true },
   observacion: { type: DataTypes.TEXT, allowNull: true },
   creadoPorId: { type: DataTypes.INTEGER, allowNull: false, references: { model: "usuarios", key: "id" } },
 }, {

@@ -10,7 +10,7 @@ const VacacionHistorial = require("../models/VacacionHistorial");
 const VacacionPago = require("../models/VacacionPago");
 const VacacionPagoPeriodo = require("../models/VacacionPagoPeriodo");
 const {
-  contarDiasCalendario, hoyGuayaquil, resumenMovimientos, siguienteDia,
+  calcularReconocimientoOrdinario, contarDiasCalendario, hoyGuayaquil, resumenMovimientos, siguienteDia,
   validarAsignaciones, validarPeriodoAniversario,
 } = require("./vacacionesDomain");
 
@@ -25,7 +25,11 @@ const obtenerSaldos = async (usuarioId, transaction = null, lock = false) => {
     order: [["fechaInicio", "ASC"]], transaction,
     ...(lock && transaction ? { lock: transaction.LOCK.UPDATE } : {}),
   });
-  return periodos.map((periodo) => ({ ...periodo.toJSON(), ...resumenMovimientos(periodo.movimientos || []) }));
+  return periodos.map((periodo) => ({
+    ...periodo.toJSON(),
+    estado: periodo.fechaFin < hoyGuayaquil() ? "CUMPLIDO" : periodo.estado,
+    ...resumenMovimientos(periodo.movimientos || []),
+  }));
 };
 
 const crearMovimientos = (items, transaction) => VacacionMovimiento.bulkCreate(items, { transaction });
@@ -40,12 +44,33 @@ const crearPeriodo = async (payload, actor) => sequelize.transaction(async (tran
     transaction,
   });
   if (periodoSuperpuesto) throw errorHttp(409, "PERIODO_SUPERPUESTO", "Ya existe un período laboral que se superpone; no se duplicaron créditos.");
-  const ordinarios = decimal(payload.diasOrdinarios);
+  const ordinariosSolicitados = decimal(payload.diasOrdinarios);
   const adicionales = decimal(payload.diasAdicionales);
-  const historicos = decimal(payload.diasDisfrutadosHistoricos);
+  const tieneInicioVacaciones = Boolean(payload.fechaInicioVacaciones);
+  const tieneFinVacaciones = Boolean(payload.fechaFinVacaciones);
+  const tieneReincorporacion = Boolean(payload.fechaReincorporacion);
+  if (new Set([tieneInicioVacaciones, tieneFinVacaciones, tieneReincorporacion]).size > 1) {
+    throw errorHttp(400, "FECHAS_VACACIONES_INCOMPLETAS", "Ingrese el inicio, el fin de vacaciones y la fecha de reincorporación.");
+  }
+  if (tieneInicioVacaciones && payload.fechaFinVacaciones < payload.fechaInicioVacaciones) {
+    throw errorHttp(400, "RANGO_VACACIONES_INVALIDO", "La fecha de fin de vacaciones no puede ser anterior al inicio.");
+  }
+  if (tieneInicioVacaciones && payload.fechaReincorporacion <= payload.fechaFinVacaciones) {
+    throw errorHttp(400, "REINCORPORACION_INVALIDA", "La fecha de reincorporación debe ser posterior al fin de vacaciones.");
+  }
+  if (tieneInicioVacaciones && (payload.fechaInicioVacaciones < usuario.fechaIngreso || (usuario.fechaSalida && payload.fechaFinVacaciones > usuario.fechaSalida))) {
+    throw errorHttp(400, "VACACIONES_FUERA_RELACION", "Las vacaciones deben estar dentro de la relación laboral del colaborador.");
+  }
+  const historicos = tieneInicioVacaciones
+    ? contarDiasCalendario(payload.fechaInicioVacaciones, payload.fechaFinVacaciones)
+    : 0;
+  const ordinarios = calcularReconocimientoOrdinario({ estado, diasSolicitados: ordinariosSolicitados, diasDisfrutados: historicos });
   if ([ordinarios, adicionales, historicos].some((n) => n < 0)) throw errorHttp(400, "DIAS_INVALIDOS", "Los días no pueden ser negativos.");
-  if (estado === "FORMACION" && (ordinarios || adicionales)) {
+  if (estado === "FORMACION" && (ordinariosSolicitados || adicionales)) {
     throw errorHttp(400, "PERIODO_NO_CUMPLIDO", "Un período en formación no puede reconocer todavía el año completo.");
+  }
+  if (estado === "FORMACION" && historicos > 15) {
+    throw errorHttp(400, "ANTICIPO_EXCEDE_LIMITE", "Antes de cumplir el año no se pueden registrar más de 15 días anticipados en este período.");
   }
   const anioServicio = Number(payload.fechaInicio.slice(0, 4)) - Number(String(usuario.fechaIngreso).slice(0, 4)) + 1;
   const adicionalesLegales = Math.min(15, Math.max(0, anioServicio - 5));
@@ -56,13 +81,16 @@ const crearPeriodo = async (payload, actor) => sequelize.transaction(async (tran
   const periodo = await VacacionPeriodo.create({
     usuarioId: usuario.id, fechaInicio: payload.fechaInicio, fechaFin: payload.fechaFin,
     estado, fechaCorte: payload.fechaCorte || hoyGuayaquil(), observacion: payload.observacion || null,
+    fechaInicioVacaciones: payload.fechaInicioVacaciones || null,
+    fechaFinVacaciones: payload.fechaFinVacaciones || null,
+    fechaReincorporacion: payload.fechaReincorporacion || null,
     creadoPorId: actorId(actor),
   }, { transaction });
   const base = { periodoId: periodo.id, fechaEfectiva: periodo.fechaCorte, creadoPorId: actorId(actor), origenTipo: "CARGA_PERIODO" };
   const movimientos = [];
-  if (ordinarios) movimientos.push({ ...base, categoria: "RECONOCIDO_ORDINARIO", dias: ordinarios, motivo: "Reconocimiento ordinario registrado por RRHH", origenId: `${periodo.id}:ordinario` });
+  if (ordinarios) movimientos.push({ ...base, categoria: "RECONOCIDO_ORDINARIO", dias: ordinarios, motivo: estado === "FORMACION" ? "Días concedidos anticipadamente antes de cumplir el aniversario" : "Reconocimiento ordinario registrado por RRHH", origenId: `${periodo.id}:ordinario` });
   if (adicionales) movimientos.push({ ...base, categoria: "RECONOCIDO_ADICIONAL", dias: adicionales, motivo: "Reconocimiento adicional por antigüedad registrado por RRHH", origenId: `${periodo.id}:adicional` });
-  if (historicos) movimientos.push({ ...base, categoria: "DISFRUTADO", dias: historicos, motivo: payload.motivoHistorico || "Vacaciones disfrutadas históricamente", origenId: `${periodo.id}:historico` });
+  if (historicos) movimientos.push({ ...base, fechaEfectiva: payload.fechaInicioVacaciones, fechaInicioVacaciones: payload.fechaInicioVacaciones, fechaFinVacaciones: payload.fechaFinVacaciones, fechaReincorporacion: payload.fechaReincorporacion, categoria: "DISFRUTADO", dias: historicos, motivo: payload.motivoHistorico || `Vacaciones históricas; reincorporación ${payload.fechaReincorporacion}`, origenId: `${periodo.id}:historico` });
   if (movimientos.length) await crearMovimientos(movimientos, transaction);
   return periodo;
 });
@@ -84,6 +112,116 @@ const crearAjuste = async (periodoId, payload, actor) => sequelize.transaction(a
     fechaEfectiva: payload.fechaCorte || hoyGuayaquil(), origenTipo: "AJUSTE",
     origenId: payload.idempotenciaKey || `ajuste:${Date.now()}:${actorId(actor)}`, creadoPorId: actorId(actor),
   }, { transaction });
+});
+
+const registrarVacacionesHistoricas = async (periodoId, payload, actor) => sequelize.transaction(async (transaction) => {
+  const periodo = await VacacionPeriodo.findByPk(periodoId, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!periodo) throw errorHttp(404, "PERIODO_NO_ENCONTRADO", "Período no encontrado.");
+  if (payload.idempotenciaKey) {
+    const existente = await VacacionMovimiento.findOne({ where: { periodoId: periodo.id, origenTipo: "DESCANSO_HISTORICO", origenId: payload.idempotenciaKey }, transaction });
+    if (existente) return { periodoId: periodo.id, repetida: true };
+  }
+  const usuario = await Usuario.findByPk(periodo.usuarioId, { transaction });
+  const { fechaInicioVacaciones, fechaFinVacaciones, fechaReincorporacion } = payload;
+  if (!fechaInicioVacaciones || !fechaFinVacaciones || !fechaReincorporacion) throw errorHttp(400, "FECHAS_VACACIONES_INCOMPLETAS", "Ingrese inicio, fin y reincorporación.");
+  if (fechaFinVacaciones < fechaInicioVacaciones) throw errorHttp(400, "RANGO_VACACIONES_INVALIDO", "La fecha de fin no puede ser anterior al inicio.");
+  if (fechaReincorporacion <= fechaFinVacaciones) throw errorHttp(400, "REINCORPORACION_INVALIDA", "La reincorporación debe ser posterior al fin de vacaciones.");
+  if (fechaInicioVacaciones < usuario.fechaIngreso || (usuario.fechaSalida && fechaFinVacaciones > usuario.fechaSalida)) throw errorHttp(400, "VACACIONES_FUERA_RELACION", "Las vacaciones deben estar dentro de la relación laboral.");
+  const superpuesta = await VacacionMovimiento.findOne({
+    where: { periodoId: periodo.id, categoria: "DISFRUTADO", anuladoAt: null, fechaInicioVacaciones: { [Op.lte]: fechaFinVacaciones }, fechaFinVacaciones: { [Op.gte]: fechaInicioVacaciones } }, transaction,
+  });
+  if (superpuesta) throw errorHttp(409, "VACACIONES_SUPERPUESTAS", "Ese descanso se superpone con vacaciones ya registradas en el período.");
+  const movimientos = await VacacionMovimiento.findAll({ where: { periodoId: periodo.id }, transaction });
+  const saldo = resumenMovimientos(movimientos);
+  const dias = contarDiasCalendario(fechaInicioVacaciones, fechaFinVacaciones);
+  const enFormacion = periodo.fechaFin >= hoyGuayaquil();
+  if (enFormacion && saldo.disfrutados + dias > 15) throw errorHttp(409, "ANTICIPO_EXCEDE_LIMITE", "Los anticipos del período no pueden superar 15 días.");
+  if (!enFormacion && dias > saldo.disponibles) throw errorHttp(409, "SALDO_INSUFICIENTE", "El período no tiene días disponibles suficientes.");
+  const origenId = payload.idempotenciaKey || `historico:${Date.now()}:${actorId(actor)}`;
+  const base = { periodoId: periodo.id, creadoPorId: actorId(actor), origenTipo: "DESCANSO_HISTORICO", origenId };
+  const nuevos = [];
+  if (enFormacion) nuevos.push({ ...base, categoria: "RECONOCIDO_ORDINARIO", dias, motivo: "Días concedidos anticipadamente antes de cumplir el aniversario", fechaEfectiva: fechaInicioVacaciones });
+  nuevos.push({ ...base, categoria: "DISFRUTADO", dias, motivo: String(payload.motivoHistorico || "Vacaciones disfrutadas históricamente"), fechaEfectiva: fechaInicioVacaciones, fechaInicioVacaciones, fechaFinVacaciones, fechaReincorporacion });
+  await crearMovimientos(nuevos, transaction);
+  return { periodoId: periodo.id, dias, fechaInicioVacaciones, fechaFinVacaciones, fechaReincorporacion };
+});
+
+const listarDescansos = async ({ usuarioId } = {}) => {
+  const where = {
+    categoria: "DISFRUTADO",
+    anuladoAt: null,
+    fechaInicioVacaciones: { [Op.ne]: null },
+    fechaFinVacaciones: { [Op.ne]: null },
+  };
+  const includePeriodo = {
+    model: VacacionPeriodo,
+    as: "periodo",
+    required: true,
+    ...(usuarioId ? { where: { usuarioId } } : {}),
+    include: [{ model: Usuario, as: "usuario", attributes: ["id", "nombre", "fechaIngreso", "fechaSalida"] }],
+  };
+  const movimientos = await VacacionMovimiento.findAll({ where, include: [includePeriodo], order: [["fechaInicioVacaciones", "DESC"], ["id", "DESC"]] });
+  return movimientos.map((movimiento) => ({
+    id: movimiento.id,
+    usuarioId: movimiento.periodo.usuarioId,
+    colaborador: movimiento.periodo.usuario,
+    periodoId: movimiento.periodoId,
+    periodoInicio: movimiento.periodo.fechaInicio,
+    periodoFin: movimiento.periodo.fechaFin,
+    fechaInicioVacaciones: movimiento.fechaInicioVacaciones,
+    fechaFinVacaciones: movimiento.fechaFinVacaciones,
+    fechaReincorporacion: movimiento.fechaReincorporacion,
+    dias: Number(movimiento.dias),
+    motivo: movimiento.motivo || "",
+  }));
+};
+
+const marcarDescansoAnulado = async (movimiento, periodo, actor, motivo, transaction) => {
+  const criterios = movimiento.origenTipo === "DESCANSO_HISTORICO"
+    ? { periodoId: periodo.id, origenTipo: movimiento.origenTipo, origenId: movimiento.origenId, anuladoAt: null }
+    : periodo.estado === "FORMACION" && movimiento.origenTipo === "CARGA_PERIODO"
+      ? { periodoId: periodo.id, origenTipo: "CARGA_PERIODO", origenId: { [Op.in]: [`${periodo.id}:historico`, `${periodo.id}:ordinario`] }, anuladoAt: null }
+      : { id: movimiento.id, anuladoAt: null };
+  await VacacionMovimiento.update({ anuladoAt: new Date(), anuladoPorId: actorId(actor), motivoAnulacion: motivo || "Anulado por administrador" }, { where: criterios, transaction });
+};
+
+const editarDescanso = async (id, payload, actor) => sequelize.transaction(async (transaction) => {
+  const movimiento = await VacacionMovimiento.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!movimiento || movimiento.categoria !== "DISFRUTADO" || movimiento.anuladoAt) throw errorHttp(404, "DESCANSO_NO_ENCONTRADO", "El registro de vacaciones no existe o ya fue eliminado.");
+  const periodo = await VacacionPeriodo.findByPk(movimiento.periodoId, { transaction, lock: transaction.LOCK.UPDATE });
+  const usuario = await Usuario.findByPk(periodo.usuarioId, { transaction });
+  const { fechaInicioVacaciones, fechaFinVacaciones, fechaReincorporacion } = payload;
+  if (!fechaInicioVacaciones || !fechaFinVacaciones || !fechaReincorporacion) throw errorHttp(400, "FECHAS_VACACIONES_INCOMPLETAS", "Ingrese inicio, fin y reincorporación.");
+  if (fechaFinVacaciones < fechaInicioVacaciones) throw errorHttp(400, "RANGO_VACACIONES_INVALIDO", "La fecha de fin no puede ser anterior al inicio.");
+  if (fechaReincorporacion <= fechaFinVacaciones) throw errorHttp(400, "REINCORPORACION_INVALIDA", "La reincorporación debe ser posterior al fin de vacaciones.");
+  if (fechaInicioVacaciones < usuario.fechaIngreso || (usuario.fechaSalida && fechaFinVacaciones > usuario.fechaSalida)) throw errorHttp(400, "VACACIONES_FUERA_RELACION", "Las vacaciones deben estar dentro de la relación laboral.");
+  const superpuesta = await VacacionMovimiento.findOne({
+    where: { id: { [Op.ne]: movimiento.id }, categoria: "DISFRUTADO", anuladoAt: null, fechaInicioVacaciones: { [Op.lte]: fechaFinVacaciones }, fechaFinVacaciones: { [Op.gte]: fechaInicioVacaciones } },
+    include: [{ model: VacacionPeriodo, as: "periodo", required: true, where: { usuarioId: periodo.usuarioId } }], transaction,
+  });
+  if (superpuesta) throw errorHttp(409, "VACACIONES_SUPERPUESTAS", "El nuevo rango se superpone con otras vacaciones del colaborador.");
+  await marcarDescansoAnulado(movimiento, periodo, actor, "Reemplazado mediante edición", transaction);
+  const movimientosVigentes = await VacacionMovimiento.findAll({ where: { periodoId: periodo.id }, transaction });
+  const saldo = resumenMovimientos(movimientosVigentes);
+  const dias = contarDiasCalendario(fechaInicioVacaciones, fechaFinVacaciones);
+  const concedidoComoAnticipo = periodo.estado === "FORMACION";
+  if (concedidoComoAnticipo && saldo.disfrutados + dias > 15) throw errorHttp(409, "ANTICIPO_EXCEDE_LIMITE", "Los anticipos del período no pueden superar 15 días.");
+  if (!concedidoComoAnticipo && dias > saldo.disponibles) throw errorHttp(409, "SALDO_INSUFICIENTE", "El período no tiene días disponibles suficientes.");
+  const origenId = payload.idempotenciaKey || `edicion:${movimiento.id}:${Date.now()}`;
+  const base = { periodoId: periodo.id, creadoPorId: actorId(actor), origenTipo: "DESCANSO_HISTORICO", origenId };
+  const nuevos = [];
+  if (concedidoComoAnticipo) nuevos.push({ ...base, categoria: "RECONOCIDO_ORDINARIO", dias, motivo: "Días concedidos anticipadamente antes de cumplir el aniversario", fechaEfectiva: fechaInicioVacaciones });
+  nuevos.push({ ...base, categoria: "DISFRUTADO", dias, motivo: String(payload.motivoHistorico || "Vacaciones disfrutadas históricamente"), fechaEfectiva: fechaInicioVacaciones, fechaInicioVacaciones, fechaFinVacaciones, fechaReincorporacion });
+  const creados = await crearMovimientos(nuevos, transaction);
+  return creados.find((item) => item.categoria === "DISFRUTADO");
+});
+
+const eliminarDescanso = async (id, payload, actor) => sequelize.transaction(async (transaction) => {
+  const movimiento = await VacacionMovimiento.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+  if (!movimiento || movimiento.categoria !== "DISFRUTADO" || movimiento.anuladoAt) throw errorHttp(404, "DESCANSO_NO_ENCONTRADO", "El registro de vacaciones no existe o ya fue eliminado.");
+  const periodo = await VacacionPeriodo.findByPk(movimiento.periodoId, { transaction, lock: transaction.LOCK.UPDATE });
+  await marcarDescansoAnulado(movimiento, periodo, actor, String(payload?.motivo || "").trim(), transaction);
+  return { id: movimiento.id, eliminado: true };
 });
 
 const validarColaboradorAgencia = async (usuarioId, agenciaId, transaction) => {
@@ -358,7 +496,7 @@ const anularPago = async (id, payload, actor) => sequelize.transaction(async (tr
 
 module.exports = {
   aprobarPago, aprobarSolicitud, anularPago, buscarSuperposicion, cancelarSolicitud,
-  confirmarPago, crearAjuste, crearPago, crearPeriodo, crearSolicitud,
+  confirmarPago, crearAjuste, crearPago, crearPeriodo, crearSolicitud, editarDescanso, eliminarDescanso, listarDescansos, registrarVacacionesHistoricas,
   obtenerSaldos, procesarConsumo, procesarConsumosPendientes,
   rechazarSolicitud, revisarSolicitud,
 };

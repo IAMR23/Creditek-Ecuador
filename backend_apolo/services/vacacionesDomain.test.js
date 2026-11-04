@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const {
+  calcularReconocimientoOrdinario,
   combinarMarcaVacacion,
   contarDiasCalendario,
   distribuirConsumo,
@@ -8,9 +9,24 @@ const {
   generarPeriodosAniversario,
   resumenMovimientos,
   seSuperponen,
+  siguienteDia,
   validarAsignaciones,
   validarPeriodoAniversario,
 } = require("./vacacionesDomain");
+
+test("un período en formación reconoce solo los días concedidos como anticipo", () => {
+  assert.equal(calcularReconocimientoOrdinario({ estado: "FORMACION", diasSolicitados: 0, diasDisfrutados: 5 }), 5);
+  assert.equal(calcularReconocimientoOrdinario({ estado: "FORMACION", diasSolicitados: 0, diasDisfrutados: 0 }), 0);
+  assert.equal(calcularReconocimientoOrdinario({ estado: "CUMPLIDO", diasSolicitados: 15, diasDisfrutados: 5 }), 15);
+});
+
+test("calcula el día anterior a la reincorporación sin desfases de zona horaria", () => {
+  assert.equal(siguienteDia("2026-11-16", -1), "2026-11-15");
+});
+
+test("el conteo termina en el fin de vacaciones y no se extiende hasta la reincorporación", () => {
+  assert.equal(contarDiasCalendario("2026-11-05", "2026-11-06"), 2);
+});
 
 test("saldo histórico suma períodos cumplidos sin duplicar créditos", () => {
   const primero = resumenMovimientos([
@@ -20,6 +36,15 @@ test("saldo histórico suma períodos cumplidos sin duplicar créditos", () => {
   const segundo = resumenMovimientos([{ categoria: "RECONOCIDO_ORDINARIO", dias: 15 }]);
   assert.equal(primero.disponibles + segundo.disponibles, 25);
   assert.equal(primero.reconocidos + segundo.reconocidos, 30);
+});
+
+test("un descanso eliminado lógicamente deja de afectar el saldo sin borrar auditoría", () => {
+  const saldo = resumenMovimientos([
+    { categoria: "RECONOCIDO_ORDINARIO", dias: 15 },
+    { categoria: "DISFRUTADO", dias: 5, anuladoAt: new Date() },
+  ]);
+  assert.equal(saldo.disfrutados, 0);
+  assert.equal(saldo.disponibles, 15);
 });
 
 test("un período incompleto queda en formación y no habilita reconocimiento automático", () => {

@@ -56,16 +56,21 @@ router.get("/periodos-propuestos/:usuarioId", asyncRoute(async (req, res) => {
   if (!usuario) return res.status(404).json({ message: "Colaborador no encontrado." });
   if (!usuario.fechaIngreso) return res.status(400).json({ code: "FECHA_INGRESO_REQUERIDA", message: "El colaborador no tiene fecha de ingreso registrada en Usuarios." });
   const registrados = await service.obtenerSaldos(usuario.id);
-  const clavesRegistradas = new Set(registrados.map((item) => `${item.fechaInicio}:${item.fechaFin}`));
+  const periodosRegistrados = new Map(registrados.map((item) => [`${item.fechaInicio}:${item.fechaFin}`, item.id]));
   const propuestas = generarPeriodosAniversario(usuario.fechaIngreso).map((item) => ({
     ...item,
-    registrado: clavesRegistradas.has(`${item.fechaInicio}:${item.fechaFin}`),
+    registrado: periodosRegistrados.has(`${item.fechaInicio}:${item.fechaFin}`),
+    periodoId: periodosRegistrados.get(`${item.fechaInicio}:${item.fechaFin}`) || null,
   }));
   res.json({ usuario, propuestas });
 }));
 router.get("/saldos/:usuarioId", asyncRoute(async (req, res) => res.json(await service.obtenerSaldos(req.params.usuarioId))));
 router.post("/periodos", asyncRoute(async (req, res) => res.status(201).json(await service.crearPeriodo(req.body, req.user))));
+router.post("/periodos/:id/vacaciones-historicas", asyncRoute(async (req, res) => res.status(201).json(await service.registrarVacacionesHistoricas(req.params.id, req.body, req.user))));
 router.post("/periodos/:id/ajustes", asyncRoute(async (req, res) => res.status(201).json(await service.crearAjuste(req.params.id, req.body, req.user))));
+router.get("/descansos", asyncRoute(async (req, res) => res.json(await service.listarDescansos({ usuarioId: req.query.usuarioId || undefined }))));
+router.put("/descansos/:id", asyncRoute(async (req, res) => res.json(await service.editarDescanso(req.params.id, req.body, req.user))));
+router.delete("/descansos/:id", asyncRoute(async (req, res) => res.json(await service.eliminarDescanso(req.params.id, req.body || {}, req.user))));
 
 router.get("/solicitudes", asyncRoute(async (req, res) => {
   const where = {};
