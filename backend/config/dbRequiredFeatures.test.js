@@ -11,7 +11,10 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
   test("crea en orden las tablas faltantes sobre una base existente", async () => {
     const query = jest.spyOn(sequelize, "query").mockResolvedValue([]);
     const queryInterface = {
-      showAllTables: jest.fn().mockResolvedValue(["agencias", "usuarios", "roles_pago"]),
+      showAllTables: jest.fn().mockResolvedValue([
+        "agencias", "usuarios", "roles_pago", "usuario_agencia",
+        "usuarios_roles_pago",
+      ]),
     };
 
     await ensureRequiredFeatureTables(queryInterface);
@@ -19,6 +22,8 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
     const sql = query.mock.calls.map(([statement]) => statement).join("\n");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS mapa_comercial_zonas");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS roles_pago_juniors");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS asignaciones_comerciales_historial");
+    expect(sql).toContain("migracion_asignaciones_comerciales_202609");
     expect(sql.indexOf("CREATE TABLE IF NOT EXISTS mapa_comercial_zonas"))
       .toBeLessThan(sql.indexOf("CREATE TABLE IF NOT EXISTS mapa_ubicaciones_normalizadas"));
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ghl_difusion_ejecuciones");
@@ -34,6 +39,10 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
         "usuarios",
         "roles_pago",
         "roles_pago_juniors",
+        "usuario_agencia",
+        "asignaciones_comerciales_historial",
+        "usuarios_roles_pago",
+        "migracion_asignaciones_comerciales_202609",
         "mapa_comercial_zonas",
         "mapa_ubicaciones_normalizadas",
         "ghl_difusion_listas",

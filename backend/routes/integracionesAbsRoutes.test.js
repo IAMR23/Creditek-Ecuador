@@ -23,6 +23,10 @@ jest.mock("../services/notificacionesPersonalService", () => ({
   registrarNotificacionSegura: jest.fn(async (promesa) => promesa),
 }));
 
+jest.mock("../services/asignacionComercialHistorialService", () => ({
+  cerrarAsignacionPorBaja: jest.fn().mockResolvedValue(1),
+}));
+
 const { sequelize } = require("../config/db");
 const Usuario = require("../models/Usuario");
 const UsuarioAgencia = require("../models/UsuarioAgencia");

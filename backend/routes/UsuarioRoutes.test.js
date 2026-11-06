@@ -5,6 +5,17 @@ jest.mock("bcryptjs", () => ({
   hash: jest.fn().mockResolvedValue("password-hash"),
 }));
 
+jest.mock("../config/db", () => ({
+  sequelize: {
+    transaction: jest.fn(async (callback) => callback({ id: "transaction" })),
+  },
+}));
+
+jest.mock("../services/asignacionComercialHistorialService", () => ({
+  cerrarAsignacionPorBaja: jest.fn().mockResolvedValue(1),
+  registrarCambioAsignacionPorRol: jest.fn().mockResolvedValue({ id: 1 }),
+}));
+
 jest.mock("../models/Usuario", () => ({
   create: jest.fn(),
   findAll: jest.fn(),
@@ -50,6 +61,9 @@ const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Rol = require("../models/Rol");
 const RolPago = require("../models/RolPago");
 const UsuarioRolPago = require("../models/UsuarioRolPago");
+const {
+  registrarCambioAsignacionPorRol,
+} = require("../services/asignacionComercialHistorialService");
 const usuarioRoutes = require("./UsuarioRoutes");
 
 const crearAplicacion = () => {
@@ -411,6 +425,13 @@ describe("PUT /usuarios/:id", () => {
       { usuarioId: 21, rolPagoId: 2 },
       { usuarioId: 21, rolPagoId: 16 },
     ]);
+    expect(registrarCambioAsignacionPorRol).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usuarioId: 21,
+        cargo: "SUPERVISOR PISO",
+        fechaEfectiva: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
+    );
   });
 
   test("actualiza el usuario de Uphone y permite limpiarlo", async () => {
@@ -568,10 +589,14 @@ describe("DELETE /usuarios/:id", () => {
     const response = await request(crearAplicacion()).delete("/usuarios/27");
 
     expect(response.status).toBe(200);
-    expect(usuario.update).toHaveBeenCalledWith({
-      activo: false,
-      usuarioUphone: null,
-    });
+    expect(usuario.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activo: false,
+        usuarioUphone: null,
+        fechaSalida: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      }),
+      { transaction: { id: "transaction" } },
+    );
     expect(UsuarioAgencia.update).toHaveBeenCalledWith(
       { activo: false },
       { where: { usuarioId: 27 } },

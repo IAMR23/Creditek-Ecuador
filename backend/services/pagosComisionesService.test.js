@@ -42,6 +42,11 @@ const {
   buildChiefAverageSelectionsMap,
   buildSupervisorAverageSelectionsMap,
   getLeaderMembersForWeek,
+  resolveSaleHistoricalAssignment,
+  getMissingHistoricalResponsibilities,
+  addHistoricalLeaderSale,
+  serializeHistoricalLeaderRows,
+  isSharedWeeklySelectionBackedByHistory,
   resolveSalesSanctionConfig,
   resolvePersonalSellerSanctionConfig,
   applyPersonalSellerPenaltiesToPrimaryView,
@@ -53,6 +58,204 @@ const PagoComisionEquipoSemanal = require("../models/PagoComisionEquipoSemanal")
 const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
 
 describe("pagosComisionesService", () => {
+  describe("atribucion comercial historica", () => {
+    const seller = { usuarioId: 7, nombre: "Vendedor trasladado" };
+    const floor = {
+      id: 1,
+      usuarioAgenciaId: 10,
+      agenciaId: 2,
+      agencia: { nombre: "Piso Centro" },
+      equipo: "PISO",
+      jefeComercialId: 100,
+      supervisorComercialId: 101,
+      vigenciaDesde: "2026-10-01",
+      vigenciaHasta: "2026-10-05",
+      requiereRevision: false,
+    };
+    const callCenter = {
+      id: 2,
+      usuarioAgenciaId: 20,
+      agenciaId: 3,
+      agencia: { nombre: "Call Center" },
+      equipo: "CALL CENTER",
+      jefeComercialId: 200,
+      supervisorComercialId: 201,
+      vigenciaDesde: "2026-10-06",
+      vigenciaHasta: null,
+      requiereRevision: false,
+    };
+
+    test("divide un traslado dentro de la semana y conserva el total personal", () => {
+      const assignments = [floor, callCenter];
+      const before = resolveSaleHistoricalAssignment({
+        assignments,
+        saleDate: "2026-10-05",
+        usuarioAgenciaId: 10,
+      });
+      const after = resolveSaleHistoricalAssignment({
+        assignments,
+        saleDate: "2026-10-06",
+        usuarioAgenciaId: 20,
+      });
+      expect(before.assignment.jefeComercialId).toBe(100);
+      expect(after.assignment.jefeComercialId).toBe(200);
+
+      const production = new Map();
+      addHistoricalLeaderSale({
+        map: production,
+        tipo: "JEFE",
+        liderId: 100,
+        weekKey: "2026-10-01",
+        venta: { id: 1 },
+        totals: { venden: 12, valorVendido: 1200 },
+        usuarioPayload: seller,
+        asignacion: floor,
+        ventasParaPromedioAntiguedad: 12,
+      });
+      addHistoricalLeaderSale({
+        map: production,
+        tipo: "JEFE",
+        liderId: 200,
+        weekKey: "2026-10-01",
+        venta: { id: 2 },
+        totals: { venden: 8, valorVendido: 800 },
+        usuarioPayload: seller,
+        asignacion: callCenter,
+        ventasParaPromedioAntiguedad: 8,
+      });
+      [
+        { leaderId: 101, saleId: 1, units: 12, value: 1200, assignment: floor },
+        { leaderId: 201, saleId: 2, units: 8, value: 800, assignment: callCenter },
+      ].forEach(({ leaderId, saleId, units, value, assignment }) => {
+        addHistoricalLeaderSale({
+          map: production,
+          tipo: "SUPERVISOR",
+          liderId: leaderId,
+          weekKey: "2026-10-01",
+          venta: { id: saleId },
+          totals: { venden: units, valorVendido: value },
+          usuarioPayload: seller,
+          asignacion: assignment,
+          ventasParaPromedioAntiguedad: units,
+        });
+      });
+      const oldLeader = serializeHistoricalLeaderRows(
+        production.get("JEFE:100:2026-10-01"),
+      );
+      const newLeader = serializeHistoricalLeaderRows(
+        production.get("JEFE:200:2026-10-01"),
+      );
+      expect(oldLeader[0].venden).toBe(12);
+      expect(newLeader[0].venden).toBe(8);
+      expect(oldLeader[0].venden + newLeader[0].venden).toBe(20);
+      const supervisorDetails = [101, 201].flatMap((leaderId) =>
+        serializeHistoricalLeaderRows(
+          production.get(`SUPERVISOR:${leaderId}:2026-10-01`),
+        ));
+      expect(supervisorDetails.reduce((sum, row) => sum + row.venden, 0)).toBe(20);
+      expect(supervisorDetails.reduce((sum, row) => sum + row.valorVendido, 0)).toBe(2000);
+    });
+
+    test("incluye la venta del ultimo dia y deja pendiente la posterior a la baja", () => {
+      const ventaUltimoDia = resolveSaleHistoricalAssignment({
+        assignments: [{ ...floor, vigenciaHasta: "2026-10-08" }],
+        saleDate: "2026-10-08",
+        usuarioAgenciaId: 10,
+        fechaSalida: "2026-10-08",
+      });
+      expect(ventaUltimoDia.assignment).toBeTruthy();
+      const production = new Map();
+      addHistoricalLeaderSale({
+        map: production,
+        tipo: "JEFE",
+        liderId: ventaUltimoDia.assignment.jefeComercialId,
+        weekKey: "2026-10-08",
+        venta: { id: 8 },
+        totals: { venden: 6, valorVendido: 600 },
+        usuarioPayload: { ...seller, fechaIngreso: "2026-10-01", fechaSalida: "2026-10-08" },
+        asignacion: ventaUltimoDia.assignment,
+        ventasParaPromedioAntiguedad: 0,
+      });
+      expect(serializeHistoricalLeaderRows(
+        production.get("JEFE:100:2026-10-08"),
+      )[0].venden).toBe(6);
+      expect(resolveSaleHistoricalAssignment({
+        assignments: [{ ...floor, vigenciaHasta: "2026-10-08" }],
+        saleDate: "2026-10-09",
+        usuarioAgenciaId: 10,
+        fechaSalida: "2026-10-08",
+      }).pendingReason).toBe("VENTA_POSTERIOR_BAJA");
+    });
+
+    test("no duplica una venta dentro del total del mismo lider", () => {
+      const production = new Map();
+      const input = {
+        map: production,
+        tipo: "SUPERVISOR",
+        liderId: 101,
+        weekKey: "2026-10-01",
+        venta: { id: 55 },
+        totals: { venden: 6, valorVendido: 600 },
+        usuarioPayload: seller,
+        asignacion: floor,
+        ventasParaPromedioAntiguedad: 0,
+      };
+      addHistoricalLeaderSale(input);
+      addHistoricalLeaderSale(input);
+      expect(serializeHistoricalLeaderRows(
+        production.get("SUPERVISOR:101:2026-10-01"),
+      )[0]).toMatchObject({ venden: 6, valorVendido: 600 });
+    });
+
+    test("marca para revision un tramo migrado sin evidencia de responsables", () => {
+      expect(resolveSaleHistoricalAssignment({
+        assignments: [{ ...floor, requiereRevision: true }],
+        saleDate: "2026-10-05",
+        usuarioAgenciaId: 10,
+      }).pendingReason).toBe("HISTORIAL_PENDIENTE_REVISION");
+    });
+
+    test("permite seleccionar al vendedor con dos lideres solo si el traslado esta respaldado", () => {
+      const sellerWithTransfer = {
+        lideresHistoricosPorSemana: {
+          "2026-10-01": {
+            jefesComerciales: [100, 200],
+            supervisores: [101, 201],
+          },
+        },
+      };
+      expect(isSharedWeeklySelectionBackedByHistory({
+        seller: sellerWithTransfer,
+        weekStart: "2026-10-01",
+        esSupervisor: false,
+        leaderIds: [100, 200],
+      })).toBe(true);
+      expect(isSharedWeeklySelectionBackedByHistory({
+        seller: sellerWithTransfer,
+        weekStart: "2026-10-01",
+        esSupervisor: true,
+        leaderIds: [101, 999],
+      })).toBe(false);
+    });
+
+    test("solo exige el responsable que corresponde al equipo", () => {
+      expect(getMissingHistoricalResponsibilities({
+        equipo: "PISO",
+        jefeComercialId: 100,
+        supervisorComercialId: null,
+      })).toEqual([]);
+      expect(getMissingHistoricalResponsibilities({
+        equipo: "CALL CENTER",
+        jefeComercialId: null,
+        supervisorComercialId: 201,
+      })).toEqual([]);
+      expect(getMissingHistoricalResponsibilities({
+        equipo: "PISO",
+        jefeComercialId: null,
+      })).toEqual(["jefe comercial"]);
+    });
+  });
+
   test.each([
     ["jefe", eliminarEquipoSemanalJefeComercial, { jefeComercialId: 10 }],
     ["supervisor", eliminarEquipoSemanalSupervisorComercial, { supervisorComercialId: 10 }],

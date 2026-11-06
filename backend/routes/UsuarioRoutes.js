@@ -7,6 +7,11 @@ const UsuarioRol = require("../models/UsuarioRol");
 const RolPago = require("../models/RolPago");
 const UsuarioRolPago = require("../models/UsuarioRolPago");
 const NominaEmpleado = require("../models/NominaEmpleado");
+const { sequelize } = require("../config/db");
+const {
+  cerrarAsignacionPorBaja,
+  registrarCambioAsignacionPorRol,
+} = require("../services/asignacionComercialHistorialService");
 const bcrypt = require("bcryptjs");
 const {
   condicionCampoNormalizado,
@@ -544,6 +549,7 @@ const actualizarUsuario = async (req, res) => {
       telefono,
       rolPagoId,
       rolesPagoIds,
+      fechaEfectivaComercial,
     } = req.body;
     const usuario = await Usuario.findByPk(req.params.id);
 
@@ -702,7 +708,32 @@ const actualizarUsuario = async (req, res) => {
     if (direccion !== undefined) usuario.direccion = direccion;
     if (telefono !== undefined) usuario.telefono = telefono;
 
-    await usuario.save();
+    await sequelize.transaction(async (transaction) => {
+      await usuario.save({ transaction });
+      if (cambioFechaSalida && usuario.fechaSalida) {
+        await cerrarAsignacionPorBaja({
+          usuarioId: usuario.id,
+          fechaSalida: usuario.fechaSalida,
+          registradoPorId: req.user?.id,
+          transaction,
+        });
+      }
+      if (debeActualizarRolPago) {
+        const fechaCambioRol = fechaEfectivaComercial || new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Guayaquil",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date());
+        await registrarCambioAsignacionPorRol({
+          usuarioId: usuario.id,
+          cargo: rolPago?.cargo || "",
+          fechaEfectiva: fechaCambioRol,
+          registradoPorId: req.user?.id,
+          transaction,
+        });
+      }
+    });
 
     if (debeActualizarRoles) {
       await sincronizarRolesUsuario(usuario.id, rolesIdsNormalizados);
@@ -760,7 +791,26 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    await usuario.update({ activo: false, usuarioUphone: null });
+    const fechaSalida = usuario.fechaSalida || new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Guayaquil",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    await sequelize.transaction(async (transaction) => {
+      await usuario.update({
+        activo: false,
+        usuarioUphone: null,
+        fechaSalida,
+        fechaSalidaRegistradaAt: usuario.fechaSalidaRegistradaAt || new Date(),
+      }, { transaction });
+      await cerrarAsignacionPorBaja({
+        usuarioId: usuario.id,
+        fechaSalida,
+        registradoPorId: req.user?.id,
+        transaction,
+      });
+    });
     await UsuarioAgencia.update(
       { activo: false },
       { where: { usuarioId: usuario.id } },

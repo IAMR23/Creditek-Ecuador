@@ -8,6 +8,9 @@ const {
   registrarNotificacionSalida,
   registrarNotificacionSegura,
 } = require("../services/notificacionesPersonalService");
+const {
+  cerrarAsignacionPorBaja,
+} = require("../services/asignacionComercialHistorialService");
 
 const router = express.Router();
 
@@ -159,6 +162,14 @@ router.patch("/usuarios/salida", async (req, res) => {
       }
 
       await usuario.save({ transaction });
+
+      if (cambioFechaSalida && fechaSalida) {
+        await cerrarAsignacionPorBaja({
+          usuarioId: usuario.id,
+          fechaSalida,
+          transaction,
+        });
+      }
 
       if (desactivar) {
         await UsuarioAgencia.update(

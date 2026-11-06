@@ -1523,6 +1523,29 @@ const ensureRequiredFeatureTables = async (queryInterface) => {
 
   if (
     tables.has("usuarios")
+    && tables.has("agencias")
+    && tables.has("usuario_agencia")
+    && !tables.has("asignaciones_comerciales_historial")
+  ) {
+    await ejecutarMigraciones([
+      "202611060004-create-asignaciones-comerciales-historial.sql",
+    ]);
+  }
+
+  if (
+    tables.has("usuarios")
+    && tables.has("roles_pago")
+    && tables.has("usuarios_roles_pago")
+    && tables.has("usuario_agencia")
+    && !tables.has("migracion_asignaciones_comerciales_202609")
+  ) {
+    await ejecutarMigraciones([
+      "202611060005-asignar-lideres-comerciales-desde-septiembre.sql",
+    ]);
+  }
+
+  if (
+    tables.has("usuarios")
     && (
       !tables.has("ghl_difusion_listas")
       || !tables.has("ghl_difusion_ejecuciones")

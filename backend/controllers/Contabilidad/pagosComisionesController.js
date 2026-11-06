@@ -1,6 +1,17 @@
 const pagosComisionesService = require("../../services/pagosComisionesService");
 const Usuario = require("../../models/Usuario");
 const RolPago = require("../../models/RolPago");
+const { sequelize } = require("../../config/db");
+const {
+  registrarCambioAsignacion,
+} = require("../../services/asignacionComercialHistorialService");
+
+const getTodayEcuador = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Guayaquil",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
 
 const responderError = (res, error) => {
   const status = error.statusCode || 500;
@@ -110,11 +121,24 @@ const actualizarJefeComercial = async (req, res) => {
       }
     }
 
-    await usuario.update({ jefeComercialId });
+    const fechaEfectiva = req.body.fechaEfectiva || getTodayEcuador();
+    await sequelize.transaction(async (transaction) => {
+      await registrarCambioAsignacion({
+        usuarioId,
+        jefeComercialId,
+        supervisorComercialId: usuario.supervisorComercialId,
+        fechaEfectiva,
+        registradoPorId: req.user.id,
+        fuente: "PAGOS_COMISIONES",
+        transaction,
+      });
+      await usuario.update({ jefeComercialId }, { transaction });
+    });
     return res.json({
       message: jefeComercialId ? "Jefe comercial asignado" : "Asignacion eliminada",
       usuarioId,
       jefeComercialId,
+      fechaEfectiva,
     });
   } catch (error) {
     responderError(res, error);
@@ -148,11 +172,24 @@ const actualizarSupervisorComercial = async (req, res) => {
       }
     }
 
-    await usuario.update({ supervisorComercialId });
+    const fechaEfectiva = req.body.fechaEfectiva || getTodayEcuador();
+    await sequelize.transaction(async (transaction) => {
+      await registrarCambioAsignacion({
+        usuarioId,
+        jefeComercialId: usuario.jefeComercialId,
+        supervisorComercialId,
+        fechaEfectiva,
+        registradoPorId: req.user.id,
+        fuente: "PAGOS_COMISIONES",
+        transaction,
+      });
+      await usuario.update({ supervisorComercialId }, { transaction });
+    });
     return res.json({
       message: supervisorComercialId ? "Supervisor asignado" : "Asignacion eliminada",
       usuarioId,
       supervisorComercialId,
+      fechaEfectiva,
     });
   } catch (error) {
     responderError(res, error);

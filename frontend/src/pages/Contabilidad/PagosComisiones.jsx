@@ -830,6 +830,9 @@ export default function PagosComisiones() {
   const [cargoFiltro, setCargoFiltro] = useState("");
   const [juniorId, setJuniorId] = useState("");
   const [jefeComercialId, setJefeComercialId] = useState("");
+  const [fechaEfectivaAsignacion, setFechaEfectivaAsignacion] = useState(
+    toDateOnly(currentDate),
+  );
   const [guardandoJefe, setGuardandoJefe] = useState(false);
   const [guardandoEquipoSemanal, setGuardandoEquipoSemanal] = useState("");
   const [guardandoMetaJefe, setGuardandoMetaJefe] = useState("");
@@ -1023,7 +1026,7 @@ export default function PagosComisiones() {
   const vendedoresElegiblesEquipo = useMemo(() => {
     const disponibles = report?.vendedoresDisponiblesEquipo;
     const candidatos = Array.isArray(disponibles)
-      ? filtrarPorPermanencia(disponibles)
+      ? disponibles
       : vendedores.filter(
           (vendedor) =>
             String(vendedor.rol || "").toUpperCase().includes("VENDEDOR") ||
@@ -1368,6 +1371,7 @@ export default function PagosComisiones() {
     try {
       await api.put(`${ENDPOINT}/vendedores/${juniorId}/jefe-comercial`, {
         jefeComercialId: jefeComercialId || null,
+        fechaEfectiva: fechaEfectivaAsignacion,
       });
       await fetchReport();
       Swal.fire(
@@ -1403,7 +1407,10 @@ export default function PagosComisiones() {
     try {
       await api.put(
         `${ENDPOINT}/vendedores/${juniorSupervisorId}/supervisor-comercial`,
-        { supervisorComercialId: supervisorComercialId || null },
+        {
+          supervisorComercialId: supervisorComercialId || null,
+          fechaEfectiva: fechaEfectivaAsignacion,
+        },
       );
       await fetchReport();
       Swal.fire(
@@ -2115,15 +2122,52 @@ export default function PagosComisiones() {
         </section>
         ) : null}
 
+        {seccionActiva !== "LOGISTICA" && report?.atribucionesPendientes?.length ? (
+          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm">
+            <h2 className="font-semibold text-amber-950">
+              Atribuciones pendientes de revision ({report.atribucionesPendientes.length})
+            </h2>
+            <p className="mt-1 text-sm text-amber-800">
+              Revisa solamente las ventas cuyo equipo no tenga el responsable requerido o cuyo historial no pueda comprobarse.
+            </p>
+            <div className="mt-3 max-h-56 overflow-auto">
+              <table className="w-full border-collapse text-left text-xs text-amber-950">
+                <thead>
+                  <tr>
+                    <th className="border border-amber-300 px-2 py-1">Venta</th>
+                    <th className="border border-amber-300 px-2 py-1">Vendedor</th>
+                    <th className="border border-amber-300 px-2 py-1">Fecha</th>
+                    <th className="border border-amber-300 px-2 py-1">Agencia / equipo</th>
+                    <th className="border border-amber-300 px-2 py-1">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.atribucionesPendientes.map((item) => (
+                    <tr key={`${item.ventaId}-${item.motivo}`}>
+                      <td className="border border-amber-300 px-2 py-1">#{item.ventaId}</td>
+                      <td className="border border-amber-300 px-2 py-1">{item.vendedor}</td>
+                      <td className="border border-amber-300 px-2 py-1">{formatDate(item.fecha)}</td>
+                      <td className="border border-amber-300 px-2 py-1">
+                        {[item.agencia, item.equipo].filter(Boolean).join(" / ") || "Sin tramo"}
+                      </td>
+                      <td className="border border-amber-300 px-2 py-1">{item.detalle}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
         {seccionActiva === "JEFES" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <h2 className="font-semibold text-slate-900">Asignacion general de respaldo</h2>
+            <h2 className="font-semibold text-slate-900">Asignacion comercial historica</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Esta asignacion se usa solamente cuando el equipo de una semana aun no ha sido configurado.
+              El responsable anterior se cierra el dia previo y el nuevo tramo inicia en la fecha efectiva.
             </p>
           </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_170px_auto] md:items-end">
             <label className="text-sm font-medium text-slate-700">
               Vendedor junior
               <select
@@ -2155,6 +2199,15 @@ export default function PagosComisiones() {
                 ))}
               </select>
             </label>
+            <label className="text-sm font-medium text-slate-700">
+              Fecha efectiva
+              <input
+                type="date"
+                value={fechaEfectivaAsignacion}
+                onChange={(event) => setFechaEfectivaAsignacion(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
             <button
               type="button"
               onClick={guardarJefeComercial}
@@ -2170,12 +2223,12 @@ export default function PagosComisiones() {
         {seccionActiva === "SUPERVISORES" ? (
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div>
-              <h2 className="font-semibold text-slate-900">Asignacion general de respaldo</h2>
+              <h2 className="font-semibold text-slate-900">Asignacion comercial historica</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Esta asignacion se usa solamente cuando el equipo de una semana aun no ha sido configurado.
+                La misma fecha efectiva se conserva al cambiar entre jefes y supervisores.
               </p>
             </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_170px_auto] md:items-end">
               <CollaboratorSearchInput
                 label="Vendedor junior"
                 options={juniorsSupervisorCoincidentes}
@@ -2215,6 +2268,15 @@ export default function PagosComisiones() {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Fecha efectiva
+                <input
+                  type="date"
+                  value={fechaEfectivaAsignacion}
+                  onChange={(event) => setFechaEfectivaAsignacion(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
               </label>
               <button
                 type="button"
@@ -3027,27 +3089,21 @@ function MonthlyLeaderAverageConfiguration({
   const isSaving = savingKey === String(leader.usuarioId);
   const isBusy = Boolean(savingKey);
   const hasChanges = !configured || selectedSignature !== savedSignature;
+  const leaderHistoryField = isChief ? "jefesComerciales" : "supervisores";
   const availableSellers = sellers.filter((seller) =>
-    weeks.some((week) => isSellerAvailableForWeek(seller, week)),
+    weeks.some((week) =>
+      seller.lideresHistoricosPorSemana?.[week.startDate]
+        ?.[leaderHistoryField]?.includes(Number(leader.usuarioId))),
   );
   const selectedCount = selectedIds.length;
   const selectedIdSet = new Set(selectedIds);
-  const hasSellerAverageSales = sellers.some(
-    (seller) => seller.ventasParaPromedioPorSemana,
+  const selectedSales = Object.entries(
+    leader.ventasAtribuidasPromedioPorVendedor || {},
+  ).reduce(
+    (total, [sellerId, units]) =>
+      selectedIdSet.has(String(sellerId)) ? total + Number(units || 0) : total,
+    0,
   );
-  const selectedSales = isChief || !hasSellerAverageSales
-    ? Number(resumen.ventasConsideradasBono || 0)
-    : sellers.reduce((total, seller) => {
-        if (!selectedIdSet.has(String(seller.usuarioId))) return total;
-        return total + weeks.reduce(
-          (sellerTotal, week) =>
-            sellerTotal +
-            Number(
-              seller.ventasParaPromedioPorSemana?.[week.startDate] || 0,
-            ),
-          0,
-        );
-      }, 0);
   const promedioCalculado = selectedCount && weeks.length
     ? selectedSales / weeks.length / selectedCount
     : 0;
@@ -3174,9 +3230,14 @@ function WeeklyTeamCard({
 }) {
   const values = getWeekValues(leader, week);
   const configured = Boolean(values.equipoSemanalConfigurado);
-  const sellersForWeek = leader.esSupervisorComercial
-    ? sellers.filter((seller) => isSellerAvailableForWeek(seller, week))
-    : sellers;
+  const historyField = leader.esSupervisorComercial
+    ? "supervisores"
+    : "jefesComerciales";
+  const sellersForWeek = sellers.filter((seller) =>
+    seller.lideresHistoricosPorSemana?.[week.startDate]
+      ?.[historyField]?.includes(Number(leader.usuarioId))
+    && (!leader.esSupervisorComercial || isSellerAvailableForWeek(seller, week)),
+  );
   const sellerIdsForWeek = new Set(
     sellersForWeek.map((seller) => String(seller.usuarioId)),
   );
@@ -3671,10 +3732,16 @@ function LeadershipCommissionTables({
                                   <div className="flex flex-col gap-1">
                                     {vendedores.map((vendedor) => (
                                       <span
-                                        key={vendedor.usuarioId}
+                                        key={`${vendedor.usuarioId}-${vendedor.vigenciaDesde}-${vendedor.agenciaId}`}
                                         className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold"
                                       >
                                         {vendedor.nombre}: {vendedor.venden || 0}
+                                        <span className="block font-normal text-emerald-800">
+                                          {vendedor.agencia} / {vendedor.equipo}
+                                          {vendedor.vigenciaDesde
+                                            ? ` · ${formatDate(vendedor.vigenciaDesde)}${vendedor.vigenciaHasta ? ` al ${formatDate(vendedor.vigenciaHasta)}` : " en adelante"}`
+                                            : ""}
+                                        </span>
                                         {vendedor.esLiderVendedor
                                           ? " (doble cargo)"
                                           : ""}
