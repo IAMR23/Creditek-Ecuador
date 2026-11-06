@@ -1517,6 +1517,10 @@ const ensureRequiredFeatureTables = async (queryInterface) => {
     await ejecutarMigraciones(["20260625_create_mapa_comercial.sql"]);
   }
 
+  if (tables.has("roles_pago") && !tables.has("roles_pago_juniors")) {
+    await ejecutarMigraciones(["202611060003-create-roles-pago-juniors.sql"]);
+  }
+
   if (
     tables.has("usuarios")
     && (
@@ -1928,6 +1932,8 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
   const columnasCalculadasManuales = [
     "fondosReservaManual",
     "sueldosExtrasManual",
+    "comisionVentaManual",
+    "sancionMetaManual",
     "descuentosMetaManual",
     "cajaGeneralManual",
     "entradasManual",
@@ -1958,6 +1964,16 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
   await addColumnIfMissing(
     queryInterface,
     "roles_creditek_ajustes",
+    "diasTrabajadosManual",
+    {
+      type: Sequelize.INTEGER,
+      allowNull: true,
+    },
+  );
+
+  await addColumnIfMissing(
+    queryInterface,
+    "roles_creditek_ajustes",
     "diasFalta",
     {
       type: Sequelize.INTEGER,
@@ -1969,6 +1985,15 @@ const ensureRolesCreditekResumenSchema = async (queryInterface, tables) => {
   await sequelize.query(`
     DO $$
     BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'roles_creditek_ajustes_dias_trabajados_manual_rango'
+      ) THEN
+        ALTER TABLE roles_creditek_ajustes
+        ADD CONSTRAINT roles_creditek_ajustes_dias_trabajados_manual_rango
+        CHECK ("diasTrabajadosManual" IS NULL OR "diasTrabajadosManual" BETWEEN 0 AND 30);
+      END IF;
+
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conname = 'roles_creditek_ajustes_dias_falta_rango'

@@ -11,13 +11,14 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
   test("crea en orden las tablas faltantes sobre una base existente", async () => {
     const query = jest.spyOn(sequelize, "query").mockResolvedValue([]);
     const queryInterface = {
-      showAllTables: jest.fn().mockResolvedValue(["agencias", "usuarios"]),
+      showAllTables: jest.fn().mockResolvedValue(["agencias", "usuarios", "roles_pago"]),
     };
 
     await ensureRequiredFeatureTables(queryInterface);
 
     const sql = query.mock.calls.map(([statement]) => statement).join("\n");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS mapa_comercial_zonas");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS roles_pago_juniors");
     expect(sql.indexOf("CREATE TABLE IF NOT EXISTS mapa_comercial_zonas"))
       .toBeLessThan(sql.indexOf("CREATE TABLE IF NOT EXISTS mapa_ubicaciones_normalizadas"));
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS ghl_difusion_ejecuciones");
@@ -31,6 +32,8 @@ describe("esquemas requeridos por funcionalidades RVE", () => {
       showAllTables: jest.fn().mockResolvedValue([
         "agencias",
         "usuarios",
+        "roles_pago",
+        "roles_pago_juniors",
         "mapa_comercial_zonas",
         "mapa_ubicaciones_normalizadas",
         "ghl_difusion_listas",

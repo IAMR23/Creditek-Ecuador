@@ -4,7 +4,9 @@ import {
   calcularBaseIessNomina,
   calcularDiasTrabajadosNomina,
   calcularIessNomina,
+  calcularFondosReservaNomina,
   calcularValorPorJornada,
+  cumplioAnioFondosReserva,
   calcularEgresosNomina,
   aplicarCalculoNovedad,
   moverPrioridadNomina,
@@ -35,6 +37,38 @@ test('prorratea al 75% los valores salariales de tres cuartos de tiempo', () => 
   assert.equal(calcularValorPorJornada(68, "tres_cuartos_tiempo"), 51);
 });
 
+test('fondos de reserva aplican 8.33% despues de cumplir un año', () => {
+  const periodo = { anio: 2026, mes: 8 };
+  assert.equal(cumplioAnioFondosReserva('2025-08-31', periodo), true);
+  assert.equal(cumplioAnioFondosReserva('2025-09-01', periodo), false);
+  assert.equal(cumplioAnioFondosReserva('', periodo), false);
+  assert.equal(calcularFondosReservaNomina(502, {
+    ...periodo,
+    fechaIngreso: '2025-08-31',
+    fondoReservaActivo: true,
+  }), 41.82);
+  assert.equal(calcularFondosReservaNomina(502, {
+    ...periodo,
+    fechaIngreso: '2025-09-01',
+    fondoReservaActivo: true,
+  }), 0);
+  assert.equal(calcularFondosReservaNomina(502, {
+    ...periodo,
+    fechaIngreso: '2020-01-01',
+    fondoReservaActivo: false,
+  }), 41.82);
+  assert.equal(calcularFondosReservaNomina(502, {
+    ...periodo,
+    fechaIngreso: '2020-01-01',
+    fondoReservaActivo: false,
+    fondosReservaManual: 0,
+  }), 41.82);
+  assert.equal(calcularFondosReservaNomina(502, {
+    ...periodo,
+    fondosReservaManual: 50,
+  }), 50);
+});
+
 test('no descuenta IESS cuando el usuario no esta afiliado', () => {
   assert.equal(calcularIessNomina({
     sueldoAPagar: 482,
@@ -58,6 +92,22 @@ test('novedad de no afiliado conserva base y descuento IESS en cero', () => {
   assert.equal(result.baseIess, 0);
   assert.equal(result.iess, 0);
   assert.equal(result.valorRecibir, 482);
+});
+
+test('novedad recupera el calculo automatico de un cero heredado', () => {
+  const row = {
+    fechaIngreso: '2020-01-01',
+    fondoReservaActivo: false,
+    fondosReservaManual: 0,
+    ingresosComisiones: 20,
+    nominaCalculada: {
+      tipoNovedad: 'LACTANCIA',
+      sueldoAPagar: 482,
+      sueldosExtras: 0,
+      fondoReservaElegible: true,
+    },
+  };
+  assert.equal(aplicarCalculoNovedad(row).fondosReserva, 41.82);
 });
 
 test('maternidad usa el cálculo del servidor y separa el subsidio del pago de Creditek', () => {
@@ -128,6 +178,50 @@ test("usa el descuento de Pagos comisiones aunque el resumen tenga un ajuste man
   assert.deepEqual(calcularEgresosNomina({ totalAnticipos: 99, descuentosMeta: 9, descuentosMetaCalculado: 7, sumanPrestamos: 30 }, 50), {
     anticipo: 90, prestamo: 30, sancionMeta: 7, totalEgresos: 177,
   });
+});
+
+test("permite reemplazar manualmente la sancion de la nomina", () => {
+  assert.deepEqual(calcularEgresosNomina({ totalAnticipos: 97, descuentosMeta: 7, descuentosMetaCalculado: 7, sancionMetaManual: 12.5 }, 50), {
+    anticipo: 90, prestamo: 0, sancionMeta: 12.5, totalEgresos: 152.5,
+  });
+});
+
+test("novedad usa ajustes manuales de comision y sancion", () => {
+  const result = aplicarCalculoNovedad({
+    ingresosComisiones: 20,
+    comisionVentaManual: 35,
+    sancionMetaManual: 8,
+    nominaCalculada: {
+      tipoNovedad: "LACTANCIA",
+      sueldoAPagar: 482,
+      sueldosExtras: 0,
+      fondoReservaElegible: false,
+    },
+  });
+  assert.equal(result.comisionVenta, 35);
+  assert.equal(result.sancionMeta, 8);
+  assert.equal(result.totalIngresos, 517);
+  assert.equal(result.totalEgresos, 56.86);
+});
+
+test("novedad recalcula sueldo con dias trabajados manuales", () => {
+  const result = aplicarCalculoNovedad({
+    diasFalta: 5,
+    diasTrabajadosManual: 20,
+    nominaCalculada: {
+      tipoNovedad: "LACTANCIA",
+      salario: 482,
+      sueldoAPagar: 401.67,
+      sueldosExtras: 0,
+      diasSueldoCompletoBase: 30,
+      diasSueldoCompleto: 25,
+      diasMaternidad25: 0,
+      fondoReservaElegible: false,
+    },
+  });
+  assert.equal(result.diasTrabajados, 20);
+  assert.equal(result.sueldoAPagar, 321.33);
+  assert.equal(result.valorRecibir, 290.96);
 });
 
 test("respeta la sanción omitida en Pagos comisiones", () => {

@@ -19,20 +19,21 @@ test('las faltas no descuentan los dias cubiertos por maternidad', () => {
 });
 test('empleado sin novedad: 30 días y sueldo completo con comportamiento previo', () => {
   expect(calcularNominaPeriodo({}, periodo)).toMatchObject({ diasTrabajados: 30, sueldoAPagar: 482, iess: 45.55, valorRecibir: 436.45 });
-  expect(calcularNominaPeriodo({ fondoReservaActivo: true, ingresosComisiones: 20 }, periodo)).toMatchObject({
-    fondosReserva: 40.17, totalIngresos: 542.17, baseIess: 502, iess: 47.44, valorRecibir: 494.73,
+  expect(calcularNominaPeriodo({ fechaIngreso: '2025-08-01', fondoReservaActivo: true, ingresosComisiones: 20 }, periodo)).toMatchObject({
+    fondosReserva: 41.82, totalIngresos: 543.82, baseIess: 502, iess: 47.44, valorRecibir: 496.38,
   });
 });
 test('medio tiempo prorratea sueldo, extras y fondos al 50%', () => {
   expect(calcularNominaPeriodo({
     jornadaLaboral: 'medio_tiempo',
+    fechaIngreso: '2025-08-01',
     rolPagoSueldoExtra: 68,
     fondoReservaActivo: true,
   }, periodo)).toMatchObject({
     salario: 241,
     sueldoAPagar: 241,
     sueldosExtras: 34,
-    fondosReserva: 22.92,
+    fondosReserva: 22.91,
     baseIess: 275,
     iess: 25.99,
   });
@@ -40,13 +41,14 @@ test('medio tiempo prorratea sueldo, extras y fondos al 50%', () => {
 test('jornada del 75% prorratea sueldo, extras, fondos e IESS', () => {
   expect(calcularNominaPeriodo({
     jornadaLaboral: 'tres_cuartos_tiempo',
+    fechaIngreso: '2025-08-01',
     rolPagoSueldoExtra: 68,
     fondoReservaActivo: true,
   }, periodo)).toMatchObject({
     salario: 361.5,
     sueldoAPagar: 361.5,
     sueldosExtras: 51,
-    fondosReserva: 34.38,
+    fondosReserva: 34.36,
     baseIess: 412.5,
     iess: 38.98,
   });
@@ -77,6 +79,54 @@ test('fondos de reserva son netos y no cambian el aporte personal al IESS', () =
   expect(conFondos.iess).toBe(sinFondos.iess);
   expect(conFondos.valorRecibir - sinFondos.valorRecibir).toBeCloseTo(100, 2);
 });
+test('ajustes manuales reemplazan comision y sancion solo en nomina', () => {
+  const resultado = calcularNominaPeriodo({
+    ingresosComisiones: 20,
+    comisionVentaManual: 35,
+    descuentosMetaCalculado: 7,
+    sancionMetaManual: 8,
+  }, periodo);
+  expect(resultado).toMatchObject({
+    comisionVenta: 35,
+    sancionMeta: 8,
+    totalIngresos: 517,
+    totalEgresos: 56.86,
+    valorRecibir: 460.14,
+  });
+});
+test('dias trabajados manuales reemplazan el calculo automatico del periodo', () => {
+  expect(calcularNominaPeriodo({ diasFalta: 5, diasTrabajadosManual: 20 }, periodo)).toMatchObject({
+    diasFalta: 5,
+    diasTrabajados: 20,
+    sueldoAPagar: 321.33,
+    baseIess: 321.33,
+  });
+});
+test('dias trabajados manuales respetan los dias cubiertos por maternidad', () => {
+  expect(calcularNominaPeriodo({ diasTrabajadosManual: 20 }, periodo, [madre()])).toMatchObject({
+    diasMaternidad25: 30,
+    diasSueldoCompleto: 0,
+    diasTrabajados: 30,
+  });
+});
+test('fondos de reserva requieren un año cumplido al cierre del periodo', () => {
+  const base = { ingresosComisiones: 20 };
+  expect(calcularNominaPeriodo({ ...base, fechaIngreso: '2025-08-31' }, periodo)).toMatchObject({
+    fondoReservaElegible: true, fondosReserva: 41.82,
+  });
+  expect(calcularNominaPeriodo({ ...base, fechaIngreso: '2025-09-01' }, periodo)).toMatchObject({
+    fondoReservaElegible: false, fondosReserva: 0,
+  });
+  expect(calcularNominaPeriodo({ ...base, fechaIngreso: '2024-01-01', fondoReservaActivo: false }, periodo)).toMatchObject({
+    fondoReservaElegible: true, fondosReserva: 41.82,
+  });
+  expect(calcularNominaPeriodo({ ...base, fechaIngreso: '2024-01-01', fondoReservaActivo: false, fondosReservaManual: 0 }, periodo)).toMatchObject({
+    fondoReservaElegible: true, fondosReserva: 41.82,
+  });
+  expect(calcularNominaPeriodo({ fondoReservaActivo: true }, periodo)).toMatchObject({
+    fondoReservaElegible: false, fondosReserva: 0,
+  });
+});
 test('maternidad completa: 30 días al 25%, IESS sobre 482', () => {
   expect(calcularNominaPeriodo({}, periodo, [madre()])).toMatchObject({ diasMaternidad25: 30, diasSueldoCompleto: 0, sueldoAPagar: 120.5, subsidioIessInformativo: 361.5, iess: 45.55 });
 });
@@ -87,8 +137,8 @@ test('ejemplo completo: 15/15, fondos históricos, anticipos y préstamos', () =
     subsidioIessInformativo: 180.75, fondosReserva: 40.15, totalIngresos: 341.40, iess: 45.55,
     anticipo: 183.50, prestamo: 50, totalEgresos: 279.05, valorRecibir: 62.35 });
 });
-test('fondos automáticos mantienen la base completa; IESS no usa fondos ni subsidio', () => {
-  expect(calcularNominaPeriodo({ fondoReservaActivo: true }, periodo, [madre()])).toMatchObject({ fondosReserva: 40.17, baseIess: 482, iess: 45.55 });
+test('fondos automáticos usan 8.33% del ingreso y no cambian IESS ni subsidio', () => {
+  expect(calcularNominaPeriodo({ fechaIngreso: '2025-08-01', fondoReservaActivo: true }, periodo, [madre()])).toMatchObject({ fondosReserva: 10.04, baseIess: 482, iess: 45.55 });
   expect(calcularNominaPeriodo({ fondosReservaManual: 0 }, periodo, [madre()]).fondosReserva).toBe(0);
 });
 test('lactancia mantiene 30 días y 100% del sueldo; no hereda el 25%', () => {

@@ -83,13 +83,19 @@ const vistaPrevia = async (payload) => {
   const row = resumen.registros.find((item) => item.usuarioId === valores.usuarioId);
   if (!row) throw fallo('El empleado no aparece en la nómina del período', 404);
   const ajustes = {};
-  for (const campo of ['fondosReservaManual', 'sueldosExtrasManual']) {
+  for (const campo of ['fondosReservaManual', 'sueldosExtrasManual', 'comisionVentaManual', 'sancionMetaManual']) {
     if (Object.hasOwn(payload.ajustesNomina || {}, campo)) {
       ajustes[campo] = normalizarValor(payload.ajustesNomina[campo], campo);
     }
   }
   if (Object.hasOwn(payload.ajustesNomina || {}, 'diasFalta')) {
     ajustes.diasFalta = normalizarDiasFalta(payload.ajustesNomina.diasFalta);
+  }
+  if (Object.hasOwn(payload.ajustesNomina || {}, 'diasTrabajadosManual')) {
+    const value = payload.ajustesNomina.diasTrabajadosManual;
+    ajustes.diasTrabajadosManual = value === null || value === ''
+      ? null
+      : normalizarDiasFalta(value);
   }
   return { calculo: calcularNominaPeriodo({ ...row, ...ajustes }, payload, conjunto), novedades: novedadesDelMes(conjunto, payload) };
 };

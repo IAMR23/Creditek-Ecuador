@@ -5,6 +5,7 @@ const factorJornadaNomina = (jornadaLaboral) => {
   if (jornadaLaboral === 'tres_cuartos_tiempo') return 0.75;
   return 1;
 };
+const FONDOS_RESERVA_RATE = 0.0833;
 const errorValidacion = (message) => Object.assign(new Error(message), { statusCode: 400 });
 const fechaValida = (value, campo, opcional = false) => {
   if ((value === '' || value == null) && opcional) return null;
@@ -76,6 +77,18 @@ const novedadesDelMes = (novedades, periodo) => {
   return novedades.filter((item) => item.activo !== false && item.fechaInicio.slice(0, 7) <= key && item.fechaFin.slice(0, 7) >= key);
 };
 
+const cumplioAnioFondosReserva = (fechaIngreso, periodo) => {
+  const match = String(fechaIngreso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const [, anio, mes, dia] = match.map(Number);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  if (fecha.toISOString().slice(0, 10) !== fechaIngreso) return false;
+  const ultimoDiaMesAniversario = new Date(Date.UTC(anio + 1, mes, 0)).getUTCDate();
+  const aniversario = `${anio + 1}-${String(mes).padStart(2, '0')}-${String(Math.min(dia, ultimoDiaMesAniversario)).padStart(2, '0')}`;
+  const finPeriodo = new Date(Date.UTC(Number(periodo.anio), Number(periodo.mes), 0)).toISOString().slice(0, 10);
+  return aniversario <= finPeriodo;
+};
+
 // Conserva las fórmulas previas para quien no tiene una novedad en el período.
 const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482) => {
   if (!Number.isFinite(sueldoMensual) || sueldoMensual < 0) throw errorValidacion('Sueldo mensual inválido');
@@ -120,6 +133,19 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
     diasSueldoCompleto = Math.max(0, diasSueldoCompletoBase - diasFalta);
     diasTrabajados = diasSueldoCompleto;
   }
+  if (row.diasTrabajadosManual != null) {
+    const diasManuales = Math.max(0, Math.min(30, Math.trunc(numero(row.diasTrabajadosManual))));
+    if (tieneMaternidad) {
+      diasSueldoCompleto = Math.min(
+        diasSueldoCompletoBase,
+        Math.max(0, diasManuales - diasMaternidad25),
+      );
+      diasTrabajados = diasMaternidad25 + diasSueldoCompleto;
+    } else {
+      diasSueldoCompleto = diasManuales;
+      diasTrabajados = diasManuales;
+    }
+  }
   sueldoMaternidadEmpresa = redondear(sueldoMaternidadEmpresa);
   subsidioIessInformativo = redondear(subsidioIessInformativo);
   const sueldoCompletoPeriodo = redondear(valorDia * diasSueldoCompleto);
@@ -127,10 +153,19 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
   const sueldosExtras = row.sueldosExtrasManual != null
     ? numero(row.sueldosExtrasManual)
     : redondear(numero(row.rolPagoSueldoExtra) * factorJornada * diasTrabajados / 30);
-  const fondosReserva = row.fondosReservaManual != null ? redondear(numero(row.fondosReservaManual))
-    : row.fondoReservaActivo ? redondear(((tieneMaternidad ? salarioJornada : sueldoAPagar) + sueldosExtras) / 12) : 0;
-  const comisionVenta = numero(row.ingresosComisiones);
-  const totalIngresos = redondear(sueldoAPagar + sueldosExtras + fondosReserva + comisionVenta);
+  const comisionVenta = row.comisionVentaManual != null
+    ? numero(row.comisionVentaManual)
+    : numero(row.ingresosComisiones);
+  const totalIngresosSinFondos = redondear(sueldoAPagar + sueldosExtras + comisionVenta);
+  const fondoReservaElegible = cumplioAnioFondosReserva(row.fechaIngreso, periodo);
+  // Recupera ceros que quedaron guardados cuando el indicador anterior
+  // desactivaba el beneficio; ya no deben bloquear el cálculo por antigüedad.
+  const esFondoReservaCeroHeredado = row.fondoReservaActivo === false
+    && numero(row.fondosReservaManual) === 0;
+  const fondosReserva = row.fondosReservaManual != null && !esFondoReservaCeroHeredado
+    ? redondear(numero(row.fondosReservaManual))
+    : fondoReservaElegible ? redondear(totalIngresosSinFondos * FONDOS_RESERVA_RATE) : 0;
+  const totalIngresos = redondear(totalIngresosSinFondos + fondosReserva);
   // Los fondos de reserva son un valor neto para el empleado y no forman parte de la base del IESS.
   const baseIess = afiliadoIess
     ? (tieneMaternidad ? salarioJornada : redondear(sueldoAPagar + sueldosExtras + comisionVenta))
@@ -138,7 +173,9 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
   const iess = afiliadoIess ? redondear(baseIess * 0.0945) : 0;
   const anticipo = redondear(numero(row.totalAnticipos) - numero(row.descuentosMeta));
   const prestamo = redondear(numero(row.sumanPrestamos) + numero(row.prestamosEgresos));
-  const sancionMeta = numero(row.descuentosMetaCalculado);
+  const sancionMeta = row.sancionMetaManual != null
+    ? numero(row.sancionMetaManual)
+    : numero(row.descuentosMetaCalculado);
   const totalEgresos = redondear(iess + anticipo + prestamo + sancionMeta);
   const valorRecibir = redondear(totalIngresos - totalEgresos);
   const aplicables = [...maternidades, ...lactancias];
@@ -146,8 +183,8 @@ const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482
     diasBasePeriodo, diasFalta, diasTrabajados, diasMaternidad25, diasSueldoCompletoBase, diasSueldoCompleto, sueldoCompletoPeriodo,
     sueldoMaternidadEmpresa, subsidioIessInformativo, sueldoAPagar, sueldosExtras, fondosReserva, comisionVenta,
     totalIngresos, totalIngresosEmpresa: totalIngresos, baseIess, iess, anticipo, prestamo, sancionMeta, totalEgresos,
-    valorRecibir, valorRecibirEmpresa: valorRecibir, tieneMaternidad,
+    valorRecibir, valorRecibirEmpresa: valorRecibir, tieneMaternidad, fondoReservaElegible,
     tipoNovedad: [...new Set(aplicables.map((item) => item.tipo))].join(' / '),
     observacionNovedad: aplicables.map((item) => item.observacion).filter(Boolean).join('; ') };
 };
-module.exports = { validarNovedad, validarDias, validarPeriodo, diasEnMes30, novedadesDelMes, calcularNominaPeriodo };
+module.exports = { validarNovedad, validarDias, validarPeriodo, diasEnMes30, novedadesDelMes, calcularNominaPeriodo, cumplioAnioFondosReserva };

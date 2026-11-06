@@ -21,6 +21,7 @@ import {
   calcularBaseIessNomina,
   calcularDiasTrabajadosNomina,
   calcularEgresosNomina,
+  calcularFondosReservaNomina,
   calcularIessNomina,
   calcularValorPorJornada,
   aplicarCalculoNovedad,
@@ -138,20 +139,25 @@ const calcularFila = (row, anio, mes) => {
   );
   const diasBasePeriodo = diasTrabajadosPeriodo(row, anio, mes);
   const diasFalta = Math.max(0, Math.min(30, Math.trunc(numero(row.diasFalta))));
-  const diasTrabajados = calcularDiasTrabajadosNomina(diasBasePeriodo, diasFalta);
+  const diasTrabajados = row.diasTrabajadosManual != null
+    ? Math.max(0, Math.min(30, Math.trunc(numero(row.diasTrabajadosManual))))
+    : calcularDiasTrabajadosNomina(diasBasePeriodo, diasFalta);
   const sueldoAPagar = redondear((sueldoBase * diasTrabajados) / 30);
   const sueldosExtras = row.sueldosExtrasManual != null
     ? redondear(row.sueldosExtrasManual)
     : redondear((sueldoExtra * diasTrabajados) / 30);
-  const fondosReserva = row.fondosReservaManual != null
-    ? redondear(row.fondosReservaManual)
-    : row.fondoReservaActivo
-      ? redondear((sueldoAPagar + sueldosExtras) / 12)
-      : 0;
-  const comisionVenta = numero(row.ingresosComisiones);
-  const totalIngresos = redondear(
-    sueldoAPagar + fondosReserva + sueldosExtras + comisionVenta,
+  const comisionVenta = row.comisionVentaManual != null
+    ? numero(row.comisionVentaManual)
+    : numero(row.ingresosComisiones);
+  const totalIngresosSinFondos = redondear(
+    sueldoAPagar + sueldosExtras + comisionVenta,
   );
+  const fondosReserva = calcularFondosReservaNomina(totalIngresosSinFondos, {
+    ...row,
+    anio,
+    mes,
+  });
+  const totalIngresos = redondear(totalIngresosSinFondos + fondosReserva);
   const baseIess = row.afiliadoIess === false
     ? 0
     : calcularBaseIessNomina({ sueldoAPagar, sueldosExtras, comisionVenta });
@@ -200,6 +206,9 @@ export default function RolesCreditekNomina() {
   const [cambios, setCambios] = useState({});
   const [cambiosExtras, setCambiosExtras] = useState({});
   const [cambiosFaltas, setCambiosFaltas] = useState({});
+  const [cambiosComisiones, setCambiosComisiones] = useState({});
+  const [cambiosSanciones, setCambiosSanciones] = useState({});
+  const [cambiosDiasTrabajados, setCambiosDiasTrabajados] = useState({});
   const [personaNovedad, setPersonaNovedad] = useState(null);
   const [novedadesDisponibles, setNovedadesDisponibles] = useState(true);
   const [ordenPersonal, setOrdenPersonal] = useState({ clave: null, ids: [] });
@@ -208,7 +217,12 @@ export default function RolesCreditekNomina() {
     () => ordenPersonal.clave === claveOrden ? ordenPersonal.ids : [],
     [claveOrden, ordenPersonal],
   );
-  const hayCambios = Object.keys(cambios).length > 0 || Object.keys(cambiosExtras).length > 0 || Object.keys(cambiosFaltas).length > 0;
+  const hayCambios = Object.keys(cambios).length > 0
+    || Object.keys(cambiosExtras).length > 0
+    || Object.keys(cambiosFaltas).length > 0
+    || Object.keys(cambiosComisiones).length > 0
+    || Object.keys(cambiosSanciones).length > 0
+    || Object.keys(cambiosDiasTrabajados).length > 0;
 
   useEffect(() => {
     if (!claveOrden) return;
@@ -253,6 +267,9 @@ export default function RolesCreditekNomina() {
         setCambios({});
         setCambiosExtras({});
         setCambiosFaltas({});
+        setCambiosComisiones({});
+        setCambiosSanciones({});
+        setCambiosDiasTrabajados({});
       }
     } catch (error) {
       setRows([]);
@@ -279,6 +296,9 @@ export default function RolesCreditekNomina() {
             ...(Object.hasOwn(cambios, row.usuarioId) ? { fondosReservaManual: cambios[row.usuarioId] } : {}),
             ...(Object.hasOwn(cambiosExtras, row.usuarioId) ? { sueldosExtrasManual: cambiosExtras[row.usuarioId] } : {}),
             ...(Object.hasOwn(cambiosFaltas, row.usuarioId) ? { diasFalta: cambiosFaltas[row.usuarioId] } : {}),
+            ...(Object.hasOwn(cambiosComisiones, row.usuarioId) ? { comisionVentaManual: cambiosComisiones[row.usuarioId] } : {}),
+            ...(Object.hasOwn(cambiosSanciones, row.usuarioId) ? { sancionMetaManual: cambiosSanciones[row.usuarioId] } : {}),
+            ...(Object.hasOwn(cambiosDiasTrabajados, row.usuarioId) ? { diasTrabajadosManual: cambiosDiasTrabajados[row.usuarioId] } : {}),
           }, anio, mes,
         ))
         .sort((left, right) => {
@@ -289,7 +309,7 @@ export default function RolesCreditekNomina() {
             "es",
           );
         }),
-    [anio, mes, rows, cambios, cambiosExtras, cambiosFaltas],
+    [anio, mes, rows, cambios, cambiosExtras, cambiosFaltas, cambiosComisiones, cambiosSanciones, cambiosDiasTrabajados],
   );
 
   const rowsOrdenadas = useMemo(
@@ -359,8 +379,12 @@ export default function RolesCreditekNomina() {
     try {
       const registros = rowsCalculadas.map((row) => ({
         usuarioId: row.usuarioId,
-        fondosReservaManual: row.fondosReserva,
+        // Mantiene nulo el valor automático; solo persiste una edición manual.
+        fondosReservaManual: row.fondosReservaManual,
         sueldosExtrasManual: row.sueldosExtras,
+        comisionVentaManual: row.comisionVentaManual,
+        sancionMetaManual: row.sancionMetaManual,
+        diasTrabajadosManual: row.diasTrabajadosManual,
         diasFalta: row.diasFalta,
       }));
       await api.put("/api/contabilidad/roles-creditek-resumen/nomina", { anio, mes, registros });
@@ -371,7 +395,10 @@ export default function RolesCreditekNomina() {
       setCambios({});
       setCambiosExtras({});
       setCambiosFaltas({});
-      Swal.fire("Guardado", "Las faltas, fondos de reserva y sueldos extras del período fueron guardados.", "success");
+      setCambiosComisiones({});
+      setCambiosSanciones({});
+      setCambiosDiasTrabajados({});
+      Swal.fire("Guardado", "Los ajustes editables de la nómina fueron guardados.", "success");
     } catch (error) {
       Swal.fire("Error", error.response?.data?.message || "No se pudo guardar la nómina. Los cambios siguen disponibles.", "error");
     } finally {
@@ -686,7 +713,33 @@ export default function RolesCreditekNomina() {
                         {formatoNumero(row.salario)}
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-center font-bold tabular-nums">
-                        {row.diasTrabajados}
+                        <input
+                          type="number"
+                          min="0"
+                          max="30"
+                          step="1"
+                          aria-label={`Días trabajados de ${row.nombre}`}
+                          title="El valor inicial es automático. Borra el ajuste para volver al cálculo original."
+                          value={cambiosDiasTrabajados[row.usuarioId] ?? row.diasTrabajados}
+                          disabled={saving}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (/^\d{0,2}$/.test(value)) {
+                              setCambiosDiasTrabajados((actuales) => ({ ...actuales, [row.usuarioId]: value }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (Object.hasOwn(cambiosDiasTrabajados, row.usuarioId)) {
+                              setCambiosDiasTrabajados((actuales) => ({
+                                ...actuales,
+                                [row.usuarioId]: actuales[row.usuarioId] === ""
+                                  ? null
+                                  : Math.max(0, Math.min(30, Math.trunc(numero(actuales[row.usuarioId])))),
+                              }));
+                            }
+                          }}
+                          className="h-6 w-16 max-w-full rounded border border-slate-300 bg-white/80 px-1 text-center text-xs font-bold tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 disabled:opacity-50"
+                        />
                       </td>
                       <td className="border border-slate-950 px-2 py-1.5 text-center font-bold tabular-nums">
                         <input
@@ -760,7 +813,31 @@ export default function RolesCreditekNomina() {
                         />
                       </td>
                       <td title="Choferes y encargados de logística: entregas del día 1 al último día del mes. Vendedores: Total Comisiones Semana + Mensual; jefes y supervisores: Total, según sus semanas comerciales." className="border border-slate-950 px-2 py-1.5 text-right font-bold tabular-nums">
-                        {row.comisionVenta ? formatoNumero(row.comisionVenta) : ""}
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Comisión por venta de ${row.nombre}`}
+                          title="El valor inicial es automático. Borra el ajuste para volver al cálculo original."
+                          value={cambiosComisiones[row.usuarioId] ?? row.comisionVenta.toFixed(2)}
+                          disabled={saving}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (/^\d{0,10}([.,]\d{0,2})?$/.test(value)) {
+                              setCambiosComisiones((actuales) => ({ ...actuales, [row.usuarioId]: value }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (Object.hasOwn(cambiosComisiones, row.usuarioId)) {
+                              setCambiosComisiones((actuales) => ({
+                                ...actuales,
+                                [row.usuarioId]: actuales[row.usuarioId] === ""
+                                  ? null
+                                  : numero(actuales[row.usuarioId]).toFixed(2),
+                              }));
+                            }
+                          }}
+                          className="h-6 w-20 max-w-full rounded border border-slate-300 bg-white/80 px-1 text-right text-xs font-bold tabular-nums outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-200 disabled:opacity-50"
+                        />
                       </td>
                       <td className="border border-slate-950 bg-emerald-100 px-2 py-1.5 text-right font-extrabold tabular-nums">
                         {formatoNumero(row.totalIngresos)}
@@ -775,7 +852,31 @@ export default function RolesCreditekNomina() {
                         {row.prestamo ? formatoNumero(row.prestamo) : ""}
                       </td>
                       <td title="Valor del período en Pagos comisiones · Sanción por no llegar a meta" className="border border-slate-950 bg-rose-50 px-2 py-1.5 text-right font-bold text-rose-800 tabular-nums">
-                        {formatoNumero(row.sancionMeta)}
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Sanción por no llegar a meta de ${row.nombre}`}
+                          title="El valor inicial es automático. Borra el ajuste para volver al cálculo original."
+                          value={cambiosSanciones[row.usuarioId] ?? row.sancionMeta.toFixed(2)}
+                          disabled={saving}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            if (/^\d{0,10}([.,]\d{0,2})?$/.test(value)) {
+                              setCambiosSanciones((actuales) => ({ ...actuales, [row.usuarioId]: value }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (Object.hasOwn(cambiosSanciones, row.usuarioId)) {
+                              setCambiosSanciones((actuales) => ({
+                                ...actuales,
+                                [row.usuarioId]: actuales[row.usuarioId] === ""
+                                  ? null
+                                  : numero(actuales[row.usuarioId]).toFixed(2),
+                              }));
+                            }
+                          }}
+                          className="h-6 w-20 max-w-full rounded border border-rose-300 bg-white/80 px-1 text-right text-xs font-bold tabular-nums text-rose-800 outline-none focus:border-rose-600 focus:ring-1 focus:ring-rose-200 disabled:opacity-50"
+                        />
                       </td>
                       <td className="border border-slate-950 bg-rose-50 px-2 py-1.5 text-right font-extrabold tabular-nums">
                         {formatoNumero(row.totalEgresos)}
@@ -868,6 +969,12 @@ export default function RolesCreditekNomina() {
           ...(Object.hasOwn(cambios, personaNovedad.usuarioId) ? { fondosReservaManual: cambios[personaNovedad.usuarioId] } : {}),
           ...(Object.hasOwn(cambiosExtras, personaNovedad.usuarioId) ? { sueldosExtrasManual: cambiosExtras[personaNovedad.usuarioId] } : {}),
           ...(Object.hasOwn(cambiosFaltas, personaNovedad.usuarioId) ? { diasFalta: cambiosFaltas[personaNovedad.usuarioId] } : {}),
+          ...(Object.hasOwn(cambiosComisiones, personaNovedad.usuarioId) && cambiosComisiones[personaNovedad.usuarioId] != null
+            ? { comisionVentaManual: cambiosComisiones[personaNovedad.usuarioId] } : {}),
+          ...(Object.hasOwn(cambiosSanciones, personaNovedad.usuarioId) && cambiosSanciones[personaNovedad.usuarioId] != null
+            ? { sancionMetaManual: cambiosSanciones[personaNovedad.usuarioId] } : {}),
+          ...(Object.hasOwn(cambiosDiasTrabajados, personaNovedad.usuarioId)
+            ? { diasTrabajadosManual: cambiosDiasTrabajados[personaNovedad.usuarioId] } : {}),
         }}
         onClose={() => setPersonaNovedad(null)} onSaved={() => { setPersonaNovedad(null); cargar({ conservarCambios: true }); }} />}
     </main>

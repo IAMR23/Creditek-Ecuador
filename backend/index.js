@@ -226,6 +226,7 @@ connectDB()
     app.use("/api/contabilidad/control-financiero", require("./routes/Contabilidad/controlFinancieroRoutes"));
     app.use("/api/contabilidad/nomina", require("./routes/Contabilidad/nominaRoutes"));
     app.use("/api/contabilidad/roles-pago", require("./routes/Contabilidad/rolesPagoRoutes"));
+    app.use("/api/contabilidad/roles-pago-juniors", require("./routes/Contabilidad/rolesPagoJuniorsRoutes"));
     app.use("/api/contabilidad/comisiones", require("./routes/Contabilidad/comisionesConfiguracionRoutes"));
     app.use("/api/contabilidad/sanciones-configuracion", require("./routes/Contabilidad/sancionesConfiguracionRoutes"));
     app.use("/api/contabilidad/sanciones-ventas", require("./routes/Contabilidad/sancionesVentasRoutes"));

@@ -12,8 +12,12 @@ jest.mock("../models/MapaUbicacionNormalizada", () => ({
 jest.mock("../models/MapaComercialZona", () => ({
   sync: jest.fn(),
 }));
+jest.mock("../models/Agencia", () => ({
+  sync: jest.fn(),
+}));
 
 const axios = require("axios");
+const Agencia = require("../models/Agencia");
 const MapaComercialZona = require("../models/MapaComercialZona");
 const MapaUbicacionNormalizada = require("../models/MapaUbicacionNormalizada");
 const {
@@ -288,6 +292,7 @@ describe("mapaComercialNormalizacionService", () => {
       original: { code: "42P01" },
       sql: 'UPDATE "mapa_ubicaciones_normalizadas" SET ...',
     });
+    Agencia.sync.mockResolvedValue();
     MapaComercialZona.sync.mockResolvedValue();
     MapaUbicacionNormalizada.sync.mockResolvedValue();
 
@@ -296,8 +301,12 @@ describe("mapaComercialNormalizacionService", () => {
       procesados: 0,
       esquemaRecuperado: true,
     });
+    expect(Agencia.sync).toHaveBeenCalledTimes(1);
     expect(MapaComercialZona.sync).toHaveBeenCalledTimes(1);
     expect(MapaUbicacionNormalizada.sync).toHaveBeenCalledTimes(1);
+    expect(Agencia.sync.mock.invocationCallOrder[0]).toBeLessThan(
+      MapaComercialZona.sync.mock.invocationCallOrder[0],
+    );
     expect(MapaComercialZona.sync.mock.invocationCallOrder[0]).toBeLessThan(
       MapaUbicacionNormalizada.sync.mock.invocationCallOrder[0],
     );

@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { Op, literal } = require("sequelize");
+const Agencia = require("../models/Agencia");
 const MapaComercialZona = require("../models/MapaComercialZona");
 const MapaUbicacionNormalizada = require("../models/MapaUbicacionNormalizada");
 const {
@@ -502,8 +503,9 @@ const procesarColaNormalizaciones = async ({
   } catch (error) {
     if (!esTablaNormalizacionInexistente(error)) throw error;
 
-    // La tabla de ubicaciones referencia a zonas; la dependencia debe existir
-    // antes de intentar recuperar la tabla hija.
+    // Respeta toda la cadena de llaves foraneas al recuperar un esquema
+    // incompleto: ubicaciones -> zonas -> agencias.
+    await Agencia.sync();
     await MapaComercialZona.sync();
     await MapaUbicacionNormalizada.sync();
     return {

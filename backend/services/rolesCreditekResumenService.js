@@ -231,8 +231,11 @@ const serializarAjuste = (row) => {
   const value = typeof row?.toJSON === "function" ? row.toJSON() : row || {};
   return {
     diasFalta: value.diasFalta == null ? 0 : Number(value.diasFalta),
+    diasTrabajadosManual: value.diasTrabajadosManual == null ? null : Number(value.diasTrabajadosManual),
     sueldosExtrasManual: value.sueldosExtrasManual == null ? null : redondear(value.sueldosExtrasManual),
     fondosReservaManual: value.fondosReservaManual == null ? null : redondear(value.fondosReservaManual),
+    comisionVentaManual: value.comisionVentaManual == null ? null : redondear(value.comisionVentaManual),
+    sancionMetaManual: value.sancionMetaManual == null ? null : redondear(value.sancionMetaManual),
     ...Object.fromEntries(
       CAMPOS_MANUALES.map((campo) => [campo, redondear(value[campo])]),
     ),
@@ -621,9 +624,20 @@ const guardarAjustes = async ({ anio, mes, registros }, actualizadoPorValue, sol
           ...(registro.diasFalta !== undefined ? {
             diasFalta: normalizarDiasFalta(registro.diasFalta),
           } : {}),
+          ...(registro.diasTrabajadosManual !== undefined ? {
+            diasTrabajadosManual: normalizarValorOpcional(registro.diasTrabajadosManual, "Dias trabajados") == null
+              ? null
+              : normalizarDiasFalta(registro.diasTrabajadosManual),
+          } : {}),
           fondosReservaManual: normalizarValorOpcional(registro.fondosReservaManual, "Fondos de reserva"),
           ...(registro.sueldosExtrasManual !== undefined ? {
             sueldosExtrasManual: normalizarValorOpcional(registro.sueldosExtrasManual, "Sueldos extras"),
+          } : {}),
+          ...(registro.comisionVentaManual !== undefined ? {
+            comisionVentaManual: normalizarValorOpcional(registro.comisionVentaManual, "Comision por venta"),
+          } : {}),
+          ...(registro.sancionMetaManual !== undefined ? {
+            sancionMetaManual: normalizarValorOpcional(registro.sancionMetaManual, "Sancion por no llegar a meta"),
           } : {}),
           actualizadoPorId,
         };

@@ -70,6 +70,7 @@ export default function Sidebar({ auth }) {
       location.pathname === "/contabilidad/egresos-creditek" ||
       location.pathname === "/contabilidad/roles-creditek-nomina" ||
       location.pathname === "/contabilidad/rol-descuentos-creditek" ||
+      location.pathname === "/contabilidad/roles-pago-juniors" ||
       location.pathname === "/contabilidad/roles-creditek-resumen",
     Auditoria: false,
     DesarrolloOrganizacional: true,
@@ -85,6 +86,7 @@ export default function Sidebar({ auth }) {
       location.pathname === "/contabilidad/egresos-creditek" ||
       location.pathname === "/contabilidad/roles-creditek-nomina" ||
       location.pathname === "/contabilidad/rol-descuentos-creditek" ||
+      location.pathname === "/contabilidad/roles-pago-juniors" ||
       location.pathname === "/contabilidad/roles-creditek-resumen",
   });
 
@@ -320,6 +322,11 @@ export default function Sidebar({ auth }) {
                 label: "Rol de descuentos Creditek",
                 icon: <LucideTicketPercent size={18} />,
                 path: "/contabilidad/rol-descuentos-creditek",
+              },
+              {
+                label: "Cargos y juniors",
+                icon: <Link2 size={18} />,
+                path: "/contabilidad/roles-pago-juniors",
               },
             ],
           },

@@ -4,6 +4,7 @@ const numero = (value) => {
 };
 const redondear = (value) => Number(value.toFixed(2));
 const IESS_RATE = 0.0945;
+const FONDOS_RESERVA_RATE = 0.0833;
 
 export const factorJornadaNomina = (jornadaLaboral) => {
   if (jornadaLaboral === "medio_tiempo") return 0.5;
@@ -13,6 +14,54 @@ export const factorJornadaNomina = (jornadaLaboral) => {
 
 export const calcularValorPorJornada = (value, jornadaLaboral) =>
   redondear(numero(value) * factorJornadaNomina(jornadaLaboral));
+
+export const cumplioAnioFondosReserva = (fechaIngreso, { anio, mes }) => {
+  const match = String(fechaIngreso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const anioPeriodo = Number(anio);
+  const mesPeriodo = Number(mes);
+  if (
+    !match ||
+    !Number.isInteger(anioPeriodo) ||
+    !Number.isInteger(mesPeriodo) ||
+    mesPeriodo < 1 ||
+    mesPeriodo > 12
+  ) return false;
+
+  const [, anioIngreso, mesIngreso, diaIngreso] = match.map(Number);
+  const ingreso = new Date(anioIngreso, mesIngreso - 1, diaIngreso);
+  if (
+    ingreso.getFullYear() !== anioIngreso ||
+    ingreso.getMonth() !== mesIngreso - 1 ||
+    ingreso.getDate() !== diaIngreso
+  ) return false;
+  const ultimoDiaMesAniversario = new Date(
+    anioIngreso + 1,
+    mesIngreso,
+    0,
+  ).getDate();
+  const aniversario = new Date(
+    anioIngreso + 1,
+    mesIngreso - 1,
+    Math.min(diaIngreso, ultimoDiaMesAniversario),
+  );
+  const finPeriodo = new Date(anioPeriodo, mesPeriodo, 0);
+  return aniversario <= finPeriodo;
+};
+
+export const calcularFondosReservaNomina = (
+  totalIngresosSinFondos,
+  { fechaIngreso, fondoReservaActivo, fondosReservaManual, anio, mes },
+) => {
+  // Un cero guardado cuando regía el indicador anterior no debe bloquear la
+  // nueva regla automática basada en la fecha de ingreso.
+  const esCeroHeredado = fondoReservaActivo === false
+    && numero(fondosReservaManual) === 0;
+  if (fondosReservaManual != null && !esCeroHeredado) {
+    return redondear(numero(fondosReservaManual));
+  }
+  if (!cumplioAnioFondosReserva(fechaIngreso, { anio, mes })) return 0;
+  return redondear(numero(totalIngresosSinFondos) * FONDOS_RESERVA_RATE);
+};
 
 export const calcularDiasTrabajadosNomina = (diasBase, diasFalta) => {
   const base = Math.max(0, Math.min(30, Math.trunc(numero(diasBase))));
@@ -59,7 +108,9 @@ export const calcularEgresosNomina = (row, iess) => {
   // Nómina muestra por separado el valor que proviene de Pagos comisiones.
   const anticipo = redondear(numero(row.totalAnticipos) - numero(row.descuentosMeta));
   const prestamo = redondear(numero(row.sumanPrestamos) + numero(row.prestamosEgresos));
-  const sancionMeta = numero(row.descuentosMetaCalculado);
+  const sancionMeta = row.sancionMetaManual != null
+    ? numero(row.sancionMetaManual)
+    : numero(row.descuentosMetaCalculado);
   return {
     anticipo,
     prestamo,
@@ -75,11 +126,20 @@ export const aplicarCalculoNovedad = (row) => {
   if (!calculo?.tipoNovedad) return null;
   const diasFalta = Math.max(0, Math.min(30, Math.trunc(numero(row.diasFalta))));
   const puedeRecalcularDias = calculo.diasSueldoCompletoBase != null || calculo.diasSueldoCompleto != null;
-  const diasSueldoCompleto = puedeRecalcularDias
-    ? calcularDiasTrabajadosNomina(calculo.diasSueldoCompletoBase ?? calculo.diasSueldoCompleto, diasFalta)
-    : calculo.diasSueldoCompleto;
-  const diasTrabajados = puedeRecalcularDias
-    ? numero(calculo.diasMaternidad25) + diasSueldoCompleto
+  const diasManuales = row.diasTrabajadosManual == null
+    ? null
+    : Math.max(0, Math.min(30, Math.trunc(numero(row.diasTrabajadosManual))));
+  const diasMaternidad25 = numero(calculo.diasMaternidad25);
+  const diasSueldoCompletoBase = numero(calculo.diasSueldoCompletoBase ?? calculo.diasSueldoCompleto);
+  const diasSueldoCompleto = diasManuales != null
+    ? calculo.tieneMaternidad
+      ? Math.min(diasSueldoCompletoBase, Math.max(0, diasManuales - diasMaternidad25))
+      : diasManuales
+    : puedeRecalcularDias
+      ? calcularDiasTrabajadosNomina(diasSueldoCompletoBase, diasFalta)
+      : calculo.diasSueldoCompleto;
+  const diasTrabajados = diasManuales != null || puedeRecalcularDias
+    ? diasMaternidad25 + diasSueldoCompleto
     : calculo.diasTrabajados;
   const sueldoCompletoPeriodo = puedeRecalcularDias
     ? redondear(numero(calculo.salario) * diasSueldoCompleto / 30)
@@ -91,10 +151,18 @@ export const aplicarCalculoNovedad = (row) => {
     : puedeRecalcularDias
       ? redondear(calcularValorPorJornada(row.rolPagoSueldoExtra, row.jornadaLaboral) * diasTrabajados / 30)
       : numero(calculo.sueldosExtras);
-  const fondosReserva = row.fondosReservaManual != null ? redondear(numero(row.fondosReservaManual))
-    : row.fondoReservaActivo ? redondear(((calculo.tieneMaternidad ? calculo.salario : sueldoAPagar) + sueldosExtras) / 12) : 0;
-  const comisionVenta = numero(row.ingresosComisiones);
-  const totalIngresos = redondear(numero(sueldoAPagar) + sueldosExtras + fondosReserva + comisionVenta);
+  const comisionVenta = row.comisionVentaManual != null
+    ? numero(row.comisionVentaManual)
+    : numero(row.ingresosComisiones);
+  const totalIngresosSinFondos = redondear(numero(sueldoAPagar) + sueldosExtras + comisionVenta);
+  const esFondoReservaCeroHeredado = row.fondoReservaActivo === false
+    && numero(row.fondosReservaManual) === 0;
+  const fondosReserva = row.fondosReservaManual != null && !esFondoReservaCeroHeredado
+    ? redondear(numero(row.fondosReservaManual))
+    : calculo.fondoReservaElegible
+      ? redondear(totalIngresosSinFondos * FONDOS_RESERVA_RATE)
+      : 0;
+  const totalIngresos = redondear(totalIngresosSinFondos + fondosReserva);
   const afiliadoIess = row.afiliadoIess !== false;
   const baseIess = afiliadoIess
     ? calculo.tieneMaternidad
@@ -112,6 +180,6 @@ export const aplicarCalculoNovedad = (row) => {
   const egresos = calcularEgresosNomina(row, iess);
   const valorRecibir = redondear(totalIngresos - egresos.totalEgresos);
   return { ...row, ...calculo, diasFalta, diasTrabajados, diasSueldoCompleto, sueldoCompletoPeriodo,
-    sueldoAPagar, ...egresos, fondosReserva, sueldosExtras, totalIngresos, baseIess,
+    sueldoAPagar, ...egresos, fondosReserva, sueldosExtras, comisionVenta, totalIngresos, baseIess,
     totalIngresosEmpresa: totalIngresos, iess, valorRecibir, valorRecibirEmpresa: valorRecibir };
 };

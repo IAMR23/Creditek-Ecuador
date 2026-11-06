@@ -90,6 +90,52 @@ const PERIODOS = [
   { id: "mes", label: "Este mes" },
 ];
 
+const CLAVE_RANGOS_HISTORIAL = "rve.egresosCreditek.rangosHistorial.v1";
+
+const fechaIsoValida = (value) => {
+  const fecha = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return "";
+  const parsed = new Date(`${fecha}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === fecha
+    ? fecha
+    : "";
+};
+
+const leerRangoHistorial = () => {
+  try {
+    const guardado = JSON.parse(
+      localStorage.getItem(CLAVE_RANGOS_HISTORIAL) || "{}",
+    );
+    // Compatibilidad con la primera version, que almacenaba un rango por seccion.
+    const rango =
+      guardado?.fechaInicio !== undefined || guardado?.fechaFin !== undefined
+        ? guardado
+        : guardado?.prestamos || guardado?.anticipos || {};
+    const fechaInicio = fechaIsoValida(rango.fechaInicio);
+    const fechaFin = fechaIsoValida(rango.fechaFin);
+    return {
+      fechaInicio,
+      fechaFin:
+        fechaInicio && fechaFin && fechaFin < fechaInicio ? "" : fechaFin,
+    };
+  } catch {
+    return { fechaInicio: "", fechaFin: "" };
+  }
+};
+
+const guardarRangoHistorial = (fechaInicio, fechaFin) => {
+  try {
+    const rango = {
+      fechaInicio: fechaIsoValida(fechaInicio),
+      fechaFin: fechaIsoValida(fechaFin),
+    };
+    localStorage.setItem(CLAVE_RANGOS_HISTORIAL, JSON.stringify(rango));
+  } catch {
+    // El filtro sigue funcionando durante la sesion si el navegador bloquea el almacenamiento.
+  }
+};
+
 const formatoFechaEcuador = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Guayaquil",
   year: "numeric",
@@ -154,6 +200,7 @@ const esCajaControlFinanciero = (registro) =>
 const esRegistroControlFinanciero = esCajaControlFinanciero;
 
 export default function EgresosCreditek() {
+  const [rangoInicial] = useState(leerRangoHistorial);
   const [usuarios, setUsuarios] = useState([]);
   const [registros, setRegistros] = useState([]);
   const [seccionActiva, setSeccionActiva] = useState("prestamos");
@@ -175,8 +222,13 @@ export default function EgresosCreditek() {
   const [observacion, setObservacion] = useState("");
   const [fechaRegistro, setFechaRegistro] = useState(fechaEcuadorIso(new Date()));
   const [busqueda, setBusqueda] = useState("");
-  const [periodo, setPeriodo] = useState("todos");
-  const [fechaFiltro, setFechaFiltro] = useState("");
+  const [periodo, setPeriodo] = useState(() =>
+    rangoInicial.fechaInicio || rangoInicial.fechaFin ? "rango" : "todos",
+  );
+  const [fechaInicioFiltro, setFechaInicioFiltro] = useState(
+    rangoInicial.fechaInicio,
+  );
+  const [fechaFinFiltro, setFechaFinFiltro] = useState(rangoInicial.fechaFin);
   const [registroEditando, setRegistroEditando] = useState(null);
   const [usuarioEdicionBusqueda, setUsuarioEdicionBusqueda] = useState("");
   const [usuarioEdicionSelectorOpen, setUsuarioEdicionSelectorOpen] = useState(false);
@@ -208,10 +260,14 @@ export default function EgresosCreditek() {
         return fechaBase >= inicioSieteDias && fechaBase <= hoy;
       }
       if (periodo === "mes") return fechaBase.startsWith(hoy.slice(0, 7));
-      if (periodo === "fecha") return fechaBase === fechaFiltro;
+      if (periodo === "rango") {
+        if (fechaInicioFiltro && fechaBase < fechaInicioFiltro) return false;
+        if (fechaFinFiltro && fechaBase > fechaFinFiltro) return false;
+        return true;
+      }
       return true;
     });
-  }, [fechaFiltro, periodo, registros, seccionActiva]);
+  }, [fechaFinFiltro, fechaInicioFiltro, periodo, registros, seccionActiva]);
 
   const total = useMemo(
     () =>
@@ -915,7 +971,9 @@ export default function EgresosCreditek() {
                     type="button"
                     onClick={() => {
                       setPeriodo(item.id);
-                      setFechaFiltro("");
+                      setFechaInicioFiltro("");
+                      setFechaFinFiltro("");
+                      guardarRangoHistorial("", "");
                     }}
                     className={`h-8 rounded px-3 text-xs font-semibold transition-colors ${
                       periodo === item.id
@@ -930,24 +988,53 @@ export default function EgresosCreditek() {
               </div>
             </div>
 
-            <label className="flex w-full items-center justify-between gap-2 text-xs font-semibold text-slate-600 sm:w-auto sm:justify-start">
-              Fecha sanción
-              <input
-                type="date"
-                value={fechaFiltro}
-                max={fechaEcuadorIso(new Date())}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setFechaFiltro(next);
-                  setPeriodo(next ? "fecha" : "todos");
-                }}
-                className={`h-9 min-w-0 rounded-md border bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${
-                  periodo === "fecha"
-                    ? "border-slate-500 text-slate-950"
-                    : "border-slate-300 text-slate-600"
-                }`}
-              />
-            </label>
+            <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto">
+              <label className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-600 sm:justify-start">
+                Fecha de inicio
+                <input
+                  type="date"
+                  value={fechaInicioFiltro}
+                  max={fechaFinFiltro || fechaEcuadorIso(new Date())}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setFechaInicioFiltro(next);
+                    setPeriodo(next || fechaFinFiltro ? "rango" : "todos");
+                    guardarRangoHistorial(
+                      next,
+                      fechaFinFiltro,
+                    );
+                  }}
+                  className={`h-9 min-w-0 rounded-md border bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${
+                    periodo === "rango"
+                      ? "border-slate-500 text-slate-950"
+                      : "border-slate-300 text-slate-600"
+                  }`}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-600 sm:justify-start">
+                Fecha de fin
+                <input
+                  type="date"
+                  value={fechaFinFiltro}
+                  min={fechaInicioFiltro || undefined}
+                  max={fechaEcuadorIso(new Date())}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setFechaFinFiltro(next);
+                    setPeriodo(fechaInicioFiltro || next ? "rango" : "todos");
+                    guardarRangoHistorial(
+                      fechaInicioFiltro,
+                      next,
+                    );
+                  }}
+                  className={`h-9 min-w-0 rounded-md border bg-white px-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${
+                    periodo === "rango"
+                      ? "border-slate-500 text-slate-950"
+                      : "border-slate-300 text-slate-600"
+                  }`}
+                />
+              </label>
+            </div>
           </div>
 
           {loading ? (
@@ -988,7 +1075,9 @@ export default function EgresosCreditek() {
                 type="button"
                 onClick={() => {
                   setPeriodo("todos");
-                  setFechaFiltro("");
+                  setFechaInicioFiltro("");
+                  setFechaFinFiltro("");
+                  guardarRangoHistorial("", "");
                 }}
                 className="mt-3 text-sm font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-950"
               >

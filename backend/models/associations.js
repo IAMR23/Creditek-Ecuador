@@ -52,6 +52,7 @@ const ConsejoEjecutivoSalaParticipante = require('./ConsejoEjecutivoSalaParticip
 const NominaEmpleado = require('./NominaEmpleado');
 const { NominaBeneficio } = require('./NominaBeneficio');
 const RolPago = require('./RolPago');
+const RolPagoJunior = require('./RolPagoJunior');
 require('./UsuarioRolPago');
 require('./UsuarioRol');
 const GestionComercial = require('./GestionComercial');
@@ -130,6 +131,10 @@ Cliente.belongsTo(Rol, { foreignKey: 'rolId', as: 'rol' });
 Rol.hasMany(Cliente, { foreignKey: 'rolId', as: 'personas' });
 Usuario.belongsTo(RolPago, { foreignKey: "rolPagoId", as: "rolPago" });
 RolPago.hasMany(Usuario, { foreignKey: "rolPagoId", as: "usuariosCargoPago" });
+RolPagoJunior.belongsTo(RolPago, { foreignKey: "cargoRolPagoId", as: "cargo" });
+RolPagoJunior.belongsTo(RolPago, { foreignKey: "juniorRolPagoId", as: "junior" });
+RolPago.hasMany(RolPagoJunior, { foreignKey: "cargoRolPagoId", as: "cargosJunior" });
+RolPago.hasMany(RolPagoJunior, { foreignKey: "juniorRolPagoId", as: "cargosSuperiores" });
 Usuario.belongsTo(Usuario, { foreignKey: "jefeComercialId", as: "jefeComercial" });
 Usuario.hasMany(Usuario, { foreignKey: "jefeComercialId", as: "vendedoresJunior" });
 Usuario.belongsTo(Usuario, { foreignKey: "supervisorComercialId", as: "supervisorComercial" });

@@ -605,12 +605,15 @@ describe("fondos de reserva de nomina", () => {
     ControlFinancieroConciliacionCaja.findAll.mockResolvedValue([]);
     pagosComisionesService.obtenerReportePagosComisiones.mockResolvedValue({ vendedores: [] });
     RolCreditekAjuste.findAll.mockResolvedValue([
-      { usuarioId: 4, fondosReservaManual: "25.50", sueldosExtrasManual: "75.50", diasFalta: 2 },
-      { usuarioId: 5, fondosReservaManual: "0.00", sueldosExtrasManual: "0.00" },
+      { usuarioId: 4, fondosReservaManual: "25.50", sueldosExtrasManual: "75.50", comisionVentaManual: "12.50", sancionMetaManual: "3.00", diasTrabajadosManual: 24, diasFalta: 2 },
+      { usuarioId: 5, fondosReservaManual: "0.00", sueldosExtrasManual: "0.00", comisionVentaManual: "0.00", sancionMetaManual: "0.00" },
     ]);
     const resultado = await obtenerResumen({ anio: 2026, mes: 9 });
     expect(resultado.registros.map(r => r.fondosReservaManual)).toEqual([25.5, 0, null]);
     expect(resultado.registros.map(r => r.sueldosExtrasManual)).toEqual([75.5, 0, null]);
+    expect(resultado.registros.map(r => r.comisionVentaManual)).toEqual([12.5, 0, null]);
+    expect(resultado.registros.map(r => r.sancionMetaManual)).toEqual([3, 0, null]);
+    expect(resultado.registros.map(r => r.diasTrabajadosManual)).toEqual([24, null, null]);
     expect(resultado.registros.map(r => r.diasFalta)).toEqual([2, 0, 0]);
     expect(RolCreditekAjuste.findAll).toHaveBeenCalledWith({ where: { anio: 2026, mes: 9 } });
   });
@@ -636,6 +639,53 @@ describe("sueldos extras de nomina", () => {
       { usuarioId: 4, fondosReservaManual: 20, sueldosExtrasManual: 25 },
       { usuarioId: 5, fondosReservaManual: 0, sueldosExtrasManual: valor },
     ] }, 7)).rejects.toMatchObject({ statusCode: 400 });
+    expect(RolCreditekAjuste.findOrCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("comision y sancion editables de nomina", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test("guarda ajustes opcionales sin modificar los valores fuente", async () => {
+    Usuario.count.mockResolvedValue(1);
+    const update = jest.fn().mockResolvedValue(undefined);
+    RolCreditekAjuste.findOrCreate.mockResolvedValue([{ update }, false]);
+
+    await guardarNomina({ anio: 2026, mes: 11, registros: [{
+      usuarioId: 4,
+      fondosReservaManual: null,
+      comisionVentaManual: "125,50",
+      sancionMetaManual: "15.25",
+      diasTrabajadosManual: 26,
+    }] }, 7);
+
+    expect(update).toHaveBeenCalledWith({
+      usuarioId: 4,
+      anio: 2026,
+      mes: 11,
+      fondosReservaManual: null,
+      comisionVentaManual: 125.5,
+      sancionMetaManual: 15.25,
+      diasTrabajadosManual: 26,
+      actualizadoPorId: 7,
+    }, { transaction: { id: "tx" } });
+  });
+
+  test.each([-1, 31, 1.5, "abc"])("rechaza dias trabajados manuales invalidos %s", async (valor) => {
+    await expect(guardarNomina({ anio: 2026, mes: 11, registros: [{
+      usuarioId: 4,
+      fondosReservaManual: null,
+      diasTrabajadosManual: valor,
+    }] }, 7)).rejects.toMatchObject({ statusCode: 400 });
+    expect(RolCreditekAjuste.findOrCreate).not.toHaveBeenCalled();
+  });
+
+  test.each([-1, "abc", 10000000000])("rechaza comision manual invalida %s", async (valor) => {
+    await expect(guardarNomina({ anio: 2026, mes: 11, registros: [{
+      usuarioId: 4,
+      fondosReservaManual: null,
+      comisionVentaManual: valor,
+    }] }, 7)).rejects.toMatchObject({ statusCode: 400 });
     expect(RolCreditekAjuste.findOrCreate).not.toHaveBeenCalled();
   });
 });
