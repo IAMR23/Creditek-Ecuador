@@ -1181,6 +1181,41 @@ const ensureUsuariosLaboralesPreSyncSchema = async (queryInterface) => {
   await sequelize.query(sql);
 };
 
+const ensureUsuariosJornada75PreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("usuarios")) return;
+
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../migrations/202611060001-allow-tres-cuartos-jornada-usuarios.sql",
+    ),
+    "utf8",
+  );
+  await sequelize.query(sql);
+};
+
+const ensureUsuariosActivoNominaPreSyncSchema = async (queryInterface) => {
+  const tables = await queryInterface.showAllTables();
+  if (!tables.includes("usuarios")) return;
+
+  const schema = await queryInterface.describeTable("usuarios");
+  const activoNomina = schema.activoNomina;
+  const tieneDefaultTrue = String(activoNomina?.defaultValue ?? "")
+    .toLowerCase()
+    .includes("true");
+  if (activoNomina?.allowNull === false && tieneDefaultTrue) return;
+
+  const sql = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../migrations/202611060002-add-activo-nomina-usuarios.sql",
+    ),
+    "utf8",
+  );
+  await sequelize.query(sql);
+};
+
 const ensureUsuariosMetaMinimaPreSyncSchema = async (queryInterface) => {
   const tables = await queryInterface.showAllTables();
   if (!tables.includes("usuarios")) return;
@@ -2396,6 +2431,8 @@ const connectDB = async () => {
     await ensureTicketsTiPreSyncSchema(queryInterface);
     await ensureUphoneCedulaSchema(queryInterface);
     await ensureUsuariosLaboralesPreSyncSchema(queryInterface);
+    await ensureUsuariosJornada75PreSyncSchema(queryInterface);
+    await ensureUsuariosActivoNominaPreSyncSchema(queryInterface);
     await ensureUsuariosMetaMinimaPreSyncSchema(queryInterface);
     await ensureGhlBroadcastQueueSchema(await queryInterface.showAllTables());
     await sequelize.sync({});

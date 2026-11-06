@@ -227,6 +227,12 @@ describe("rolesCreditekResumenService", () => {
 
     const resultado = await obtenerResumen({ anio: 2026, mes: 8 });
 
+    expect(Usuario.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { activo: true, activoNomina: true },
+      }),
+    );
+
     expect(EgresoCreditekEntrada.findAll).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

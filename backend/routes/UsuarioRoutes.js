@@ -21,7 +21,11 @@ const {
 } = require("../services/notificacionesPersonalService");
 
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,}$/;
-const JORNADAS_LABORALES = new Set(["tiempo_completo", "medio_tiempo"]);
+const JORNADAS_LABORALES = new Set([
+  "tiempo_completo",
+  "tres_cuartos_tiempo",
+  "medio_tiempo",
+]);
 const ETIQUETAS_CAMPOS_USUARIO = {
   email: "Correo electrónico",
   password: "Contraseña",
@@ -105,16 +109,20 @@ const normalizarRolesPagoIds = (rolPagoId, rolesPagoIds) => {
   ];
 };
 
-const validarDatosLaborales = (jornadaLaboral, afiliadoIess) => {
+const validarDatosLaborales = (jornadaLaboral, afiliadoIess, activoNomina) => {
   if (
     jornadaLaboral !== undefined &&
     !JORNADAS_LABORALES.has(jornadaLaboral)
   ) {
-    return "La jornada laboral debe ser tiempo completo o medio tiempo.";
+    return "La jornada laboral debe ser tiempo completo, 75% o medio tiempo.";
   }
 
   if (afiliadoIess !== undefined && typeof afiliadoIess !== "boolean") {
     return "La afiliacion al IESS debe indicarse con un valor si/no valido.";
+  }
+
+  if (activoNomina !== undefined && typeof activoNomina !== "boolean") {
+    return "El estado para nomina debe indicarse con un valor si/no valido.";
   }
 
   return null;
@@ -272,6 +280,7 @@ router.post("/", async (req, res) => {
       fechaSalida,
       jornadaLaboral,
       afiliadoIess,
+      activoNomina,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -287,6 +296,7 @@ router.post("/", async (req, res) => {
     const errorDatosLaborales = validarDatosLaborales(
       jornadaLaboral,
       afiliadoIess,
+      activoNomina,
     );
 
     if (errorDatosLaborales) {
@@ -380,6 +390,7 @@ router.post("/", async (req, res) => {
       fechaSalidaRegistradaAt: fechaSalida ? new Date() : null,
       jornadaLaboral: jornadaLaboral ?? "tiempo_completo",
       afiliadoIess: afiliadoIess ?? true,
+      activoNomina: activoNomina ?? true,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -526,6 +537,7 @@ const actualizarUsuario = async (req, res) => {
       fechaSalida,
       jornadaLaboral,
       afiliadoIess,
+      activoNomina,
       numeroCuenta,
       entidadFinanciera,
       direccion,
@@ -542,6 +554,7 @@ const actualizarUsuario = async (req, res) => {
     const errorDatosLaborales = validarDatosLaborales(
       jornadaLaboral,
       afiliadoIess,
+      activoNomina,
     );
 
     if (errorDatosLaborales) {
@@ -671,6 +684,7 @@ const actualizarUsuario = async (req, res) => {
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
     if (jornadaLaboral !== undefined) usuario.jornadaLaboral = jornadaLaboral;
     if (afiliadoIess !== undefined) usuario.afiliadoIess = afiliadoIess;
+    if (activoNomina !== undefined) usuario.activoNomina = activoNomina;
     let cambioFechaSalida = false;
     if (fechaSalida !== undefined) {
       const nuevaFechaSalida = fechaSalida || null;

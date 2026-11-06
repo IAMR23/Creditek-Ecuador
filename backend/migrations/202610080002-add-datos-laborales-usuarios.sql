@@ -40,7 +40,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.usuarios
       ADD CONSTRAINT usuarios_jornada_laboral_check
-      CHECK ("jornadaLaboral" IN ('tiempo_completo', 'medio_tiempo'));
+      CHECK ("jornadaLaboral" IN ('tiempo_completo', 'tres_cuartos_tiempo', 'medio_tiempo'));
   END IF;
 END $$;
 

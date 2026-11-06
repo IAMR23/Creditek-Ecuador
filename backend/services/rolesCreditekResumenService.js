@@ -313,7 +313,7 @@ const obtenerResumen = async (periodoValue) => {
   ] =
     await Promise.all([
       Usuario.findAll({
-        where: { activo: true },
+        where: { activo: true, activoNomina: true },
         attributes: [
           "id",
           "cedula",
@@ -323,6 +323,7 @@ const obtenerResumen = async (periodoValue) => {
           "fechaSalida",
           "jornadaLaboral",
           "afiliadoIess",
+          "activoNomina",
           "rolPagoId",
         ],
         include: [

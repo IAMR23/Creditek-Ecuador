@@ -31,6 +31,13 @@ import {
 
 const ahora = new Date();
 const SALARIO_BASE_NOMINA = 482;
+const ETIQUETAS_JORNADA = {
+  tiempo_completo: "Tiempo completo",
+  tres_cuartos_tiempo: "75% de tiempo",
+  medio_tiempo: "Medio tiempo",
+};
+const etiquetaJornadaLaboral = (value) =>
+  ETIQUETAS_JORNADA[value] || ETIQUETAS_JORNADA.tiempo_completo;
 const MESES = [
   "Enero",
   "Febrero",
@@ -660,9 +667,7 @@ export default function RolesCreditekNomina() {
                         <div>{row.cargo || "-"}</div>
                         <div className="mt-1 flex flex-wrap gap-1 text-[10px] normal-case">
                           <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-800">
-                            {row.jornadaLaboral === "medio_tiempo"
-                              ? "Medio tiempo"
-                              : "Tiempo completo"}
+                            {etiquetaJornadaLaboral(row.jornadaLaboral)}
                           </span>
                           <span
                             className={`rounded px-1.5 py-0.5 ${

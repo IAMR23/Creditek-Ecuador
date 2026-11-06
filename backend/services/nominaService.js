@@ -198,7 +198,7 @@ const serializarNomina = (nomina, relacionFallback = null) => {
 const listarNomina = async ({ agenciaId, estado, nombre, usuarioId } = {}) => {
   const estadoNormalizado = normalizarEstado(estado);
   const whereRelacion = { activo: true };
-  const whereUsuario = { activo: true };
+  const whereUsuario = { activo: true, activoNomina: true };
 
   if (agenciaId) whereRelacion.agenciaId = agenciaId;
   if (usuarioId) whereRelacion.usuarioId = usuarioId;
@@ -245,6 +245,7 @@ const obtenerNominaPorUsuario = async (usuarioId) => {
       {
         model: Usuario,
         as: "usuario",
+        where: { activoNomina: true },
         include: [
           { model: Rol, as: "rol", attributes: ["id", "nombre"] },
           { model: RolPago, as: "rolPago" },
@@ -270,6 +271,7 @@ const crearSiNoExiste = async (usuarioAgenciaId) => {
       {
         model: Usuario,
         as: "usuario",
+        where: { activoNomina: true },
         include: [
           { model: Rol, as: "rol", attributes: ["id", "nombre"] },
           { model: RolPago, as: "rolPago" },

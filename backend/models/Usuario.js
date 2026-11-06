@@ -142,13 +142,19 @@ const Usuario = sequelize.define(
       defaultValue: "tiempo_completo",
       validate: {
         isIn: {
-          args: [["tiempo_completo", "medio_tiempo"]],
-          msg: "La jornada laboral debe ser tiempo completo o medio tiempo.",
+          args: [["tiempo_completo", "tres_cuartos_tiempo", "medio_tiempo"]],
+          msg: "La jornada laboral debe ser tiempo completo, 75% o medio tiempo.",
         },
       },
     },
 
     afiliadoIess: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
+    activoNomina: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,

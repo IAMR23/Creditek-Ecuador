@@ -238,6 +238,7 @@ describe("POST /usuarios", () => {
       expect.objectContaining({
         jornadaLaboral: "tiempo_completo",
         afiliadoIess: true,
+        activoNomina: true,
       }),
     );
   });
@@ -263,6 +264,48 @@ describe("POST /usuarios", () => {
         jornadaLaboral: "medio_tiempo",
         afiliadoIess: false,
       }),
+    );
+  });
+
+  test("permite crear un usuario con jornada del 75 por ciento", async () => {
+    Usuario.create.mockImplementation(async (data) => ({
+      id: 34,
+      ...data,
+      toJSON: () => ({ id: 34, ...data }),
+    }));
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send({
+        ...payloadValido,
+        jornadaLaboral: "tres_cuartos_tiempo",
+      });
+
+    expect(response.status).toBe(201);
+    expect(Usuario.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jornadaLaboral: "tres_cuartos_tiempo",
+      }),
+    );
+  });
+
+  test("permite crear un usuario excluido de nomina", async () => {
+    Usuario.create.mockImplementation(async (data) => ({
+      id: 35,
+      ...data,
+      toJSON: () => ({ id: 35, ...data }),
+    }));
+
+    const response = await request(crearAplicacion())
+      .post("/usuarios")
+      .send({
+        ...payloadValido,
+        activoNomina: false,
+      });
+
+    expect(response.status).toBe(201);
+    expect(Usuario.create).toHaveBeenCalledWith(
+      expect.objectContaining({ activoNomina: false }),
     );
   });
 
@@ -415,12 +458,14 @@ describe("PUT /usuarios/:id", () => {
       id: 24,
       jornadaLaboral: "tiempo_completo",
       afiliadoIess: true,
+      activoNomina: true,
       save: jest.fn().mockResolvedValue(undefined),
       toJSON() {
         return {
           id: this.id,
           jornadaLaboral: this.jornadaLaboral,
           afiliadoIess: this.afiliadoIess,
+          activoNomina: this.activoNomina,
         };
       },
     };
@@ -429,13 +474,15 @@ describe("PUT /usuarios/:id", () => {
     const response = await request(crearAplicacion())
       .put("/usuarios/24")
       .send({
-        jornadaLaboral: "medio_tiempo",
+        jornadaLaboral: "tres_cuartos_tiempo",
         afiliadoIess: false,
+        activoNomina: false,
       });
 
     expect(response.status).toBe(200);
-    expect(usuario.jornadaLaboral).toBe("medio_tiempo");
+    expect(usuario.jornadaLaboral).toBe("tres_cuartos_tiempo");
     expect(usuario.afiliadoIess).toBe(false);
+    expect(usuario.activoNomina).toBe(false);
     expect(usuario.save).toHaveBeenCalled();
   });
 
@@ -482,7 +529,25 @@ describe("PUT /usuarios/:id", () => {
 
     expect(response.status).toBe(400);
     expect(response.body.message).toBe(
-      "La jornada laboral debe ser tiempo completo o medio tiempo.",
+      "La jornada laboral debe ser tiempo completo, 75% o medio tiempo.",
+    );
+    expect(usuario.save).not.toHaveBeenCalled();
+  });
+
+  test("rechaza un estado de nomina que no sea booleano", async () => {
+    const usuario = {
+      id: 28,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    Usuario.findByPk.mockResolvedValue(usuario);
+
+    const response = await request(crearAplicacion())
+      .put("/usuarios/28")
+      .send({ activoNomina: "si" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      "El estado para nomina debe indicarse con un valor si/no valido.",
     );
     expect(usuario.save).not.toHaveBeenCalled();
   });

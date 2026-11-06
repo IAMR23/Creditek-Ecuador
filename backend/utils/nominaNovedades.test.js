@@ -37,6 +37,20 @@ test('medio tiempo prorratea sueldo, extras y fondos al 50%', () => {
     iess: 25.99,
   });
 });
+test('jornada del 75% prorratea sueldo, extras, fondos e IESS', () => {
+  expect(calcularNominaPeriodo({
+    jornadaLaboral: 'tres_cuartos_tiempo',
+    rolPagoSueldoExtra: 68,
+    fondoReservaActivo: true,
+  }, periodo)).toMatchObject({
+    salario: 361.5,
+    sueldoAPagar: 361.5,
+    sueldosExtras: 51,
+    fondosReserva: 34.38,
+    baseIess: 412.5,
+    iess: 38.98,
+  });
+});
 test('usuario no afiliado no tiene descuento ni subsidio del IESS', () => {
   expect(calcularNominaPeriodo({ afiliadoIess: false }, periodo)).toMatchObject({
     salario: 482,

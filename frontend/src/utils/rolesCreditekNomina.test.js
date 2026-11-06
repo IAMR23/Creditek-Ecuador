@@ -30,6 +30,11 @@ test('prorratea al 50% los valores salariales de medio tiempo', () => {
   assert.equal(calcularValorPorJornada(68, "medio_tiempo"), 34);
 });
 
+test('prorratea al 75% los valores salariales de tres cuartos de tiempo', () => {
+  assert.equal(calcularValorPorJornada(482, "tres_cuartos_tiempo"), 361.5);
+  assert.equal(calcularValorPorJornada(68, "tres_cuartos_tiempo"), 51);
+});
+
 test('no descuenta IESS cuando el usuario no esta afiliado', () => {
   assert.equal(calcularIessNomina({
     sueldoAPagar: 482,

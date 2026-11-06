@@ -10,6 +10,14 @@ import {
 } from "../../config/usuariosUphone";
 
 const normalizeText = (value) => (value?.trim() ? value.trim() : null);
+const JORNADAS_LABORALES = [
+  { value: "tiempo_completo", label: "Tiempo completo" },
+  { value: "tres_cuartos_tiempo", label: "75% de tiempo" },
+  { value: "medio_tiempo", label: "Medio tiempo" },
+];
+const etiquetaJornadaLaboral = (value) =>
+  JORNADAS_LABORALES.find((jornada) => jornada.value === value)?.label ||
+  "Tiempo completo";
 const getRolesPagoUsuario = (usuario) =>
   usuario?.rolesPago?.length
     ? usuario.rolesPago
@@ -142,6 +150,7 @@ export default function Usuarios() {
     fechaSalida: "",
     jornadaLaboral: "tiempo_completo",
     afiliadoIess: true,
+    activoNomina: true,
     numeroCuenta: "",
     entidadFinanciera: "",
     direccion: "",
@@ -164,6 +173,7 @@ export default function Usuarios() {
     fechaSalida: "",
     jornadaLaboral: "tiempo_completo",
     afiliadoIess: true,
+    activoNomina: true,
     numeroCuenta: "",
     entidadFinanciera: "",
     direccion: "",
@@ -196,6 +206,7 @@ export default function Usuarios() {
       fechaSalida: usuario.fechaSalida || "",
       jornadaLaboral: usuario.jornadaLaboral || "tiempo_completo",
       afiliadoIess: usuario.afiliadoIess ?? true,
+      activoNomina: usuario.activoNomina ?? true,
       numeroCuenta: usuario.numeroCuenta || "",
       entidadFinanciera: usuario.entidadFinanciera || "",
       direccion: usuario.direccion || "",
@@ -222,6 +233,7 @@ export default function Usuarios() {
       fechaSalida: "",
       jornadaLaboral: "tiempo_completo",
       afiliadoIess: true,
+      activoNomina: true,
       numeroCuenta: "",
       entidadFinanciera: "",
       direccion: "",
@@ -412,6 +424,7 @@ export default function Usuarios() {
         fechaSalida: form.fechaSalida || null,
         jornadaLaboral: form.jornadaLaboral,
         afiliadoIess: form.afiliadoIess,
+        activoNomina: form.activoNomina,
         numeroCuenta: normalizeText(form.numeroCuenta),
         entidadFinanciera: normalizeText(form.entidadFinanciera),
         direccion: normalizeText(form.direccion),
@@ -432,6 +445,7 @@ export default function Usuarios() {
         fechaSalida: "",
         jornadaLaboral: "tiempo_completo",
         afiliadoIess: true,
+        activoNomina: true,
         numeroCuenta: "",
         entidadFinanciera: "",
         direccion: "",
@@ -485,6 +499,7 @@ export default function Usuarios() {
         fechaSalida: editForm.fechaSalida || null,
         jornadaLaboral: editForm.jornadaLaboral,
         afiliadoIess: editForm.afiliadoIess,
+        activoNomina: editForm.activoNomina,
         numeroCuenta: normalizeText(editForm.numeroCuenta),
         entidadFinanciera: normalizeText(editForm.entidadFinanciera),
         direccion: normalizeText(editForm.direccion),
@@ -848,8 +863,11 @@ export default function Usuarios() {
                     setForm({ ...form, jornadaLaboral: e.target.value })
                   }
                 >
-                  <option value="tiempo_completo">Tiempo completo</option>
-                  <option value="medio_tiempo">Medio tiempo</option>
+                  {JORNADAS_LABORALES.map((jornada) => (
+                    <option key={jornada.value} value={jornada.value}>
+                      {jornada.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -869,6 +887,25 @@ export default function Usuarios() {
                 >
                   <option value="true">Afiliado</option>
                   <option value="false">No afiliado</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700">
+                  Activo para nómina
+                </label>
+                <select
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                  value={String(form.activoNomina)}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      activoNomina: e.target.value === "true",
+                    })
+                  }
+                >
+                  <option value="true">Sí, incluir en nómina</option>
+                  <option value="false">No, excluir de nómina</option>
                 </select>
               </div>
 
@@ -1082,9 +1119,7 @@ export default function Usuarios() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col items-start gap-1.5">
                         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                          {u.jornadaLaboral === "medio_tiempo"
-                            ? "Medio tiempo"
-                            : "Tiempo completo"}
+                          {etiquetaJornadaLaboral(u.jornadaLaboral)}
                         </span>
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-bold ${
@@ -1096,6 +1131,17 @@ export default function Usuarios() {
                           {(u.afiliadoIess ?? true)
                             ? "Afiliado IESS"
                             : "No afiliado"}
+                        </span>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            (u.activoNomina ?? true)
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-rose-50 text-rose-700"
+                          }`}
+                        >
+                          {(u.activoNomina ?? true)
+                            ? "En nómina"
+                            : "Fuera de nómina"}
                         </span>
                       </div>
                     </td>
@@ -1232,9 +1278,7 @@ export default function Usuarios() {
                       Jornada laboral
                     </p>
                     <p className="font-medium text-slate-700">
-                      {u.jornadaLaboral === "medio_tiempo"
-                        ? "Medio tiempo"
-                        : "Tiempo completo"}
+                      {etiquetaJornadaLaboral(u.jornadaLaboral)}
                     </p>
                   </div>
 
@@ -1244,6 +1288,15 @@ export default function Usuarios() {
                     </p>
                     <p className="font-medium text-slate-700">
                       {(u.afiliadoIess ?? true) ? "Afiliado" : "No afiliado"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400">
+                      Activo para nómina
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      {(u.activoNomina ?? true) ? "Sí" : "No"}
                     </p>
                   </div>
                 </div>
@@ -1576,8 +1629,11 @@ export default function Usuarios() {
                         })
                       }
                     >
-                      <option value="tiempo_completo">Tiempo completo</option>
-                      <option value="medio_tiempo">Medio tiempo</option>
+                      {JORNADAS_LABORALES.map((jornada) => (
+                        <option key={jornada.value} value={jornada.value}>
+                          {jornada.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -1597,6 +1653,25 @@ export default function Usuarios() {
                     >
                       <option value="true">Afiliado</option>
                       <option value="false">No afiliado</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-semibold text-slate-700">
+                      Activo para nómina
+                    </label>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      value={String(editForm.activoNomina)}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          activoNomina: e.target.value === "true",
+                        })
+                      }
+                    >
+                      <option value="true">Sí, incluir en nómina</option>
+                      <option value="false">No, excluir de nómina</option>
                     </select>
                   </div>
 

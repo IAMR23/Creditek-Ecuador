@@ -5,8 +5,11 @@ const numero = (value) => {
 const redondear = (value) => Number(value.toFixed(2));
 const IESS_RATE = 0.0945;
 
-export const factorJornadaNomina = (jornadaLaboral) =>
-  jornadaLaboral === "medio_tiempo" ? 0.5 : 1;
+export const factorJornadaNomina = (jornadaLaboral) => {
+  if (jornadaLaboral === "medio_tiempo") return 0.5;
+  if (jornadaLaboral === "tres_cuartos_tiempo") return 0.75;
+  return 1;
+};
 
 export const calcularValorPorJornada = (value, jornadaLaboral) =>
   redondear(numero(value) * factorJornadaNomina(jornadaLaboral));

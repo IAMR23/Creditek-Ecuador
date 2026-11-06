@@ -1,5 +1,10 @@
 const redondear = (value) => Number(Number(value).toFixed(2));
 const numero = (value) => Number(String(value ?? 0).replace(',', '.')) || 0;
+const factorJornadaNomina = (jornadaLaboral) => {
+  if (jornadaLaboral === 'medio_tiempo') return 0.5;
+  if (jornadaLaboral === 'tres_cuartos_tiempo') return 0.75;
+  return 1;
+};
 const errorValidacion = (message) => Object.assign(new Error(message), { statusCode: 400 });
 const fechaValida = (value, campo, opcional = false) => {
   if ((value === '' || value == null) && opcional) return null;
@@ -74,7 +79,7 @@ const novedadesDelMes = (novedades, periodo) => {
 // Conserva las fórmulas previas para quien no tiene una novedad en el período.
 const calcularNominaPeriodo = (row, periodo, novedades = [], sueldoMensual = 482) => {
   if (!Number.isFinite(sueldoMensual) || sueldoMensual < 0) throw errorValidacion('Sueldo mensual inválido');
-  const factorJornada = row.jornadaLaboral === 'medio_tiempo' ? 0.5 : 1;
+  const factorJornada = factorJornadaNomina(row.jornadaLaboral);
   const salarioJornada = redondear(sueldoMensual * factorJornada);
   const afiliadoIess = row.afiliadoIess !== false;
   const key = validarPeriodo(periodo);
