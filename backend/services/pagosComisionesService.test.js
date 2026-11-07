@@ -1,6 +1,7 @@
 const {
   finalizarVendedor,
   normalizarCantidadVendedoresComision,
+  normalizarDivisorPromedioSupervisor,
   isCargoPagoComisionable,
   buildPersonalSellerView,
   getCommissionablePaidPosition,
@@ -42,11 +43,6 @@ const {
   buildChiefAverageSelectionsMap,
   buildSupervisorAverageSelectionsMap,
   getLeaderMembersForWeek,
-  resolveSaleHistoricalAssignment,
-  getMissingHistoricalResponsibilities,
-  addHistoricalLeaderSale,
-  serializeHistoricalLeaderRows,
-  isSharedWeeklySelectionBackedByHistory,
   resolveSalesSanctionConfig,
   resolvePersonalSellerSanctionConfig,
   applyPersonalSellerPenaltiesToPrimaryView,
@@ -58,204 +54,6 @@ const PagoComisionEquipoSemanal = require("../models/PagoComisionEquipoSemanal")
 const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
 
 describe("pagosComisionesService", () => {
-  describe("atribucion comercial historica", () => {
-    const seller = { usuarioId: 7, nombre: "Vendedor trasladado" };
-    const floor = {
-      id: 1,
-      usuarioAgenciaId: 10,
-      agenciaId: 2,
-      agencia: { nombre: "Piso Centro" },
-      equipo: "PISO",
-      jefeComercialId: 100,
-      supervisorComercialId: 101,
-      vigenciaDesde: "2026-10-01",
-      vigenciaHasta: "2026-10-05",
-      requiereRevision: false,
-    };
-    const callCenter = {
-      id: 2,
-      usuarioAgenciaId: 20,
-      agenciaId: 3,
-      agencia: { nombre: "Call Center" },
-      equipo: "CALL CENTER",
-      jefeComercialId: 200,
-      supervisorComercialId: 201,
-      vigenciaDesde: "2026-10-06",
-      vigenciaHasta: null,
-      requiereRevision: false,
-    };
-
-    test("divide un traslado dentro de la semana y conserva el total personal", () => {
-      const assignments = [floor, callCenter];
-      const before = resolveSaleHistoricalAssignment({
-        assignments,
-        saleDate: "2026-10-05",
-        usuarioAgenciaId: 10,
-      });
-      const after = resolveSaleHistoricalAssignment({
-        assignments,
-        saleDate: "2026-10-06",
-        usuarioAgenciaId: 20,
-      });
-      expect(before.assignment.jefeComercialId).toBe(100);
-      expect(after.assignment.jefeComercialId).toBe(200);
-
-      const production = new Map();
-      addHistoricalLeaderSale({
-        map: production,
-        tipo: "JEFE",
-        liderId: 100,
-        weekKey: "2026-10-01",
-        venta: { id: 1 },
-        totals: { venden: 12, valorVendido: 1200 },
-        usuarioPayload: seller,
-        asignacion: floor,
-        ventasParaPromedioAntiguedad: 12,
-      });
-      addHistoricalLeaderSale({
-        map: production,
-        tipo: "JEFE",
-        liderId: 200,
-        weekKey: "2026-10-01",
-        venta: { id: 2 },
-        totals: { venden: 8, valorVendido: 800 },
-        usuarioPayload: seller,
-        asignacion: callCenter,
-        ventasParaPromedioAntiguedad: 8,
-      });
-      [
-        { leaderId: 101, saleId: 1, units: 12, value: 1200, assignment: floor },
-        { leaderId: 201, saleId: 2, units: 8, value: 800, assignment: callCenter },
-      ].forEach(({ leaderId, saleId, units, value, assignment }) => {
-        addHistoricalLeaderSale({
-          map: production,
-          tipo: "SUPERVISOR",
-          liderId: leaderId,
-          weekKey: "2026-10-01",
-          venta: { id: saleId },
-          totals: { venden: units, valorVendido: value },
-          usuarioPayload: seller,
-          asignacion: assignment,
-          ventasParaPromedioAntiguedad: units,
-        });
-      });
-      const oldLeader = serializeHistoricalLeaderRows(
-        production.get("JEFE:100:2026-10-01"),
-      );
-      const newLeader = serializeHistoricalLeaderRows(
-        production.get("JEFE:200:2026-10-01"),
-      );
-      expect(oldLeader[0].venden).toBe(12);
-      expect(newLeader[0].venden).toBe(8);
-      expect(oldLeader[0].venden + newLeader[0].venden).toBe(20);
-      const supervisorDetails = [101, 201].flatMap((leaderId) =>
-        serializeHistoricalLeaderRows(
-          production.get(`SUPERVISOR:${leaderId}:2026-10-01`),
-        ));
-      expect(supervisorDetails.reduce((sum, row) => sum + row.venden, 0)).toBe(20);
-      expect(supervisorDetails.reduce((sum, row) => sum + row.valorVendido, 0)).toBe(2000);
-    });
-
-    test("incluye la venta del ultimo dia y deja pendiente la posterior a la baja", () => {
-      const ventaUltimoDia = resolveSaleHistoricalAssignment({
-        assignments: [{ ...floor, vigenciaHasta: "2026-10-08" }],
-        saleDate: "2026-10-08",
-        usuarioAgenciaId: 10,
-        fechaSalida: "2026-10-08",
-      });
-      expect(ventaUltimoDia.assignment).toBeTruthy();
-      const production = new Map();
-      addHistoricalLeaderSale({
-        map: production,
-        tipo: "JEFE",
-        liderId: ventaUltimoDia.assignment.jefeComercialId,
-        weekKey: "2026-10-08",
-        venta: { id: 8 },
-        totals: { venden: 6, valorVendido: 600 },
-        usuarioPayload: { ...seller, fechaIngreso: "2026-10-01", fechaSalida: "2026-10-08" },
-        asignacion: ventaUltimoDia.assignment,
-        ventasParaPromedioAntiguedad: 0,
-      });
-      expect(serializeHistoricalLeaderRows(
-        production.get("JEFE:100:2026-10-08"),
-      )[0].venden).toBe(6);
-      expect(resolveSaleHistoricalAssignment({
-        assignments: [{ ...floor, vigenciaHasta: "2026-10-08" }],
-        saleDate: "2026-10-09",
-        usuarioAgenciaId: 10,
-        fechaSalida: "2026-10-08",
-      }).pendingReason).toBe("VENTA_POSTERIOR_BAJA");
-    });
-
-    test("no duplica una venta dentro del total del mismo lider", () => {
-      const production = new Map();
-      const input = {
-        map: production,
-        tipo: "SUPERVISOR",
-        liderId: 101,
-        weekKey: "2026-10-01",
-        venta: { id: 55 },
-        totals: { venden: 6, valorVendido: 600 },
-        usuarioPayload: seller,
-        asignacion: floor,
-        ventasParaPromedioAntiguedad: 0,
-      };
-      addHistoricalLeaderSale(input);
-      addHistoricalLeaderSale(input);
-      expect(serializeHistoricalLeaderRows(
-        production.get("SUPERVISOR:101:2026-10-01"),
-      )[0]).toMatchObject({ venden: 6, valorVendido: 600 });
-    });
-
-    test("marca para revision un tramo migrado sin evidencia de responsables", () => {
-      expect(resolveSaleHistoricalAssignment({
-        assignments: [{ ...floor, requiereRevision: true }],
-        saleDate: "2026-10-05",
-        usuarioAgenciaId: 10,
-      }).pendingReason).toBe("HISTORIAL_PENDIENTE_REVISION");
-    });
-
-    test("permite seleccionar al vendedor con dos lideres solo si el traslado esta respaldado", () => {
-      const sellerWithTransfer = {
-        lideresHistoricosPorSemana: {
-          "2026-10-01": {
-            jefesComerciales: [100, 200],
-            supervisores: [101, 201],
-          },
-        },
-      };
-      expect(isSharedWeeklySelectionBackedByHistory({
-        seller: sellerWithTransfer,
-        weekStart: "2026-10-01",
-        esSupervisor: false,
-        leaderIds: [100, 200],
-      })).toBe(true);
-      expect(isSharedWeeklySelectionBackedByHistory({
-        seller: sellerWithTransfer,
-        weekStart: "2026-10-01",
-        esSupervisor: true,
-        leaderIds: [101, 999],
-      })).toBe(false);
-    });
-
-    test("solo exige el responsable que corresponde al equipo", () => {
-      expect(getMissingHistoricalResponsibilities({
-        equipo: "PISO",
-        jefeComercialId: 100,
-        supervisorComercialId: null,
-      })).toEqual([]);
-      expect(getMissingHistoricalResponsibilities({
-        equipo: "CALL CENTER",
-        jefeComercialId: null,
-        supervisorComercialId: 201,
-      })).toEqual([]);
-      expect(getMissingHistoricalResponsibilities({
-        equipo: "PISO",
-        jefeComercialId: null,
-      })).toEqual(["jefe comercial"]);
-    });
-  });
-
   test.each([
     ["jefe", eliminarEquipoSemanalJefeComercial, { jefeComercialId: 10 }],
     ["supervisor", eliminarEquipoSemanalSupervisorComercial, { supervisorComercialId: 10 }],
@@ -844,13 +642,12 @@ describe("pagosComisionesService", () => {
     ).toBe(0);
   });
 
-  test("promedio del supervisor usa la cantidad real de vendedores de cada semana", () => {
+  test("promedio del supervisor usa el divisor mensual ingresado", () => {
     expect(
       calculateLeaderAverage({
         totalDispositivos: 100,
         cantidadSemanas: 4,
-        cantidadJuniors: 3,
-        totalVendedoresSemanas: 10,
+        cantidadJuniors: 2.5,
       }),
     ).toBe(10);
   });
@@ -1153,6 +950,32 @@ describe("pagosComisionesService", () => {
     expect(isActiveDuringWeek({ fechaSalida: "2026-07-10", week: { startDate: "2026-07-16", endDate: "2026-07-22" } })).toBe(false);
   });
 
+  test("jefes comerciales incluye al vendedor inactivo si trabajo dentro del periodo", () => {
+    const mateo = {
+      activo: false,
+      fechaIngreso: "2026-10-23",
+      fechaSalida: "2026-10-24",
+      rol: "Vendedor",
+      posicionesPago: [{ cargo: "VENDEDOR DE PISO" }],
+    };
+
+    expect(isSellerEligibleForTeam(mateo)).toBe(true);
+    expect(isActiveDuringPeriod({
+      fechaIngreso: mateo.fechaIngreso,
+      fechaSalida: mateo.fechaSalida,
+      fechaInicio: "2026-10-01",
+      fechaFin: "2026-10-31",
+    })).toBe(true);
+    expect(isAvailableForTeamWeek(mateo, {
+      startDate: "2026-10-22",
+      endDate: "2026-10-28",
+    })).toBe(true);
+    expect(isAvailableForTeamWeek(mateo, {
+      startDate: "2026-10-29",
+      endDate: "2026-11-04",
+    })).toBe(false);
+  });
+
   test("no aplica descuentos cuando el vendedor ingresa o sale a mitad de semana", () => {
     const week = { startDate: "2026-07-09", endDate: "2026-07-15" };
 
@@ -1374,7 +1197,7 @@ describe("pagosComisionesService", () => {
     });
   });
 
-  test("el supervisor calcula produccion y promedio con su seleccion de cada semana", () => {
+  test("el supervisor calcula el promedio con todos los equipos semanales y el divisor ingresado", () => {
     const weeks = [
       { startDate: "2026-07-02", endDate: "2026-07-08" },
       { startDate: "2026-07-09", endDate: "2026-07-15" },
@@ -1389,8 +1212,8 @@ describe("pagosComisionesService", () => {
       nombre: "Vendedor uno",
       fechaIngreso: "2025-01-01",
       semanas: {
-        "2026-07-02": { venden: 4, valorVendido: 400 },
-        "2026-07-09": { venden: 10, valorVendido: 1000 },
+        "2026-07-02": { venden: 4, ventasParaPromedioAntiguedad: 4, valorVendido: 400 },
+        "2026-07-09": { venden: 10, ventasParaPromedioAntiguedad: 10, valorVendido: 1000 },
       },
     };
     const sellerTwo = {
@@ -1398,8 +1221,8 @@ describe("pagosComisionesService", () => {
       nombre: "Vendedor dos",
       fechaIngreso: "2025-01-01",
       semanas: {
-        "2026-07-02": { venden: 6, valorVendido: 600 },
-        "2026-07-09": { venden: 8, valorVendido: 800 },
+        "2026-07-02": { venden: 6, ventasParaPromedioAntiguedad: 6, valorVendido: 600 },
+        "2026-07-09": { venden: 8, ventasParaPromedioAntiguedad: 8, valorVendido: 800 },
       },
     };
     const sellersById = new Map([
@@ -1433,13 +1256,24 @@ describe("pagosComisionesService", () => {
     expect(firstProduction.integrantes).toHaveLength(2);
     expect(secondProduction.venden).toBe(8);
     expect(secondProduction.integrantes).toHaveLength(1);
+    const ventasEquiposSemanales =
+      getSelectedAverageSalesForWeek({
+        sellerIds: firstTeam.members.map((member) => member.usuarioId),
+        sellersById,
+        week: weeks[0],
+      }) +
+      getSelectedAverageSalesForWeek({
+        sellerIds: secondTeam.members.map((member) => member.usuarioId),
+        sellersById,
+        week: weeks[1],
+      });
     expect(
       calculateLeaderAverage({
-        totalDispositivos: firstProduction.venden + secondProduction.venden,
-        totalVendedoresSemanas:
-          firstProduction.integrantes.length + secondProduction.integrantes.length,
+        totalDispositivos: ventasEquiposSemanales,
+        cantidadSemanas: weeks.length,
+        cantidadJuniors: 3,
       }),
-    ).toBe(6);
+    ).toBe(3);
   });
 
   test("normaliza las configuraciones semanales persistidas", () => {
@@ -1465,7 +1299,7 @@ describe("pagosComisionesService", () => {
     });
   });
 
-  test("normaliza la seleccion mensual de vendedores para promedio de supervisor", () => {
+  test("normaliza el divisor mensual y conserva selecciones anteriores como respaldo", () => {
     const map = buildSupervisorAverageSelectionsMap([
       {
         id: 1,
@@ -1473,6 +1307,7 @@ describe("pagosComisionesService", () => {
         anio: 2026,
         mes: 9,
         vendedorIds: [31, "32", 31, "invalido"],
+        divisorPromedio: "3.5",
       },
     ]);
 
@@ -1486,7 +1321,12 @@ describe("pagosComisionesService", () => {
       year: 2026,
       month: 9,
       vendedorIds: [31, 32],
+      divisorPromedio: 3.5,
     });
+    expect(normalizarDivisorPromedioSupervisor("2,5")).toBe(2.5);
+    expect(() => normalizarDivisorPromedioSupervisor(0)).toThrow(
+      "El divisor del promedio debe ser mayor que cero",
+    );
   });
 
   test("normaliza la seleccion mensual de vendedores para promedio de jefe comercial", () => {

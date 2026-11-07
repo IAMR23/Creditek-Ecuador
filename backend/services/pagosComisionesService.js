@@ -21,7 +21,6 @@ const PagoComisionPromedioSupervisor = require("../models/PagoComisionPromedioSu
 const ConfiguracionMesComision = require("../models/ConfiguracionMesComision");
 const PagoComisionSancionObservacion = require("../models/PagoComisionSancionObservacion");
 const PagoComisionPeriodo = require("../models/PagoComisionPeriodo");
-const AsignacionComercialHistorial = require("../models/AsignacionComercialHistorial");
 const {
   addDays,
   generateAnnualCommercialCalendar,
@@ -314,94 +313,6 @@ const getSaleTotals = (row) => {
     },
     { venden: 0, valorVendido: 0 },
   );
-};
-
-const getHistoricalLeaderKey = (tipo, liderId, weekKey) =>
-  `${tipo}:${Number(liderId)}:${weekKey}`;
-
-const addHistoricalLeaderSale = ({
-  map,
-  tipo,
-  liderId,
-  weekKey,
-  venta,
-  totals,
-  usuarioPayload,
-  asignacion,
-  ventasParaPromedioAntiguedad,
-}) => {
-  if (!liderId) return;
-  const key = getHistoricalLeaderKey(tipo, liderId, weekKey);
-  if (!map.has(key)) map.set(key, new Map());
-  const rows = map.get(key);
-  const detailKey = `${usuarioPayload.usuarioId}:${asignacion.id}`;
-  if (!rows.has(detailKey)) {
-    rows.set(detailKey, {
-      usuarioId: usuarioPayload.usuarioId,
-      nombre: usuarioPayload.nombre,
-      agenciaId: asignacion.agenciaId,
-      agencia: asignacion.agencia?.nombre || "Agencia sin nombre",
-      equipo: asignacion.equipo || "Equipo sin registrar",
-      vigenciaDesde: asignacion.vigenciaDesde,
-      vigenciaHasta: asignacion.vigenciaHasta || null,
-      venden: 0,
-      valorVendido: 0,
-      ventasParaPromedioAntiguedad: 0,
-      ventaIds: new Set(),
-    });
-  }
-  const row = rows.get(detailKey);
-  if (row.ventaIds.has(Number(venta.id))) return;
-  row.ventaIds.add(Number(venta.id));
-  row.venden += totals.venden;
-  row.valorVendido += totals.valorVendido;
-  row.ventasParaPromedioAntiguedad += ventasParaPromedioAntiguedad;
-};
-
-const serializeHistoricalLeaderRows = (rows) => [...(rows?.values() || [])].map(
-  ({ ventaIds, ...row }) => ({
-    ...row,
-    venden: toNumber(row.venden),
-    valorVendido: round(row.valorVendido, 2),
-    ventasParaPromedioAntiguedad: toNumber(row.ventasParaPromedioAntiguedad),
-  }),
-);
-
-const resolveSaleHistoricalAssignment = ({
-  assignments = [],
-  saleDate,
-  usuarioAgenciaId,
-  fechaSalida,
-}) => {
-  const fecha = String(saleDate || "").slice(0, 10);
-  if (fechaSalida && fecha > String(fechaSalida).slice(0, 10)) {
-    return { assignment: null, pendingReason: "VENTA_POSTERIOR_BAJA" };
-  }
-  const assignment = assignments.find((row) =>
-    Number(row.usuarioAgenciaId) === Number(usuarioAgenciaId)
-    && row.vigenciaDesde <= fecha
-    && (!row.vigenciaHasta || row.vigenciaHasta >= fecha));
-  if (!assignment) {
-    return { assignment: null, pendingReason: "HISTORIAL_INSUFICIENTE" };
-  }
-  if (assignment.requiereRevision) {
-    return { assignment, pendingReason: "HISTORIAL_PENDIENTE_REVISION" };
-  }
-  return { assignment, pendingReason: null };
-};
-
-const getMissingHistoricalResponsibilities = (assignment = {}) => {
-  const equipo = normalizeText(assignment.equipo);
-  if (equipo.includes("CALL CENTER")) {
-    return assignment.supervisorComercialId ? [] : ["supervisor"];
-  }
-  if (equipo.includes("PISO")) {
-    return assignment.jefeComercialId ? [] : ["jefe comercial"];
-  }
-  return [
-    !assignment.jefeComercialId ? "jefe comercial" : null,
-    !assignment.supervisorComercialId ? "supervisor" : null,
-  ].filter(Boolean);
 };
 
 const getUsuarioPayload = (usuarioAgencia) => {
@@ -748,6 +659,10 @@ const buildSupervisorAverageSelectionsMap = (rows = []) =>
         year: Number(item.anio),
         month: Number(item.mes),
         vendedorIds: normalizeSupervisorAverageSellerIds(item.vendedorIds),
+        divisorPromedio:
+          toNumber(item.divisorPromedio) > 0
+            ? toNumber(item.divisorPromedio)
+            : normalizeSupervisorAverageSellerIds(item.vendedorIds).length || null,
       },
     );
     return map;
@@ -2333,7 +2248,6 @@ const construirReportePagosComisiones = async ({
     weeklyTeamsRows,
     chiefAverageRows,
     supervisorAverageRows,
-    asignacionesHistoricas,
   ] = await Promise.all([
     obtenerRelacionesVendedores(),
     obtenerVentasRango({ fechaInicio, fechaFin }),
@@ -2374,18 +2288,14 @@ const construirReportePagosComisiones = async ({
         anio: numericYear,
         mes: numericMonth,
       },
-      attributes: ["id", "supervisorComercialId", "anio", "mes", "vendedorIds"],
-    }),
-    AsignacionComercialHistorial.findAll({
-      where: {
-        vigenciaDesde: { [Op.lte]: fechaFin },
-        [Op.or]: [
-          { vigenciaHasta: null },
-          { vigenciaHasta: { [Op.gte]: fechaInicio } },
-        ],
-      },
-      include: [{ model: Agencia, as: "agencia", attributes: ["id", "nombre"] }],
-      order: [["usuarioId", "ASC"], ["vigenciaDesde", "ASC"]],
+      attributes: [
+        "id",
+        "supervisorComercialId",
+        "anio",
+        "mes",
+        "vendedorIds",
+        "divisorPromedio",
+      ],
     }),
   ]);
 
@@ -2410,14 +2320,6 @@ const construirReportePagosComisiones = async ({
     buildSupervisorAverageSelectionsMap(supervisorAverageRows);
   const vendedoresMap = new Map();
   const vendedoresEquipoMap = new Map();
-  const produccionHistoricaPorLider = new Map();
-  const atribucionesPendientes = [];
-  const asignacionesPorUsuario = new Map();
-  asignacionesHistoricas.forEach((asignacion) => {
-    const usuarioId = Number(asignacion.usuarioId);
-    if (!asignacionesPorUsuario.has(usuarioId)) asignacionesPorUsuario.set(usuarioId, []);
-    asignacionesPorUsuario.get(usuarioId).push(asignacion);
-  });
 
   relaciones.forEach((relacion) => {
     const usuarioPayload = getUsuarioPayload(relacion);
@@ -2435,10 +2337,9 @@ const construirReportePagosComisiones = async ({
         requireCommissionable: false,
       });
     }
-    if (
-      hasValidEmploymentDuration(usuarioPayload)
-      && hasCommissionablePaidPosition(usuarioPayload)
-    ) {
+    if (isInactiveCommercialLeader(usuarioPayload)) return;
+    if (!hasValidEmploymentDuration(usuarioPayload)) return;
+    if (hasCommissionablePaidPosition(usuarioPayload)) {
       ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     }
   });
@@ -2449,98 +2350,24 @@ const construirReportePagosComisiones = async ({
     if (!weekKeys.has(weekKey)) return;
 
     const usuarioPayload = getUsuarioPayload(venta.usuarioAgencia);
-    const fechaVenta = getDateOnlyEcuador(venta.fecha);
+    if (
+      !isActiveDuringPeriod({
+        fechaIngreso:
+          usuarioPayload.fechaIngreso || usuarioPayload.fechaCreacionUsuario,
+        fechaSalida: usuarioPayload.fechaSalida,
+        fechaInicio,
+        fechaFin,
+      })
+    ) return;
+
     const totals = getSaleTotals(venta);
     const ventasParaPromedioAntiguedad = ventaCuentaParaPromedio({
       fechaIngreso: usuarioPayload.fechaIngreso,
       fechaSalida: usuarioPayload.fechaSalida,
       activo: usuarioPayload.activo,
-      fechaVenta,
+      fechaVenta: getDateOnlyEcuador(venta.fecha),
       hoy: hoyPromedio,
     }) ? totals.venden : 0;
-
-    const resolucionHistorica = resolveSaleHistoricalAssignment({
-      assignments: asignacionesPorUsuario.get(Number(usuarioPayload.usuarioId)) || [],
-      saleDate: fechaVenta,
-      usuarioAgenciaId: venta.usuarioAgenciaId,
-      fechaSalida: usuarioPayload.fechaSalida,
-    });
-    const asignacion = resolucionHistorica.assignment;
-    const ventaPosteriorBaja =
-      resolucionHistorica.pendingReason === "VENTA_POSTERIOR_BAJA";
-    if (ventaPosteriorBaja) {
-      atribucionesPendientes.push({
-        ventaId: venta.id,
-        usuarioId: usuarioPayload.usuarioId,
-        vendedor: usuarioPayload.nombre,
-        fecha: fechaVenta,
-        usuarioAgenciaId: venta.usuarioAgenciaId,
-        motivo: "VENTA_POSTERIOR_BAJA",
-        detalle: `La venta es posterior al ultimo dia trabajado (${usuarioPayload.fechaSalida})`,
-      });
-    } else if (resolucionHistorica.pendingReason === "HISTORIAL_INSUFICIENTE") {
-      atribucionesPendientes.push({
-        ventaId: venta.id,
-        usuarioId: usuarioPayload.usuarioId,
-        vendedor: usuarioPayload.nombre,
-        fecha: fechaVenta,
-        usuarioAgenciaId: venta.usuarioAgenciaId,
-        motivo: "HISTORIAL_INSUFICIENTE",
-        detalle: "No existe un tramo historico para la agencia y fecha de la venta",
-      });
-    } else if (resolucionHistorica.pendingReason === "HISTORIAL_PENDIENTE_REVISION") {
-      atribucionesPendientes.push({
-        ventaId: venta.id,
-        usuarioId: usuarioPayload.usuarioId,
-        vendedor: usuarioPayload.nombre,
-        fecha: fechaVenta,
-        usuarioAgenciaId: venta.usuarioAgenciaId,
-        agencia: asignacion.agencia?.nombre || null,
-        equipo: asignacion.equipo || null,
-        motivo: "HISTORIAL_PENDIENTE_REVISION",
-        detalle: asignacion.observacion || "El tramo historico requiere confirmacion",
-      });
-    } else {
-      addHistoricalLeaderSale({
-        map: produccionHistoricaPorLider,
-        tipo: "JEFE",
-        liderId: asignacion.jefeComercialId,
-        weekKey,
-        venta,
-        totals,
-        usuarioPayload,
-        asignacion,
-        ventasParaPromedioAntiguedad,
-      });
-      addHistoricalLeaderSale({
-        map: produccionHistoricaPorLider,
-        tipo: "SUPERVISOR",
-        liderId: asignacion.supervisorComercialId,
-        weekKey,
-        venta,
-        totals,
-        usuarioPayload,
-        asignacion,
-        ventasParaPromedioAntiguedad,
-      });
-      const responsablesRequeridosFaltantes =
-        getMissingHistoricalResponsibilities(asignacion);
-      if (responsablesRequeridosFaltantes.length) {
-        atribucionesPendientes.push({
-          ventaId: venta.id,
-          usuarioId: usuarioPayload.usuarioId,
-          vendedor: usuarioPayload.nombre,
-          fecha: fechaVenta,
-          usuarioAgenciaId: venta.usuarioAgenciaId,
-          agencia: asignacion.agencia?.nombre || null,
-          equipo: asignacion.equipo || null,
-          motivo: "RESPONSABLE_INCOMPLETO",
-          detalle: responsablesRequeridosFaltantes.join(" y "),
-        });
-      }
-    }
-
-    if (ventaPosteriorBaja) return;
     if (isSellerEligibleForTeam(usuarioPayload)) {
       const vendedorEquipo = ensureVendedor(
         vendedoresEquipoMap,
@@ -2556,10 +2383,9 @@ const construirReportePagosComisiones = async ({
       }
     }
 
-    if (
-      !hasValidEmploymentDuration(usuarioPayload)
-      || !hasCommissionablePaidPosition(usuarioPayload)
-    ) return;
+    if (isInactiveCommercialLeader(usuarioPayload)) return;
+    if (!hasValidEmploymentDuration(usuarioPayload)) return;
+    if (!hasCommissionablePaidPosition(usuarioPayload)) return;
 
     const vendedor = ensureVendedor(vendedoresMap, usuarioPayload, weeks);
     if (!vendedor) return;
@@ -2612,18 +2438,11 @@ const construirReportePagosComisiones = async ({
     const jefeProduccion = vendedoresProduccion.find(
       (vendedor) => Number(vendedor.usuarioId) === Number(jefe.usuarioId),
     );
-    const tipoLiderHistorico = esJefe ? "JEFE" : "SUPERVISOR";
-    const vendedorIdsHistoricos = new Set(
-      asignacionesHistoricas
-        .filter((row) =>
-          !row.requiereRevision
-          && Number(esJefe ? row.jefeComercialId : row.supervisorComercialId)
-            === Number(jefe.usuarioId))
-        .map((row) => Number(row.usuarioId)),
+    const juniorsPredeterminados = vendedoresEquipoProduccion.filter(
+      (vendedor) => Number(
+        esJefe ? vendedor.jefeComercialId : vendedor.supervisorComercialId,
+      ) === Number(jefe.usuarioId),
     );
-    const juniorsPredeterminados = [...vendedorIdsHistoricos]
-      .map((usuarioId) => vendedoresProduccionPorId.get(usuarioId))
-      .filter(Boolean);
     const equiposPorSemana = new Map();
     const integrantesPorId = new Map();
     weeks.forEach((week) => {
@@ -2660,12 +2479,17 @@ const construirReportePagosComisiones = async ({
           }),
         )
       : null;
-    const vendedorIdsPromedioSupervisor = promedioSupervisorSelection
-      ? promedioSupervisorSelection.vendedorIds
-      : integrantesEquipo.map((member) => Number(member.usuarioId));
+    const vendedorIdsPromedioSupervisor = integrantesEquipo.map((member) =>
+      Number(member.usuarioId),
+    );
     const vendedoresPromedioSupervisor = vendedorIdsPromedioSupervisor
       .map((sellerId) => vendedoresProduccionPorId.get(Number(sellerId)))
       .filter(Boolean);
+    const divisorPromedioSupervisor = toNumber(
+      promedioSupervisorSelection?.divisorPromedio,
+    ) > 0
+      ? toNumber(promedioSupervisorSelection.divisorPromedio)
+      : vendedoresPromedioSupervisor.length;
     const equipoBonoBase = esJefe
       ? getLeaderBonusTeam({ members: integrantesEquipo, weeks })
       : { included: integrantesEquipo, excluded: [] };
@@ -2716,7 +2540,8 @@ const construirReportePagosComisiones = async ({
       jefe.cantidadVendedoresPromedioJefe = vendedoresPromedioJefe.length;
     }
     if (esSupervisor) {
-      jefe.promedioSupervisorMensualConfigurado = Boolean(promedioSupervisorSelection);
+      jefe.promedioSupervisorMensualConfigurado =
+        toNumber(promedioSupervisorSelection?.divisorPromedio) > 0;
       jefe.vendedorIdsPromedioSupervisor = vendedoresPromedioSupervisor.map(
         (member) => Number(member.usuarioId),
       );
@@ -2724,61 +2549,43 @@ const construirReportePagosComisiones = async ({
         ({ usuarioId, nombre }) => ({ usuarioId, nombre }),
       );
       jefe.cantidadVendedoresPromedioSupervisor =
-        vendedoresPromedioSupervisor.length;
+        divisorPromedioSupervisor;
     }
     if (integrantesEquipo.some((member) => member.esLiderVendedor)) {
       jefe.semanasPersonalesVendedor = jefeProduccion.semanas;
     }
     jefe.semanas = buildEmptyWeeks(weeks);
     jefe.total = emptyWeekValues();
-    jefe.ventasAtribuidasPromedioPorVendedor = {};
 
     weeks.forEach((week) => {
       const equipoSemana = equiposPorSemana.get(week.startDate);
-      const integrantesProduccion = (equipoSemana?.members || []).filter((member) =>
-        (asignacionesPorUsuario.get(Number(member.usuarioId)) || []).some((row) =>
-          !row.requiereRevision
-          && row.vigenciaDesde <= week.endDate
-          && (!row.vigenciaHasta || row.vigenciaHasta >= week.startDate)
-          && Number(esJefe ? row.jefeComercialId : row.supervisorComercialId)
-            === Number(jefe.usuarioId)));
-      const selectedSellerIds = new Set(
-        integrantesProduccion.map((member) => Number(member.usuarioId)),
+      const integrantesSemana = equipoSemana?.members || [];
+      const integrantesBonoSemana = integrantesSemana.filter((member) =>
+        vendedoresBonoIds.has(Number(member.usuarioId)),
       );
-      const filasHistoricas = serializeHistoricalLeaderRows(
-        produccionHistoricaPorLider.get(
-          getHistoricalLeaderKey(tipoLiderHistorico, jefe.usuarioId, week.startDate),
-        ),
-      ).filter((row) => selectedSellerIds.has(Number(row.usuarioId)));
-      const filasBono = filasHistoricas.filter((row) =>
-        vendedoresBonoIds.has(Number(row.usuarioId)),
-      );
-      const produccion = {
-        venden: filasHistoricas.reduce((total, row) => total + row.venden, 0),
-        valorVendido: filasHistoricas.reduce(
-          (total, row) => total + row.valorVendido,
-          0,
-        ),
-        dispositivosPorVendedor: filasHistoricas,
-      };
-      const produccionBono = {
-        venden: filasBono.reduce((total, row) => total + row.venden, 0),
-        integrantes: integrantesProduccion.filter((member) =>
-          vendedoresBonoIds.has(Number(member.usuarioId)),
-        ),
-      };
-      filasHistoricas.forEach((row) => {
-        const usuarioId = Number(row.usuarioId);
-        jefe.ventasAtribuidasPromedioPorVendedor[usuarioId] =
-          toNumber(jefe.ventasAtribuidasPromedioPorVendedor[usuarioId])
-          + toNumber(row.ventasParaPromedioAntiguedad);
+      const produccion = getCommissionTeamProductionForWeek({
+        members: integrantesSemana,
+        week,
+        esSupervisor,
       });
+      const produccionBono = getCommissionTeamProductionForWeek({
+        members: integrantesBonoSemana,
+        week,
+        esSupervisor,
+      });
+      const integrantesProduccion = produccion.integrantes;
       jefe.semanas[week.startDate].ventasParaPromedioAntiguedad = esSupervisor
-        ? filasHistoricas
-            .filter((row) => vendedorIdsPromedioSupervisor.includes(Number(row.usuarioId)))
-            .reduce((total, row) => total + row.ventasParaPromedioAntiguedad, 0)
-        : filasHistoricas.reduce(
-            (total, row) => total + row.ventasParaPromedioAntiguedad,
+        ? getSelectedAverageSalesForWeek({
+            sellerIds: integrantesSemana.map((member) => member.usuarioId),
+            sellersById: vendedoresProduccionPorId,
+            week,
+          })
+        : integrantesProduccion.reduce(
+            (total, member) =>
+              total +
+              toNumber(
+                member.semanas[week.startDate]?.ventasParaPromedioAntiguedad,
+              ),
             0,
           );
       jefe.semanas[week.startDate].cantidadVendedoresComision =
@@ -2853,25 +2660,6 @@ const construirReportePagosComisiones = async ({
       semanasDisponiblesEquipo: weeks
         .filter((week) => isAvailableForTeamWeek(vendedor, week))
         .map((week) => week.startDate),
-      lideresHistoricosPorSemana: Object.fromEntries(
-        weeks.map((week) => {
-          const tramosSemana = (
-            asignacionesPorUsuario.get(Number(vendedor.usuarioId)) || []
-          ).filter((row) =>
-            !row.requiereRevision
-            && row.vigenciaDesde <= week.endDate
-            && (!row.vigenciaHasta || row.vigenciaHasta >= week.startDate));
-          const result = {
-            jefesComerciales: [...new Set(
-              tramosSemana.map((row) => Number(row.jefeComercialId)).filter(Boolean),
-            )],
-            supervisores: [...new Set(
-              tramosSemana.map((row) => Number(row.supervisorComercialId)).filter(Boolean),
-            )],
-          };
-          return [week.startDate, result];
-        }),
-      ),
       ventasParaPromedioPorSemana: Object.fromEntries(
         weeks.map((week) => [
           week.startDate,
@@ -2968,7 +2756,6 @@ const construirReportePagosComisiones = async ({
     logisticaPeriodo,
     vendedores,
     vendedoresDisponiblesEquipo,
-    atribucionesPendientes,
     logistica,
     total,
   };
@@ -3130,27 +2917,6 @@ const isCommercialSupervisorInReport = (person) =>
     normalizeText(position.cargo).includes("SUPERVISOR"),
   );
 
-const getHistoricalLeaderIdsForWeek = ({ seller, weekStart, esSupervisor }) => {
-  const historical = seller?.lideresHistoricosPorSemana?.[weekStart];
-  return esSupervisor
-    ? historical?.supervisores || []
-    : historical?.jefesComerciales || [];
-};
-
-const isSharedWeeklySelectionBackedByHistory = ({
-  seller,
-  weekStart,
-  esSupervisor,
-  leaderIds,
-}) => {
-  const historicalIds = getHistoricalLeaderIdsForWeek({
-    seller,
-    weekStart,
-    esSupervisor,
-  });
-  return leaderIds.every((leaderId) => historicalIds.includes(Number(leaderId)));
-};
-
 const normalizarCantidadVendedoresComision = (value, maximo = 6) => {
   if (value === undefined || value === null || value === "") return null;
   const numero = Number(value);
@@ -3166,6 +2932,19 @@ const normalizarCantidadVendedoresComision = (value, maximo = 6) => {
     );
   }
   return numero;
+};
+
+const normalizarDivisorPromedioSupervisor = (value) => {
+  const normalized = Number(
+    typeof value === "string" ? value.trim().replace(",", ".") : value,
+  );
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    throw createHttpError("El divisor del promedio debe ser mayor que cero", 400);
+  }
+  if (normalized > 1000) {
+    throw createHttpError("El divisor del promedio no puede superar 1000", 400);
+  }
+  return round(normalized, 2);
 };
 
 const guardarEquipoSemanalLiderComercial = async ({
@@ -3215,8 +2994,8 @@ const guardarEquipoSemanalLiderComercial = async ({
   const reporte = await construirReportePagosComisiones({ year, month });
   const personasPorId = new Map(
     [
-      ...reporte.vendedores,
       ...(reporte.vendedoresDisponiblesEquipo || []),
+      ...reporte.vendedores,
     ].map((person) => [Number(person.usuarioId), person]),
   );
   const leader = personasPorId.get(numericLeaderId);
@@ -3253,22 +3032,6 @@ const guardarEquipoSemanalLiderComercial = async ({
     );
   }
 
-  const sellerWithoutHistoricalLeader = normalizedSellerIds.find((sellerId) => {
-    const leaderIds = getHistoricalLeaderIdsForWeek({
-      seller: personasPorId.get(sellerId),
-      weekStart: week.startDate,
-      esSupervisor,
-    });
-    return !leaderIds.includes(numericLeaderId);
-  });
-  if (sellerWithoutHistoricalLeader) {
-    const sellerName = personasPorId.get(sellerWithoutHistoricalLeader)?.nombre;
-    throw createHttpError(
-      `${sellerName || `El vendedor ${sellerWithoutHistoricalLeader}`} no tiene un tramo historico con este ${nombreLider} en la semana`,
-      409,
-    );
-  }
-
   if (esSupervisor) {
     const unavailableSellerId = normalizedSellerIds.find((sellerId) => {
       const seller = personasPorId.get(sellerId);
@@ -3297,16 +3060,9 @@ const guardarEquipoSemanalLiderComercial = async ({
       const sameLeaderType = esSupervisor
         ? isCommercialSupervisorInReport(otherLeader)
         : isCommercialLeaderInReport(otherLeader);
-      const trasladoRespaldado = isSharedWeeklySelectionBackedByHistory({
-        seller: personasPorId.get(sellerId),
-        weekStart: week.startDate,
-        esSupervisor,
-        leaderIds: [numericLeaderId, Number(item.jefeComercialId)],
-      });
       return (
         sameLeaderType &&
-        normalizeWeeklySellerIds(item.vendedorIds).includes(sellerId) &&
-        !trasladoRespaldado
+        normalizeWeeklySellerIds(item.vendedorIds).includes(sellerId)
       );
     }),
   );
@@ -3524,8 +3280,8 @@ const guardarPromedioMensualJefeComercial = async ({
   });
   const personasPorId = new Map(
     [
-      ...reporte.vendedores,
       ...(reporte.vendedoresDisponiblesEquipo || []),
+      ...reporte.vendedores,
     ].map((person) => [Number(person.usuarioId), person]),
   );
   const jefe = personasPorId.get(numericLeaderId);
@@ -3541,18 +3297,6 @@ const guardarPromedioMensualJefeComercial = async ({
     throw createHttpError(
       `El usuario ${invalidSellerId} no es un vendedor valido para este periodo`,
       400,
-    );
-  }
-  const sellerWithoutChiefHistory = normalizedSellerIds.find((sellerId) => {
-    const seller = personasPorId.get(sellerId);
-    return !(reporte.weeks || []).some((week) =>
-      seller?.lideresHistoricosPorSemana?.[week.startDate]
-        ?.jefesComerciales?.includes(numericLeaderId));
-  });
-  if (sellerWithoutChiefHistory) {
-    throw createHttpError(
-      "La seleccion mensual solo puede incluir ventas atribuidas historicamente a este jefe comercial",
-      409,
     );
   }
 
@@ -3586,30 +3330,14 @@ const guardarPromedioMensualSupervisorComercial = async ({
   supervisorComercialId,
   year,
   month,
-  vendedorIds,
+  divisorPromedio,
   actualizadoPorId,
 }) => {
   const numericSupervisorId = Number(supervisorComercialId);
   if (!Number.isInteger(numericSupervisorId) || numericSupervisorId <= 0) {
     throw createHttpError("El supervisor comercial no es valido", 400);
   }
-  if (!Array.isArray(vendedorIds)) {
-    throw createHttpError("vendedorIds debe ser una lista", 400);
-  }
-
-  const normalizedSellerIds = normalizeSupervisorAverageSellerIds(vendedorIds);
-  if (normalizedSellerIds.length !== vendedorIds.length) {
-    throw createHttpError("La lista de vendedores contiene valores invalidos o repetidos", 400);
-  }
-  if (normalizedSellerIds.length > 100) {
-    throw createHttpError("Solo se pueden seleccionar hasta 100 vendedores", 400);
-  }
-  if (normalizedSellerIds.includes(numericSupervisorId)) {
-    throw createHttpError(
-      "El supervisor no debe seleccionarse a si mismo para el promedio",
-      400,
-    );
-  }
+  const divisorAjustado = normalizarDivisorPromedioSupervisor(divisorPromedio);
 
   const { numericYear, numericMonth } = parseReportPeriod({ year, month });
   if (await getPeriodoPagado(numericYear, numericMonth)) {
@@ -3625,8 +3353,8 @@ const guardarPromedioMensualSupervisorComercial = async ({
   });
   const personasPorId = new Map(
     [
-      ...reporte.vendedores,
       ...(reporte.vendedoresDisponiblesEquipo || []),
+      ...reporte.vendedores,
     ].map((person) => [Number(person.usuarioId), person]),
   );
   const supervisor = personasPorId.get(numericSupervisorId);
@@ -3634,34 +3362,11 @@ const guardarPromedioMensualSupervisorComercial = async ({
     throw createHttpError("Debe seleccionar un supervisor comercial del reporte", 400);
   }
 
-  const invalidSellerId = normalizedSellerIds.find((sellerId) => {
-    const seller = personasPorId.get(sellerId);
-    return !seller || !isSellerEligibleForTeam(seller);
-  });
-  if (invalidSellerId) {
-    throw createHttpError(
-      `El usuario ${invalidSellerId} no es un vendedor valido para este periodo`,
-      400,
-    );
-  }
-  const sellerWithoutSupervisorHistory = normalizedSellerIds.find((sellerId) => {
-    const seller = personasPorId.get(sellerId);
-    return !(reporte.weeks || []).some((week) =>
-      seller?.lideresHistoricosPorSemana?.[week.startDate]
-        ?.supervisores?.includes(numericSupervisorId));
-  });
-  if (sellerWithoutSupervisorHistory) {
-    throw createHttpError(
-      "La seleccion mensual solo puede incluir ventas atribuidas historicamente a este supervisor",
-      409,
-    );
-  }
-
   const payload = {
     supervisorComercialId: numericSupervisorId,
     anio: numericYear,
     mes: numericMonth,
-    vendedorIds: normalizedSellerIds,
+    divisorPromedio: divisorAjustado,
     actualizadoPorId: actualizadoPorId || null,
   };
   const [selection] = await PagoComisionPromedioSupervisor.findOrCreate({
@@ -3679,7 +3384,7 @@ const guardarPromedioMensualSupervisorComercial = async ({
     supervisorComercialId: numericSupervisorId,
     year: numericYear,
     month: numericMonth,
-    vendedorIds: normalizedSellerIds,
+    divisorPromedio: divisorAjustado,
   };
 };
 
@@ -3986,6 +3691,7 @@ const actualizarPersonalNuevoBono = async ({
 module.exports = {
   finalizarVendedor,
   normalizarCantidadVendedoresComision,
+  normalizarDivisorPromedioSupervisor,
   isCargoPagoComisionable,
   buildPersonalSellerView,
   getCommissionablePaidPosition,
@@ -4025,11 +3731,6 @@ module.exports = {
   buildChiefAverageSelectionsMap,
   buildSupervisorAverageSelectionsMap,
   getLeaderMembersForWeek,
-  resolveSaleHistoricalAssignment,
-  getMissingHistoricalResponsibilities,
-  addHistoricalLeaderSale,
-  serializeHistoricalLeaderRows,
-  isSharedWeeklySelectionBackedByHistory,
   resolveSalesSanctionConfig,
   resolvePersonalSellerSanctionConfig,
   applyPersonalSellerPenaltiesToPrimaryView,

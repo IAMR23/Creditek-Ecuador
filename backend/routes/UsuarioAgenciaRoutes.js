@@ -3,10 +3,6 @@ const router = express.Router();
 const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Usuario = require("../models/Usuario");
 const Agencia = require("../models/Agencia");
-const { sequelize } = require("../config/db");
-const {
-  registrarCambioAsignacion,
-} = require("../services/asignacionComercialHistorialService");
 const { authenticate, requirePermission } = require("../middleware/authMiddleware");
 const {
   desactivarUsuarioAgencia,
@@ -22,7 +18,7 @@ const manejarError = (res, error, fallback) =>
 
 router.post("/", ...accesoAdministracion, async (req, res) => {
   try {
-    const { usuarioId, agenciaId, activo, fechaEfectiva, equipo } = req.body;
+    const { usuarioId, agenciaId, activo } = req.body;
     const usuario = await Usuario.findByPk(usuarioId);
     if (!usuario) return res.status(400).json({ message: "Usuario no encontrado" });
     const agencia = await Agencia.findByPk(agenciaId);
@@ -31,30 +27,10 @@ router.post("/", ...accesoAdministracion, async (req, res) => {
     if (existing) {
       return res.status(400).json({ message: "El usuario ya esta asignado a esta agencia" });
     }
-    const relacion = await sequelize.transaction(async (transaction) => {
-      const nuevaRelacion = await UsuarioAgencia.create({
-        usuarioId,
-        agenciaId,
-        activo: activo ?? true,
-      }, { transaction });
-      if (nuevaRelacion.activo) {
-        await registrarCambioAsignacion({
-          usuarioId,
-          usuarioAgenciaId: nuevaRelacion.id,
-          agenciaId,
-          equipo,
-          fechaEfectiva: fechaEfectiva || new Intl.DateTimeFormat("en-CA", {
-            timeZone: "America/Guayaquil",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          }).format(new Date()),
-          registradoPorId: req.user.id,
-          fuente: "TRASLADO_AGENCIA",
-          transaction,
-        });
-      }
-      return nuevaRelacion;
+    const relacion = await UsuarioAgencia.create({
+      usuarioId,
+      agenciaId,
+      activo: activo ?? true,
     });
     return res.status(201).json(relacion);
   } catch (error) {
@@ -113,14 +89,7 @@ router.get("/:id", ...accesoAdministracion, async (req, res) => {
 
 router.put("/:id", ...accesoAdministracion, async (req, res) => {
   try {
-    const {
-      activo,
-      responsableDestinoId,
-      motivo,
-      idempotencyKey,
-      fechaEfectiva,
-      equipo,
-    } = req.body;
+    const { activo, responsableDestinoId, motivo, idempotencyKey } = req.body;
     if (activo === false) {
       const resultado = await desactivarUsuarioAgencia({
         usuarioAgenciaId: req.params.id,
@@ -136,26 +105,7 @@ router.put("/:id", ...accesoAdministracion, async (req, res) => {
     const relacion = await UsuarioAgencia.findByPk(req.params.id);
     if (!relacion) return res.status(404).json({ message: "Relacion no encontrada" });
     relacion.activo = activo ?? relacion.activo;
-    await sequelize.transaction(async (transaction) => {
-      await relacion.save({ transaction });
-      if (relacion.activo) {
-        await registrarCambioAsignacion({
-          usuarioId: relacion.usuarioId,
-          usuarioAgenciaId: relacion.id,
-          agenciaId: relacion.agenciaId,
-          equipo,
-          fechaEfectiva: fechaEfectiva || new Intl.DateTimeFormat("en-CA", {
-            timeZone: "America/Guayaquil",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          }).format(new Date()),
-          registradoPorId: req.user.id,
-          fuente: "REACTIVACION_AGENCIA",
-          transaction,
-        });
-      }
-    });
+    await relacion.save();
     return res.json(relacion);
   } catch (error) {
     console.error(error);

@@ -29,6 +29,11 @@ const PagoComisionPromedioSupervisor = sequelize.define(
       allowNull: false,
       defaultValue: [],
     },
+    divisorPromedio: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      validate: { min: 0.01 },
+    },
     actualizadoPorId: {
       type: DataTypes.INTEGER,
       allowNull: true,

@@ -830,9 +830,6 @@ export default function PagosComisiones() {
   const [cargoFiltro, setCargoFiltro] = useState("");
   const [juniorId, setJuniorId] = useState("");
   const [jefeComercialId, setJefeComercialId] = useState("");
-  const [fechaEfectivaAsignacion, setFechaEfectivaAsignacion] = useState(
-    toDateOnly(currentDate),
-  );
   const [guardandoJefe, setGuardandoJefe] = useState(false);
   const [guardandoEquipoSemanal, setGuardandoEquipoSemanal] = useState("");
   const [guardandoMetaJefe, setGuardandoMetaJefe] = useState("");
@@ -1371,7 +1368,6 @@ export default function PagosComisiones() {
     try {
       await api.put(`${ENDPOINT}/vendedores/${juniorId}/jefe-comercial`, {
         jefeComercialId: jefeComercialId || null,
-        fechaEfectiva: fechaEfectivaAsignacion,
       });
       await fetchReport();
       Swal.fire(
@@ -1407,10 +1403,7 @@ export default function PagosComisiones() {
     try {
       await api.put(
         `${ENDPOINT}/vendedores/${juniorSupervisorId}/supervisor-comercial`,
-        {
-          supervisorComercialId: supervisorComercialId || null,
-          fechaEfectiva: fechaEfectivaAsignacion,
-        },
+        { supervisorComercialId: supervisorComercialId || null },
       );
       await fetchReport();
       Swal.fire(
@@ -1556,13 +1549,13 @@ export default function PagosComisiones() {
     }
   };
 
-  const guardarPromedioSupervisorMensual = async ({ supervisor, vendedorIds }) => {
+  const guardarPromedioSupervisorMensual = async ({ supervisor, divisorPromedio }) => {
     const key = String(supervisor.usuarioId);
     setGuardandoPromedioSupervisor(key);
     try {
       await api.put(
         `${ENDPOINT}/supervisores/${supervisor.usuarioId}/promedio-mensual/${filters.year}/${filters.month}`,
-        { vendedorIds },
+        { divisorPromedio },
       );
       await fetchReport();
       Swal.fire({
@@ -2122,52 +2115,15 @@ export default function PagosComisiones() {
         </section>
         ) : null}
 
-        {seccionActiva !== "LOGISTICA" && report?.atribucionesPendientes?.length ? (
-          <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-sm">
-            <h2 className="font-semibold text-amber-950">
-              Atribuciones pendientes de revision ({report.atribucionesPendientes.length})
-            </h2>
-            <p className="mt-1 text-sm text-amber-800">
-              Revisa solamente las ventas cuyo equipo no tenga el responsable requerido o cuyo historial no pueda comprobarse.
-            </p>
-            <div className="mt-3 max-h-56 overflow-auto">
-              <table className="w-full border-collapse text-left text-xs text-amber-950">
-                <thead>
-                  <tr>
-                    <th className="border border-amber-300 px-2 py-1">Venta</th>
-                    <th className="border border-amber-300 px-2 py-1">Vendedor</th>
-                    <th className="border border-amber-300 px-2 py-1">Fecha</th>
-                    <th className="border border-amber-300 px-2 py-1">Agencia / equipo</th>
-                    <th className="border border-amber-300 px-2 py-1">Motivo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.atribucionesPendientes.map((item) => (
-                    <tr key={`${item.ventaId}-${item.motivo}`}>
-                      <td className="border border-amber-300 px-2 py-1">#{item.ventaId}</td>
-                      <td className="border border-amber-300 px-2 py-1">{item.vendedor}</td>
-                      <td className="border border-amber-300 px-2 py-1">{formatDate(item.fecha)}</td>
-                      <td className="border border-amber-300 px-2 py-1">
-                        {[item.agencia, item.equipo].filter(Boolean).join(" / ") || "Sin tramo"}
-                      </td>
-                      <td className="border border-amber-300 px-2 py-1">{item.detalle}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
-
         {seccionActiva === "JEFES" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <h2 className="font-semibold text-slate-900">Asignacion comercial historica</h2>
+            <h2 className="font-semibold text-slate-900">Asignacion general de respaldo</h2>
             <p className="mt-1 text-sm text-slate-500">
-              El responsable anterior se cierra el dia previo y el nuevo tramo inicia en la fecha efectiva.
+              Esta asignacion se usa solamente cuando el equipo de una semana aun no ha sido configurado.
             </p>
           </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_170px_auto] md:items-end">
+          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
             <label className="text-sm font-medium text-slate-700">
               Vendedor junior
               <select
@@ -2199,15 +2155,6 @@ export default function PagosComisiones() {
                 ))}
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700">
-              Fecha efectiva
-              <input
-                type="date"
-                value={fechaEfectivaAsignacion}
-                onChange={(event) => setFechaEfectivaAsignacion(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </label>
             <button
               type="button"
               onClick={guardarJefeComercial}
@@ -2223,12 +2170,12 @@ export default function PagosComisiones() {
         {seccionActiva === "SUPERVISORES" ? (
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div>
-              <h2 className="font-semibold text-slate-900">Asignacion comercial historica</h2>
+              <h2 className="font-semibold text-slate-900">Asignacion general de respaldo</h2>
               <p className="mt-1 text-sm text-slate-500">
-                La misma fecha efectiva se conserva al cambiar entre jefes y supervisores.
+                Esta asignacion se usa solamente cuando el equipo de una semana aun no ha sido configurado.
               </p>
             </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_170px_auto] md:items-end">
+            <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
               <CollaboratorSearchInput
                 label="Vendedor junior"
                 options={juniorsSupervisorCoincidentes}
@@ -2268,15 +2215,6 @@ export default function PagosComisiones() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="text-sm font-medium text-slate-700">
-                Fecha efectiva
-                <input
-                  type="date"
-                  value={fechaEfectivaAsignacion}
-                  onChange={(event) => setFechaEfectivaAsignacion(event.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
               </label>
               <button
                 type="button"
@@ -2927,6 +2865,23 @@ function WeeklyLeaderTeamConfiguration({
   savingKey,
   disabled,
 }) {
+  const [sellerSearch, setSellerSearch] = useState("");
+  const normalizedSellerSearch = normalizeSearchText(sellerSearch);
+  const hasWeeklySellerSearch = Boolean(
+    leader.esJefeComercial || leader.esSupervisorComercial,
+  );
+  const visibleWeeks = useMemo(() => {
+    if (!hasWeeklySellerSearch || !normalizedSellerSearch) return weeks;
+
+    return weeks.filter((week) =>
+      sellers.some(
+        (seller) =>
+          isSellerAvailableForWeek(seller, week) &&
+          normalizeSearchText(seller.nombre).includes(normalizedSellerSearch),
+      ),
+    );
+  }, [hasWeeklySellerSearch, normalizedSellerSearch, sellers, weeks]);
+
   return (
     <div className="border-b border-slate-200 bg-slate-50 px-4 py-4">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -2951,13 +2906,47 @@ function WeeklyLeaderTeamConfiguration({
         ) : null}
       </div>
 
+      {hasWeeklySellerSearch ? (
+        <div className="mt-3 max-w-md">
+          <label
+            htmlFor={`buscar-vendedor-semanas-${leader.usuarioId}`}
+            className="text-xs font-semibold text-slate-700"
+          >
+            Buscar vendedor
+          </label>
+          <div className="relative mt-1">
+            <Search
+              size={15}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              id={`buscar-vendedor-semanas-${leader.usuarioId}`}
+              type="search"
+              value={sellerSearch}
+              onChange={(event) => setSellerSearch(event.target.value)}
+              placeholder="Nombre del vendedor"
+              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </div>
+          {normalizedSellerSearch ? (
+            <p className="mt-1 text-xs text-slate-600">
+              {visibleWeeks.length
+                ? `${visibleWeeks.length} semana${visibleWeeks.length === 1 ? "" : "s"} con coincidencias.`
+                : "El vendedor no se encuentra disponible en ninguna semana del periodo."}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {weeks.map((week) => (
+        {visibleWeeks.map((week) => (
           <WeeklyTeamCard
             key={`${leader.usuarioId}-${week.startDate}`}
             leader={leader}
             week={week}
             sellers={sellers}
+            sellerSearch={hasWeeklySellerSearch ? normalizedSellerSearch : ""}
             onSave={onSave}
             onDelete={onDelete}
             savingKey={savingKey}
@@ -3047,174 +3036,79 @@ function MonthlyChiefGoalConfiguration({
 
 function MonthlyLeaderAverageConfiguration({
   leader,
-  leaderType,
-  sellers,
   weeks,
   onSave,
   savingKey,
   disabled,
 }) {
   const resumen = leader.resumenMensual || {};
-  const isChief = leaderType === "jefe";
-  const configured = Boolean(
-    isChief
-      ? resumen.promedioJefeMensualConfigurado
-      : resumen.promedioSupervisorMensualConfigurado,
-  );
-  const configuredIds = isChief
-    ? resumen.vendedorIdsPromedioJefe
-    : resumen.vendedorIdsPromedioSupervisor;
-  const defaultIds = (isChief
-    ? resumen.vendedoresConsideradosBono || leader.vendedoresBono || []
-    : leader.vendedoresJunior || []
-  ).map((vendedor) => String(vendedor.usuarioId));
-  const savedIds = [
-    ...new Set(
-      (configured
-        ? configuredIds || []
-        : defaultIds
-      ).map((id) => String(id)),
-    ),
-  ].sort((a, b) => Number(a) - Number(b));
-  const savedSignature = savedIds.join(",");
-  const [selectedIds, setSelectedIds] = useState(savedIds);
+  const configured = Boolean(resumen.promedioSupervisorMensualConfigurado);
+  const savedDivisor = Number(resumen.cantidadVendedoresPromedioSupervisor || 0);
+  const [divisor, setDivisor] = useState(savedDivisor ? String(savedDivisor) : "");
 
   useEffect(() => {
-    setSelectedIds(savedSignature ? savedSignature.split(",") : []);
-  }, [savedSignature]);
+    setDivisor(savedDivisor ? String(savedDivisor) : "");
+  }, [savedDivisor]);
 
-  const selectedSignature = [...selectedIds]
-    .sort((a, b) => Number(a) - Number(b))
-    .join(",");
   const isSaving = savingKey === String(leader.usuarioId);
   const isBusy = Boolean(savingKey);
-  const hasChanges = !configured || selectedSignature !== savedSignature;
-  const leaderHistoryField = isChief ? "jefesComerciales" : "supervisores";
-  const availableSellers = sellers.filter((seller) =>
-    weeks.some((week) =>
-      seller.lideresHistoricosPorSemana?.[week.startDate]
-        ?.[leaderHistoryField]?.includes(Number(leader.usuarioId))),
-  );
-  const selectedCount = selectedIds.length;
-  const selectedIdSet = new Set(selectedIds);
-  const selectedSales = Object.entries(
-    leader.ventasAtribuidasPromedioPorVendedor || {},
-  ).reduce(
-    (total, [sellerId, units]) =>
-      selectedIdSet.has(String(sellerId)) ? total + Number(units || 0) : total,
-    0,
-  );
-  const promedioCalculado = selectedCount && weeks.length
-    ? selectedSales / weeks.length / selectedCount
+  const numericDivisor = Number(String(divisor).trim().replace(",", "."));
+  const validDivisor = Number.isFinite(numericDivisor) && numericDivisor > 0;
+  const hasChanges = validDivisor &&
+    (!configured || numericDivisor !== savedDivisor);
+  const teamSales = Number(resumen.ventasConsideradasBono || 0);
+  const promedioCalculado = validDivisor && weeks.length
+    ? teamSales / weeks.length / numericDivisor
     : 0;
-
-  const toggleSeller = (sellerId) => {
-    const id = String(sellerId);
-    setSelectedIds((current) =>
-      current.includes(id)
-        ? current.filter((currentId) => currentId !== id)
-        : [...current, id],
-    );
-  };
 
   return (
     <div className="border-b border-slate-200 bg-blue-50 px-4 py-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex-1">
           <h3 className="text-sm font-bold text-slate-900">
-            Vendedores para promedio mensual
+            Promedio mensual del supervisor
           </h3>
-          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span>Dispositivos: {formatCommission(selectedSales)}</span>
+          <div className="mt-1 flex flex-wrap gap-3 text-xs font-semibold text-blue-800">
+            <span>Ventas del equipo semanal: {formatCommission(teamSales)}</span>
             <span>Semanas: {weeks.length}</span>
-            <span>Seleccionados: {selectedCount}</span>
+            <span>Divisor: {validDivisor ? formatCommission(numericDivisor) : "-"}</span>
             <span>Promedio: {formatCommission(promedioCalculado)}</span>
           </div>
           <p className="mt-1 text-xs text-slate-600">
-            {isChief
-              ? "Promedio = ventas elegibles de los equipos semanales ÷ semanas ÷ vendedores del promedio mensual."
-              : "Promedio = suma de ventas elegibles de los vendedores seleccionados ÷ semanas ÷ vendedores seleccionados."}{" "}
-            Si el vendedor sigue activo, sin fecha de salida, y ya supera 15
-            días desde su ingreso, también cuentan sus ventas iniciales.
+            Promedio = ventas elegibles de todos los vendedores a cargo en cada
+            semana ÷ semanas del periodo ÷ divisor ingresado.
           </p>
         </div>
-        {disabled ? (
-          <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
-            <Lock size={13} /> Periodo pagado
-          </span>
-        ) : null}
-      </div>
-
-      <div className="mt-3 max-h-44 space-y-1 overflow-y-auto rounded border border-blue-200 bg-white p-2">
-        {availableSellers.length ? (
-          availableSellers.map((seller) => {
-            const id = String(seller.usuarioId);
-            const detalleCargo =
-              seller.cargoComision || seller.cargo || seller.rol || "Vendedor";
-            return (
-              <label
-                key={seller.usuarioId}
-                className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs text-slate-700 hover:bg-blue-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(id)}
-                  onChange={() => toggleSeller(id)}
-                  disabled={disabled || isBusy}
-                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                />
-                <span className="min-w-0">
-                  <span className="block font-medium text-slate-800">
-                    {seller.nombre}
-                  </span>
-                  <span className="block truncate text-[10px] text-slate-500">
-                    {detalleCargo}
-                  </span>
-                </span>
-              </label>
-            );
-          })
-        ) : (
-          <p className="py-2 text-center text-xs text-slate-500">
-            No hay vendedores disponibles para el periodo.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="text-xs font-semibold text-slate-700">
+            Número divisor
+            <input
+              type="number"
+              min="0.01"
+              max="1000"
+              step="0.01"
+              value={divisor}
+              onChange={(event) => setDivisor(event.target.value)}
+              disabled={disabled || isBusy}
+              className="mt-1 block w-40 rounded border border-blue-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+            />
+          </label>
           <button
             type="button"
-            onClick={() => setSelectedIds(availableSellers.map((seller) => String(seller.usuarioId)))}
-            disabled={disabled || isBusy || !availableSellers.length}
-            className="rounded border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => onSave({ supervisor: leader, divisorPromedio: numericDivisor })}
+            disabled={disabled || isBusy || !hasChanges}
+            className="inline-flex items-center justify-center gap-1 rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Seleccionar todos
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedIds([])}
-            disabled={disabled || isBusy || !selectedIds.length}
-            className="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Limpiar
+            <Save size={13} />
+            {isSaving ? "Guardando..." : "Guardar promedio"}
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            onSave({
-              [isChief ? "jefe" : "supervisor"]: leader,
-              vendedorIds: selectedIds.map(Number),
-            })
-          }
-          disabled={disabled || isBusy || !hasChanges}
-          className="inline-flex items-center justify-center gap-1 rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Save size={13} />
-          {isSaving ? "Guardando..." : "Guardar promedio"}
-        </button>
       </div>
+      {disabled ? (
+        <span className="mt-2 inline-flex w-fit items-center gap-1 rounded bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
+          <Lock size={13} /> Periodo pagado
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -3223,6 +3117,7 @@ function WeeklyTeamCard({
   leader,
   week,
   sellers,
+  sellerSearch = "",
   onSave,
   onDelete,
   savingKey,
@@ -3230,21 +3125,21 @@ function WeeklyTeamCard({
 }) {
   const values = getWeekValues(leader, week);
   const configured = Boolean(values.equipoSemanalConfigurado);
-  const historyField = leader.esSupervisorComercial
-    ? "supervisores"
-    : "jefesComerciales";
-  const sellersForWeek = sellers.filter((seller) =>
-    seller.lideresHistoricosPorSemana?.[week.startDate]
-      ?.[historyField]?.includes(Number(leader.usuarioId))
-    && (!leader.esSupervisorComercial || isSellerAvailableForWeek(seller, week)),
+  const availableSellersForWeek = sellers.filter((seller) =>
+    isSellerAvailableForWeek(seller, week),
   );
+  const sellersForWeek = sellerSearch
+    ? availableSellersForWeek.filter((seller) =>
+        normalizeSearchText(seller.nombre).includes(sellerSearch),
+      )
+    : availableSellersForWeek;
   const sellerIdsForWeek = new Set(
-    sellersForWeek.map((seller) => String(seller.usuarioId)),
+    availableSellersForWeek.map((seller) => String(seller.usuarioId)),
   );
   const savedIds = [...new Set(
     (values.vendedorIdsSeleccionados || []).map((id) => String(id)),
   )]
-    .filter((id) => !leader.esSupervisorComercial || sellerIdsForWeek.has(id))
+    .filter((id) => sellerIdsForWeek.has(id))
     .sort((a, b) => Number(a) - Number(b));
   const savedSignature = savedIds.join(",");
   const [selectedIds, setSelectedIds] = useState(savedIds);
@@ -3618,12 +3513,6 @@ function LeadershipCommissionTables({
             {row.esSupervisorComercial ? (
               <MonthlyLeaderAverageConfiguration
                 leader={row}
-                leaderType="supervisor"
-                sellers={vendedoresDisponibles.filter(
-                  (vendedor) =>
-                    Number(vendedor.usuarioId) !== Number(row.usuarioId) &&
-                    (!isCallCenterSupervisor(row) || isCallCenterSeller(vendedor)),
-                )}
                 weeks={weeks}
                 onSave={onGuardarPromedioSupervisor}
                 savingKey={guardandoPromedioSupervisor}
@@ -3732,16 +3621,10 @@ function LeadershipCommissionTables({
                                   <div className="flex flex-col gap-1">
                                     {vendedores.map((vendedor) => (
                                       <span
-                                        key={`${vendedor.usuarioId}-${vendedor.vigenciaDesde}-${vendedor.agenciaId}`}
+                                        key={vendedor.usuarioId}
                                         className="rounded bg-emerald-100 px-2 py-1 text-xs font-semibold"
                                       >
                                         {vendedor.nombre}: {vendedor.venden || 0}
-                                        <span className="block font-normal text-emerald-800">
-                                          {vendedor.agencia} / {vendedor.equipo}
-                                          {vendedor.vigenciaDesde
-                                            ? ` · ${formatDate(vendedor.vigenciaDesde)}${vendedor.vigenciaHasta ? ` al ${formatDate(vendedor.vigenciaHasta)}` : " en adelante"}`
-                                            : ""}
-                                        </span>
                                         {vendedor.esLiderVendedor
                                           ? " (doble cargo)"
                                           : ""}

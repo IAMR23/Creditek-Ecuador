@@ -1437,6 +1437,39 @@ const ensureComisionesConfiguracionSchema = async (queryInterface, tables) => {
 };
 
 const ensurePagosComisionesSchema = async (queryInterface, tables) => {
+  if (tables.includes("pagos_comisiones_promedios_supervisores")) {
+    await addColumnIfMissing(
+      queryInterface,
+      "pagos_comisiones_promedios_supervisores",
+      "divisorPromedio",
+      {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: true,
+      },
+    );
+    await sequelize.query(`
+      UPDATE pagos_comisiones_promedios_supervisores
+      SET "divisorPromedio" = jsonb_array_length("vendedorIds")
+      WHERE "divisorPromedio" IS NULL
+        AND jsonb_typeof("vendedorIds") = 'array'
+        AND jsonb_array_length("vendedorIds") > 0;
+    `);
+    await sequelize.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'pagos_comisiones_promedios_supervisor_divisor_check'
+            AND conrelid = 'pagos_comisiones_promedios_supervisores'::regclass
+        ) THEN
+          ALTER TABLE pagos_comisiones_promedios_supervisores
+            ADD CONSTRAINT pagos_comisiones_promedios_supervisor_divisor_check
+            CHECK ("divisorPromedio" IS NULL OR "divisorPromedio" > 0);
+        END IF;
+      END $$;
+    `);
+  }
   if (tables.includes("pagos_comisiones_promedios_jefes")) {
     await addColumnIfMissing(
       queryInterface,
@@ -1519,29 +1552,6 @@ const ensureRequiredFeatureTables = async (queryInterface) => {
 
   if (tables.has("roles_pago") && !tables.has("roles_pago_juniors")) {
     await ejecutarMigraciones(["202611060003-create-roles-pago-juniors.sql"]);
-  }
-
-  if (
-    tables.has("usuarios")
-    && tables.has("agencias")
-    && tables.has("usuario_agencia")
-    && !tables.has("asignaciones_comerciales_historial")
-  ) {
-    await ejecutarMigraciones([
-      "202611060004-create-asignaciones-comerciales-historial.sql",
-    ]);
-  }
-
-  if (
-    tables.has("usuarios")
-    && tables.has("roles_pago")
-    && tables.has("usuarios_roles_pago")
-    && tables.has("usuario_agencia")
-    && !tables.has("migracion_asignaciones_comerciales_202609")
-  ) {
-    await ejecutarMigraciones([
-      "202611060005-asignar-lideres-comerciales-desde-septiembre.sql",
-    ]);
   }
 
   if (

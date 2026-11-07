@@ -7,7 +7,6 @@ Usuario.hasMany(LogisticaCombustibleRegistro, { foreignKey: 'userId', as: 'regis
 const Rol = require('./Rol');
 const Agencia = require('./Agencia');
 const UsuarioAgencia = require('./UsuarioAgencia');
-const AsignacionComercialHistorial = require('./AsignacionComercialHistorial');
 
 const Venta = require('./Venta');
 const DetalleVenta = require('./DetalleVenta');
@@ -324,30 +323,6 @@ CopaCreditekSemanaVendedor.belongsTo(Usuario, {
 // Relaciones directas para include desde UsuarioAgencia
 UsuarioAgencia.belongsTo(Usuario, { foreignKey: "usuarioId", as: "usuario" });
 UsuarioAgencia.belongsTo(Agencia, { foreignKey: "agenciaId", as: "agencia" });
-Usuario.hasMany(AsignacionComercialHistorial, {
-  foreignKey: "usuarioId",
-  as: "asignacionesComercialesHistorial",
-});
-AsignacionComercialHistorial.belongsTo(Usuario, {
-  foreignKey: "usuarioId",
-  as: "vendedor",
-});
-AsignacionComercialHistorial.belongsTo(UsuarioAgencia, {
-  foreignKey: "usuarioAgenciaId",
-  as: "usuarioAgencia",
-});
-AsignacionComercialHistorial.belongsTo(Agencia, {
-  foreignKey: "agenciaId",
-  as: "agencia",
-});
-AsignacionComercialHistorial.belongsTo(Usuario, {
-  foreignKey: "jefeComercialId",
-  as: "jefeComercial",
-});
-AsignacionComercialHistorial.belongsTo(Usuario, {
-  foreignKey: "supervisorComercialId",
-  as: "supervisorComercial",
-});
 
 // El evento permanece aunque el usuario de referencia deje de estar activo.
 NotificacionPersonal.hasMany(NotificacionPersonalLectura, {

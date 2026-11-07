@@ -11,9 +11,6 @@ const {
   registrarNotificacionSalida,
   registrarNotificacionSegura,
 } = require("../services/notificacionesPersonalService");
-const {
-  cerrarAsignacionPorBaja,
-} = require("../services/asignacionComercialHistorialService");
 
 const router = express.Router();
 
@@ -183,14 +180,6 @@ router.patch("/por-cedula/:cedula", async (req, res) => {
     if (camposActualizados.length > 0) {
       await sequelize.transaction(async (transaction) => {
         await usuario.save({ transaction });
-        if (fechaSalidaNueva) {
-          await cerrarAsignacionPorBaja({
-            usuarioId: usuario.id,
-            fechaSalida: fechaSalidaNueva,
-            registradoPorId: req.user?.id,
-            transaction,
-          });
-        }
       });
     }
 
