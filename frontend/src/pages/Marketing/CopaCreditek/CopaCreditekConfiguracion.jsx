@@ -152,7 +152,7 @@ export default function CopaCreditekConfiguracion({
               type="search"
               value={busqueda}
               onChange={(event) => setBusqueda(event.target.value)}
-              placeholder="Ej.: Fernando, Simbaña o Caupicho"
+              placeholder="Ej.: Fernando, Caupicho"
               className="mt-1 block w-full rounded-lg border border-slate-300 px-4 py-3 text-base font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
             />
           </label>
