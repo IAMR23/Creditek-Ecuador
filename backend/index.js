@@ -93,6 +93,9 @@ const corsOptions = {
     "X-RVE-Auditoria-TV-Inconsistencias",
     "X-RVE-Auditoria-Celular-Registros",
     "X-RVE-Auditoria-Celular-Inconsistencias",
+    "X-RVE-Normalizacion-Estado",
+    "X-RVE-Modelos-TV-Nuevos",
+    "X-RVE-Modelos-Celular-Nuevos",
   ],
   maxAge: 3600,
 };

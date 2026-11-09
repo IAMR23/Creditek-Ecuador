@@ -22,6 +22,9 @@ const auditoriaVentasController = require("../Auditoria/auditoriaVentasControlle
 const {
   obtenerMapeoReporteCaja,
 } = require("../../services/reporteCajaAgenciasService");
+const {
+  sincronizarModelosDesdeVentas,
+} = require("../../services/conciliacionModelosPdfService");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -205,6 +208,12 @@ const crearResumenAuditoriaNoAplica = () => ({
   errores: [],
 });
 
+const crearResumenNormalizacionNoAplica = () => ({
+  estado: "NO_APLICA",
+  tv: { detectados: 0, nuevos: 0, actualizados: 0 },
+  celular: { detectados: 0, nuevos: 0, actualizados: 0 },
+});
+
 const establecerHeadersAuditoria = (res, auditoria) => {
   res.setHeader("X-RVE-Auditoria-Estado", auditoria.estado);
   res.setHeader(
@@ -305,6 +314,31 @@ const procesarCargaReportesCajaVentas = async (req) => {
     usuarioId: req.user?.id,
     archivoGenerado: filename,
   });
+  let normalizacionModelos = crearResumenNormalizacionNoAplica();
+  if (
+    (datosControlFinanciero.ventasTv || []).length ||
+    (datosControlFinanciero.ventasCelular || []).length
+  ) {
+    try {
+      const sincronizacion = await sincronizarModelosDesdeVentas({
+        ventasTv: datosControlFinanciero.ventasTv || [],
+        ventasCelular: datosControlFinanciero.ventasCelular || [],
+      });
+      normalizacionModelos = {
+        estado: "COMPLETADA",
+        ...sincronizacion,
+      };
+    } catch (errorNormalizacion) {
+      normalizacionModelos = {
+        ...crearResumenNormalizacionNoAplica(),
+        estado: "ERROR",
+      };
+      console.error(
+        "La carga continuo, pero no se pudieron registrar los modelos para normalizacion:",
+        errorNormalizacion,
+      );
+    }
+  }
   const { carga } = persistencia;
   let conciliacionEntradas = null;
   let conciliacionCaja = null;
@@ -393,6 +427,7 @@ const procesarCargaReportesCajaVentas = async (req) => {
     datosControlFinanciero,
     fechaReporte,
     filename,
+    normalizacionModelos,
     outputFile,
     persistencia,
     summary,
@@ -405,6 +440,7 @@ const establecerHeadersResultado = (res, resultado) => {
     conciliacionCaja,
     conciliacionEntradas,
     fechaReporte,
+    normalizacionModelos,
     persistencia,
     summary,
   } = resultado;
@@ -435,6 +471,15 @@ const establecerHeadersResultado = (res, resultado) => {
   res.setHeader(
     "X-RVE-Registros-Omitidos",
     String(persistencia.registrosOmitidos || 0),
+  );
+  res.setHeader("X-RVE-Normalizacion-Estado", normalizacionModelos.estado);
+  res.setHeader(
+    "X-RVE-Modelos-TV-Nuevos",
+    String(normalizacionModelos.tv?.nuevos || 0),
+  );
+  res.setHeader(
+    "X-RVE-Modelos-Celular-Nuevos",
+    String(normalizacionModelos.celular?.nuevos || 0),
   );
   if (conciliacionEntradas?.id) {
     res.setHeader("X-RVE-Conciliacion-Entradas", String(conciliacionEntradas.id));
@@ -542,6 +587,7 @@ exports.importarVentasApi = async (req, res) => {
         registrosAgregados,
         registrosOmitidos: resultado.persistencia.registrosOmitidos || 0,
         conciliacionEntradasId: resultado.conciliacionEntradas?.id || null,
+        normalizacionModelos: resultado.normalizacionModelos,
         auditoria: resumirAuditoriaApi(resultado.auditoriaAutomatica),
       },
     });

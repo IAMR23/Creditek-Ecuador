@@ -8,6 +8,10 @@ const {
 } = require("../utils/calcularIndicadoresCostoHistorico");
 const listaPreciosController = require("../controllers/listaPreciosController");
 const {
+  eliminarCostoHistoricoConRecalculo,
+  reajustarVentasPorRango,
+} = require("../services/costoHistoricoService");
+const {
   authenticate,
   requirePermission,
 } = require("../middleware/authMiddleware");
@@ -174,6 +178,31 @@ router.put(
   listaPreciosController.guardar,
 );
 
+router.post(
+  "/reajustar",
+  authenticate,
+  requirePermission("Catalogos", "Administracion"),
+  async (req, res) => {
+    try {
+      const resultado = await reajustarVentasPorRango({
+        fechaDesde: req.body?.fechaDesde,
+        fechaHasta: req.body?.fechaHasta,
+      });
+      return res.json({
+        message: "Ventas reajustadas correctamente",
+        ...resultado,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({
+        message: error.statusCode
+          ? error.message
+          : "Error interno del servidor",
+        code: error.code || "COSTO_HISTORICO_REAJUSTE_ERROR",
+      });
+    }
+  },
+);
+
 router.get("/:id", async (req, res) => {
   try {
     const costo = await CostoHistorico.findByPk(req.params.id, {
@@ -233,15 +262,26 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
-  try {
-    const costo = await CostoHistorico.findByPk(req.params.id);
-    if (!costo) return res.status(404).json({ message: "No encontrado" });
-    await costo.destroy();
-    res.json({ message: "Eliminado correctamente" });
-  } catch (error) {
-    res.status(500).json({ message: "Error interno del servidor", error: error.message });
-  }
-});
+router.delete(
+  "/:id",
+  authenticate,
+  requirePermission("Catalogos", "Administracion"),
+  async (req, res) => {
+    try {
+      const resultado = await eliminarCostoHistoricoConRecalculo(req.params.id);
+      return res.json({
+        message: "Costo historico eliminado y ventas recalculadas correctamente",
+        ...resultado,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({
+        message: error.statusCode
+          ? error.message
+          : "Error interno del servidor",
+        code: error.code || "COSTO_HISTORICO_DELETE_ERROR",
+      });
+    }
+  },
+);
 
 module.exports = router;

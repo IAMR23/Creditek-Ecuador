@@ -129,6 +129,9 @@ const getVendedorDetalle = (usuario) => {
   return typeof detalle === "object" ? detalle?.nombre || "" : detalle || "";
 };
 
+const getModeloDetalle = (modelo) =>
+  modelo.dispositivoMarca?.dispositivo?.nombre || "";
+
 const getFilaEditableId = (fila) =>
   fila.detalleVentaId ? String(fila.detalleVentaId) : "";
 
@@ -377,6 +380,8 @@ export default function VentasAuditoria() {
   const [vendedorSelectorOpen, setVendedorSelectorOpen] = useState(false);
   const [modelos, setModelos] = useState([]);
   const [modeloId, setModeloId] = useState(filtrosGuardados.modeloId || "");
+  const [modeloBusqueda, setModeloBusqueda] = useState("");
+  const [modeloSelectorOpen, setModeloSelectorOpen] = useState(false);
   const [origenes, setOrigenes] = useState([]);
   const [origenId, setOrigenId] = useState(filtrosGuardados.origenId || "");
   const [dispositivos, setDispositivos] = useState([]);
@@ -409,6 +414,15 @@ export default function VentasAuditoria() {
       setVendedorBusqueda(vendedorSeleccionado.nombre || "");
     }
   }, [usuarios, vendedorId]);
+
+  useEffect(() => {
+    const modeloSeleccionado = modelos.find(
+      (modelo) => String(modelo.id) === String(modeloId),
+    );
+    if (modeloSeleccionado) {
+      setModeloBusqueda(getModeloLabel(modeloSeleccionado));
+    }
+  }, [modelos, modeloId]);
   const [comentariosEditados, setComentariosEditados] = useState({});
   const [comentariosGuardando, setComentariosGuardando] = useState({});
   const [auditoriaCaja, setAuditoriaCaja] = useState(null);
@@ -716,6 +730,8 @@ export default function VentasAuditoria() {
     setVendedorBusqueda("");
     setVendedorSelectorOpen(false);
     setModeloId("");
+    setModeloBusqueda("");
+    setModeloSelectorOpen(false);
     setCierreCaja("");
     setOrigenId("");
     setDispositivoId("");
@@ -727,6 +743,11 @@ export default function VentasAuditoria() {
     setFuenteResultados("normal");
     setFilaEditandoId("");
     setEdicionFila({});
+  };
+
+  const actualizarDatos = async () => {
+    if (!fechaInicio || !fechaFin || fechaInicio > fechaFin) return;
+    await Promise.all([fetchData(), cargarAuditoriaCaja()]);
   };
 
   useEffect(() => {
@@ -1653,14 +1674,37 @@ export default function VentasAuditoria() {
       <section className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold text-gray-900">Filtros</h2>
-          <button
-            type="button"
-            onClick={limpiarFiltros}
-            className="inline-flex items-center justify-center gap-2 rounded border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-          >
-            <X size={14} />
-            Limpiar
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={actualizarDatos}
+              disabled={
+                loading ||
+                auditoriaCajaLoading ||
+                !fechaInicio ||
+                !fechaFin ||
+                fechaInicio > fechaFin
+              }
+              className="inline-flex items-center justify-center gap-2 rounded border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw
+                size={14}
+                className={
+                  loading || auditoriaCajaLoading ? "animate-spin" : ""
+                }
+              />
+              {loading || auditoriaCajaLoading ? "Actualizando..." : "Actualizar"}
+            </button>
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              disabled={loading || auditoriaCajaLoading}
+              className="inline-flex items-center justify-center gap-2 rounded border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <X size={14} />
+              Limpiar
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -1701,21 +1745,34 @@ export default function VentasAuditoria() {
             }}
           />
 
-          <label className="block">
-            <span className="block text-sm font-medium text-gray-700">Modelo</span>
-            <select
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              value={modeloId}
-              onChange={(e) => setModeloId(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {modelos.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {getModeloLabel(m)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CollaboratorSearchInput
+            options={modelos}
+            getOptionLabel={getModeloLabel}
+            getOptionDetail={getModeloDetalle}
+            searchValue={modeloBusqueda}
+            selectedId={modeloId}
+            open={modeloSelectorOpen}
+            label="Modelo"
+            placeholder="Todos los modelos"
+            showAllTitle="Ver modelos"
+            debounceMs={300}
+            onOpenChange={setModeloSelectorOpen}
+            onSearchChange={(value) => {
+              setModeloBusqueda(value);
+              setModeloId("");
+              setModeloSelectorOpen(true);
+            }}
+            onShowAll={() => {
+              setModeloBusqueda("");
+              setModeloId("");
+              setModeloSelectorOpen(true);
+            }}
+            onSelect={(modelo) => {
+              setModeloId(String(modelo.id));
+              setModeloBusqueda(getModeloLabel(modelo));
+              setModeloSelectorOpen(false);
+            }}
+          />
 
           <label className="block">
             <span className="block text-sm font-medium text-gray-700">Cierre de caja</span>

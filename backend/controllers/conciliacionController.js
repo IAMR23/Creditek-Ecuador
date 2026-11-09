@@ -12,6 +12,10 @@ const Modelo = require("../models/Modelo");
 const DispositivoMarca = require("../models/DispositivoMarca");
 const Dispositivo = require("../models/Dispositivo");
 const Marca = require("../models/Marca");
+const {
+  extraerModelosDesdeResultado,
+  guardarModelosDetectados,
+} = require("../services/conciliacionModelosPdfService");
 
 const PYTHON_TIMEOUT_MS = Number(process.env.PYTHON_TIMEOUT_MS || 120000);
 
@@ -21,14 +25,6 @@ const normalizeText = (value) =>
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
-
-const normalizePdfCode = (value) =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
 
 const getPythonBin = () =>
   process.env.PYTHON_BIN ||
@@ -191,89 +187,6 @@ const listarMapeosModelosCelular = () =>
       ["codigoNormalizado", "ASC"],
     ],
   });
-
-const extraerModelosUnicos = (resultado) => {
-  const map = new Map();
-  const registros = Array.isArray(resultado.registros_validos)
-    ? resultado.registros_validos
-    : [];
-  const errores = Array.isArray(resultado.errores) ? resultado.errores : [];
-
-  for (const record of [...registros, ...errores]) {
-    const codigoPdf = String(record.codigo_pdf || "").trim();
-    const codigoNormalizado = normalizePdfCode(codigoPdf);
-
-    if (!codigoNormalizado) continue;
-
-    const current =
-      map.get(codigoNormalizado) || {
-        codigoPdf,
-        codigoNormalizado,
-        vecesDetectado: 0,
-        archivosOrigen: new Set(),
-      };
-
-    current.vecesDetectado += 1;
-    if (record.archivo_origen) current.archivosOrigen.add(record.archivo_origen);
-    map.set(codigoNormalizado, current);
-  }
-
-  return [...map.values()].map((item) => ({
-    ...item,
-    archivosOrigen: [...item.archivosOrigen],
-  }));
-};
-
-const guardarModelosDetectados = async ({
-  ModeloMapeo,
-  modelosDetectados,
-  origen,
-  transaction,
-}) => {
-  let nuevos = 0;
-  let actualizados = 0;
-
-  for (const item of modelosDetectados) {
-    const existente = await ModeloMapeo.findOne({
-      where: { codigoNormalizado: item.codigoNormalizado },
-      transaction,
-    });
-
-    if (!existente) {
-      await ModeloMapeo.create(
-        {
-          origen,
-          codigoPdf: item.codigoPdf,
-          codigoNormalizado: item.codigoNormalizado,
-          vecesDetectado: item.vecesDetectado,
-          archivosOrigen: item.archivosOrigen,
-          estado: "PENDIENTE",
-          observacion: "Modelo extraido de PDF pendiente de mapeo",
-        },
-        { transaction },
-      );
-      nuevos += 1;
-      continue;
-    }
-
-    const archivosOrigen = new Set([
-      ...(Array.isArray(existente.archivosOrigen) ? existente.archivosOrigen : []),
-      ...item.archivosOrigen,
-    ]);
-
-    await existente.update(
-      {
-        codigoPdf: existente.codigoPdf || item.codigoPdf,
-        vecesDetectado: Number(existente.vecesDetectado || 0) + item.vecesDetectado,
-        archivosOrigen: [...archivosOrigen],
-      },
-      { transaction },
-    );
-    actualizados += 1;
-  }
-
-  return { nuevos, actualizados };
-};
 
 const buildResumen = ({ resultado, registros, errores }) => ({
   pdfsProcesados: resultado.pdfs_procesados || 0,
@@ -515,7 +428,7 @@ exports.extraerModelosTvDesdePdf = async (req, res) => {
       });
     }
 
-    const modelosDetectados = extraerModelosUnicos(resultado);
+    const modelosDetectados = extraerModelosDesdeResultado(resultado);
     const transaction = await sequelize.transaction();
     let guardado;
 
@@ -701,7 +614,7 @@ exports.extraerModelosCelularDesdePdf = async (req, res) => {
       });
     }
 
-    const modelosDetectados = extraerModelosUnicos(resultado);
+    const modelosDetectados = extraerModelosDesdeResultado(resultado);
     const transaction = await sequelize.transaction();
     let guardado;
 

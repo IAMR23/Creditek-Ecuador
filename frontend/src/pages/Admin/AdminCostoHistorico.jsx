@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
-import { FaPen, FaPlus, FaSave, FaTimes } from "react-icons/fa";
+import {
+  FaPen,
+  FaPlus,
+  FaSave,
+  FaSyncAlt,
+  FaTimes,
+  FaTrash,
+} from "react-icons/fa";
 import { API_URL } from "../../../config";
+import { api } from "../../api/client";
+import { getHoyLocal } from "../../utils/dateUtils";
 
 const emptyForm = {
   modeloId: "",
@@ -174,6 +183,8 @@ export default function CostosHistoricosCRUD() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [editOriginal, setEditOriginal] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [reajustando, setReajustando] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -256,6 +267,134 @@ export default function CostosHistoricosCRUD() {
     setEditOriginal(null);
   };
 
+  const handleDelete = async (costo) => {
+    const modeloNombre =
+      costo.modelo?.nombre ||
+      modelos.find((modelo) => Number(modelo.id) === Number(costo.modeloId))
+        ?.nombre ||
+      "este modelo";
+
+    const confirmacion = await Swal.fire({
+      icon: "warning",
+      title: "¿Eliminar costo historico?",
+      text: `Se eliminara el costo de ${modeloNombre} correspondiente a la fecha ${costo.fechaCompra}. Las ventas posteriores se recalcularan usando el costo historico que quede vigente. Esta accion no se puede deshacer.`,
+      showCancelButton: true,
+      confirmButtonText: "Si, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      reverseButtons: true,
+      focusCancel: true,
+    });
+
+    if (!confirmacion.isConfirmed) return;
+
+    try {
+      setDeletingId(costo.id);
+      const { data } = await api.delete(`/costos/${costo.id}`);
+      setCostos((actuales) =>
+        actuales.filter((registro) => registro.id !== costo.id),
+      );
+      const ventasRecalculadas = Number(data?.ventasRecalculadas || 0);
+      await Swal.fire({
+        icon: "success",
+        title: "Costo historico eliminado",
+        text: `${modeloNombre} - ${costo.fechaCompra}. Ventas recalculadas: ${ventasRecalculadas}.`,
+        confirmButtonText: "Aceptar",
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo eliminar",
+        text:
+          error.response?.data?.message ||
+          "Ocurrio un error al eliminar el costo historico.",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleReajuste = async () => {
+    const hoy = getHoyLocal();
+    const primerDiaMes = `${hoy.slice(0, 8)}01`;
+    const seleccion = await Swal.fire({
+      icon: "question",
+      title: "Reajustar ventas",
+      html: `
+        <div class="grid gap-3 text-left">
+          <label class="grid gap-1 text-sm font-medium text-slate-700">
+            Desde
+            <input id="reajuste-fecha-desde" type="date" value="${primerDiaMes}" class="swal2-input !m-0 !w-full" />
+          </label>
+          <label class="grid gap-1 text-sm font-medium text-slate-700">
+            Hasta
+            <input id="reajuste-fecha-hasta" type="date" value="${hoy}" class="swal2-input !m-0 !w-full" />
+          </label>
+          <p class="text-sm text-slate-500">
+            Se conservara el precio cobrado, alcance, entrada y contrato. Se recalcularan costo y margen con el historico vigente para cada fecha.
+          </p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Reajustar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#059669",
+      focusCancel: true,
+      preConfirm: () => {
+        const popup = Swal.getPopup();
+        const fechaDesde = popup
+          ?.querySelector("#reajuste-fecha-desde")
+          ?.value;
+        const fechaHasta = popup
+          ?.querySelector("#reajuste-fecha-hasta")
+          ?.value;
+
+        if (!fechaDesde || !fechaHasta) {
+          Swal.showValidationMessage("Selecciona ambas fechas.");
+          return false;
+        }
+        if (fechaDesde > fechaHasta) {
+          Swal.showValidationMessage(
+            "La fecha desde no puede ser posterior a la fecha hasta.",
+          );
+          return false;
+        }
+        return { fechaDesde, fechaHasta };
+      },
+    });
+
+    if (!seleccion.isConfirmed) return;
+
+    try {
+      setReajustando(true);
+      Swal.fire({
+        title: "Reajustando ventas...",
+        text: "Este proceso puede tardar según la cantidad de ventas.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+      const { data } = await api.post("/costos/reajustar", seleccion.value);
+      await Swal.fire({
+        icon: "success",
+        title: "Reajuste completado",
+        text: `Ventas reajustadas: ${data.ventasRecalculadas || 0}. Modelos procesados: ${data.modelosReajustados || 0}.`,
+        confirmButtonText: "Aceptar",
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo completar el reajuste",
+        text:
+          error.response?.data?.message ||
+          "Ocurrio un error al reajustar las ventas.",
+      });
+    } finally {
+      setReajustando(false);
+    }
+  };
+
   const creaNuevoHistorico =
     Boolean(editId) &&
     Boolean(editOriginal) &&
@@ -313,12 +452,25 @@ export default function CostosHistoricosCRUD() {
           </p>
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-        >
-          <FaPlus /> Nuevo
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleReajuste}
+            disabled={reajustando || deletingId !== null}
+            className="inline-flex items-center justify-center gap-2 rounded border border-emerald-600 bg-white px-4 py-2 font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+          >
+            <FaSyncAlt className={reajustando ? "animate-spin" : ""} />
+            {reajustando ? "Reajustando..." : "Reajuste"}
+          </button>
+          <button
+            type="button"
+            onClick={openCreateModal}
+            disabled={reajustando}
+            className="inline-flex items-center justify-center gap-2 rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-60"
+          >
+            <FaPlus /> Nuevo
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -373,15 +525,28 @@ export default function CostosHistoricosCRUD() {
                         }`}
                       >
                         {celda?.registro ? (
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(celda.registro)}
-                            className="flex w-full items-center justify-end gap-2 px-2 py-1 text-right font-semibold hover:bg-blue-50"
-                            title="Editar costo de esta fecha"
-                          >
-                            <div>{contenido}</div>
-                            <FaPen className="text-xs text-blue-600" />
-                          </button>
+                          <div className="flex w-full items-stretch">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(celda.registro)}
+                              disabled={deletingId === celda.registro.id}
+                              className="flex min-w-0 flex-1 items-center justify-end gap-2 px-2 py-1 text-right font-semibold hover:bg-blue-50 disabled:opacity-60"
+                              title="Editar costo de esta fecha"
+                            >
+                              <div>{contenido}</div>
+                              <FaPen className="shrink-0 text-xs text-blue-600" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(celda.registro)}
+                              disabled={deletingId !== null}
+                              className="flex w-9 shrink-0 items-center justify-center border-l border-gray-200 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Eliminar costo historico"
+                              aria-label={`Eliminar costo historico de ${modelo.nombre} para ${fecha}`}
+                            >
+                              <FaTrash className="text-xs" />
+                            </button>
+                          </div>
                         ) : (
                           <div className="block px-2 py-1 font-semibold">{contenido}</div>
                         )}

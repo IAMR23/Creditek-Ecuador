@@ -40,6 +40,10 @@ jest.mock("../../services/reporteCajaAgenciasService", () => ({
   ]),
 }));
 
+jest.mock("../../services/conciliacionModelosPdfService", () => ({
+  sincronizarModelosDesdeVentas: jest.fn(),
+}));
+
 jest.mock("../Auditoria/auditoriaVentasController", () => ({
   obtenerReporteAuditoria: jest.fn(),
   auditarRegistrosPdf: jest.fn(),
@@ -64,6 +68,9 @@ const {
 const {
   auditarVentasDesdeDirectorios,
 } = require("../../services/auditoriaVentasPdfService");
+const {
+  sincronizarModelosDesdeVentas,
+} = require("../../services/conciliacionModelosPdfService");
 const controller = require("./reportesCajaVentasController");
 
 const resumenAuditoriaCompleta = {
@@ -107,6 +114,10 @@ describe("reportesCajaVentasController", () => {
     fsp.rm.mockResolvedValue(undefined);
     auditarVentasDesdeDirectorios.mockResolvedValue(resumenAuditoriaCompleta);
     conciliarCargaCaja.mockResolvedValue(null);
+    sincronizarModelosDesdeVentas.mockResolvedValue({
+      tv: { detectados: 1, nuevos: 1, actualizados: 0 },
+      celular: { detectados: 0, nuevos: 0, actualizados: 0 },
+    });
   });
 
   test("procesa una solicitud que contiene solamente ventas TV", async () => {
@@ -148,6 +159,10 @@ describe("reportesCajaVentasController", () => {
     expect(guardarCargaControlFinanciero).toHaveBeenCalledWith(
       expect.objectContaining({ datos, usuarioId: 7 }),
     );
+    expect(sincronizarModelosDesdeVentas).toHaveBeenCalledWith({
+      ventasTv: datos.ventasTv,
+      ventasCelular: datos.ventasCelular,
+    });
     expect(conciliarCarga).toHaveBeenCalledWith({
       cargaId: 25,
       origen: "CARGA",
@@ -176,6 +191,11 @@ describe("reportesCajaVentasController", () => {
       "X-RVE-Auditoria-TV-Registros",
       "1",
     );
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "X-RVE-Normalizacion-Estado",
+      "COMPLETADA",
+    );
+    expect(res.setHeader).toHaveBeenCalledWith("X-RVE-Modelos-TV-Nuevos", "1");
     expect(auditarVentasDesdeDirectorios.mock.invocationCallOrder[0]).toBeLessThan(
       res.download.mock.invocationCallOrder[0],
     );
@@ -312,6 +332,62 @@ describe("reportesCajaVentasController", () => {
     );
     expect(errorLog).toHaveBeenCalledWith(
       "Error inesperado ejecutando la auditoria automatica de ventas:",
+      expect.any(Error),
+    );
+    errorLog.mockRestore();
+  });
+
+  test("descarga el Excel aunque falle el registro de modelos para normalizacion", async () => {
+    const errorLog = jest.spyOn(console, "error").mockImplementation(() => {});
+    const datos = {
+      registrosCaja: [],
+      ventasTv: [
+        {
+          FECHA: "7/25/26 10:00 AM",
+          CONTRATO: "TV-1",
+          MODELO: "SMART TV 50",
+        },
+      ],
+      ventasCelular: [],
+    };
+    fs.existsSync.mockReturnValue(true);
+    fsp.readFile.mockResolvedValue(JSON.stringify(datos));
+    spawn.mockReturnValue(
+      crearProcesoPython({ registrosCaja: 0, ventasTv: 1, ventasCelular: 0 }),
+    );
+    obtenerFechaReporte.mockReturnValue("2026-07-25");
+    guardarCargaControlFinanciero.mockResolvedValue({
+      carga: { id: 25 },
+      esCargaNueva: true,
+      archivosAgregados: 1,
+      archivosOmitidos: 0,
+    });
+    conciliarCarga.mockResolvedValue(null);
+    sincronizarModelosDesdeVentas.mockRejectedValue(
+      new Error("Tabla de normalizacion no disponible"),
+    );
+    const res = crearRes();
+
+    await controller.extraerCierreCajaConVentas(
+      {
+        files: { ventasTv: [{ originalname: "tv.pdf" }] },
+        body: { asignacionesAgencias: "[]" },
+        user: { id: 7 },
+        reportesCajaVentasTempRoot: "C:/temp/reporte",
+        reportesCajaDir: "C:/temp/reporte/caja",
+        ventasTvDir: "C:/temp/reporte/tv",
+        ventasCelularDir: "C:/temp/reporte/celular",
+      },
+      res,
+    );
+
+    expect(res.download).toHaveBeenCalledTimes(1);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "X-RVE-Normalizacion-Estado",
+      "ERROR",
+    );
+    expect(errorLog).toHaveBeenCalledWith(
+      "La carga continuo, pero no se pudieron registrar los modelos para normalizacion:",
       expect.any(Error),
     );
     errorLog.mockRestore();

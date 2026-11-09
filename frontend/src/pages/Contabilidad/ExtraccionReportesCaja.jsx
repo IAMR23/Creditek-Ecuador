@@ -209,6 +209,13 @@ export default function ExtraccionReportesCaja() {
         response.headers["x-rve-registros-omitidos"] || 0,
       );
       const auditoria = getResumenAuditoria(response.headers);
+      const normalizacionModelos = {
+        estado: response.headers["x-rve-normalizacion-estado"] || "NO_APLICA",
+        tvNuevos: Number(response.headers["x-rve-modelos-tv-nuevos"] || 0),
+        celularNuevos: Number(
+          response.headers["x-rve-modelos-celular-nuevos"] || 0,
+        ),
+      };
 
       setLastSummary({
         registros: Number(response.headers["x-rve-registros"] || 0),
@@ -224,6 +231,7 @@ export default function ExtraccionReportesCaja() {
         registrosOmitidos,
         archivo: filename,
         auditoria,
+        normalizacionModelos,
       });
 
       const mensajeAuditoria = getMensajeAuditoria(auditoria);
@@ -547,6 +555,33 @@ export default function ExtraccionReportesCaja() {
                 Inconsistencias totales: {lastSummary.auditoria.inconsistencias}
               </p>
             </div>
+            {lastSummary.normalizacionModelos.estado !== "NO_APLICA" && (
+              <div
+                className={`mt-3 rounded-md border p-3 ${
+                  lastSummary.normalizacionModelos.estado === "ERROR"
+                    ? "border-amber-300 bg-amber-50 text-amber-900"
+                    : "border-emerald-200 bg-white/70"
+                }`}
+              >
+                <p className="font-semibold">
+                  Normalizacion de dispositivos:{" "}
+                  {lastSummary.normalizacionModelos.estado}
+                </p>
+                {lastSummary.normalizacionModelos.estado === "COMPLETADA" ? (
+                  <p className="mt-1">
+                    Nuevos modelos pendientes: TV{" "}
+                    {lastSummary.normalizacionModelos.tvNuevos}
+                    {" | "}Celular{" "}
+                    {lastSummary.normalizacionModelos.celularNuevos}.
+                  </p>
+                ) : (
+                  <p className="mt-1">
+                    El Excel se genero, pero los modelos no pudieron enviarse a
+                    Normalizacion de dispositivos.
+                  </p>
+                )}
+              </div>
+            )}
           </section>
         )}
       </div>

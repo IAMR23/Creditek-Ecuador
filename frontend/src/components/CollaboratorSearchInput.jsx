@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import PropTypes from "prop-types";
 
@@ -22,7 +22,9 @@ export default function CollaboratorSearchInput({
   selectedId,
   open,
   placeholder = "Seleccione un colaborador",
+  showAllTitle = "Ver colaboradores",
   disabled = false,
+  debounceMs = 0,
   getOptionId = defaultOptionId,
   getOptionLabel = defaultOptionLabel,
   getOptionDetail = defaultOptionDetail,
@@ -31,8 +33,23 @@ export default function CollaboratorSearchInput({
   onShowAll,
   onSelect,
 }) {
+  const [debouncedSearchValue, setDebouncedSearchValue] = useState(searchValue);
+
+  useEffect(() => {
+    if (!debounceMs) {
+      setDebouncedSearchValue(searchValue);
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(
+      () => setDebouncedSearchValue(searchValue),
+      debounceMs,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [debounceMs, searchValue]);
+
   const matchingOptions = useMemo(() => {
-    const search = normalizeSearchText(searchValue);
+    const search = normalizeSearchText(debouncedSearchValue);
     if (!search) return options;
 
     return options.filter((option) =>
@@ -40,7 +57,7 @@ export default function CollaboratorSearchInput({
         [getOptionLabel(option), getOptionDetail(option)].filter(Boolean).join(" "),
       ).includes(search),
     );
-  }, [getOptionDetail, getOptionLabel, options, searchValue]);
+  }, [debouncedSearchValue, getOptionDetail, getOptionLabel, options]);
 
   return (
     <div
@@ -64,8 +81,8 @@ export default function CollaboratorSearchInput({
           onMouseDown={(event) => event.preventDefault()}
           onClick={onShowAll}
           disabled={disabled}
-          title="Ver colaboradores"
-          aria-label="Ver colaboradores"
+          title={showAllTitle}
+          aria-label={showAllTitle}
           className="inline-flex w-11 items-center justify-center border-l border-slate-300 text-slate-600 transition hover:bg-slate-50 hover:text-emerald-700 disabled:cursor-not-allowed"
         >
           <Search size={17} />
@@ -116,7 +133,9 @@ CollaboratorSearchInput.propTypes = {
   selectedId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   open: PropTypes.bool.isRequired,
   placeholder: PropTypes.string,
+  showAllTitle: PropTypes.string,
   disabled: PropTypes.bool,
+  debounceMs: PropTypes.number,
   getOptionId: PropTypes.func,
   getOptionLabel: PropTypes.func,
   getOptionDetail: PropTypes.func,
