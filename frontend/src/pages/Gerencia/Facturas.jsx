@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   ClipboardPaste,
@@ -21,13 +21,30 @@ import { api } from "../../api/client";
 const API_BASE = "/api/gerencia/facturas";
 const MAX_SOURCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_PROCESSED_IMAGE_BYTES = 600 * 1024;
-const filtrosIniciales = {
-  busqueda: "",
-  estado: "",
-  tipo: "",
-  formaPago: "",
-  fechaInicio: "",
-  fechaFin: "",
+const DEPARTAMENTOS = ["LOGISTICA", "COMERCIAL", "SISTEMAS"];
+const fechaActualEcuador = () => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
+const crearFiltrosIniciales = () => {
+  const hoy = fechaActualEcuador();
+  return {
+    busqueda: "",
+    estado: "",
+    tipo: "",
+    formaPago: "",
+    departamento: "",
+    fechaInicio: "",
+    fechaFin: "",
+    fechaCargaInicio: hoy,
+    fechaCargaFin: hoy,
+  };
 };
 const edicionInicial = {
   fechaFactura: "",
@@ -41,6 +58,7 @@ const edicionInicial = {
   estado: "",
   observaciones: "",
   tipo: "",
+  departamento: "LOGISTICA",
 };
 
 const money = new Intl.NumberFormat("es-EC", {
@@ -81,6 +99,7 @@ const descargarPlantilla = () => {
       "Enlace a la foto": "https://example.com/factura.jpg",
       Observaciones: "Factura cargada desde la plantilla",
       TIPO: "Compra",
+      Departamento: "LOGISTICA",
     },
   ];
   const url = URL.createObjectURL(
@@ -109,10 +128,10 @@ const resolverEnlaceFoto = (value) => {
 export default function Facturas() {
   const [facturas, setFacturas] = useState([]);
   const [resumen, setResumen] = useState({ cantidad: 0, subtotal: 0, iva: 0, total: 0 });
-  const [catalogos, setCatalogos] = useState({ estados: [], tipos: [], formasPago: [] });
+  const [catalogos, setCatalogos] = useState({ estados: [], tipos: [], formasPago: [], departamentos: DEPARTAMENTOS });
   const [paginacion, setPaginacion] = useState({ page: 1, limit: 25, totalPaginas: 1 });
-  const [filtros, setFiltros] = useState(filtrosIniciales);
-  const [filtrosAplicados, setFiltrosAplicados] = useState(filtrosIniciales);
+  const [filtros, setFiltros] = useState(crearFiltrosIniciales);
+  const [filtrosAplicados, setFiltrosAplicados] = useState(crearFiltrosIniciales);
   const [loading, setLoading] = useState(true);
   const [modalCarga, setModalCarga] = useState(false);
   const [modoCarga, setModoCarga] = useState("archivo");
@@ -121,10 +140,29 @@ export default function Facturas() {
   const [contenidoJson, setContenidoJson] = useState("");
   const [subiendo, setSubiendo] = useState(false);
   const [fotoSubiendoId, setFotoSubiendoId] = useState(null);
+  const [fotoFactura, setFotoFactura] = useState(null);
+  const [modoFoto, setModoFoto] = useState("archivo");
+  const [fotoArchivo, setFotoArchivo] = useState(null);
   const [fotoVista, setFotoVista] = useState(null);
   const [facturaEditando, setFacturaEditando] = useState(null);
   const [edicion, setEdicion] = useState(edicionInicial);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
+  const fotoPreview = useMemo(
+    () => (fotoArchivo ? URL.createObjectURL(fotoArchivo) : ""),
+    [fotoArchivo],
+  );
+
+  useEffect(() => () => {
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+  }, [fotoPreview]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setFiltrosAplicados(filtros);
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [filtros]);
 
   const cargar = useCallback(async ({ page = 1, silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -134,7 +172,13 @@ export default function Facturas() {
       });
       setFacturas(data.facturas || []);
       setResumen(data.resumen || { cantidad: 0, subtotal: 0, iva: 0, total: 0 });
-      setCatalogos(data.catalogos || { estados: [], tipos: [], formasPago: [] });
+      setCatalogos({
+        estados: [],
+        tipos: [],
+        formasPago: [],
+        departamentos: DEPARTAMENTOS,
+        ...(data.catalogos || {}),
+      });
       setPaginacion((current) => ({ ...current, ...(data.paginacion || {}) }));
     } catch (error) {
       await Swal.fire("No se pudieron cargar las facturas", mensajeError(error), "error");
@@ -147,14 +191,10 @@ export default function Facturas() {
     cargar();
   }, [cargar]);
 
-  const aplicarFiltros = (event) => {
-    event.preventDefault();
-    setFiltrosAplicados({ ...filtros });
-  };
-
   const limpiarFiltros = () => {
-    setFiltros(filtrosIniciales);
-    setFiltrosAplicados(filtrosIniciales);
+    const filtrosDefault = crearFiltrosIniciales();
+    setFiltros(filtrosDefault);
+    setFiltrosAplicados(filtrosDefault);
   };
 
   const subirArchivo = async () => {
@@ -168,8 +208,9 @@ export default function Facturas() {
       });
       setModalCarga(false);
       setArchivo(null);
-      setFiltros(filtrosIniciales);
-      setFiltrosAplicados(filtrosIniciales);
+      const filtrosDefault = crearFiltrosIniciales();
+      setFiltros(filtrosDefault);
+      setFiltrosAplicados(filtrosDefault);
       await Swal.fire({
         title: "Carga completada",
         text: data.message,
@@ -209,8 +250,9 @@ export default function Facturas() {
       });
       setModalCarga(false);
       setContenidoJson("");
-      setFiltros(filtrosIniciales);
-      setFiltrosAplicados(filtrosIniciales);
+      const filtrosDefault = crearFiltrosIniciales();
+      setFiltros(filtrosDefault);
+      setFiltrosAplicados(filtrosDefault);
       await Swal.fire({
         title: "Contenido procesado",
         text: data.message,
@@ -237,8 +279,9 @@ export default function Facturas() {
       });
       setModalCarga(false);
       setArchivoExcel(null);
-      setFiltros(filtrosIniciales);
-      setFiltrosAplicados(filtrosIniciales);
+      const filtrosDefault = crearFiltrosIniciales();
+      setFiltros(filtrosDefault);
+      setFiltrosAplicados(filtrosDefault);
       await Swal.fire({
         title: "Excel procesado",
         text: data.message,
@@ -268,11 +311,11 @@ export default function Facturas() {
     setFotoSubiendoId(facturaId);
     try {
       const processed = await imageCompression(file, {
-        maxSizeMB: 0.35,
-        maxWidthOrHeight: 1600,
+        maxSizeMB: 0.55,
         useWebWorker: true,
-        initialQuality: 0.82,
+        initialQuality: 0.9,
         fileType: "image/webp",
+        alwaysKeepResolution: true,
       });
       if (processed.size > MAX_PROCESSED_IMAGE_BYTES) {
         throw new Error("No se pudo reducir la imagen por debajo de 600 KB.");
@@ -293,6 +336,8 @@ export default function Facturas() {
           factura.id === facturaId ? { ...factura, ...data.factura } : factura,
         ),
       );
+      setFotoFactura(null);
+      setFotoArchivo(null);
       await Swal.fire({
         title: "Foto guardada",
         text: `Imagen optimizada a ${(lightweightFile.size / 1024).toFixed(0)} KB.`,
@@ -305,6 +350,27 @@ export default function Facturas() {
     } finally {
       setFotoSubiendoId(null);
     }
+  };
+
+  const abrirFoto = (factura) => {
+    setFotoFactura(factura);
+    setModoFoto("archivo");
+    setFotoArchivo(null);
+  };
+
+  const cerrarFoto = () => {
+    if (fotoSubiendoId !== null) return;
+    setFotoFactura(null);
+    setFotoArchivo(null);
+  };
+
+  const recibirImagenPegada = (event) => {
+    const itemImagen = Array.from(event.clipboardData?.items || [])
+      .find((item) => item.kind === "file" && item.type.startsWith("image/"));
+    const file = itemImagen?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    setFotoArchivo(file);
   };
 
   const abrirModal = () => {
@@ -329,6 +395,7 @@ export default function Facturas() {
       estado: factura.estado || "",
       observaciones: factura.observaciones || "",
       tipo: factura.tipo || "",
+      departamento: factura.departamento || "LOGISTICA",
     });
   };
 
@@ -413,14 +480,14 @@ export default function Facturas() {
           ))}
         </section>
 
-        <form onSubmit={aplicarFiltros} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_160px_160px_180px_145px_145px_auto]">
+        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-9">
             <label className="relative">
               <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
               <input
                 value={filtros.busqueda}
                 onChange={(event) => setFiltros((current) => ({ ...current, busqueda: event.target.value }))}
-                placeholder="Proveedor, RUC, factura..."
+                placeholder="Proveedor, RUC, factura, departamento..."
                 className="h-9 w-full rounded-md border border-slate-300 pl-9 pr-3 text-xs"
               />
             </label>
@@ -436,14 +503,32 @@ export default function Facturas() {
               <option value="">Todas las formas de pago</option>
               {catalogos.formasPago.map((value) => <option key={value}>{value}</option>)}
             </select>
-            <input type="date" aria-label="Fecha inicial" value={filtros.fechaInicio} onChange={(event) => setFiltros((current) => ({ ...current, fechaInicio: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
-            <input type="date" aria-label="Fecha final" value={filtros.fechaFin} onChange={(event) => setFiltros((current) => ({ ...current, fechaFin: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
-            <div className="flex gap-1">
-              <button className="h-9 flex-1 rounded-md bg-slate-900 px-3 text-xs font-semibold text-white">Filtrar</button>
-              <button type="button" onClick={limpiarFiltros} title="Limpiar filtros" className="h-9 rounded-md border border-slate-300 px-2 text-xs text-slate-600"><X size={15} /></button>
-            </div>
+            <select value={filtros.departamento} onChange={(event) => setFiltros((current) => ({ ...current, departamento: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs">
+              <option value="">Todos los departamentos</option>
+              {catalogos.departamentos.map((value) => <option key={value}>{value}</option>)}
+            </select>
+            <label className="grid gap-1">
+              <input type="date" aria-label="Factura desde" value={filtros.fechaInicio} onChange={(event) => setFiltros((current) => ({ ...current, fechaInicio: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
+              <span className="px-1 text-[10px] font-semibold text-slate-500">Factura desde</span>
+            </label>
+            <label className="grid gap-1">
+              <input type="date" aria-label="Factura hasta" value={filtros.fechaFin} onChange={(event) => setFiltros((current) => ({ ...current, fechaFin: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
+              <span className="px-1 text-[10px] font-semibold text-slate-500">Factura hasta</span>
+            </label>
+            <label className="grid gap-1">
+              <input type="date" aria-label="Carga desde" value={filtros.fechaCargaInicio} onChange={(event) => setFiltros((current) => ({ ...current, fechaCargaInicio: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
+              <span className="px-1 text-[10px] font-semibold text-slate-500">Carga desde</span>
+            </label>
+            <label className="grid gap-1">
+              <input type="date" aria-label="Carga hasta" value={filtros.fechaCargaFin} onChange={(event) => setFiltros((current) => ({ ...current, fechaCargaFin: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
+              <span className="px-1 text-[10px] font-semibold text-slate-500">Carga hasta</span>
+            </label>
           </div>
-        </form>
+          <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-500">
+            <span>Los filtros se aplican automáticamente después de 450 ms.</span>
+            <button type="button" onClick={limpiarFiltros} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"><X size={14} /> Limpiar</button>
+          </div>
+        </section>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {loading ? (
@@ -458,13 +543,13 @@ export default function Facturas() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1830px] text-left text-xs">
+              <table className="w-full min-w-[1940px] text-left text-xs">
                 <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                   <tr>
                     {[
                       "ID", "Fecha de factura", "Fecha de carga", "Proveedor", "RUC / Cédula",
                       "N.º de factura", "Subtotal", "IVA", "Total", "Forma de pago", "Estado",
-                      "Foto / nota de venta", "Observaciones", "Tipo", "Acciones",
+                      "Departamento", "Foto / nota de venta", "Observaciones", "Tipo", "Acciones",
                     ].map((label) => <th key={label} className="whitespace-nowrap px-3 py-3">{label}</th>)}
                   </tr>
                 </thead>
@@ -482,6 +567,7 @@ export default function Facturas() {
                       <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-slate-900">{formatoMonto(factura.total)}</td>
                       <td className="px-3 py-3">{factura.formaPago}</td>
                       <td className="px-3 py-3"><span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-[10px] font-bold text-blue-700">{factura.estado}</span></td>
+                      <td className="px-3 py-3"><span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">{factura.departamento || "LOGISTICA"}</span></td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           {factura.enlaceFoto ? (
@@ -498,23 +584,16 @@ export default function Facturas() {
                               Ver
                             </button>
                           ) : <span className="text-slate-400">Sin foto</span>}
-                          <label
+                          <button
+                            type="button"
                             title={factura.enlaceFoto ? "Reemplazar foto" : "Cargar foto"}
-                            className={`inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:border-teal-400 hover:text-teal-700 ${fotoSubiendoId === factura.id ? "cursor-wait opacity-60" : "cursor-pointer"}`}
+                            disabled={fotoSubiendoId !== null}
+                            onClick={() => abrirFoto(factura)}
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-600 hover:border-teal-400 hover:text-teal-700 disabled:cursor-wait disabled:opacity-60"
                           >
                             {fotoSubiendoId === factura.id ? <RefreshCw size={13} className="animate-spin" /> : <ImageUp size={14} />}
-                            <input
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              disabled={fotoSubiendoId !== null}
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0] || null;
-                                event.target.value = "";
-                                cargarFotoFactura(factura.id, file);
-                              }}
-                            />
-                          </label>
+                            Subir / pegar
+                          </button>
                         </div>
                       </td>
                       <td className="max-w-72 px-3 py-3 text-slate-600"><span className="line-clamp-2" title={factura.observaciones || ""}>{factura.observaciones || "-"}</span></td>
@@ -618,7 +697,7 @@ export default function Facturas() {
                     </div>
                   )}
                   <p className="text-[11px] text-slate-500">
-                    Usa los encabezados de la plantilla: Fecha de factura, Proveedor, RUC / Cédula, N.º de factura, Subtotal, IVA, Total, Forma de pago, Estado, Enlace a la foto, Observaciones y TIPO.
+                    Usa los encabezados de la plantilla: Fecha de factura, Proveedor, RUC / Cédula, N.º de factura, Subtotal, IVA, Total, Forma de pago, Estado, Enlace a la foto, Observaciones, TIPO y Departamento.
                   </p>
                 </>
               )}
@@ -641,6 +720,93 @@ export default function Facturas() {
               >
                 {subiendo ? <RefreshCw size={15} className="animate-spin" /> : modoCarga === "archivo" ? <Upload size={15} /> : modoCarga === "texto" ? <ClipboardPaste size={15} /> : <FileSpreadsheet size={15} />}
                 {subiendo ? "Procesando..." : modoCarga === "archivo" ? "Cargar facturas" : modoCarga === "texto" ? "Procesar contenido" : "Procesar Excel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fotoFactura && (
+        <div
+          className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="foto-factura-titulo"
+          onClick={cerrarFoto}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
+              <div>
+                <h2 id="foto-factura-titulo" className="text-sm font-bold text-slate-900">
+                  {fotoFactura.enlaceFoto ? "Reemplazar foto" : "Agregar foto"}
+                </h2>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Factura {fotoFactura.numeroFactura || `#${fotoFactura.id}`}
+                </p>
+              </div>
+              <button type="button" disabled={fotoSubiendoId !== null} onClick={cerrarFoto} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-50">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-xs font-semibold">
+                <button type="button" onClick={() => { setModoFoto("archivo"); setFotoArchivo(null); }} className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ${modoFoto === "archivo" ? "bg-white text-teal-700 shadow-sm" : "text-slate-600"}`}>
+                  <ImageUp size={14} /> Subir foto
+                </button>
+                <button type="button" onClick={() => { setModoFoto("pegar"); setFotoArchivo(null); }} className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ${modoFoto === "pegar" ? "bg-white text-teal-700 shadow-sm" : "text-slate-600"}`}>
+                  <ClipboardPaste size={14} /> Pegar con Ctrl+V
+                </button>
+              </div>
+
+              {modoFoto === "archivo" ? (
+                <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-teal-300 bg-teal-50 p-5 text-center hover:bg-teal-100/70">
+                  <ImageUp size={38} className="text-teal-700" />
+                  <span className="mt-2 text-sm font-bold text-teal-900">Seleccionar imagen</span>
+                  <span className="mt-1 text-xs text-teal-700">JPG, PNG o WEBP · máximo 10 MB</span>
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => setFotoArchivo(event.target.files?.[0] || null)} />
+                </label>
+              ) : (
+                <div
+                  tabIndex={0}
+                  autoFocus
+                  onPaste={recibirImagenPegada}
+                  className="flex min-h-40 flex-col items-center justify-center rounded-lg border-2 border-dashed border-violet-300 bg-violet-50 p-5 text-center outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200"
+                >
+                  <ClipboardPaste size={38} className="text-violet-700" />
+                  <span className="mt-2 text-sm font-bold text-violet-900">Haz clic aquí y presiona Ctrl+V</span>
+                  <span className="mt-1 text-xs text-violet-700">La imagen copiada aparecerá para revisión antes de guardarla.</span>
+                </div>
+              )}
+
+              {fotoPreview && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <img src={fotoPreview} alt="Vista previa de la factura" className="mx-auto max-h-64 max-w-full rounded object-contain" />
+                  <div className="mt-2 flex justify-between gap-3 text-[11px] text-slate-600">
+                    <span className="truncate font-semibold">{fotoArchivo.name || "imagen-pegada"}</span>
+                    <span className="shrink-0">{(fotoArchivo.size / 1024).toFixed(0)} KB</span>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[11px] leading-5 text-slate-500">
+                Se conserva la resolución original. Antes de almacenarse, la imagen se comprime y convierte a WebP (máximo 600 KB).
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3">
+              <button type="button" disabled={fotoSubiendoId !== null} onClick={cerrarFoto} className="h-9 rounded-md border border-slate-300 px-3 text-xs font-semibold disabled:opacity-50">Cancelar</button>
+              <button
+                type="button"
+                disabled={!fotoArchivo || fotoSubiendoId !== null}
+                onClick={() => cargarFotoFactura(fotoFactura.id, fotoArchivo)}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {fotoSubiendoId !== null ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+                {fotoSubiendoId !== null ? "Optimizando..." : "Guardar foto"}
               </button>
             </div>
           </div>
@@ -778,6 +944,18 @@ export default function Facturas() {
                     disabled={guardandoEdicion}
                     className="h-10 rounded-md border border-slate-300 px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                   />
+                </label>
+                <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
+                  Departamento
+                  <select
+                    value={edicion.departamento}
+                    onChange={(event) => actualizarCampoEdicion("departamento", event.target.value)}
+                    disabled={guardandoEdicion}
+                    required
+                    className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  >
+                    {catalogos.departamentos.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
                 </label>
                 <label className="grid gap-1.5 text-xs font-semibold text-slate-700 sm:col-span-2">
                   Observaciones

@@ -35,7 +35,7 @@ const uploadFoto = multer({
   fileFilter: (_req, file, callback) =>
     FACTURA_IMAGE_EXTENSIONS[file.mimetype]
       ? callback(null, true)
-      : callback(new Error("La imagen debe ser JPG, PNG o WEBP")),
+      : callback(new Error("La imagen procesada debe estar en formato WEBP")),
 });
 
 const cargarArchivo = (req, res, next) => {
@@ -86,7 +86,7 @@ const cargarFotoFactura = (req, res, next) => {
       ok: false,
       message:
         error.code === "LIMIT_FILE_SIZE"
-          ? "La imagen procesada no puede superar los 600 KB"
+          ? "La imagen WebP procesada no puede superar los 600 KB"
           : error.message || "No se pudo recibir la foto",
     });
   });

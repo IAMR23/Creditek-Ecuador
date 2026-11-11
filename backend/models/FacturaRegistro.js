@@ -57,6 +57,14 @@ const FacturaRegistro = sequelize.define(
       type: DataTypes.STRING(100),
       allowNull: true,
     },
+    departamento: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "LOGISTICA",
+      validate: {
+        isIn: [["LOGISTICA", "COMERCIAL", "SISTEMAS"]],
+      },
+    },
     nombreArchivoJson: {
       type: DataTypes.STRING(255),
       allowNull: true,
@@ -84,6 +92,7 @@ const FacturaRegistro = sequelize.define(
       },
       { name: "facturas_estado_idx", fields: ["estado"] },
       { name: "facturas_tipo_idx", fields: ["tipo"] },
+      { name: "facturas_departamento_idx", fields: ["departamento"] },
     ],
   },
 );

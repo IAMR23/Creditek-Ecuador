@@ -25,12 +25,18 @@ describe("pre-sync de facturas", () => {
         payloadOriginal: {},
         cargadoPorId: {},
       }),
+      addColumn: jest.fn().mockResolvedValue(undefined),
     };
     const query = jest.spyOn(sequelize, "query").mockResolvedValue([]);
 
     await ensureFacturasPreSyncSchema(queryInterface);
 
     expect(queryInterface.describeTable).toHaveBeenCalledWith("facturas");
+    expect(queryInterface.addColumn).toHaveBeenCalledWith(
+      "facturas",
+      "departamento",
+      expect.objectContaining({ allowNull: true }),
+    );
     expect(query).toHaveBeenCalledTimes(1);
     const sql = query.mock.calls[0][0];
     for (const field of [
@@ -53,6 +59,9 @@ describe("pre-sync de facturas", () => {
       expect(sql).toContain(`ALTER COLUMN "${field}" DROP NOT NULL`);
     }
     expect(sql).toMatch(/contype = 'f'/i);
+    expect(sql).toMatch(/SET departamento = 'LOGISTICA'/i);
+    expect(sql).toMatch(/ALTER COLUMN departamento SET NOT NULL/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_departamento_idx/i);
     expect(sql).toMatch(/DROP CONSTRAINT/i);
     expect(sql).not.toMatch(/\bDELETE\b|DROP\s+TABLE/i);
   });

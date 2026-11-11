@@ -9,6 +9,8 @@ const {
   cargarJsonTexto,
   extraerFacturas,
   normalizarFactura,
+  normalizarDepartamento,
+  normalizarFiltros,
   normalizarMonto,
   parsearExcel,
   validarFotoFactura,
@@ -47,6 +49,7 @@ describe("facturasService", () => {
       enlaceFoto: "https://example.com/factura.jpg",
       observaciones: "Carga inicial",
       tipo: "Compra",
+      departamento: "LOGISTICA",
     });
   });
 
@@ -54,6 +57,19 @@ describe("facturasService", () => {
     expect(extraerFacturas([{ a: 1 }])).toHaveLength(1);
     expect(extraerFacturas({ facturas: [{ a: 1 }, { a: 2 }] })).toHaveLength(2);
     expect(extraerFacturas({ a: 1 })).toEqual([{ a: 1 }]);
+  });
+
+  test("normaliza los departamentos permitidos y rechaza valores desconocidos", () => {
+    expect(normalizarDepartamento("logística")).toBe("LOGISTICA");
+    expect(normalizarDepartamento(" comercial ")).toBe("COMERCIAL");
+    expect(normalizarDepartamento("Sistemas")).toBe("SISTEMAS");
+    expect(() => normalizarDepartamento("Contabilidad")).toThrow(/Departamento no valido/);
+  });
+
+  test("asigna Logistica por defecto al importar una factura", () => {
+    expect(normalizarFactura({ numeroFactura: "DEP-001" })).toMatchObject({
+      departamento: "LOGISTICA",
+    });
   });
 
   test("acepta facturas sin RUC o cedula y deja la identificacion vacia", () => {
@@ -180,7 +196,19 @@ describe("facturasService", () => {
         size: buffer.length,
         mimetype: "image/webp",
       }),
-    ).toThrow(/JPG, PNG o WEBP valida/);
+    ).toThrow(/WEBP valido/);
+  });
+
+  test("filtra la fecha de carga usando el dia completo de Ecuador", () => {
+    const where = normalizarFiltros({
+      fechaCargaInicio: "2026-11-10",
+      fechaCargaFin: "2026-11-11",
+    });
+
+    expect(where.createdAt[require("sequelize").Op.gte].toISOString())
+      .toBe("2026-11-10T05:00:00.000Z");
+    expect(where.createdAt[require("sequelize").Op.lte].toISOString())
+      .toBe("2026-11-12T04:59:59.999Z");
   });
 
   test("rechaza contenido pegado que no sea JSON valido", async () => {
@@ -291,6 +319,7 @@ describe("facturasService", () => {
           subtotal: "100,50",
           iva: "15,08",
           total: "115,58",
+          departamento: "comercial",
         },
       }),
     ).resolves.toMatchObject({
@@ -300,6 +329,7 @@ describe("facturasService", () => {
       subtotal: 100.5,
       iva: 15.08,
       total: 115.58,
+      departamento: "COMERCIAL",
     });
     expect(factura.update).toHaveBeenCalled();
   });
@@ -314,5 +344,10 @@ describe("facturasService", () => {
     await expect(
       actualizarFactura({ id: 7, payload: { numeroFactura: "001-001-0002" } }),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("filtra facturas por departamento", () => {
+    expect(normalizarFiltros({ departamento: "sistemas" }))
+      .toMatchObject({ departamento: "SISTEMAS" });
   });
 });

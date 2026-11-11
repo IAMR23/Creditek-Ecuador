@@ -114,4 +114,18 @@ describe("migracion de facturas", () => {
     }
     expect(sql).not.toMatch(/\bDELETE\b/i);
   });
+
+  test("agrega departamento y asigna Logistica a las facturas existentes", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "202611110001-add-departamento-facturas.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS departamento VARCHAR\(20\)/i);
+    expect(sql).toMatch(/SET departamento = 'LOGISTICA'/i);
+    expect(sql).toMatch(/WHERE departamento IS NULL/i);
+    expect(sql).toMatch(/ALTER COLUMN departamento SET NOT NULL/i);
+    expect(sql).toMatch(/'LOGISTICA', 'COMERCIAL', 'SISTEMAS'/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_departamento_idx/i);
+    expect(sql).not.toMatch(/\bDELETE\b|DROP TABLE/i);
+  });
 });

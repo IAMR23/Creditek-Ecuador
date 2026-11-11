@@ -21,8 +21,6 @@ jest.mock("../../controllers/Gerencia/facturasController", () => ({
 }));
 jest.mock("../../services/facturasService", () => ({
   FACTURA_IMAGE_EXTENSIONS: {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
     "image/webp": ".webp",
   },
   MAX_FACTURA_IMAGE_BYTES: 600 * 1024,
@@ -108,6 +106,17 @@ describe("rutas de facturas", () => {
       .post("/api/gerencia/facturas/7/foto")
       .set("x-test-permisos", "Gerencia")
       .attach("foto", Buffer.from("archivo"), "factura.pdf")
+      .expect(400);
+  });
+
+  test("rechaza una foto sin convertir a WEBP", async () => {
+    await request(createApp())
+      .post("/api/gerencia/facturas/7/foto")
+      .set("x-test-permisos", "Gerencia")
+      .attach("foto", Buffer.from([0xff, 0xd8, 0xff, 0x00]), {
+        filename: "factura.jpg",
+        contentType: "image/jpeg",
+      })
       .expect(400);
   });
 });

@@ -2261,6 +2261,12 @@ const ensureFacturasPreSyncSchema = async (queryInterface) => {
   if (!tables.includes("facturas")) return;
 
   const columns = await queryInterface.describeTable("facturas");
+  if (!columns.departamento) {
+    await queryInterface.addColumn("facturas", "departamento", {
+      type: Sequelize.STRING(20),
+      allowNull: true,
+    });
+  }
   const optionalColumns = [
     "fechaFactura",
     "proveedor",
@@ -2289,6 +2295,31 @@ const ensureFacturasPreSyncSchema = async (queryInterface) => {
     ${nullableChanges
       ? `ALTER TABLE public.facturas\n      ${nullableChanges};`
       : ""}
+
+    UPDATE public.facturas
+    SET departamento = 'LOGISTICA'
+    WHERE departamento IS NULL;
+
+    ALTER TABLE public.facturas
+      ALTER COLUMN departamento SET DEFAULT 'LOGISTICA',
+      ALTER COLUMN departamento SET NOT NULL;
+
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'facturas_departamento_check'
+          AND conrelid = 'public.facturas'::regclass
+      ) THEN
+        ALTER TABLE public.facturas
+          ADD CONSTRAINT facturas_departamento_check
+          CHECK (departamento IN ('LOGISTICA', 'COMERCIAL', 'SISTEMAS'));
+      END IF;
+    END $$;
+
+    CREATE INDEX IF NOT EXISTS facturas_departamento_idx
+      ON public.facturas (departamento);
 
     DO $$
     DECLARE

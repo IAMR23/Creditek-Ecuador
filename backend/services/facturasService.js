@@ -13,10 +13,9 @@ const MAX_FACTURA_IMAGE_BYTES = 600 * 1024;
 const MAX_FACTURAS_POR_ARCHIVO = 1000;
 const MAX_LIMIT = 100;
 const CAMPOS_MONETARIOS = ["subtotal", "iva", "total"];
+const DEPARTAMENTOS = ["LOGISTICA", "COMERCIAL", "SISTEMAS"];
 const FACTURAS_UPLOAD_DIR = path.resolve(__dirname, "..", "uploads", "facturas");
 const FACTURA_IMAGE_EXTENSIONS = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
   "image/webp": ".webp",
 };
 
@@ -56,6 +55,18 @@ const normalizarTexto = (value, maxLength) => {
 
 const normalizarNumeroFactura = (value) =>
   normalizarTexto(value, 100)?.replace(/\s+/g, "").toUpperCase() || null;
+
+const normalizarDepartamento = (value, valorPorDefecto = null) => {
+  const departamento = normalizarTexto(value, 30)
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+  if (!departamento) return valorPorDefecto;
+  if (!DEPARTAMENTOS.includes(departamento)) {
+    throw crearError(`Departamento no valido. Usa: ${DEPARTAMENTOS.join(", ")}`);
+  }
+  return departamento;
+};
 
 const normalizarId = (value) => {
   const id = Number(value);
@@ -170,6 +181,10 @@ const normalizarFactura = (payload, index = 0) => {
       5000,
     ),
     tipo: normalizarTexto(primerValor(values, ["tipo", "TIPO"]), 100),
+    departamento: normalizarDepartamento(
+      primerValor(values, ["departamento", "area", "departamento correspondiente"]),
+      "LOGISTICA",
+    ),
   };
 
   const advertencias = [];
@@ -282,7 +297,7 @@ const validarFotoFactura = (file) => {
   }
   const extension = FACTURA_IMAGE_EXTENSIONS[file.mimetype];
   if (!extension || !firmaImagenValida(file.buffer, file.mimetype)) {
-    throw crearError("La imagen debe ser JPG, PNG o WEBP valida");
+    throw crearError("La imagen procesada debe ser un WEBP valido");
   }
   return extension;
 };
@@ -520,6 +535,11 @@ const normalizarDatosEdicion = (payload) => {
     if (tieneCampo(campo)) datos[campo] = normalizador(payload[campo], maxLength);
   }
 
+  if (tieneCampo("departamento")) {
+    datos.departamento = normalizarDepartamento(payload.departamento);
+    if (!datos.departamento) throw crearError("El departamento es obligatorio");
+  }
+
   for (const campo of CAMPOS_MONETARIOS) {
     if (!tieneCampo(campo)) continue;
     datos[campo] = normalizarMonto(payload[campo]);
@@ -579,6 +599,7 @@ const normalizarFiltros = (query = {}) => {
       "formaPago",
       "estado",
       "tipo",
+      "departamento",
       "observaciones",
     ].map((field) => ({ [field]: { [Op.iLike]: `%${search}%` } }));
   }
@@ -590,12 +611,25 @@ const normalizarFiltros = (query = {}) => {
     const value = normalizarTexto(query[queryKey], max);
     if (value) where[field] = value;
   }
+  const departamento = normalizarDepartamento(query.departamento);
+  if (departamento) where.departamento = departamento;
   const start = normalizarFecha(query.fechaInicio);
   const end = normalizarFecha(query.fechaFin);
   if (start || end) {
     where.fechaFactura = {};
     if (start) where.fechaFactura[Op.gte] = start;
     if (end) where.fechaFactura[Op.lte] = end;
+  }
+  const uploadStart = normalizarFecha(query.fechaCargaInicio);
+  const uploadEnd = normalizarFecha(query.fechaCargaFin);
+  if (uploadStart || uploadEnd) {
+    where.createdAt = {};
+    if (uploadStart) {
+      where.createdAt[Op.gte] = new Date(`${uploadStart}T00:00:00-05:00`);
+    }
+    if (uploadEnd) {
+      where.createdAt[Op.lte] = new Date(`${uploadEnd}T23:59:59.999-05:00`);
+    }
   }
   return where;
 };
@@ -634,6 +668,7 @@ const listar = async (query = {}) => {
       estados: [...new Set(catalogRows.map((row) => row.estado).filter(Boolean))].sort(),
       tipos: [...new Set(catalogRows.map((row) => row.tipo).filter(Boolean))].sort(),
       formasPago: [...new Set(catalogRows.map((row) => row.formaPago).filter(Boolean))].sort(),
+      departamentos: DEPARTAMENTOS,
     },
     paginacion: {
       page,
@@ -646,6 +681,7 @@ const listar = async (query = {}) => {
 
 module.exports = {
   FACTURA_IMAGE_EXTENSIONS,
+  DEPARTAMENTOS,
   MAX_FACTURA_IMAGE_BYTES,
   MAX_JSON_BYTES,
   actualizarFactura,
@@ -657,6 +693,8 @@ module.exports = {
   listar,
   normalizarFecha,
   normalizarFactura,
+  normalizarDepartamento,
+  normalizarFiltros,
   normalizarMonto,
   parsearExcel,
   validarFotoFactura,
