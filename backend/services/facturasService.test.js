@@ -8,6 +8,7 @@ const {
   actualizarFactura,
   cargarJsonTexto,
   extraerFacturas,
+  listar,
   normalizarFactura,
   normalizarDepartamento,
   normalizarFiltros,
@@ -349,5 +350,22 @@ describe("facturasService", () => {
   test("filtra facturas por departamento", () => {
     expect(normalizarFiltros({ departamento: "sistemas" }))
       .toMatchObject({ departamento: "SISTEMAS" });
+  });
+
+  test("ordena el historial por la fecha de carga mas reciente", async () => {
+    FacturaRegistro.findAndCountAll = jest.fn().mockResolvedValue({
+      rows: [],
+      count: 0,
+    });
+    FacturaRegistro.sum = jest.fn().mockResolvedValue(0);
+    FacturaRegistro.findAll = jest.fn().mockResolvedValue([]);
+
+    await listar({ page: 1, limit: 25 });
+
+    expect(FacturaRegistro.findAndCountAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order: [["createdAt", "DESC"], ["id", "DESC"]],
+      }),
+    );
   });
 });

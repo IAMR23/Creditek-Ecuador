@@ -641,7 +641,7 @@ const listar = async (query = {}) => {
   const { rows, count } = await FacturaRegistro.findAndCountAll({
     where,
     attributes: { exclude: ["payloadOriginal"] },
-    order: [["fechaFactura", "DESC"], ["id", "DESC"]],
+    order: [["createdAt", "DESC"], ["id", "DESC"]],
     limit,
     offset: (page - 1) * limit,
   });
