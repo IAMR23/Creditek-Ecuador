@@ -39,8 +39,8 @@ const ESTADOS = {
     className: "bg-sky-300 text-black",
   },
   vacaciones: {
-    label: "VAC",
-    nombre: "Vacaciones aprobadas (derivado)",
+    label: "V",
+    nombre: "Vacaciones (derivado)",
     className: "bg-orange-500 text-white",
   },
   libre: {
@@ -671,7 +671,9 @@ export default function ControlAsistencia({ fase = "", embedded = false }) {
                               item.fecha
                             )
                             const titulo = registro.conflictoVacacion
-                              ? `Conflicto: existe un movimiento de asistencia y una vacación aprobada (solicitud #${registro.solicitudVacacionId}).`
+                              ? registro.solicitudVacacionId
+                                ? `Conflicto: existe un movimiento de asistencia y una vacación aprobada (solicitud #${registro.solicitudVacacionId}).`
+                                : "Conflicto: existe un movimiento de asistencia y una vacación registrada."
                               : bloqueadoPorFechaIngreso
                               ? `No disponible. Fecha de ingreso: ${usuario.fechaIngreso}`
                               : tieneObservacion

@@ -170,6 +170,8 @@ exports.obtenerReporteAuditoria = async ({
           "formaPagoId",
           "observacionDetalle",
           "referenciaPdf",
+          "precioVendedorPdf",
+          "entradaPdf",
         ],
         ...((Object.keys(whereDetalleVenta).length > 0 ||
           (dispositivoId && dispositivoId !== "todos")) && {
@@ -1673,6 +1675,8 @@ const flattenVentasAuditoria = (ventas) => {
         modelo: detalle.modelo?.nombre || "",
         contrato: detalle.contrato || "",
         referenciaPdf: detalle.referenciaPdf || "",
+        precioVendedorPdf: toNumero(detalle.precioVendedorPdf),
+        entradaPdf: toNumero(detalle.entradaPdf),
         precioVendedor: toNumero(detalle.precioVendedor),
         entrada: toNumero(detalle.entrada),
       });
@@ -1775,8 +1779,8 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       referenciaPdf: fila.referenciaPdf || "",
       clientePdf: "",
       fechaPdf: "",
-      precioVendedorPdf: null,
-      entradaPdf: null,
+      precioVendedorPdf: fila.precioVendedorPdf ?? null,
+      entradaPdf: fila.entradaPdf ?? null,
       similitudCliente: "",
       observacionError: "NO_EN_PDF",
     }));
@@ -1791,6 +1795,15 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
     const codigoPdf = record.codigo_pdf || "";
     const referenciaRecordPdf = getReferenciaRecordPdf({ tipo, record });
     const contratoPdf = String(record.factura || "").trim();
+    const precioVendedorPdf = getValorVentasPdf(record);
+    const entradaPdf =
+      record.entrada_detectada === false ? null : toNumero(record.entrada);
+    const valoresPdfPersistibles = {
+      ...(referenciaRecordPdf ? { referenciaPdf: referenciaRecordPdf } : {}),
+      ...(contratoPdf ? { contrato: contratoPdf } : {}),
+      ...(precioVendedorPdf !== null ? { precioVendedorPdf } : {}),
+      ...(entradaPdf !== null ? { entradaPdf } : {}),
+    };
     const contratoPdfNormalizado = normalizarContrato(contratoPdf);
     const mapeo = await getModeloMapeado({ tipo, codigoPdf });
 
@@ -1907,14 +1920,9 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       if (!detalleCelularYaAsignado && matchModeloDiferente) {
         detallesAsignados.add(Number(matchModeloDiferente.detalleVentaId));
 
-        if (referenciaRecordPdf || contratoPdf) {
+        if (Object.keys(valoresPdfPersistibles).length) {
           await DetalleVenta.update(
-            {
-              ...(referenciaRecordPdf
-                ? { referenciaPdf: referenciaRecordPdf }
-                : {}),
-              ...(contratoPdf ? { contrato: contratoPdf } : {}),
-            },
+            valoresPdfPersistibles,
             { where: { id: matchModeloDiferente.detalleVentaId } },
           );
         }
@@ -1931,9 +1939,8 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
           referenciaPdf: referenciaRecordPdf || filaBase?.referenciaPdf || "",
           clientePdf: record.cliente || "",
           fechaPdf,
-          precioVendedorPdf: getValorVentasPdf(record),
-          entradaPdf:
-            record.entrada_detectada === false ? null : toNumero(record.entrada),
+          precioVendedorPdf,
+          entradaPdf,
           similitudCliente: matchModeloDiferente.similitudCliente,
           observacionError: construirObservacionModeloDiferente({
             record,
@@ -1991,14 +1998,9 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
 
     detallesAsignados.add(Number(match.detalleVentaId));
 
-    if (referenciaRecordPdf || contratoPdf) {
+    if (Object.keys(valoresPdfPersistibles).length) {
       await DetalleVenta.update(
-        {
-          ...(referenciaRecordPdf
-            ? { referenciaPdf: referenciaRecordPdf }
-            : {}),
-          ...(contratoPdf ? { contrato: contratoPdf } : {}),
-        },
+        valoresPdfPersistibles,
         { where: { id: match.detalleVentaId } },
       );
     }
@@ -2020,9 +2022,8 @@ const auditarRegistrosPdf = async ({ tipo, registrosPdf, ventas }) => {
       referenciaPdf: referenciaRecordPdf || filaBase?.referenciaPdf || "",
       clientePdf: record.cliente || "",
       fechaPdf,
-      precioVendedorPdf: getValorVentasPdf(record),
-      entradaPdf:
-        record.entrada_detectada === false ? null : toNumero(record.entrada),
+      precioVendedorPdf,
+      entradaPdf,
       similitudCliente: match.similitudCliente,
       observacionError,
     });
@@ -2090,6 +2091,8 @@ exports.formatearReporte = (ventas) => {
         marca: detalle.dispositivoMarca?.marca?.nombre || "",
         modelo: detalle.modelo?.nombre || "",
         referenciaPdf: detalle.referenciaPdf || "",
+        precioVendedorPdf: detalle.precioVendedorPdf ?? null,
+        entradaPdf: detalle.entradaPdf ?? null,
         formaPagoId: detalle.formaPagoId || null,
         formaPago: detalle.formaPago?.nombre || "",
         valorCorregido: detalle.precioUnitario || "",

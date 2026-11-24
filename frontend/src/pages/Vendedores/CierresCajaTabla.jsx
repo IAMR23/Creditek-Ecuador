@@ -372,16 +372,26 @@ export default function CierresCajaTabla() {
     );
   }, [cierres, selectedCierreId]);
 
-  const totalFisicoConsultado = useMemo(
-    () =>
-      redondearDosDecimales(
-        cierres.reduce(
-          (total, item) => total + (Number(item.cierre?.totalFisico) || 0),
-          0,
-        ),
-      ),
-    [cierres],
-  );
+  const totalesConsultados = useMemo(() => {
+    const totales = cierres.reduce(
+      (acumulado, item) => ({
+        fisico: acumulado.fisico + (Number(item.cierre?.totalFisico) || 0),
+        transferencia:
+          acumulado.transferencia +
+          (Number(item.cierre?.totalTransferencia) || 0),
+      }),
+      { fisico: 0, transferencia: 0 },
+    );
+
+    const fisico = redondearDosDecimales(totales.fisico);
+    const transferencia = redondearDosDecimales(totales.transferencia);
+
+    return {
+      fisico,
+      transferencia,
+      total: redondearDosDecimales(fisico + transferencia),
+    };
+  }, [cierres]);
 
   const descripcionPeriodo = useMemo(() => {
     const { fechaInicio: inicio, fechaFin: fin } = periodoConsultado;
@@ -710,36 +720,34 @@ export default function CierresCajaTabla() {
             </label>
           </div>
 
-          <div
-            className="mt-4 flex flex-col gap-3 rounded border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between"
-            aria-live="polite"
-          >
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-emerald-600 p-2 text-white">
-                <Banknote size={24} />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-emerald-900">
-                  Dinero físico en caja
-                </p>
-                <p className="text-xs text-emerald-700">{descripcionPeriodo}</p>
-              </div>
-            </div>
-
-            <div className="sm:text-right">
-              <p className="text-2xl font-bold text-emerald-900">
-                {loading
-                  ? "Calculando..."
-                  : error
-                    ? "No disponible"
-                    : formatearMoneda(totalFisicoConsultado)}
-              </p>
-              {!loading && !error && (
-                <p className="text-xs text-emerald-700">
-                  {cierres.length} {cierres.length === 1 ? "cierre incluido" : "cierres incluidos"}
-                </p>
-              )}
-            </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3" aria-live="polite">
+            <MetricaCierres
+              titulo="Dinero físico en caja"
+              valor={totalesConsultados.fisico}
+              descripcion={descripcionPeriodo}
+              cantidadCierres={cierres.length}
+              loading={loading}
+              error={error}
+              color="emerald"
+            />
+            <MetricaCierres
+              titulo="Transferencia"
+              valor={totalesConsultados.transferencia}
+              descripcion={descripcionPeriodo}
+              cantidadCierres={cierres.length}
+              loading={loading}
+              error={error}
+              color="blue"
+            />
+            <MetricaCierres
+              titulo="Total físico + transferencia"
+              valor={totalesConsultados.total}
+              descripcion={descripcionPeriodo}
+              cantidadCierres={cierres.length}
+              loading={loading}
+              error={error}
+              color="slate"
+            />
           </div>
         </div>
 
@@ -876,6 +884,66 @@ function EstadoCierreBadge({ estado }) {
   );
 }
 
+function MetricaCierres({
+  titulo,
+  valor,
+  descripcion,
+  cantidadCierres,
+  loading,
+  error,
+  color,
+}) {
+  const estilos = {
+    emerald: {
+      contenedor: "border-emerald-200 bg-emerald-50",
+      icono: "bg-emerald-600",
+      titulo: "text-emerald-900",
+      detalle: "text-emerald-700",
+    },
+    blue: {
+      contenedor: "border-blue-200 bg-blue-50",
+      icono: "bg-blue-600",
+      titulo: "text-blue-900",
+      detalle: "text-blue-700",
+    },
+    slate: {
+      contenedor: "border-slate-300 bg-slate-50",
+      icono: "bg-slate-700",
+      titulo: "text-slate-900",
+      detalle: "text-slate-600",
+    },
+  };
+  const estilo = estilos[color] || estilos.slate;
+
+  return (
+    <div
+      className={`flex flex-col gap-3 rounded border p-4 sm:flex-row sm:items-center sm:justify-between ${estilo.contenedor}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`rounded-full p-2 text-white ${estilo.icono}`}>
+          <Banknote size={24} />
+        </div>
+        <div>
+          <p className={`text-sm font-semibold ${estilo.titulo}`}>{titulo}</p>
+          <p className={`text-xs ${estilo.detalle}`}>{descripcion}</p>
+        </div>
+      </div>
+
+      <div className="sm:text-right">
+        <p className={`text-2xl font-bold ${estilo.titulo}`}>
+          {loading ? "Calculando..." : error ? "No disponible" : formatearMoneda(valor)}
+        </p>
+        {!loading && !error && (
+          <p className={`text-xs ${estilo.detalle}`}>
+            {cantidadCierres}{" "}
+            {cantidadCierres === 1 ? "cierre incluido" : "cierres incluidos"}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
   return (
     <div className="min-w-0 border bg-white">
@@ -885,6 +953,7 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
           <col className="w-24" />
           <col className="w-[11%]" />
           <col className="w-[14%]" />
+          <col className="w-[9%]" />
           <col className="w-[9%]" />
           <col className="w-[9%]" />
           <col className="w-[10%]" />
@@ -897,7 +966,8 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
             <Th>Fecha</Th>
             <Th>Usuario</Th>
             <Th>Agencia</Th>
-            <Th>Fisico</Th>
+            <Th>Físico</Th>
+            <Th>Transferencia</Th>
             <Th>Diferencia</Th>
             <Th>Cuadre</Th>
             <Th>Estado</Th>
@@ -922,6 +992,7 @@ function SelectorCierres({ cierres, selectedCierreId, seleccionarCierre }) {
                 <Td>{cierre.usuarioAgencia?.usuario?.nombre || "-"}</Td>
                 <Td>{cierre.usuarioAgencia?.agencia?.nombre || "-"}</Td>
                 <Td>{formatearMoneda(cierre.totalFisico)}</Td>
+                <Td>{formatearMoneda(cierre.totalTransferencia)}</Td>
                 <Td>
                   <span
                     className={claseDiferencia(cierre.diferencia)}

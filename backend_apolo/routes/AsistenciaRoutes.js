@@ -7,6 +7,8 @@ const UsuarioAgencia = require("../models/UsuarioAgencia");
 const Asistencia = require("../models/Asistencia");
 const Postulacion = require("../models/Postulacion");
 const VacacionSolicitud = require("../models/VacacionSolicitud");
+const VacacionMovimiento = require("../models/VacacionMovimiento");
+const VacacionPeriodo = require("../models/VacacionPeriodo");
 const { sequelize } = require("../config/db");
 const {
   sincronizarSalidaUsuarioRve,
@@ -281,6 +283,8 @@ router.get("/agencias", async (req, res) => {
         {
           model: Usuario,
           as: "usuario",
+          where: { mostrarEnMovimientosTerminales: true },
+          required: true,
           attributes: ["id", "cedula", "nombre", "fechaIngreso", "fechaSalida"],
         },
         { model: Agencia, as: "agencia", attributes: ["id", "nombre", "tipo"] },
@@ -348,18 +352,71 @@ router.get("/agencias", async (req, res) => {
         })
       : [];
 
-    for (const vacacion of vacacionesAprobadas) {
-      const desde = vacacion.fechaInicio < start ? start : vacacion.fechaInicio;
+    const vacacionesRegistradas = usuarioIds.length
+      ? await VacacionMovimiento.findAll({
+          where: {
+            categoria: "DISFRUTADO",
+            anuladoAt: null,
+            fechaInicioVacaciones: { [Op.lt]: end },
+            fechaFinVacaciones: { [Op.gte]: start },
+          },
+          attributes: ["id", "fechaInicioVacaciones", "fechaFinVacaciones"],
+          include: [
+            {
+              model: VacacionPeriodo,
+              as: "periodo",
+              required: true,
+              where: { usuarioId: { [Op.in]: usuarioIds } },
+              attributes: ["usuarioId"],
+            },
+          ],
+        })
+      : [];
+
+    const vacacionesPorUsuarioYFecha = new Map();
+    const agregarRangoVacacion = ({ usuarioId, fechaInicio, fechaFin, solicitudId = null }) => {
+      const desde = fechaInicio < start ? start : fechaInicio;
       const ultimoMes = new Date(`${end}T00:00:00`);
       ultimoMes.setDate(ultimoMes.getDate() - 1);
       const hastaMes = `${ultimoMes.getFullYear()}-${String(ultimoMes.getMonth() + 1).padStart(2, "0")}-${String(ultimoMes.getDate()).padStart(2, "0")}`;
-      const hasta = vacacion.fechaFin > hastaMes ? hastaMes : vacacion.fechaFin;
-      if (!asistenciasPorUsuario.has(vacacion.usuarioId)) asistenciasPorUsuario.set(vacacion.usuarioId, {});
-      const actuales = asistenciasPorUsuario.get(vacacion.usuarioId);
+      const hasta = fechaFin > hastaMes ? hastaMes : fechaFin;
       for (const fecha of obtenerFechasEnRango(desde, hasta)) {
-        const movimiento = actuales[fecha];
-        actuales[fecha] = combinarMarcaVacacion(movimiento, vacacion.id);
+        const key = `${usuarioId}:${fecha}`;
+        const actual = vacacionesPorUsuarioYFecha.get(key);
+        vacacionesPorUsuarioYFecha.set(key, {
+          usuarioId,
+          fecha,
+          solicitudId: actual?.solicitudId || solicitudId,
+        });
       }
+    };
+
+    for (const movimiento of vacacionesRegistradas) {
+      agregarRangoVacacion({
+        usuarioId: movimiento.periodo.usuarioId,
+        fechaInicio: movimiento.fechaInicioVacaciones,
+        fechaFin: movimiento.fechaFinVacaciones,
+      });
+    }
+
+    for (const vacacion of vacacionesAprobadas) {
+      agregarRangoVacacion({
+        usuarioId: vacacion.usuarioId,
+        fechaInicio: vacacion.fechaInicio,
+        fechaFin: vacacion.fechaFin,
+        solicitudId: vacacion.id,
+      });
+    }
+
+    for (const vacacion of vacacionesPorUsuarioYFecha.values()) {
+      if (!asistenciasPorUsuario.has(vacacion.usuarioId)) {
+        asistenciasPorUsuario.set(vacacion.usuarioId, {});
+      }
+      const actuales = asistenciasPorUsuario.get(vacacion.usuarioId);
+      actuales[vacacion.fecha] = combinarMarcaVacacion(
+        actuales[vacacion.fecha],
+        vacacion.solicitudId,
+      );
     }
 
     for (const ua of usuarioAgencias) {

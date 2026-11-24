@@ -133,6 +133,16 @@ test("marca VAC sin sobrescribir el movimiento de asistencia y expone conflicto"
   });
 });
 
+test("marca como vacaciones registradas los descansos históricos", () => {
+  assert.deepEqual(combinarMarcaVacacion(null, null), {
+    estado: "vacaciones",
+    observacion: "Vacación registrada",
+    vacacion: true,
+    conflictoVacacion: false,
+    solicitudVacacionId: null,
+  });
+});
+
 test("la clave de origen de movimientos soporta idempotencia y doble aprobación", () => {
   const movimientos = new Set();
   const insertar = (periodoId, categoria, origenTipo, origenId) => {

@@ -145,7 +145,13 @@ const distribuirConsumo = (asignaciones, objetivo, consumidoPorPeriodo = {}) => 
 
 const combinarMarcaVacacion = (movimiento, solicitudId) => movimiento
   ? { ...movimiento, vacacion: true, conflictoVacacion: true, solicitudVacacionId: solicitudId }
-  : { estado: "vacaciones", observacion: "Vacación aprobada", vacacion: true, conflictoVacacion: false, solicitudVacacionId: solicitudId };
+  : {
+      estado: "vacaciones",
+      observacion: solicitudId == null ? "Vacación registrada" : "Vacación aprobada",
+      vacacion: true,
+      conflictoVacacion: false,
+      solicitudVacacionId: solicitudId,
+    };
 
 module.exports = {
   calcularReconocimientoOrdinario, combinarMarcaVacacion, contarDiasCalendario, distribuirConsumo, estadoTemporal,

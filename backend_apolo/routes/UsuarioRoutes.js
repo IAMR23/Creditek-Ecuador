@@ -96,6 +96,7 @@ router.post("/", async (req, res) => {
       direccion,
       telefono,
       agenciaId,
+      mostrarEnMovimientosTerminales,
     } = req.body;
     const nombreNormalizado = normalizeText(nombre);
     const cedulaNormalizada = normalizeText(cedula);
@@ -241,6 +242,10 @@ router.post("/", async (req, res) => {
             direccion: normalizeOptionalText(direccion),
             telefono: normalizeOptionalText(telefono),
             activo: true,
+            mostrarEnMovimientosTerminales:
+              mostrarEnMovimientosTerminales === undefined
+                ? true
+                : Boolean(mostrarEnMovimientosTerminales),
           },
           { transaction },
         );
@@ -396,6 +401,7 @@ router.put("/:id", async (req, res) => {
       numeroCuenta,
       direccion,
       telefono,
+      mostrarEnMovimientosTerminales,
     } = req.body;
     const fechaSalidaNormalizada =
       fechaSalida === undefined
@@ -506,6 +512,12 @@ router.put("/:id", async (req, res) => {
       usuario.cedula = cedulaNormalizada;
     }
     if (activo !== undefined) usuario.activo = activo;
+    if (mostrarEnMovimientosTerminales !== undefined) {
+      usuario.mostrarEnMovimientosTerminales = Boolean(
+        mostrarEnMovimientosTerminales,
+      );
+    }
+    if (activo === false) usuario.mostrarEnMovimientosTerminales = false;
     if (fechaIngreso !== undefined) usuario.fechaIngreso = fechaIngreso;
     if (fechaSalida !== undefined) usuario.fechaSalida = fechaSalidaNormalizada;
     if (numeroCuenta !== undefined) usuario.numeroCuenta = numeroCuenta;
@@ -561,6 +573,7 @@ router.delete("/:id", async (req, res) => {
     if (!usuario) return res.status(404).json({ message: "Usuario no encontrado" });
 
     usuario.activo = false;
+    usuario.mostrarEnMovimientosTerminales = false;
     await usuario.save();
 
     await UsuarioAgencia.update(

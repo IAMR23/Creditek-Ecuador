@@ -115,6 +115,7 @@ test("crea usuario y agencia en una sola transaccion", async () => {
   assert.equal(response.body.cedula, "0102030405");
   assert.equal(response.body.email, "maria.perez@ejemplo.com");
   assert.equal(response.body.usuario, "maria.perez");
+  assert.equal(response.body.mostrarEnMovimientosTerminales, true);
   assert.equal(response.body.password, undefined);
   assert.equal(usuariosCreados.length, 1);
   assert.equal(relacionesCreadas.length, 1);
@@ -344,6 +345,27 @@ test("al limpiar fechaSalida no borra la asistencia existente", async () => {
   assert.deepEqual(actualizaciones[0].values, { estado: null });
   assert.equal(actualizaciones[0].options.where.fecha, "2026-07-27");
   assert.equal(eliminaciones, 0);
+});
+
+test("al desactivar un usuario también lo oculta de Movimientos de Terminales", async () => {
+  let guardado = false;
+  const usuarioExistente = {
+    id: 30,
+    activo: true,
+    mostrarEnMovimientosTerminales: true,
+    save: async function () {
+      guardado = true;
+    },
+  };
+
+  Usuario.findByPk = async () => usuarioExistente;
+
+  const response = await requestJson("/30", { method: "DELETE" });
+
+  assert.equal(response.status, 200);
+  assert.equal(guardado, true);
+  assert.equal(usuarioExistente.activo, false);
+  assert.equal(usuarioExistente.mostrarEnMovimientosTerminales, false);
 });
 
 test("exige una agencia para no dejar usuarios incompletos", async () => {

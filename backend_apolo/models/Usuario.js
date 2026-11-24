@@ -58,6 +58,11 @@ const Usuario = sequelize.define(
     direccion: { type: DataTypes.STRING, allowNull: true },
     telefono: { type: DataTypes.STRING, allowNull: true },
     activo: { type: DataTypes.BOOLEAN, defaultValue: true },
+    mostrarEnMovimientosTerminales: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
   },
   { timestamps: true, tableName: "usuarios" }
 );

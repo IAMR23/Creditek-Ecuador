@@ -1,0 +1,7 @@
+BEGIN;
+
+ALTER TABLE detalle_ventas
+  ADD COLUMN IF NOT EXISTS "precioVendedorPdf" DECIMAL(10, 2),
+  ADD COLUMN IF NOT EXISTS "entradaPdf" DECIMAL(10, 2);
+
+COMMIT;

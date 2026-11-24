@@ -340,12 +340,22 @@ describe("auditarRegistrosPdf", () => {
     ]);
     expect(DetalleVenta.update).toHaveBeenNthCalledWith(
       1,
-      { referenciaPdf: "LA32ZEC", contrato: "PDF-1" },
+      {
+        referenciaPdf: "LA32ZEC",
+        contrato: "PDF-1",
+        precioVendedorPdf: 100,
+        entradaPdf: 10,
+      },
       { where: { id: 3675 } },
     );
     expect(DetalleVenta.update).toHaveBeenNthCalledWith(
       2,
-      { referenciaPdf: "LA32ZEC", contrato: "PDF-2" },
+      {
+        referenciaPdf: "LA32ZEC",
+        contrato: "PDF-2",
+        precioVendedorPdf: 100,
+        entradaPdf: 10,
+      },
       { where: { id: 3676 } },
     );
     expect(auditoria.resultados.map((fila) => fila.contrato)).toEqual([
@@ -380,12 +390,22 @@ describe("auditarRegistrosPdf", () => {
 
     expect(DetalleVenta.update).toHaveBeenNthCalledWith(
       1,
-      { referenciaPdf: "LA32ZEC", contrato: "TV-002" },
+      {
+        referenciaPdf: "LA32ZEC",
+        contrato: "TV-002",
+        precioVendedorPdf: 100,
+        entradaPdf: 10,
+      },
       { where: { id: 3676 } },
     );
     expect(DetalleVenta.update).toHaveBeenNthCalledWith(
       2,
-      { referenciaPdf: "LA32ZEC", contrato: "TV-001" },
+      {
+        referenciaPdf: "LA32ZEC",
+        contrato: "TV-001",
+        precioVendedorPdf: 100,
+        entradaPdf: 10,
+      },
       { where: { id: 3675 } },
     );
     expect(
@@ -447,6 +467,8 @@ describe("auditarRegistrosPdf", () => {
       {
         referenciaPdf: "123456789012345",
         contrato: "CEL-9001",
+        precioVendedorPdf: 100,
+        entradaPdf: 10,
       },
       { where: { id: 3677 } },
     );
@@ -455,6 +477,44 @@ describe("auditarRegistrosPdf", () => {
         detalleVentaId: 3677,
         contrato: "CEL-9001",
         referenciaPdf: "123456789012345",
+      }),
+    );
+  });
+
+  it("no sobrescribe los valores UPH persistidos cuando el PDF no los detecta", async () => {
+    const ventaCelular = crearVentaCelular();
+    ventaCelular.detalleVenta[0].precioVendedorPdf = "95.50";
+    ventaCelular.detalleVenta[0].entradaPdf = "12.25";
+
+    const auditoria = await controller.auditarRegistrosPdf({
+      tipo: "CELULAR",
+      registrosPdf: [
+        {
+          factura: "CEL-9002",
+          fecha: "7/16/26 8:02 PM",
+          cliente: "MISMO CLIENTE",
+          codigo_pdf: "CELULAR PRUEBA",
+          modelo_normalizado: "CELULAR PRUEBA",
+          imei: "123456789012346",
+          valor_ventas_detectado: false,
+          precio_vendedor_detectado: false,
+          entrada_detectada: false,
+        },
+      ],
+      ventas: [ventaCelular],
+    });
+
+    expect(DetalleVenta.update).toHaveBeenCalledWith(
+      {
+        referenciaPdf: "123456789012346",
+        contrato: "CEL-9002",
+      },
+      { where: { id: 3677 } },
+    );
+    expect(auditoria.resultados[0]).toEqual(
+      expect.objectContaining({
+        precioVendedorPdf: null,
+        entradaPdf: null,
       }),
     );
   });
@@ -736,6 +796,17 @@ describe("comentario de auditoria de ventas", () => {
     expect(fila.observacionDetalle).toBe(
       "Cliente solicita entrega por la tarde",
     );
+  });
+
+  test("incluye los valores UPH persistidos al formatear el reporte", () => {
+    const venta = crearVentaCelular();
+    venta.detalleVenta[0].precioVendedorPdf = "95.50";
+    venta.detalleVenta[0].entradaPdf = "12.25";
+
+    const [fila] = controller.formatearReporte([venta]);
+
+    expect(fila.precioVendedorPdf).toBe("95.50");
+    expect(fila.entradaPdf).toBe("12.25");
   });
 
   test("guarda un comentario normalizado para la venta", async () => {

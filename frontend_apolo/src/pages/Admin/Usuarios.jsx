@@ -64,6 +64,7 @@ export default function Usuarios() {
     numeroCuenta: "",
     direccion: "",
     telefono: "",
+    mostrarEnMovimientosTerminales: true,
     agenciasIds: [],
   });
 
@@ -82,6 +83,7 @@ export default function Usuarios() {
     direccion: "",
     telefono: "",
     activo: true,
+    mostrarEnMovimientosTerminales: true,
     agenciasIds: [],
   });
 
@@ -154,6 +156,7 @@ export default function Usuarios() {
         numeroCuenta: normalizeText(form.numeroCuenta),
         direccion: normalizeText(form.direccion),
         telefono: normalizeText(form.telefono),
+        mostrarEnMovimientosTerminales: form.mostrarEnMovimientosTerminales,
         agenciaId: form.agenciasIds[0],
       });
 
@@ -169,6 +172,7 @@ export default function Usuarios() {
         numeroCuenta: "",
         direccion: "",
         telefono: "",
+        mostrarEnMovimientosTerminales: true,
         agenciasIds: [],
       });
 
@@ -206,6 +210,8 @@ export default function Usuarios() {
       direccion: usuario.direccion || "",
       telefono: usuario.telefono || "",
       activo: !!usuario.activo,
+      mostrarEnMovimientosTerminales:
+        usuario.mostrarEnMovimientosTerminales !== false,
       agenciasIds: agenciasUser.map((a) => a.id),
     });
     setEditModal(true);
@@ -227,6 +233,7 @@ export default function Usuarios() {
       direccion: "",
       telefono: "",
       activo: true,
+      mostrarEnMovimientosTerminales: true,
       agenciasIds: [],
     });
   };
@@ -292,6 +299,8 @@ export default function Usuarios() {
         direccion: normalizeText(editForm.direccion),
         telefono: normalizeText(editForm.telefono),
         activo: editForm.activo,
+        mostrarEnMovimientosTerminales:
+          editForm.activo && editForm.mostrarEnMovimientosTerminales,
       });
 
       await sincronizarAgenciasUsuario(editForm.id, editForm.agenciasIds);
@@ -570,6 +579,27 @@ export default function Usuarios() {
           </div>
 
           <div className="md:col-span-2 border border-slate-200 rounded-2xl p-4 bg-white">
+            <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 p-3">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-orange-500"
+                checked={form.mostrarEnMovimientosTerminales}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    mostrarEnMovimientosTerminales: e.target.checked,
+                  })
+                }
+              />
+              <span>
+                <span className="block text-sm font-extrabold text-slate-950">
+                  Movimientos de terminales
+                </span>
+                <span className="mt-1 block text-xs text-slate-600">
+                  Si está activo, el usuario aparecerá en Movimientos de Terminales.
+                </span>
+              </span>
+            </label>
             <div className="text-sm font-extrabold tracking-tight text-slate-950">
               Agencias
             </div>
@@ -722,6 +752,7 @@ export default function Usuarios() {
                 <th className="p-3 text-left">Rol</th>
                 <th className="p-3 text-left hidden lg:table-cell">Agencias</th>
                 <th className="p-3 text-left">Activo</th>
+                <th className="p-3 text-left">Terminales</th>
                 <th className="p-3 text-center">Acciones</th>
               </tr>
             </thead>
@@ -743,6 +774,9 @@ export default function Usuarios() {
                       {list.length ? list.map((a) => a.nombre).join(", ") : "-"}
                     </td>
                     <td className="p-3">{u.activo ? "Sí" : "No"}</td>
+                    <td className="p-3">
+                      {u.mostrarEnMovimientosTerminales ? "Sí" : "No"}
+                    </td>
                     <td className="p-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -767,7 +801,7 @@ export default function Usuarios() {
 
               {usuariosFiltrados.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="p-4 text-center text-slate-500">
+                  <td colSpan="8" className="p-4 text-center text-slate-500">
                     No hay usuarios para los filtros actuales.
                   </td>
                 </tr>
@@ -978,6 +1012,28 @@ export default function Usuarios() {
               </div>
 
               <div className="md:col-span-2 border border-slate-200 rounded-2xl p-4 bg-white">
+                <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-orange-500"
+                    checked={editForm.mostrarEnMovimientosTerminales}
+                    disabled={!editForm.activo}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        mostrarEnMovimientosTerminales: e.target.checked,
+                      })
+                    }
+                  />
+                  <span>
+                    <span className="block text-sm font-extrabold text-slate-950">
+                      Movimientos de terminales
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-600">
+                      Si está activo, el usuario aparecerá en Movimientos de Terminales.
+                    </span>
+                  </span>
+                </label>
                 <div className="text-sm font-extrabold tracking-tight text-slate-950">
                   Agencias
                 </div>
@@ -1025,6 +1081,10 @@ export default function Usuarios() {
                     setEditForm({
                       ...editForm,
                       activo: e.target.value === "true",
+                      mostrarEnMovimientosTerminales:
+                        e.target.value === "true"
+                          ? editForm.mostrarEnMovimientosTerminales
+                          : false,
                     })
                   }
                 >

@@ -82,6 +82,14 @@ const DetalleVenta = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    precioVendedorPdf: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
+    entradaPdf: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
     cierreCaja: {
       type: DataTypes.STRING,
       allowNull: true,

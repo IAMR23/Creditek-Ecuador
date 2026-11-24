@@ -2619,6 +2619,16 @@ const connectDB = async () => {
         allowNull: true,
       });
 
+      await addColumnIfMissing(queryInterface, "detalle_ventas", "precioVendedorPdf", {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: true,
+      });
+
+      await addColumnIfMissing(queryInterface, "detalle_ventas", "entradaPdf", {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: true,
+      });
+
       const detalleVentaColumns = await queryInterface.describeTable("detalle_ventas");
       const columnasReferenciaAntiguas = ["codigoPdf", "imeiPdf"].filter(
         (column) => detalleVentaColumns[column],
