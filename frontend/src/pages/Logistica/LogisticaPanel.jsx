@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import {
   MdInventory2,
   MdLocalGasStation,
+  MdPhotoCamera,
   MdPointOfSale,
 } from "react-icons/md";
 import { hasRouteAccess, ROUTE_PERMISSIONS } from "../../config/routePermissions";
@@ -26,6 +27,13 @@ function LogisticaPanel() {
   }, []);
 
   const options = [
+    {
+      label: "Logistica",
+      title: "Subir foto de factura",
+      desc: "Toma una foto o selecciona una imagen de la factura",
+      icon: <MdPhotoCamera className="h-10 w-10 text-green-600" />,
+      path: "/logistica-panel/facturas",
+    },
     {
       label: "Logística",
       title: "Kilometraje y combustible",

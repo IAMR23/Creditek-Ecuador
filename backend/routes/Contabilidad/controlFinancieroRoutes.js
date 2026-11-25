@@ -7,7 +7,7 @@ const controller = require("../../controllers/Contabilidad/controlFinancieroCont
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
+router.use(authenticate, requirePermission("Contabilidad"));
 
 router.get("/cargas", controller.listarCargas);
 router.get("/cargas/consolidado-ventas", controller.consolidarVentas);

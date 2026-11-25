@@ -76,11 +76,8 @@ const crearApp = () => {
 };
 
 describe("controlFinancieroRoutes conciliacion de entradas", () => {
-  test("mantiene permisos de Contabilidad y Administracion", () => {
-    expect(mockRequirePermission).toHaveBeenCalledWith(
-      "Contabilidad",
-      "Administracion",
-    );
+  test("exige el permiso de Contabilidad", () => {
+    expect(mockRequirePermission).toHaveBeenCalledWith("Contabilidad");
   });
 
   test("expone el endpoint GET protegido solicitado", async () => {

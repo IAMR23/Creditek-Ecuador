@@ -56,6 +56,13 @@ router.post("/", authenticate, requirePermission("Administracion"), async (req, 
       ],
     });
 
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`user_${usuario.id}`).emit("permisos-actualizados", {
+        actualizadoAt: new Date().toISOString(),
+      });
+    }
+
     res.json({
       message: "Permisos actualizados correctamente",
       permisos: permisosConInfo,
@@ -111,7 +118,7 @@ router.get(
 router.get(
   "/usuarios-repartidores",
   authenticate,
-  requirePermission("Logistica", "Administracion"),
+  requirePermission("Logistica"),
   async (req, res) => {
   try {
     const esAdministrador = (req.user.permisos || []).some(

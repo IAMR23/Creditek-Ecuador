@@ -7,6 +7,7 @@ const ExcelJS = require("exceljs");
 
 const { sequelize } = require("../config/db");
 const FacturaRegistro = require("../models/FacturaRegistro");
+const Usuario = require("../models/Usuario");
 
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
 const MAX_FACTURA_IMAGE_BYTES = 600 * 1024;
@@ -484,7 +485,7 @@ const eliminarFotoLocal = async (enlaceFoto) => {
   }
 };
 
-const guardarFotoFactura = async ({ id, file }) => {
+const guardarFotoFactura = async ({ id, file, userId = null }) => {
   const facturaId = normalizarId(id);
   const extension = validarFotoFactura(file);
   const factura = await FacturaRegistro.findByPk(facturaId);
@@ -498,13 +499,59 @@ const guardarFotoFactura = async ({ id, file }) => {
 
   try {
     await fs.writeFile(filePath, file.buffer, { flag: "wx" });
-    await factura.update({ enlaceFoto });
+    await factura.update({
+      enlaceFoto,
+      ...(userId ? { cargadoPorId: userId } : {}),
+      revisada: false,
+      revisadaAt: null,
+      revisadaPorId: null,
+    });
   } catch (error) {
     await fs.unlink(filePath).catch(() => undefined);
     throw error;
   }
 
   await eliminarFotoLocal(enlaceAnterior);
+  return serializar(factura);
+};
+
+const crearFacturaDesdeFoto = async ({ file, userId }) => {
+  const cargadoPorId = Number(userId);
+  if (!Number.isInteger(cargadoPorId) || cargadoPorId < 1) {
+    throw crearError("El usuario que carga la foto no es valido", 400);
+  }
+  const extension = validarFotoFactura(file);
+  await fs.mkdir(FACTURAS_UPLOAD_DIR, { recursive: true });
+  const filename = `${crypto.randomUUID()}${extension}`;
+  const filePath = path.join(FACTURAS_UPLOAD_DIR, filename);
+  const enlaceFoto = `/uploads/facturas/${filename}`;
+
+  try {
+    await fs.writeFile(filePath, file.buffer, { flag: "wx" });
+    const factura = await FacturaRegistro.create({
+      enlaceFoto,
+      cargadoPorId,
+      departamento: "LOGISTICA",
+      revisada: false,
+    });
+    return serializar(factura);
+  } catch (error) {
+    await fs.unlink(filePath).catch(() => undefined);
+    throw error;
+  }
+};
+
+const marcarRevisada = async ({ id, userId }) => {
+  const facturaId = normalizarId(id);
+  const factura = await FacturaRegistro.findByPk(facturaId);
+  if (!factura) throw crearError("Factura no encontrada", 404);
+  if (!factura.enlaceFoto) throw crearError("La factura no tiene una foto para revisar");
+
+  await factura.update({
+    revisada: true,
+    revisadaAt: new Date(),
+    revisadaPorId: Number(userId) || null,
+  });
   return serializar(factura);
 };
 
@@ -655,9 +702,32 @@ const listar = async (query = {}) => {
     group: ["estado", "tipo", "formaPago"],
     raw: true,
   });
+  const usuariosIds = [
+    ...new Set(
+      rows
+        .flatMap((row) => [row.cargadoPorId, row.revisadaPorId])
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
+  const usuarios = usuariosIds.length
+    ? await Usuario.findAll({
+        where: { id: { [Op.in]: usuariosIds } },
+        attributes: ["id", "nombre", "usuario"],
+        raw: true,
+      })
+    : [];
+  const usuariosPorId = new Map(usuarios.map((usuario) => [Number(usuario.id), usuario]));
   return {
     ok: true,
-    facturas: rows.map(serializar),
+    facturas: rows.map((row) => {
+      const factura = serializar(row);
+      return {
+        ...factura,
+        cargadoPor: usuariosPorId.get(Number(factura.cargadoPorId)) || null,
+        revisadaPor: usuariosPorId.get(Number(factura.revisadaPorId)) || null,
+      };
+    }),
     resumen: {
       cantidad: count,
       subtotal: Number(sumaSubtotal || 0),
@@ -688,9 +758,11 @@ module.exports = {
   cargarExcel,
   cargarJson,
   cargarJsonTexto,
+  crearFacturaDesdeFoto,
   extraerFacturas,
   guardarFotoFactura,
   listar,
+  marcarRevisada,
   normalizarFecha,
   normalizarFactura,
   normalizarDepartamento,

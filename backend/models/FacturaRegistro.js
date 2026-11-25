@@ -73,6 +73,23 @@ const FacturaRegistro = sequelize.define(
       type: DataTypes.JSONB,
       allowNull: true,
     },
+    cargadoPorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    revisada: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    revisadaAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    revisadaPorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   },
   {
     tableName: "facturas",
@@ -93,6 +110,8 @@ const FacturaRegistro = sequelize.define(
       { name: "facturas_estado_idx", fields: ["estado"] },
       { name: "facturas_tipo_idx", fields: ["tipo"] },
       { name: "facturas_departamento_idx", fields: ["departamento"] },
+      { name: "facturas_cargado_por_idx", fields: ["cargadoPorId"] },
+      { name: "facturas_revisada_idx", fields: ["revisada"] },
     ],
   },
 );

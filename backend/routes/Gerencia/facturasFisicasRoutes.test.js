@@ -74,7 +74,7 @@ describe("facturasFisicasRoutes OCR", () => {
   test("aplica sugerencias por endpoint protegido y no expone endpoint de eliminacion", async () => {
     const response = await request(crearApp())
       .patch("/api/gerencia/facturas-fisicas/7/aplicar-ocr")
-      .set("x-test-permisos", "Administracion")
+      .set("x-test-permisos", "Gerencia")
       .send({ campos: ["total"] })
       .expect(200);
     expect(response.body.accion).toBe("aplicar");

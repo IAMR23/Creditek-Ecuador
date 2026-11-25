@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, requirePermission } = require("../../middleware/authMiddleware");
 const controller = require("../../controllers/Contabilidad/nominaController");
 
-const requireNomina = requirePermission("Contabilidad", "Administracion");
+const requireNomina = requirePermission("Contabilidad");
 
 router.use(authenticate, requireNomina);
 

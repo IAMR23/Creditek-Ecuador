@@ -7,7 +7,7 @@ const {
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Logistica", "Administracion"));
+router.use(authenticate, requirePermission("Logistica"));
 router.get("/catalogos", controller.catalogos);
 router.get("/reporte", controller.reporte);
 router.get("/ingresos", controller.listarIngresos);

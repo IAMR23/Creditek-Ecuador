@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   ClipboardPaste,
+  CheckCircle2,
   Download,
   FileJson,
   FileSpreadsheet,
@@ -358,6 +359,21 @@ export default function Facturas() {
     setFotoArchivo(null);
   };
 
+  const verFoto = async (factura) => {
+    setFotoVista({
+      url: resolverEnlaceFoto(factura.enlaceFoto),
+      titulo: factura.numeroFactura ? `Factura ${factura.numeroFactura}` : `Factura #${factura.id}`,
+    });
+    if (factura.revisada) return;
+    try {
+      const { data } = await api.patch(`${API_BASE}/${factura.id}/revisada`);
+      setFacturas((current) => current.map((item) =>
+        item.id === factura.id ? { ...item, ...data.factura } : item));
+    } catch (error) {
+      await Swal.fire("No se pudo marcar como revisada", mensajeError(error), "warning");
+    }
+  };
+
   const cerrarFoto = () => {
     if (fotoSubiendoId !== null) return;
     setFotoFactura(null);
@@ -543,13 +559,13 @@ export default function Facturas() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1940px] text-left text-xs">
+              <table className="w-full min-w-[2160px] text-left text-xs">
                 <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                   <tr>
                     {[
-                      "ID", "Fecha de factura", "Fecha de carga", "Proveedor", "RUC / Cédula",
+                      "ID", "Fecha de factura", "Fecha y hora de carga", "Usuario que subio", "Proveedor", "RUC / Cédula",
                       "N.º de factura", "Subtotal", "IVA", "Total", "Forma de pago", "Estado",
-                      "Departamento", "Foto / nota de venta", "Observaciones", "Tipo", "Acciones",
+                      "Departamento", "Foto / nota de venta", "Revision", "Observaciones", "Tipo", "Acciones",
                     ].map((label) => <th key={label} className="whitespace-nowrap px-3 py-3">{label}</th>)}
                   </tr>
                 </thead>
@@ -559,7 +575,8 @@ export default function Facturas() {
                       <td className="px-3 py-3 font-bold text-slate-700">{factura.id}</td>
                       <td className="whitespace-nowrap px-3 py-3">{formatoFecha(factura.fechaFactura)}</td>
                       <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatoFecha(factura.fechaCarga, true)}</td>
-                      <td className="max-w-64 px-3 py-3 font-semibold text-slate-900"><span className="line-clamp-2" title={factura.proveedor}>{factura.proveedor}</span></td>
+                      <td className="max-w-52 px-3 py-3 font-semibold text-slate-700">{factura.cargadoPor?.nombre || factura.cargadoPor?.usuario || "-"}</td>
+                      <td className="max-w-64 px-3 py-3 font-semibold text-slate-900"><span className="line-clamp-2" title={factura.proveedor || ""}>{factura.proveedor || "-"}</span></td>
                       <td className="whitespace-nowrap px-3 py-3">{factura.identificacionProveedor}</td>
                       <td className="whitespace-nowrap px-3 py-3 font-medium">{factura.numeroFactura}</td>
                       <td className="whitespace-nowrap px-3 py-3 text-right">{formatoMonto(factura.subtotal)}</td>
@@ -573,12 +590,7 @@ export default function Facturas() {
                           {factura.enlaceFoto ? (
                             <button
                               type="button"
-                              onClick={() => setFotoVista({
-                                url: resolverEnlaceFoto(factura.enlaceFoto),
-                                titulo: factura.numeroFactura
-                                  ? `Factura ${factura.numeroFactura}`
-                                  : `Factura #${factura.id}`,
-                              })}
+                              onClick={() => verFoto(factura)}
                               className="font-semibold text-teal-700 hover:underline"
                             >
                               Ver
@@ -595,6 +607,17 @@ export default function Facturas() {
                             Subir / pegar
                           </button>
                         </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        {!factura.enlaceFoto ? (
+                          <span className="text-slate-400">-</span>
+                        ) : factura.revisada ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700" title={factura.revisadaAt ? formatoFecha(factura.revisadaAt, true) : ""}>
+                            <CheckCircle2 size={12} /> Revisada
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-800">Pendiente</span>
+                        )}
                       </td>
                       <td className="max-w-72 px-3 py-3 text-slate-600"><span className="line-clamp-2" title={factura.observaciones || ""}>{factura.observaciones || "-"}</span></td>
                       <td className="px-3 py-3"><span className="inline-flex rounded bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700">{factura.tipo}</span></td>

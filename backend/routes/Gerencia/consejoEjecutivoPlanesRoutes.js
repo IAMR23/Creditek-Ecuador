@@ -8,7 +8,7 @@ const salasController = require("../../controllers/Gerencia/consejoEjecutivoSala
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Gerencia", "Administracion"));
+router.use(authenticate, requirePermission("Gerencia"));
 
 router.get("/responsables", controller.listarResponsables);
 router.get("/salas", salasController.listarSalas);

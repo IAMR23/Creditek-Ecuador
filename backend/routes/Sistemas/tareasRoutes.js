@@ -6,7 +6,7 @@ const {
   requirePermission,
 } = require("../../middleware/authMiddleware");
 
-const accesoSistemas = [authenticate, requirePermission("Sistemas", "Administracion")];
+const accesoSistemas = [authenticate, requirePermission("Sistemas")];
 
 router.get("/", accesoSistemas, tareasController.listarTareas);
 router.get("/calendario", accesoSistemas, tareasController.listarTareasCalendario);

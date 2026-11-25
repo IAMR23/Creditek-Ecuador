@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, requirePermission } = require("../../middleware/authMiddleware");
 const controller = require("../../controllers/Contabilidad/metaMinimaMultaController");
 
-const requireMetaMinima = requirePermission("Contabilidad", "Administracion");
+const requireMetaMinima = requirePermission("Contabilidad");
 
 router.use(authenticate, requireMetaMinima);
 

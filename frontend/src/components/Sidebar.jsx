@@ -184,7 +184,7 @@ export default function Sidebar({ auth }) {
       },
       jefesComerciales: {
         title: "Jefes comerciales",
-        permission: ["Gerencia", "Administracion", "Sistemas"],
+        permission: "Jefes Comerciales",
         items: [
           {
             label: "Uphone",
@@ -222,7 +222,7 @@ export default function Sidebar({ auth }) {
 
       logistica: {
         title: "Logística",
-        permission: ["Logistica", "Administracion"],
+        permission: "Logistica",
         items: [
           {
             label: "Gasto combustible",
@@ -383,8 +383,7 @@ export default function Sidebar({ auth }) {
 
       Sistemas: {
         title: "Sistemas",
-        // La sección también contiene Tickets de TI, disponible para todo usuario autenticado.
-        permission: [],
+        permission: "Sistemas",
         items: [
           {
             label: "Tickets de TI",

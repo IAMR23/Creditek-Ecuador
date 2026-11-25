@@ -10,7 +10,7 @@ const {
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Sistemas", "Administracion"));
+router.use(authenticate, requirePermission("Sistemas"));
 router.get("/", listar);
 router.put("/:usuarioUphone", asignar);
 

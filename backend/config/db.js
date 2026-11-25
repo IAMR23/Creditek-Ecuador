@@ -2267,6 +2267,14 @@ const ensureFacturasPreSyncSchema = async (queryInterface) => {
       allowNull: true,
     });
   }
+  for (const [columnName, definition] of [
+    ["cargadoPorId", { type: Sequelize.INTEGER, allowNull: true }],
+    ["revisada", { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: false }],
+    ["revisadaAt", { type: Sequelize.DATE, allowNull: true }],
+    ["revisadaPorId", { type: Sequelize.INTEGER, allowNull: true }],
+  ]) {
+    await addColumnIfMissing(queryInterface, "facturas", columnName, definition);
+  }
   const optionalColumns = [
     "fechaFactura",
     "proveedor",
@@ -2320,6 +2328,12 @@ const ensureFacturasPreSyncSchema = async (queryInterface) => {
 
     CREATE INDEX IF NOT EXISTS facturas_departamento_idx
       ON public.facturas (departamento);
+
+    CREATE INDEX IF NOT EXISTS facturas_cargado_por_idx
+      ON public.facturas ("cargadoPorId");
+
+    CREATE INDEX IF NOT EXISTS facturas_revisada_idx
+      ON public.facturas (revisada);
 
     DO $$
     DECLARE

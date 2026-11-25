@@ -34,7 +34,7 @@ const createApp = () => {
 };
 
 describe("rutas de stock Contifico", () => {
-  test.each(["Logistica", "Administracion"])(
+  test.each(["Logistica"])(
     "permite consultar con el permiso %s",
     async (permission) => {
       await request(createApp())
@@ -43,6 +43,13 @@ describe("rutas de stock Contifico", () => {
         .expect(200);
     },
   );
+
+  test("Administracion no sustituye el permiso de Logistica", async () => {
+    await request(createApp())
+      .get("/api/logistica/stock-contifico/catalogo")
+      .set("x-test-permisos", "Administracion")
+      .expect(403);
+  });
 
   test("rechaza usuarios sin permisos de Logistica", async () => {
     await request(createApp())

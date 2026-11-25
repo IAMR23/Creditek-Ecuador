@@ -28,7 +28,7 @@ const cargarArchivoJson = (req, res, next) => {
   });
 };
 
-router.use(authenticate, requirePermission("Gerencia", "Administracion"));
+router.use(authenticate, requirePermission("Gerencia"));
 router.get("/", controller.listar);
 router.get("/exportacion", controller.exportarDatos);
 router.post("/", cargarArchivoJson, controller.cargarJson);

@@ -14,12 +14,12 @@ const requireCoverageAccess = (req, res, next) => {
   if (String(req.user?.rol || "").trim().toLowerCase() === "vendedor") {
     return next();
   }
-  return requirePermission("Vendedor", "Logistica", "Administracion")(req, res, next);
+  return requirePermission("Vendedor", "Logistica")(req, res, next);
 };
 
 router.get("/cobertura-bodegas", requireCoverageAccess, controller.coberturaBodegas);
 
-router.use(requirePermission("Logistica", "Administracion"));
+router.use(requirePermission("Logistica"));
 
 router.get("/catalogo", controller.catalogo);
 router.get("/productos/:productoId/stock", controller.stockProducto);

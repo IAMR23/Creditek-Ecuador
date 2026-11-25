@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const { authenticate, requirePermission } = require("../../middleware/authMiddleware");
 const controller = require("../../controllers/Contabilidad/sancionesConfiguracionController");
-router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
+router.use(authenticate, requirePermission("Administracion"));
 router.get("/", controller.listar);
 router.get("/:id", controller.obtener);
 router.post("/", controller.crear);

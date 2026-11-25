@@ -52,7 +52,7 @@ const {
 
 const accesoInformeEntregas = [
   authenticate,
-  requirePermission("Logistica", "Administracion"),
+  requirePermission("Logistica"),
 ];
 const tienePermiso = (req, permiso) =>
   (req.user?.permisos || []).some(
@@ -523,21 +523,21 @@ router.get("/contador", ...accesoInformeEntregas, async (req, res) => {
 router.post(
   "/:entregaId/asignar-repartidor",
   authenticate,
-  requirePermission("Logistica", "Administracion"),
+  requirePermission("Logistica"),
   asignarEntrega,
 );
 
 router.patch(
   "/:id/estado",
   authenticate,
-  requirePermission("Logistica", "Administracion"),
+  requirePermission("Logistica"),
   cambiarEstado,
 );
 
 router.patch(
   "/:id/tipo-entrega",
   authenticate,
-  requirePermission("Logistica", "Administracion"),
+  requirePermission("Logistica"),
   actualizarTipoEntrega,
 );
 
@@ -659,7 +659,7 @@ router.post("/", async (req, res) => {
 router.put(
   "/:id",
   authenticate,
-  requirePermission("Logistica", "Administracion"),
+  requirePermission("Logistica"),
   actualizarCamposGenerales,
 );
 

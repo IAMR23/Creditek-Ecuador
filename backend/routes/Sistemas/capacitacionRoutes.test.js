@@ -36,8 +36,12 @@ describe("rutas de capacitación", () => {
   test("un usuario autenticado puede listar videos", async () => {
     await request(crearApp())
       .get("/api/sistemas/capacitacion")
-      .set("x-test-permisos", "Ventas")
+      .set("x-test-permisos", "Sistemas")
       .expect(200);
+    await request(crearApp())
+      .get("/api/sistemas/capacitacion")
+      .set("x-test-permisos", "Administracion")
+      .expect(403);
   });
 
   test("solo Sistemas o Administración pueden crear", async () => {
@@ -55,7 +59,7 @@ describe("rutas de capacitación", () => {
   test("solo Sistemas o Administración pueden actualizar", async () => {
     await request(crearApp())
       .patch("/api/sistemas/capacitacion/1")
-      .set("x-test-permisos", "Administracion")
+      .set("x-test-permisos", "Sistemas")
       .expect(200);
   });
 });

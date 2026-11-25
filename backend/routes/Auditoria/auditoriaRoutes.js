@@ -18,7 +18,7 @@ const {
   comiteCompras,
 } = require("../../utils/calcularEstadisticasVentas");
 
-const accesoAuditoria = [authenticate, requirePermission("Auditoria", "Administracion")];
+const accesoAuditoria = [authenticate, requirePermission("Auditoria")];
 
 const uploadRoot =
   process.env.AUDITORIA_TEMP_DIR ||

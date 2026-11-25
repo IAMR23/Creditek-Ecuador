@@ -4,7 +4,7 @@ const { authenticate, requirePermission } = require("../../middleware/authMiddle
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Sistemas", "Administracion"));
+router.use(authenticate, requirePermission("Sistemas"));
 
 router.get("/catalogos", controller.catalogos);
 router.get("/", controller.listar);

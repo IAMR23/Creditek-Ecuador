@@ -8,7 +8,8 @@ import {
 import { getDefaultRoute } from "../utils/getDefaultRoute.js";
 
 test("combustible propio es exclusivo de repartidores", () => {
-  assert.equal(hasRouteAccess({ rol: "REPARTIDOR", permisos: [], path: "/logistica-panel/combustible" }), true);
+  assert.equal(hasRouteAccess({ rol: "REPARTIDOR", permisos: [], path: "/logistica-panel/combustible" }), false);
+  assert.equal(hasRouteAccess({ rol: "REPARTIDOR", permisos: ["Logistica"], path: "/logistica-panel/combustible" }), true);
   for (const rol of ["admin", "administrador", "vendedor", "logistica"]) {
     assert.equal(hasRouteAccess({ rol, permisos: ["Logistica", "Administracion"], path: "/logistica-panel/combustible" }), false);
   }
@@ -17,7 +18,8 @@ test("combustible propio es exclusivo de repartidores", () => {
 test("dashboard de combustible exige administrador y permiso explícito", () => {
   const path = "/logistica/gasto-combustible";
   for (const rol of ["admin", "administrador"]) {
-    for (const permiso of ["Logistica", "Administracion"]) assert.equal(hasRouteAccess({ rol, permisos: [permiso], path }), true);
+    assert.equal(hasRouteAccess({ rol, permisos: ["Logistica"], path }), true);
+    assert.equal(hasRouteAccess({ rol, permisos: ["Administracion"], path }), false);
     assert.equal(hasRouteAccess({ rol, permisos: [], path }), false);
   }
   assert.equal(hasRouteAccess({ rol: "repartidor", permisos: ["Administracion"], path }), false);
@@ -105,21 +107,19 @@ test("ruta configurada con Gerencia o Administracion acepta cualquiera de los do
       permisos: ["Administracion"],
       path: "/consejo-ejecutivo",
     }),
-    true,
+    false,
   );
 });
 
-test("facturas permite Gerencia o Administracion", () => {
-  for (const permiso of ["Gerencia", "Administracion"]) {
-    assert.equal(
-      hasRouteAccess({
-        rol: "administrador",
-        permisos: [permiso],
-        path: "/gerencia/facturas",
-      }),
-      true,
-    );
-  }
+test("facturas exige Gerencia", () => {
+  assert.equal(
+    hasRouteAccess({ rol: "administrador", permisos: ["Gerencia"], path: "/gerencia/facturas" }),
+    true,
+  );
+  assert.equal(
+    hasRouteAccess({ rol: "administrador", permisos: ["Administracion"], path: "/gerencia/facturas" }),
+    false,
+  );
   assert.equal(
     hasRouteAccess({
       rol: "administrador",
@@ -159,19 +159,19 @@ test("vendedor conserva acceso implicito a rutas de vendedor", () => {
   );
 });
 
-test("repartidor conserva acceso implicito a Logistica", () => {
+test("repartidor requiere permiso explicito de Logistica", () => {
   assert.equal(
     hasRouteAccess({
       rol: "repartidor",
       permisos: [],
       path: "/logistica-panel",
     }),
-    true,
+    false,
   );
   assert.equal(
     hasRouteAccess({
       rol: "repartidor",
-      permisos: [],
+      permisos: ["Logistica"],
       path: "/logistica/stock-contifico",
     }),
     true,
@@ -214,38 +214,27 @@ test("configuracion de Supervisores no depende de Administracion", () => {
   );
 });
 
-test("workflows programados exige un permiso administrativo GHL", () => {
-  for (const permiso of ["Gerencia", "Administracion", "Sistemas"]) {
-    assert.equal(hasRouteAccess({ rol: "administrador", permisos: [permiso], path: "/ghl/workflows-programados" }), true);
-  }
+test("workflows programados exige Sistemas", () => {
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Sistemas"], path: "/ghl/workflows-programados" }), true);
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Administracion"], path: "/ghl/workflows-programados" }), false);
   assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Contabilidad"], path: "/ghl/workflows-programados" }), false);
 });
 
-test("horarios de flujo exige un permiso administrativo GHL", () => {
-  for (const permiso of ["Gerencia", "Administracion", "Sistemas"]) {
-    assert.equal(hasRouteAccess({ rol: "administrador", permisos: [permiso], path: "/ghl/horarios-flujo" }), true);
-  }
+test("horarios de flujo exige Sistemas", () => {
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Sistemas"], path: "/ghl/horarios-flujo" }), true);
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Gerencia"], path: "/ghl/horarios-flujo" }), false);
   assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Marketing"], path: "/ghl/horarios-flujo" }), false);
 });
 
-test("difusiones GHL solo permite Administracion o Sistemas", () => {
-  for (const permiso of ["Administracion", "Sistemas"]) {
-    assert.equal(hasRouteAccess({ rol: "administrador", permisos: [permiso], path: "/ghl/difusiones" }), true);
-  }
+test("difusiones GHL exige Sistemas", () => {
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Sistemas"], path: "/ghl/difusiones" }), true);
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Administracion"], path: "/ghl/difusiones" }), false);
   assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Gerencia"], path: "/ghl/difusiones" }), false);
 });
 
-test("solicitudes Uphone permite Gerencia, Administracion o Sistemas", () => {
-  for (const permiso of ["Gerencia", "Administracion", "Sistemas"]) {
-    assert.equal(
-      hasRouteAccess({
-        rol: "administrador",
-        permisos: [permiso],
-        path: "/uphone/solicitudes",
-      }),
-      true,
-    );
-  }
+test("solicitudes Uphone exige Jefes Comerciales", () => {
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Jefes Comerciales"], path: "/uphone/solicitudes" }), true);
+  assert.equal(hasRouteAccess({ rol: "administrador", permisos: ["Gerencia"], path: "/uphone/solicitudes" }), false);
   assert.equal(
     hasRouteAccess({
       rol: "administrador",

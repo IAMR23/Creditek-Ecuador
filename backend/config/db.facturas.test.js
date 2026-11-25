@@ -37,6 +37,13 @@ describe("pre-sync de facturas", () => {
       "departamento",
       expect.objectContaining({ allowNull: true }),
     );
+    for (const field of ["revisada", "revisadaAt", "revisadaPorId"]) {
+      expect(queryInterface.addColumn).toHaveBeenCalledWith(
+        "facturas",
+        field,
+        expect.any(Object),
+      );
+    }
     expect(query).toHaveBeenCalledTimes(1);
     const sql = query.mock.calls[0][0];
     for (const field of [
@@ -62,6 +69,8 @@ describe("pre-sync de facturas", () => {
     expect(sql).toMatch(/SET departamento = 'LOGISTICA'/i);
     expect(sql).toMatch(/ALTER COLUMN departamento SET NOT NULL/i);
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_departamento_idx/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_cargado_por_idx/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_revisada_idx/i);
     expect(sql).toMatch(/DROP CONSTRAINT/i);
     expect(sql).not.toMatch(/\bDELETE\b|DROP\s+TABLE/i);
   });

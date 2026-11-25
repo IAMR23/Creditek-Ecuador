@@ -11,7 +11,7 @@ const {
 const router = express.Router();
 const accesoDashboardGhl = [
   authenticate,
-  requirePermission("Gerencia", "Administracion", "Sistemas"),
+  requirePermission("Gerencia"),
 ];
 
 router.get("/oportunidades/matriz", accesoDashboardGhl, async (req, res) => {

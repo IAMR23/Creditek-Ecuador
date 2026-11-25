@@ -174,14 +174,14 @@ router.get(
 router.put(
   "/lista-precios",
   authenticate,
-  requirePermission("Catalogos", "Administracion"),
+  requirePermission("Catalogos"),
   listaPreciosController.guardar,
 );
 
 router.post(
   "/reajustar",
   authenticate,
-  requirePermission("Catalogos", "Administracion"),
+  requirePermission("Catalogos"),
   async (req, res) => {
     try {
       const resultado = await reajustarVentasPorRango({
@@ -265,7 +265,7 @@ router.put("/:id", async (req, res) => {
 router.delete(
   "/:id",
   authenticate,
-  requirePermission("Catalogos", "Administracion"),
+  requirePermission("Catalogos"),
   async (req, res) => {
     try {
       const resultado = await eliminarCostoHistoricoConRecalculo(req.params.id);

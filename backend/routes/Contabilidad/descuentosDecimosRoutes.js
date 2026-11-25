@@ -6,7 +6,7 @@ const {
 const controller = require("../../controllers/Contabilidad/descuentosDecimosController");
 
 const router = express.Router();
-const requireContabilidad = requirePermission("Contabilidad", "Administracion");
+const requireContabilidad = requirePermission("Contabilidad");
 
 router.use(authenticate, requireContabilidad);
 router.get("/", controller.obtener);

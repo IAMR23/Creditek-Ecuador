@@ -16,6 +16,7 @@ jest.mock("../../controllers/Gerencia/facturasController", () => ({
   cargarExcel: (_req, res) => res.status(201).json({ ok: true }),
   cargarFoto: (_req, res) => res.json({ ok: true }),
   listar: (_req, res) => res.json({ ok: true, facturas: [] }),
+  marcarRevisada: (_req, res) => res.json({ ok: true }),
   cargarJson: (_req, res) => res.status(201).json({ ok: true }),
   cargarJsonTexto: (_req, res) => res.status(201).json({ ok: true }),
 }));
@@ -36,11 +37,18 @@ const createApp = () => {
 };
 
 describe("rutas de facturas", () => {
-  test.each(["Gerencia", "Administracion"])("permite listar con %s", async (permission) => {
+  test.each(["Gerencia"])("permite listar con %s", async (permission) => {
     await request(createApp())
       .get("/api/gerencia/facturas")
       .set("x-test-permisos", permission)
       .expect(200);
+  });
+
+  test("Administracion no sustituye el permiso de Gerencia", async () => {
+    await request(createApp())
+      .get("/api/gerencia/facturas")
+      .set("x-test-permisos", "Administracion")
+      .expect(403);
   });
 
   test("rechaza usuarios sin permisos", async () => {
@@ -55,6 +63,13 @@ describe("rutas de facturas", () => {
       .patch("/api/gerencia/facturas/7")
       .set("x-test-permisos", "Gerencia")
       .send({ proveedor: "Proveedor actualizado" })
+      .expect(200);
+  });
+
+  test("permite marcar una foto como revisada con permiso de Gerencia", async () => {
+    await request(createApp())
+      .patch("/api/gerencia/facturas/7/revisada")
+      .set("x-test-permisos", "Gerencia")
       .expect(200);
   });
 

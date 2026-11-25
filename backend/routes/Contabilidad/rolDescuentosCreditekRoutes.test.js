@@ -14,8 +14,8 @@ const app = express();
 app.use(express.json());
 app.use("/descuentos", require("./rolDescuentosCreditekRoutes"));
 
-test("protege la sección para Contabilidad y Administración", () => {
-  expect(requirePermission).toHaveBeenCalledWith("Contabilidad", "Administracion");
+test("protege la sección exclusivamente con Contabilidad", () => {
+  expect(requirePermission).toHaveBeenCalledWith("Contabilidad");
 });
 test.each([["get", "/"], ["post", "/"], ["put", "/1"], ["patch", "/1/estado"]])("%s %s exige autenticación y permiso", async (method, path) => {
   await request(app)[method](`/descuentos${path}`).expect(401);

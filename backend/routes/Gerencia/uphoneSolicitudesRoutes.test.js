@@ -48,7 +48,7 @@ describe("rutas de solicitudes Uphone", () => {
     delete process.env.API_KEY_RVE;
   });
 
-  test.each(["Gerencia", "Administracion", "Sistemas"])(
+  test.each(["Jefes Comerciales"])(
     "permite consultar con el permiso %s",
     async (permission) => {
       const response = await request(createApp())
@@ -69,7 +69,7 @@ describe("rutas de solicitudes Uphone", () => {
   test("permite exportar con sesion RVE y permiso autorizado", async () => {
     const response = await request(createApp())
       .get("/api/uphone/solicitudes/exportar?estado=PENDIENTE")
-      .set("x-test-permission", "Gerencia");
+      .set("x-test-permission", "Jefes Comerciales");
     expect(response.status).toBe(200);
     expect(controller.exportar).toHaveBeenCalled();
     expect(controller.exportar.mock.calls[0][0].query.estado).toBe("PENDIENTE");
@@ -78,7 +78,7 @@ describe("rutas de solicitudes Uphone", () => {
   test("permite eliminar con sesion RVE y permiso autorizado", async () => {
     const response = await request(createApp())
       .delete("/api/uphone/solicitudes/14")
-      .set("x-test-permission", "Sistemas");
+      .set("x-test-permission", "Jefes Comerciales");
     expect(response.status).toBe(200);
     expect(controller.eliminar).toHaveBeenCalled();
     expect(controller.eliminar.mock.calls[0][0].params.id).toBe("14");
@@ -135,7 +135,7 @@ describe("rutas de solicitudes Uphone", () => {
   test("permite una carga manual con sesion RVE y permiso autorizado", async () => {
     const response = await request(createApp())
       .post("/api/uphone/solicitudes/importar-manual")
-      .set("x-test-permission", "Gerencia")
+      .set("x-test-permission", "Jefes Comerciales")
       .attach("archivo", Buffer.from("xlsx-prueba"), "solicitudes.xlsx");
     expect(response.status).toBe(201);
     expect(mockAuthenticate).toHaveBeenCalled();

@@ -44,29 +44,33 @@ describe("rutas de combustible con middleware real de roles y permisos", () => {
         .expect(401);
     },
   );
-  test("el repartidor accede al CRUD sin permisos administrativos", async () => {
-    await request(app).get(BASE).set("x-test-rol", "REPARTIDOR").expect(200);
+  test("el repartidor accede al CRUD con permiso Logistica", async () => {
+    await request(app).get(BASE).set("x-test-rol", "REPARTIDOR").set("x-test-permisos", "Logistica").expect(200);
     await request(app)
       .get(`${BASE}/3`)
       .set("x-test-rol", "REPARTIDOR")
+      .set("x-test-permisos", "Logistica")
       .expect(200);
     const creada = await request(app)
       .post(BASE)
       .set("x-test-rol", "REPARTIDOR")
+      .set("x-test-permisos", "Logistica")
       .send({ fecha: "2026-10-06" })
       .expect(201);
     expect(creada.body.registro.id).toBe(3);
     await request(app)
       .put(`${BASE}/3`)
       .set("x-test-rol", "REPARTIDOR")
+      .set("x-test-permisos", "Logistica")
       .send({})
       .expect(200);
     await request(app)
       .delete(`${BASE}/3`)
       .set("x-test-rol", "REPARTIDOR")
+      .set("x-test-permisos", "Logistica")
       .expect(200);
   });
-  test.each(["Logistica", "Administración"])(
+  test.each(["Logistica"])(
     "administrador con %s consulta y elimina",
     async (permiso) => {
       for (const path of [BASE, `${BASE}/3`, `${BASE}/repartidores`]) {
@@ -121,6 +125,7 @@ describe("rutas de combustible con middleware real de roles y permisos", () => {
     const invalida = await request(app)
       .post(BASE)
       .set("x-test-rol", "repartidor")
+      .set("x-test-permisos", "Logistica")
       .send({})
       .expect(400);
     expect(invalida.body.message).toBe("Fecha inválida");
@@ -131,6 +136,7 @@ describe("rutas de combustible con middleware real de roles y permisos", () => {
     const fallo = await request(app)
       .get(BASE)
       .set("x-test-rol", "repartidor")
+      .set("x-test-permisos", "Logistica")
       .expect(500);
     expect(fallo.body.message).not.toContain("PostgreSQL");
     log.mockRestore();

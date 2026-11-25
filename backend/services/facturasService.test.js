@@ -9,6 +9,7 @@ const {
   cargarJsonTexto,
   extraerFacturas,
   listar,
+  marcarRevisada,
   normalizarFactura,
   normalizarDepartamento,
   normalizarFiltros,
@@ -345,6 +346,26 @@ describe("facturasService", () => {
     await expect(
       actualizarFactura({ id: 7, payload: { numeroFactura: "001-001-0002" } }),
     ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("marca una foto como revisada sin impedir volver a consultarla", async () => {
+    const factura = {
+      id: 7,
+      enlaceFoto: "/uploads/facturas/factura.webp",
+      update: jest.fn(async function update(datos) {
+        Object.assign(this, datos);
+      }),
+      toJSON() {
+        return { ...this, update: undefined, toJSON: undefined };
+      },
+    };
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue(factura);
+
+    const resultado = await marcarRevisada({ id: 7, userId: 3 });
+
+    expect(resultado).toMatchObject({ revisada: true, revisadaPorId: 3 });
+    expect(resultado.revisadaAt).toBeInstanceOf(Date);
+    expect(factura.enlaceFoto).toBe("/uploads/facturas/factura.webp");
   });
 
   test("filtra facturas por departamento", () => {

@@ -1,11 +1,11 @@
 const express = require("express");
 const controller = require("../../controllers/Sistemas/ticketsTiController");
-const { authenticate } = require("../../middleware/authMiddleware");
+const { authenticate, requirePermission } = require("../../middleware/authMiddleware");
 const { procesarArchivosTickets } = require("../../middleware/uploadTicketsTi");
 
 const router = express.Router();
 
-router.use(authenticate);
+router.use(authenticate, requirePermission("Sistemas"));
 router.get("/dashboard", controller.dashboard);
 router.get("/kanban", controller.listarKanban);
 router.get("/responsables", controller.responsables);

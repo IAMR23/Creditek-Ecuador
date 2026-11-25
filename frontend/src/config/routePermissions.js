@@ -8,6 +8,10 @@ export const SIDEBAR_SECTION_PERMISSIONS = [
     descripcion: "Acceso a la seccion Supervisores del sidebar",
   },
   {
+    permission: "Jefes Comerciales",
+    descripcion: "Acceso a la seccion Jefes comerciales del sidebar",
+  },
+  {
     permission: "Marketing",
     descripcion: "Acceso a la seccion Marketing del sidebar",
   },
@@ -50,17 +54,17 @@ export const ROUTE_PERMISSIONS = {
   "/supervisores/reporte-gestiones": "Supervisores",
   "/powerbi": "Gerencia",
   "/ghl/oportunidades-matriz": "Gerencia",
-  "/ghl/rendimiento-pautas": ["Gerencia", "Administracion", "Sistemas"],
-  "/ghl/reparto-oportunidades": ["Gerencia", "Administracion", "Sistemas"],
-  "/ghl/refresco-oportunidades": ["Gerencia", "Administracion", "Sistemas"],
-  "/ghl/disponibilidad-asesores": ["Gerencia", "Administracion", "Sistemas"],
-  "/ghl/horarios-flujo": ["Gerencia", "Administracion", "Sistemas"],
-  "/ghl/workflows-programados": ["Gerencia", "Administracion", "Sistemas"],
-  "/ghl/difusiones": ["Administracion", "Sistemas"],
-  "/uphone/solicitudes": ["Gerencia", "Administracion", "Sistemas"],
+  "/ghl/rendimiento-pautas": "Gerencia",
+  "/ghl/reparto-oportunidades": "Sistemas",
+  "/ghl/refresco-oportunidades": "Sistemas",
+  "/ghl/disponibilidad-asesores": "Sistemas",
+  "/ghl/horarios-flujo": "Sistemas",
+  "/ghl/workflows-programados": "Sistemas",
+  "/ghl/difusiones": "Sistemas",
+  "/uphone/solicitudes": "Jefes Comerciales",
   "/metas-comerciales": "Gerencia",
   "/costo-venta-marketing": "Gerencia",
-  "/costo-entrega-marketing": "Gerencia",
+  "/costo-entrega-marketing": "Logistica",
   "/reporte-entregas": "Gerencia",
   "/revision-gestiones": "Gerencia",
   "/revision-gestiones-comercial": "Gerencia",
@@ -72,10 +76,10 @@ export const ROUTE_PERMISSIONS = {
   "/conciliacion-facturas": "Gerencia",
   "/bonos": "Gerencia",
   "/secretarios-ejecutivos": "Gerencia",
-  "/consejo-ejecutivo": ["Gerencia", "Administracion"],
-  "/gerencia/facturas": ["Gerencia", "Administracion"],
-  "/gerencia/facturas-fisicas": ["Gerencia", "Administracion"],
-  "/gerencia/facturas-ia": ["Gerencia", "Administracion"],
+  "/consejo-ejecutivo": "Gerencia",
+  "/gerencia/facturas": "Gerencia",
+  "/gerencia/facturas-fisicas": "Gerencia",
+  "/gerencia/facturas-ia": "Gerencia",
   "/ver-planes-batalla": "Gerencia",
   "/tasks": "Gerencia",
   "/ventas-completas": "Gerencia",
@@ -86,7 +90,8 @@ export const ROUTE_PERMISSIONS = {
 
   "/logistica-panel": "Logistica",
   "/logistica-panel/combustible": "Logistica",
-  "/logistica/gasto-combustible": ["Logistica", "Administracion"],
+  "/logistica-panel/facturas": "Logistica",
+  "/logistica/gasto-combustible": "Logistica",
   "/entregas": "Logistica",
   "/entrega-logistica": "Logistica",
   "/entregas-pendientes": "Logistica",
@@ -94,43 +99,41 @@ export const ROUTE_PERMISSIONS = {
   "/mis-entregas-pendientes": "Logistica",
   "/mis-entregas-realizadas": "Logistica",
   "/logistica/stock-contifico": "Logistica",
-  "/logistica/ingreso-productos": ["Logistica", "Administracion"],
+  "/logistica/ingreso-productos": "Logistica",
 
-  "/revisar-cajas": ["Contabilidad", "Administracion"],
-  "/revisar-cajas2": ["Contabilidad", "Administracion"],
-  "/nomina": ["Contabilidad", "Administracion"],
-  "/contabilidad/roles-pago": ["Contabilidad", "Administracion"],
-  "/contabilidad/comisiones": ["Contabilidad", "Administracion"],
-  "/contabilidad/metas-minimas-multas": ["Contabilidad", "Administracion"],
-  "/contabilidad/meta-minima-sin-multa": ["Contabilidad", "Administracion"],
-  "/contabilidad/pagos-comisiones": ["Contabilidad", "Administracion"],
-  "/contabilidad/descuentos-decimos": ["Contabilidad", "Administracion"],
-  "/contabilidad/egresos-creditek": ["Contabilidad", "Administracion"],
-  "/contabilidad/roles-creditek-nomina": ["Contabilidad", "Administracion"],
-  "/contabilidad/rol-descuentos-creditek": ["Contabilidad", "Administracion"],
-  "/contabilidad/roles-pago-juniors": ["Contabilidad", "Administracion"],
-  "/contabilidad/roles-creditek-resumen": ["Contabilidad", "Administracion"],
-  "/contabilidad/sanciones-configuracion": ["Contabilidad", "Administracion"],
-  "/contabilidad/sanciones-ventas": ["Contabilidad", "Administracion"],
-  "/contabilidad/extraccion-reportes-caja": ["Contabilidad", "Administracion"],
-  "/contabilidad/control-financiero": ["Contabilidad", "Administracion"],
+  "/revisar-cajas": "Contabilidad",
+  "/revisar-cajas2": "Contabilidad",
+  "/nomina": "Contabilidad",
+  "/contabilidad/roles-pago": "Contabilidad",
+  "/contabilidad/comisiones": "Contabilidad",
+  "/contabilidad/metas-minimas-multas": "Contabilidad",
+  "/contabilidad/meta-minima-sin-multa": "Contabilidad",
+  "/contabilidad/pagos-comisiones": "Contabilidad",
+  "/contabilidad/descuentos-decimos": "Contabilidad",
+  "/contabilidad/egresos-creditek": "Contabilidad",
+  "/contabilidad/roles-creditek-nomina": "Contabilidad",
+  "/contabilidad/rol-descuentos-creditek": "Contabilidad",
+  "/contabilidad/roles-pago-juniors": "Contabilidad",
+  "/contabilidad/roles-creditek-resumen": "Contabilidad",
+  "/contabilidad/sanciones-configuracion": "Administracion",
+  "/contabilidad/sanciones-ventas": "Administracion",
+  "/contabilidad/extraccion-reportes-caja": "Contabilidad",
+  "/contabilidad/control-financiero": "Contabilidad",
 
   "/entregas-auditoria": "Auditoria",
   "/ventas-auditoria": "Auditoria",
-  // La consulta es comun; el backend restringe por separado la edicion.
-  "/lista-precios": [],
+  "/lista-precios": "Catalogos",
 
   "/postulaciones": "Desarrollo Organizacional",
 
-  "/sistemas/tareas": ["Sistemas", "Administracion"],
-  // Todo usuario autenticado puede crear y consultar sus propios tickets.
-  "/sistemas/tickets": [],
-  "/sistemas/capacitacion": ["Sistemas", "Administracion"],
-  "/sistemas/mapa-comercial": ["Sistemas", "Administracion"],
-  "/sistemas/inventarios": ["Sistemas", "Administracion"],
-  "/sistemas/personas": ["Sistemas", "Administracion"],
-  "/sistemas/reportes-caja-agencias": ["Sistemas", "Administracion"],
-  "/sistemas/usuarios-uphone": ["Sistemas", "Administracion"],
+  "/sistemas/tareas": "Sistemas",
+  "/sistemas/tickets": "Sistemas",
+  "/sistemas/capacitacion": "Sistemas",
+  "/sistemas/mapa-comercial": "Sistemas",
+  "/sistemas/inventarios": "Sistemas",
+  "/sistemas/personas": "Sistemas",
+  "/sistemas/reportes-caja-agencias": "Sistemas",
+  "/sistemas/usuarios-uphone": "Sistemas",
 
   "/usuarios": "Administracion",
   "/rol": "Administracion",
@@ -180,6 +183,7 @@ export const SYSTEM_ROUTES = SIDEBAR_SECTION_PERMISSIONS;
 // El permiso de sección no sustituye el rol requerido por estas pantallas.
 export const ROUTE_ALLOWED_ROLES = {
   "/logistica-panel/combustible": ["repartidor"],
+  "/logistica-panel/facturas": ["repartidor"],
   "/logistica/gasto-combustible": ["admin", "administrador"],
 };
 
@@ -227,13 +231,6 @@ export const hasRouteAccess = ({ rol, permisos = [], path, permission }) => {
   const permisosRequeridosNormalizados = permisosRequeridos.map(normalizePermissionName);
 
   if (rolNormalizado === "vendedor" && permisosRequeridos.includes(VENDEDOR_PERMISSION)) {
-    return true;
-  }
-
-  if (
-    rolNormalizado === "repartidor" &&
-    permisosRequeridosNormalizados.includes("logistica")
-  ) {
     return true;
   }
 

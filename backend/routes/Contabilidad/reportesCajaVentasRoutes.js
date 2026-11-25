@@ -17,7 +17,7 @@ const {
 const controller = require("../../controllers/Contabilidad/reportesCajaVentasController");
 
 const router = express.Router();
-const requireContabilidad = requirePermission("Contabilidad", "Administracion");
+const requireContabilidad = requirePermission("Contabilidad");
 const uploadRoot =
   process.env.REPORTES_CAJA_VENTAS_TEMP_DIR ||
   path.join(os.tmpdir(), "rve-reportes-caja-ventas");

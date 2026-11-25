@@ -5,7 +5,7 @@ describe("rutas administrativas de workflows GHL", () => {
   const source = fs.readFileSync(path.join(__dirname, "workflowProgramacionesRoutes.js"), "utf8");
 
   test("protege todo el router con JWT y permisos administrativos", () => {
-    expect(source).toMatch(/router\.use\(authenticate, requirePermission\("Gerencia", "Administracion", "Sistemas"\)\)/);
+    expect(source).toMatch(/router\.use\(authenticate, requirePermission\("Sistemas"\)\)/);
   });
 
   test("expone catalogos, CRUD, vista previa e historial sin endpoint manual de inscripcion", () => {

@@ -92,7 +92,7 @@ const cargarFotoFactura = (req, res, next) => {
   });
 };
 
-router.use(authenticate, requirePermission("Gerencia", "Administracion"));
+router.use(authenticate, requirePermission("Gerencia"));
 router.get("/", controller.listar);
 router.post("/carga-json", cargarArchivo, controller.cargarJson);
 router.post(
@@ -102,6 +102,7 @@ router.post(
 );
 router.post("/carga-excel", cargarArchivoExcel, controller.cargarExcel);
 router.post("/:id/foto", cargarFotoFactura, controller.cargarFoto);
+router.patch("/:id/revisada", controller.marcarRevisada);
 router.patch("/:id", controller.actualizar);
 
 module.exports = router;

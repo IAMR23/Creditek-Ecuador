@@ -33,7 +33,7 @@ const requireAdminRole = (req, res, next) => {
   next();
 };
 
-const requireLecturaCaja = requirePermission("Contabilidad", "Administracion");
+const requireLecturaCaja = requirePermission("Contabilidad");
 
 router.post("/cierre-caja", authenticate, cerrarCaja);
 router.get("/cierre-caja/estado", authenticate, obtenerEstadoCierreUsuario);

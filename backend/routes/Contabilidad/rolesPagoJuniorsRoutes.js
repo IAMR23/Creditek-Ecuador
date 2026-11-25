@@ -3,7 +3,7 @@ const { authenticate, requirePermission } = require("../../middleware/authMiddle
 const controller = require("../../controllers/Contabilidad/rolesPagoJuniorsController");
 
 const router = express.Router();
-router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
+router.use(authenticate, requirePermission("Contabilidad"));
 router.get("/", controller.listar);
 router.post("/", controller.crear);
 router.patch("/:id/estado", controller.cambiarEstado);

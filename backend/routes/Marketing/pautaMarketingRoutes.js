@@ -10,7 +10,7 @@ const controller = require("../../controllers/Marketing/pautaMarketingController
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Marketing", "Administracion"));
+router.use(authenticate, requirePermission("Marketing"));
 
 router.get("/", controller.listar);
 router.post("/", procesarImagenMarketing, controller.crear);

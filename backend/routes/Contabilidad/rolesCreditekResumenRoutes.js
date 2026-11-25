@@ -8,7 +8,7 @@ const novedades = require("../../controllers/Contabilidad/nominaNovedadesControl
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
+router.use(authenticate, requirePermission("Contabilidad"));
 router.get("/novedades/:usuarioId", novedades.listar);
 router.post("/novedades/preview", novedades.vistaPrevia);
 router.post("/novedades", novedades.crear);

@@ -46,6 +46,7 @@ import MisVentas from "./pages/Vendedores/Ventas/MisVentas";
 import MisEntregas from "./pages/Vendedores/Entregas/MisEntregas";
 import ReporteEntregas from "./pages/Admin/ReporteEntregas";
 import LogisticaPanel from "./pages/Logistica/LogisticaPanel";
+import SubirFactura from "./pages/Logistica/SubirFactura";
 import FotoFechaHoraEntrega from "./pages/Vendedores/Entregas/FotoFechaHoraEntrega";
 import EntregasPendientes from "./pages/Logistica/EntregasPendientes";
 import EntregasAuditoria from "./pages/Auditoria/EntregasAuditoria";
@@ -272,6 +273,21 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const actualizarPermisosEnTiempoReal = async () => {
+      try {
+        await refreshSession();
+      } catch (error) {
+        console.error("No se pudieron actualizar los permisos en tiempo real", error);
+      }
+    };
+
+    socket.on("permisos-actualizados", actualizarPermisosEnTiempoReal);
+    return () => {
+      socket.off("permisos-actualizados", actualizarPermisosEnTiempoReal);
+    };
+  }, []);
+
+  useEffect(() => {
     registerSW();
     initAppVersionWatcher();
   }, []);
@@ -408,7 +424,7 @@ function App() {
                   path="usuarios-agencias"
                   element={protect(<UsuariosAgencias />, "/usuarios-agencias")}
                 />
-                <Route path="entregas" element={protect(<Entregas />)} />
+                <Route path="entregas" element={protect(<Entregas />, "/entregas")} />
                 <Route
                   path="revision-gestiones"
                   element={protect(<RevisionGestiones />, "/revision-gestiones")}
@@ -716,6 +732,7 @@ function App() {
               />
 
               <Route path="logistica-panel" element={protect(<LogisticaPanel />, "/logistica-panel")} />
+              <Route path="logistica-panel/facturas" element={protect(<SubirFactura />, "/logistica-panel/facturas")} />
               <Route
                 path="logistica-panel/combustible"
                 element={protect(

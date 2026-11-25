@@ -8,7 +8,7 @@ const tiposController = require("../../controllers/Contabilidad/egresosCreditekT
 
 const router = express.Router();
 
-router.use(authenticate, requirePermission("Contabilidad", "Administracion"));
+router.use(authenticate, requirePermission("Contabilidad"));
 router.get("/:seccion/tipos", tiposController.listar);
 router.post("/:seccion/tipos", tiposController.crear);
 router.put("/:seccion/tipos/:tipoId", tiposController.actualizar);

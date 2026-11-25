@@ -13,7 +13,7 @@ const {
 } = require("../../services/facturasFisicasService");
 
 const router = express.Router();
-const requireGerencia = requirePermission("Gerencia", "Administracion");
+const requireGerencia = requirePermission("Gerencia");
 
 const upload = multer({
   storage: multer.memoryStorage(),

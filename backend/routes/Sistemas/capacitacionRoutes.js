@@ -6,9 +6,9 @@ const {
 } = require("../../middleware/authMiddleware");
 
 const router = express.Router();
-const puedeAdministrar = requirePermission("Sistemas", "Administracion");
+const puedeAdministrar = requirePermission("Sistemas");
 
-router.use(authenticate);
+router.use(authenticate, requirePermission("Sistemas"));
 router.get("/", controller.listar);
 router.post("/", puedeAdministrar, controller.crear);
 router.patch("/:id", puedeAdministrar, controller.actualizar);

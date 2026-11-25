@@ -55,7 +55,7 @@ router.post("/importar", requireUphoneApiKey, cargarExcel, controller.importarAp
 // La consulta desde la interfaz RVE conserva autenticacion y permisos de usuario.
 router.use(
   authenticate,
-  requirePermission("Gerencia", "Administracion", "Sistemas"),
+  requirePermission("Jefes Comerciales"),
 );
 router.get("/exportar", controller.exportar);
 router.get("/", controller.listar);

@@ -3,7 +3,7 @@ const controller = require("../../controllers/GHL/workflowProgramacionesControll
 const { authenticate, requirePermission } = require("../../middleware/authMiddleware");
 
 const router = express.Router();
-router.use(authenticate, requirePermission("Gerencia", "Administracion", "Sistemas"));
+router.use(authenticate, requirePermission("Sistemas"));
 router.get("/catalogos/pipelines", controller.pipelines);
 router.get("/catalogos/pipelines/:pipelineId/stages", controller.stages);
 router.get("/catalogos/workflows", controller.workflows);

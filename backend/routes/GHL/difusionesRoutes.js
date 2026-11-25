@@ -35,7 +35,7 @@ const receiveImage = (req, res, next) => {
 
 router.use(
   authenticate,
-  requirePermission("Sistemas", "Administracion"),
+  requirePermission("Sistemas"),
   requireAdminRole,
 );
 router.get("/estado", controller.status);

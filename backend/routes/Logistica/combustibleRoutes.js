@@ -8,10 +8,9 @@ const {
 const { esRepartidor } = require("../../utils/logisticaCombustible");
 
 const router = express.Router();
-const permisoAdministrador = requirePermission("Logistica", "Administracion");
 const acceso = (req, res, next) => {
   if (esRepartidor(req.user)) return next();
-  return requireAdminRole(req, res, () => permisoAdministrador(req, res, next));
+  return requireAdminRole(req, res, next);
 };
 const soloRepartidor = (req, res, next) =>
   esRepartidor(req.user)
@@ -23,7 +22,7 @@ const soloRepartidor = (req, res, next) =>
           message: "Esta acción requiere rol de repartidor.",
         });
 
-router.use(authenticate, acceso);
+router.use(authenticate, requirePermission("Logistica"), acceso);
 router.get("/repartidores", requireAdminRole, controller.repartidores);
 router.get("/", controller.listar);
 router.get("/:id", controller.obtener);

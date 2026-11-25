@@ -19,13 +19,10 @@ jest.mock("../../middleware/authMiddleware", () => ({
 const { requirePermission } = require("../../middleware/authMiddleware");
 
 describe("rutas del inventario Masther Phone", () => {
-  test("protege toda la seccion con Logistica o Administracion", () => {
+  test("protege toda la seccion exclusivamente con Logistica", () => {
     const router = require("./mastherPhoneInventarioRoutes");
 
-    expect(requirePermission).toHaveBeenCalledWith(
-      "Logistica",
-      "Administracion",
-    );
+    expect(requirePermission).toHaveBeenCalledWith("Logistica");
     expect(
       router.stack.some(
         (layer) =>

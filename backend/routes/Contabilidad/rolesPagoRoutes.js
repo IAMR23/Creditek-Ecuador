@@ -4,7 +4,7 @@ const router = express.Router();
 const { authenticate, requirePermission } = require("../../middleware/authMiddleware");
 const controller = require("../../controllers/Contabilidad/rolesPagoController");
 
-const requireRolesPago = requirePermission("Contabilidad", "Administracion");
+const requireRolesPago = requirePermission("Contabilidad");
 
 router.use(authenticate, requireRolesPago);
 

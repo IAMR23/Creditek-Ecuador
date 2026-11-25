@@ -59,12 +59,25 @@ const cargarFoto = async (req, res) => {
     const factura = await facturasService.guardarFotoFactura({
       id: req.params.id,
       file: req.file,
+      userId: req.user.id,
     });
     return res.json({
       ok: true,
       message: "Foto procesada y guardada correctamente.",
       factura,
     });
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
+const marcarRevisada = async (req, res) => {
+  try {
+    const factura = await facturasService.marcarRevisada({
+      id: req.params.id,
+      userId: req.user.id,
+    });
+    return res.json({ ok: true, message: "Foto marcada como revisada.", factura });
   } catch (error) {
     return responderError(res, error);
   }
@@ -94,4 +107,4 @@ const actualizar = async (req, res) => {
   }
 };
 
-module.exports = { actualizar, cargarExcel, cargarFoto, cargarJson, cargarJsonTexto, listar };
+module.exports = { actualizar, cargarExcel, cargarFoto, cargarJson, cargarJsonTexto, listar, marcarRevisada };

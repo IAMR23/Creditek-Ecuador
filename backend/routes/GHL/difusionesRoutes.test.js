@@ -5,7 +5,7 @@ describe("rutas de difusiones GHL", () => {
   const source = fs.readFileSync(path.join(__dirname, "difusionesRoutes.js"), "utf8");
 
   test("protege todo el modulo con JWT, permisos y rol administrador", () => {
-    expect(source).toMatch(/router\.use\([\s\S]*authenticate,[\s\S]*requirePermission\("Sistemas", "Administracion"\),[\s\S]*requireAdminRole/);
+    expect(source).toMatch(/router\.use\([\s\S]*authenticate,[\s\S]*requirePermission\("Sistemas"\),[\s\S]*requireAdminRole/);
   });
 
   test("separa consulta, vista previa y confirmacion de envio", () => {
