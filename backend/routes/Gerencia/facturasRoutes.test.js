@@ -15,6 +15,7 @@ jest.mock("../../controllers/Gerencia/facturasController", () => ({
   actualizar: (_req, res) => res.json({ ok: true }),
   cargarExcel: (_req, res) => res.status(201).json({ ok: true }),
   cargarFoto: (_req, res) => res.json({ ok: true }),
+  eliminar: (_req, res) => res.json({ ok: true }),
   listar: (_req, res) => res.json({ ok: true, facturas: [] }),
   marcarRevisada: (_req, res) => res.json({ ok: true }),
   cargarJson: (_req, res) => res.status(201).json({ ok: true }),
@@ -71,6 +72,20 @@ describe("rutas de facturas", () => {
       .patch("/api/gerencia/facturas/7/revisada")
       .set("x-test-permisos", "Gerencia")
       .expect(200);
+  });
+
+  test("permite eliminar una factura con permiso de Gerencia", async () => {
+    await request(createApp())
+      .delete("/api/gerencia/facturas/7")
+      .set("x-test-permisos", "Gerencia")
+      .expect(200);
+  });
+
+  test("rechaza eliminar una factura sin permiso de Gerencia", async () => {
+    await request(createApp())
+      .delete("/api/gerencia/facturas/7")
+      .set("x-test-permisos", "Administracion")
+      .expect(403);
   });
 
   test("rechaza archivos que no sean JSON", async () => {

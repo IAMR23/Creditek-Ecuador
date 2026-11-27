@@ -45,6 +45,17 @@ describe("migracion de facturas", () => {
     expect(sql).not.toMatch(/\bDELETE\b|\bDROP\b/i);
   });
 
+  test("permite numeros de factura repetidos sin eliminar registros", () => {
+    const sql = fs.readFileSync(
+      path.join(__dirname, "202611270001-allow-duplicate-numero-factura.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(/DROP INDEX IF EXISTS public\.facturas_numero_factura_unique/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_numero_factura_idx/i);
+    expect(sql).not.toMatch(/^\s*CREATE UNIQUE INDEX[^;]*facturas_numero_factura_idx/im);
+    expect(sql).not.toMatch(/\bDELETE\b|DROP\s+TABLE/i);
+  });
+
   test("permite dejar vacio el RUC o cedula en tablas existentes", () => {
     const sql = fs.readFileSync(
       path.join(

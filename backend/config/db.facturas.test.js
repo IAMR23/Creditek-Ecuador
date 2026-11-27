@@ -69,6 +69,8 @@ describe("pre-sync de facturas", () => {
     expect(sql).toMatch(/SET departamento = 'LOGISTICA'/i);
     expect(sql).toMatch(/ALTER COLUMN departamento SET NOT NULL/i);
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_departamento_idx/i);
+    expect(sql).toMatch(/DROP INDEX IF EXISTS public\.facturas_numero_factura_unique/i);
+    expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_numero_factura_idx/i);
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_cargado_por_idx/i);
     expect(sql).toMatch(/CREATE INDEX IF NOT EXISTS facturas_revisada_idx/i);
     expect(sql).toMatch(/DROP CONSTRAINT/i);

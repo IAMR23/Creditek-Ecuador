@@ -5,6 +5,7 @@ const cargarFoto = async (req, res) => {
     const factura = await facturasService.crearFacturaDesdeFoto({
       file: req.file,
       userId: req.user.id,
+      tipo: req.body?.tipo,
     });
     return res.status(201).json({
       ok: true,

@@ -6,12 +6,14 @@ import { api } from "../../api/client";
 
 const MAX_SOURCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_PROCESSED_IMAGE_BYTES = 600 * 1024;
+const TIPOS_DOCUMENTO = ["Factura", "Nota de Venta", "Otros"];
 
 const mensajeError = (error) =>
   error.response?.data?.message || error.message || "No se pudo cargar la foto.";
 
 export default function SubirFactura() {
   const [foto, setFoto] = useState(null);
+  const [tipoDocumento, setTipoDocumento] = useState("");
   const [subiendo, setSubiendo] = useState(false);
   const archivoRef = useRef(null);
   const camaraRef = useRef(null);
@@ -35,6 +37,14 @@ export default function SubirFactura() {
   };
 
   const subir = async () => {
+    if (!tipoDocumento) {
+      await Swal.fire(
+        "Selecciona el tipo de documento",
+        "Indica si la foto corresponde a una factura, nota de venta u otro documento.",
+        "warning",
+      );
+      return;
+    }
     if (!foto || subiendo) return;
     setSubiendo(true);
     try {
@@ -54,10 +64,12 @@ export default function SubirFactura() {
         "foto",
         new File([processed], `factura-${Date.now()}.webp`, { type: "image/webp" }),
       );
+      formData.append("tipo", tipoDocumento);
       const { data } = await api.post("/api/repartidor/facturas", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setFoto(null);
+      setTipoDocumento("");
       await Swal.fire({
         title: "Factura enviada",
         text: `${data.message} La fecha y hora se registraron automaticamente.`,
@@ -86,6 +98,23 @@ export default function SubirFactura() {
         </header>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5">
+            <label htmlFor="tipo-documento" className="mb-2 block text-sm font-bold text-slate-800">
+              Tipo de documento <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="tipo-documento"
+              value={tipoDocumento}
+              disabled={subiendo}
+              onChange={(event) => setTipoDocumento(event.target.value)}
+              className="h-12 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 outline-none transition focus:border-green-600 focus:ring-2 focus:ring-green-100 disabled:bg-slate-100"
+              required
+            >
+              <option value="">Selecciona una opción</option>
+              {TIPOS_DOCUMENTO.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
+            </select>
+            <p className="mt-1.5 text-xs text-slate-500">Este campo es obligatorio para guardar la foto.</p>
+          </div>
           {!preview ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <button type="button" onClick={() => camaraRef.current?.click()} className="flex min-h-40 flex-col items-center justify-center rounded-xl border-2 border-dashed border-green-300 bg-green-50 p-5 text-green-800 hover:bg-green-100">
@@ -110,9 +139,9 @@ export default function SubirFactura() {
               <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-800">
                 <CheckCircle2 size={18} /> Foto lista para enviar
               </div>
-              <button type="button" disabled={subiendo} onClick={subir} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-green-700 px-4 font-bold text-white hover:bg-green-800 disabled:cursor-wait disabled:opacity-60">
+              <button type="button" disabled={subiendo || !tipoDocumento} onClick={subir} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-green-700 px-4 font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60">
                 {subiendo ? <RefreshCw size={19} className="animate-spin" /> : <ImageUp size={19} />}
-                {subiendo ? "Optimizando y enviando..." : "Enviar factura"}
+                {subiendo ? "Optimizando y enviando..." : tipoDocumento ? "Guardar foto" : "Selecciona el tipo para guardar"}
               </button>
             </div>
           )}

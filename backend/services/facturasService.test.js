@@ -1,24 +1,35 @@
 jest.mock("../config/db", () => ({
-  sequelize: { define: jest.fn(() => ({})) },
+  sequelize: {
+    define: jest.fn(() => ({})),
+    transaction: jest.fn((callback) => callback({ id: "test-transaction" })),
+  },
 }));
 jest.mock("../models/FacturaRegistro", () => ({}));
 jest.mock("../models/Usuario", () => ({}));
+jest.mock("fs/promises", () => ({
+  mkdir: jest.fn(),
+  writeFile: jest.fn(),
+  unlink: jest.fn(),
+}));
 
 const {
   actualizarFactura,
   cargarJsonTexto,
+  eliminarFactura,
   extraerFacturas,
+  guardarFotoFactura,
   listar,
   marcarRevisada,
   normalizarFactura,
   normalizarDepartamento,
   normalizarFiltros,
   normalizarMonto,
+  normalizarTipoDocumentoFoto,
   parsearExcel,
   validarFotoFactura,
-  validarNumerosFacturaDisponibles,
 } = require("./facturasService");
 const FacturaRegistro = require("../models/FacturaRegistro");
+const fs = require("fs/promises");
 const ExcelJS = require("exceljs");
 
 describe("facturasService", () => {
@@ -190,6 +201,78 @@ describe("facturasService", () => {
     ).toBe(".webp");
   });
 
+  test.each([
+    ["Factura", "Factura"],
+    ["nota de venta", "Nota de Venta"],
+    ["OTROS", "Otros"],
+  ])("normaliza el tipo de documento del repartidor: %s", (entrada, esperado) => {
+    expect(normalizarTipoDocumentoFoto(entrada)).toBe(esperado);
+  });
+
+  test.each([undefined, "", "Recibo"])(
+    "exige un tipo de documento permitido al repartidor",
+    (tipo) => {
+      expect(() => normalizarTipoDocumentoFoto(tipo)).toThrow(
+        /Selecciona el tipo de documento/,
+      );
+    },
+  );
+
+  test("guarda el tipo seleccionado junto con la foto de Gerencia", async () => {
+    const factura = {
+      id: 7,
+      enlaceFoto: null,
+      update: jest.fn(async function update(datos) {
+        Object.assign(this, datos);
+      }),
+      toJSON() {
+        return { ...this, update: undefined, toJSON: undefined };
+      },
+    };
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue(factura);
+    fs.mkdir.mockResolvedValue();
+    fs.writeFile.mockResolvedValue();
+
+    const resultado = await guardarFotoFactura({
+      id: 7,
+      file: {
+        buffer: Buffer.from("RIFF0000WEBPimagen"),
+        size: 20,
+        mimetype: "image/webp",
+      },
+      userId: 3,
+      tipo: "Nota de Venta",
+    });
+
+    expect(factura.update).toHaveBeenCalledWith(expect.objectContaining({
+      tipo: "Nota de Venta",
+      cargadoPorId: 3,
+      revisada: false,
+    }));
+    expect(resultado.tipo).toBe("Nota de Venta");
+  });
+
+  test("elimina definitivamente el registro y su foto local", async () => {
+    const factura = {
+      id: 7,
+      enlaceFoto: "/uploads/facturas/factura.webp",
+      destroy: jest.fn().mockResolvedValue(),
+    };
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue(factura);
+    fs.unlink.mockResolvedValue();
+
+    await expect(eliminarFactura({ id: 7 })).resolves.toEqual({ id: 7 });
+
+    expect(factura.destroy).toHaveBeenCalledTimes(1);
+    expect(fs.unlink).toHaveBeenCalledWith(expect.stringMatching(/factura\.webp$/));
+  });
+
+  test("no elimina una factura inexistente", async () => {
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue(null);
+
+    await expect(eliminarFactura({ id: 999 })).rejects.toMatchObject({ statusCode: 404 });
+  });
+
   test("rechaza una imagen cuya firma no coincide con el formato", () => {
     const buffer = Buffer.from("contenido que no es una imagen");
     expect(() =>
@@ -268,34 +351,24 @@ describe("facturasService", () => {
     });
   });
 
-  test("rechaza numeros repetidos dentro del mismo JSON", async () => {
-    await expect(
-      validarNumerosFacturaDisponibles([
+  test("permite numeros repetidos dentro de la misma carga", async () => {
+    FacturaRegistro.bulkCreate = jest.fn(async (registros) => registros);
+
+    const resultado = await cargarJsonTexto({
+      contenido: JSON.stringify([
         { numeroFactura: "001-001-0001" },
         { numeroFactura: "001-001-0001" },
       ]),
-    ).rejects.toMatchObject({ statusCode: 409, duplicados: ["001-001-0001"] });
-  });
+    });
 
-  test("permite varios registros sin numero de factura", async () => {
-    FacturaRegistro.findAll = jest.fn();
-
-    await expect(
-      validarNumerosFacturaDisponibles([
-        { numeroFactura: null },
-        { numeroFactura: null },
+    expect(resultado).toHaveLength(2);
+    expect(FacturaRegistro.bulkCreate).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ numeroFactura: "001-001-0001" }),
+        expect.objectContaining({ numeroFactura: "001-001-0001" }),
       ]),
-    ).resolves.toBeUndefined();
-    expect(FacturaRegistro.findAll).not.toHaveBeenCalled();
-  });
-
-  test("rechaza numeros de factura que ya existen en la base", async () => {
-    FacturaRegistro.findAll = jest.fn().mockResolvedValue([
-      { numeroFactura: "001-001-0002" },
-    ]);
-    await expect(
-      validarNumerosFacturaDisponibles([{ numeroFactura: "001-001-0002" }]),
-    ).rejects.toMatchObject({ statusCode: 409, duplicados: ["001-001-0002"] });
+      expect.objectContaining({ validate: true, returning: true }),
+    );
   });
 
   test("actualiza los campos editables de una factura", async () => {
@@ -336,16 +409,22 @@ describe("facturasService", () => {
     expect(factura.update).toHaveBeenCalled();
   });
 
-  test("impide editar una factura con un numero ya registrado", async () => {
-    FacturaRegistro.findByPk = jest.fn().mockResolvedValue({
+  test("permite editar una factura con un numero ya registrado", async () => {
+    const factura = {
       id: 7,
       numeroFactura: "001-001-0001",
-    });
-    FacturaRegistro.findOne = jest.fn().mockResolvedValue({ id: 8 });
+      update: jest.fn(async function update(datos) {
+        Object.assign(this, datos);
+      }),
+      toJSON() {
+        return { ...this, update: undefined, toJSON: undefined };
+      },
+    };
+    FacturaRegistro.findByPk = jest.fn().mockResolvedValue(factura);
 
     await expect(
       actualizarFactura({ id: 7, payload: { numeroFactura: "001-001-0002" } }),
-    ).rejects.toMatchObject({ statusCode: 409 });
+    ).resolves.toMatchObject({ numeroFactura: "001-001-0002" });
   });
 
   test("marca una foto como revisada sin impedir volver a consultarla", async () => {

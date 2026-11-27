@@ -10,10 +10,15 @@ import {
   Pencil,
   ReceiptText,
   RefreshCw,
+  RotateCcw,
+  RotateCw,
   Save,
   Search,
+  Trash2,
   Upload,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import Swal from "sweetalert2";
@@ -23,19 +28,8 @@ const API_BASE = "/api/gerencia/facturas";
 const MAX_SOURCE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_PROCESSED_IMAGE_BYTES = 600 * 1024;
 const DEPARTAMENTOS = ["LOGISTICA", "COMERCIAL", "SISTEMAS"];
-const fechaActualEcuador = () => {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Guayaquil",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return `${values.year}-${values.month}-${values.day}`;
-};
-const crearFiltrosIniciales = () => {
-  const hoy = fechaActualEcuador();
-  return {
+const TIPOS_DOCUMENTO_FOTO = ["Factura", "Nota de Venta", "Otros"];
+const crearFiltrosIniciales = () => ({
     busqueda: "",
     estado: "",
     tipo: "",
@@ -43,10 +37,7 @@ const crearFiltrosIniciales = () => {
     departamento: "",
     fechaInicio: "",
     fechaFin: "",
-    fechaCargaInicio: hoy,
-    fechaCargaFin: hoy,
-  };
-};
+});
 const edicionInicial = {
   fechaFactura: "",
   proveedor: "",
@@ -126,6 +117,28 @@ const resolverEnlaceFoto = (value) => {
   return `${base}${path}`;
 };
 
+const cargarImagenDesdeBlob = (blob) => new Promise((resolve, reject) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const image = new Image();
+  image.onload = () => {
+    URL.revokeObjectURL(objectUrl);
+    resolve(image);
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    reject(new Error("No se pudo preparar la imagen para girarla."));
+  };
+  image.src = objectUrl;
+});
+
+const convertirCanvasABlob = (canvas) => new Promise((resolve, reject) => {
+  canvas.toBlob(
+    (blob) => blob ? resolve(blob) : reject(new Error("No se pudo guardar la imagen girada.")),
+    "image/webp",
+    0.9,
+  );
+});
+
 export default function Facturas() {
   const [facturas, setFacturas] = useState([]);
   const [resumen, setResumen] = useState({ cantidad: 0, subtotal: 0, iva: 0, total: 0 });
@@ -144,10 +157,15 @@ export default function Facturas() {
   const [fotoFactura, setFotoFactura] = useState(null);
   const [modoFoto, setModoFoto] = useState("archivo");
   const [fotoArchivo, setFotoArchivo] = useState(null);
+  const [tipoDocumentoFoto, setTipoDocumentoFoto] = useState("");
   const [fotoVista, setFotoVista] = useState(null);
+  const [zoomFoto, setZoomFoto] = useState(1);
+  const [rotacionFoto, setRotacionFoto] = useState(0);
+  const [guardandoRotacion, setGuardandoRotacion] = useState(false);
   const [facturaEditando, setFacturaEditando] = useState(null);
   const [edicion, setEdicion] = useState(edicionInicial);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [eliminandoId, setEliminandoId] = useState(null);
 
   const fotoPreview = useMemo(
     () => (fotoArchivo ? URL.createObjectURL(fotoArchivo) : ""),
@@ -299,6 +317,14 @@ export default function Facturas() {
   };
 
   const cargarFotoFactura = async (facturaId, file) => {
+    if (!tipoDocumentoFoto) {
+      await Swal.fire(
+        "Selecciona el tipo de documento",
+        "Indica si la foto corresponde a una factura, nota de venta u otro documento.",
+        "warning",
+      );
+      return;
+    }
     if (!file) return;
     if (!(["image/jpeg", "image/png", "image/webp"].includes(file.type))) {
       await Swal.fire("Formato no válido", "Selecciona una imagen JPG, PNG o WEBP.", "info");
@@ -329,6 +355,7 @@ export default function Facturas() {
       );
       const formData = new FormData();
       formData.append("foto", lightweightFile);
+      formData.append("tipo", tipoDocumentoFoto);
       const { data } = await api.post(`${API_BASE}/${facturaId}/foto`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -339,6 +366,7 @@ export default function Facturas() {
       );
       setFotoFactura(null);
       setFotoArchivo(null);
+      setTipoDocumentoFoto("");
       await Swal.fire({
         title: "Foto guardada",
         text: `Imagen optimizada a ${(lightweightFile.size / 1024).toFixed(0)} KB.`,
@@ -357,10 +385,16 @@ export default function Facturas() {
     setFotoFactura(factura);
     setModoFoto("archivo");
     setFotoArchivo(null);
+    setTipoDocumentoFoto("");
   };
 
   const verFoto = async (factura) => {
+    setZoomFoto(1);
+    setRotacionFoto(0);
     setFotoVista({
+      id: factura.id,
+      tipo: factura.tipo,
+      enlaceFoto: factura.enlaceFoto,
       url: resolverEnlaceFoto(factura.enlaceFoto),
       titulo: factura.numeroFactura ? `Factura ${factura.numeroFactura}` : `Factura #${factura.id}`,
     });
@@ -374,10 +408,120 @@ export default function Facturas() {
     }
   };
 
+  const cerrarVistaFoto = () => {
+    if (guardandoRotacion) return;
+    setFotoVista(null);
+    setZoomFoto(1);
+    setRotacionFoto(0);
+  };
+
+  const cambiarZoomFoto = (incremento) => {
+    setZoomFoto((actual) => Math.min(3, Math.max(0.5, actual + incremento)));
+  };
+
+  const guardarRotacionFoto = async () => {
+    const giro = ((rotacionFoto % 360) + 360) % 360;
+    if (!fotoVista || giro === 0 || guardandoRotacion) return;
+
+    let tipoDocumento = TIPOS_DOCUMENTO_FOTO.includes(fotoVista.tipo)
+      ? fotoVista.tipo
+      : "";
+    if (!tipoDocumento) {
+      const seleccion = await Swal.fire({
+        title: "Selecciona el tipo de documento",
+        text: "Es obligatorio para guardar la foto girada.",
+        input: "select",
+        inputOptions: Object.fromEntries(TIPOS_DOCUMENTO_FOTO.map((tipo) => [tipo, tipo])),
+        inputPlaceholder: "Selecciona una opción",
+        showCancelButton: true,
+        confirmButtonText: "Continuar",
+        cancelButtonText: "Cancelar",
+        inputValidator: (value) => value ? undefined : "Selecciona el tipo de documento.",
+      });
+      if (!seleccion.isConfirmed) return;
+      tipoDocumento = seleccion.value;
+    }
+
+    setGuardandoRotacion(true);
+    try {
+      let imagenBlob;
+      if (String(fotoVista.enlaceFoto || "").startsWith("/uploads/facturas/")) {
+        const response = await api.get(fotoVista.enlaceFoto, { responseType: "blob" });
+        imagenBlob = response.data;
+      } else {
+        const response = await fetch(fotoVista.url, { credentials: "omit" });
+        if (!response.ok) throw new Error("No se pudo descargar la imagen para girarla.");
+        imagenBlob = await response.blob();
+      }
+      const image = await cargarImagenDesdeBlob(imagenBlob);
+      const intercambiarDimensiones = giro === 90 || giro === 270;
+      const canvas = document.createElement("canvas");
+      canvas.width = intercambiarDimensiones ? image.naturalHeight : image.naturalWidth;
+      canvas.height = intercambiarDimensiones ? image.naturalWidth : image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("El navegador no permite procesar esta imagen.");
+
+      context.translate(canvas.width / 2, canvas.height / 2);
+      context.rotate((giro * Math.PI) / 180);
+      context.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
+
+      const blobGirado = await convertirCanvasABlob(canvas);
+      const archivoGirado = new File(
+        [blobGirado],
+        `factura-${fotoVista.id}-girada.webp`,
+        { type: "image/webp" },
+      );
+      const archivoOptimizado = await imageCompression(archivoGirado, {
+        maxSizeMB: 0.55,
+        useWebWorker: true,
+        initialQuality: 0.9,
+        fileType: "image/webp",
+        alwaysKeepResolution: true,
+      });
+      if (archivoOptimizado.size > MAX_PROCESSED_IMAGE_BYTES) {
+        throw new Error("No se pudo reducir la imagen girada por debajo de 600 KB.");
+      }
+
+      const formData = new FormData();
+      formData.append("foto", new File(
+        [archivoOptimizado],
+        `factura-${fotoVista.id}-girada.webp`,
+        { type: "image/webp" },
+      ));
+      formData.append("tipo", tipoDocumento);
+      const { data } = await api.post(`${API_BASE}/${fotoVista.id}/foto`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setFacturas((actuales) => actuales.map((factura) =>
+        factura.id === fotoVista.id ? { ...factura, ...data.factura } : factura));
+      setFotoVista((actual) => ({
+        ...actual,
+        tipo: data.factura.tipo,
+        enlaceFoto: data.factura.enlaceFoto,
+        url: resolverEnlaceFoto(data.factura.enlaceFoto),
+      }));
+      setRotacionFoto(0);
+      setZoomFoto(1);
+      await Swal.fire({
+        title: "Giro guardado",
+        text: "La foto conservará esta orientación.",
+        icon: "success",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      await Swal.fire("No se pudo guardar el giro", mensajeError(error), "error");
+    } finally {
+      setGuardandoRotacion(false);
+    }
+  };
+
   const cerrarFoto = () => {
     if (fotoSubiendoId !== null) return;
     setFotoFactura(null);
     setFotoArchivo(null);
+    setTipoDocumentoFoto("");
   };
 
   const recibirImagenPegada = (event) => {
@@ -449,6 +593,41 @@ export default function Facturas() {
     }
   };
 
+  const eliminarRegistro = async (factura) => {
+    const confirmacion = await Swal.fire({
+      title: "¿Eliminar registro?",
+      text: "Estos registros, una vez eliminados, ya no se pueden recuperar.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      reverseButtons: true,
+    });
+    if (!confirmacion.isConfirmed) return;
+
+    setEliminandoId(factura.id);
+    try {
+      const { data } = await api.delete(`${API_BASE}/${factura.id}`);
+      const paginaDestino = facturas.length === 1 && paginacion.page > 1
+        ? paginacion.page - 1
+        : paginacion.page;
+      await cargar({ page: paginaDestino, silent: true });
+      await Swal.fire({
+        title: "Registro eliminado",
+        text: data.message,
+        icon: "success",
+        timer: 1800,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      await Swal.fire("No se pudo eliminar el registro", mensajeError(error), "error");
+    } finally {
+      setEliminandoId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-100 p-3 sm:p-5">
       <div className="mx-auto max-w-[1800px] space-y-4">
@@ -497,7 +676,7 @@ export default function Facturas() {
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-9">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
             <label className="relative">
               <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
               <input
@@ -530,14 +709,6 @@ export default function Facturas() {
             <label className="grid gap-1">
               <input type="date" aria-label="Factura hasta" value={filtros.fechaFin} onChange={(event) => setFiltros((current) => ({ ...current, fechaFin: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
               <span className="px-1 text-[10px] font-semibold text-slate-500">Factura hasta</span>
-            </label>
-            <label className="grid gap-1">
-              <input type="date" aria-label="Carga desde" value={filtros.fechaCargaInicio} onChange={(event) => setFiltros((current) => ({ ...current, fechaCargaInicio: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
-              <span className="px-1 text-[10px] font-semibold text-slate-500">Carga desde</span>
-            </label>
-            <label className="grid gap-1">
-              <input type="date" aria-label="Carga hasta" value={filtros.fechaCargaFin} onChange={(event) => setFiltros((current) => ({ ...current, fechaCargaFin: event.target.value }))} className="h-9 rounded-md border border-slate-300 px-2 text-xs" />
-              <span className="px-1 text-[10px] font-semibold text-slate-500">Carga hasta</span>
             </label>
           </div>
           <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-500">
@@ -622,14 +793,27 @@ export default function Facturas() {
                       <td className="max-w-72 px-3 py-3 text-slate-600"><span className="line-clamp-2" title={factura.observaciones || ""}>{factura.observaciones || "-"}</span></td>
                       <td className="px-3 py-3"><span className="inline-flex rounded bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700">{factura.tipo}</span></td>
                       <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          onClick={() => abrirEdicion(factura)}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 font-semibold text-slate-700 hover:border-teal-400 hover:bg-teal-50 hover:text-teal-800"
-                          title={`Editar factura ${factura.numeroFactura || `#${factura.id}`}`}
-                        >
-                          <Pencil size={13} /> Editar
-                        </button>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <button
+                            type="button"
+                            disabled={eliminandoId !== null}
+                            onClick={() => abrirEdicion(factura)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 font-semibold text-slate-700 hover:border-teal-400 hover:bg-teal-50 hover:text-teal-800 disabled:opacity-50"
+                            title={`Editar factura ${factura.numeroFactura || `#${factura.id}`}`}
+                          >
+                            <Pencil size={13} /> Editar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={eliminandoId !== null}
+                            onClick={() => eliminarRegistro(factura)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 font-semibold text-red-700 hover:border-red-400 hover:bg-red-50 disabled:cursor-wait disabled:opacity-50"
+                            title={`Eliminar factura ${factura.numeroFactura || `#${factura.id}`}`}
+                          >
+                            {eliminandoId === factura.id ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            {eliminandoId === factura.id ? "Eliminando..." : "Eliminar"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -727,7 +911,7 @@ export default function Facturas() {
 
               <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                <p>Todos los campos de cada factura son opcionales y pueden quedar vacíos. El ID y la fecha de carga se generan automáticamente. Máximo 1.000 facturas y 5 MB; si un número de factura informado ya existe, no se guardará ningún registro.</p>
+                <p>Todos los campos de cada factura son opcionales y pueden quedar vacíos. El ID y la fecha de carga se generan automáticamente. Máximo 1.000 facturas y 5 MB. Los números de factura repetidos están permitidos.</p>
               </div>
               <button type="button" onClick={descargarPlantilla} className="inline-flex items-center gap-2 text-xs font-semibold text-teal-700 hover:underline">
                 <Download size={14} /> Descargar plantilla JSON
@@ -776,6 +960,24 @@ export default function Facturas() {
             </div>
 
             <div className="space-y-4 p-4">
+              <div>
+                <label htmlFor="tipo-documento-foto" className="mb-1.5 block text-xs font-bold text-slate-800">
+                  Tipo de documento <span className="text-red-600">*</span>
+                </label>
+                <select
+                  id="tipo-documento-foto"
+                  value={tipoDocumentoFoto}
+                  disabled={fotoSubiendoId !== null}
+                  onChange={(event) => setTipoDocumentoFoto(event.target.value)}
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100 disabled:bg-slate-100"
+                  required
+                >
+                  <option value="">Selecciona una opción</option>
+                  {TIPOS_DOCUMENTO_FOTO.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">Obligatorio para guardar la foto.</p>
+              </div>
+
               <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-xs font-semibold">
                 <button type="button" onClick={() => { setModoFoto("archivo"); setFotoArchivo(null); }} className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 ${modoFoto === "archivo" ? "bg-white text-teal-700 shadow-sm" : "text-slate-600"}`}>
                   <ImageUp size={14} /> Subir foto
@@ -824,12 +1026,12 @@ export default function Facturas() {
               <button type="button" disabled={fotoSubiendoId !== null} onClick={cerrarFoto} className="h-9 rounded-md border border-slate-300 px-3 text-xs font-semibold disabled:opacity-50">Cancelar</button>
               <button
                 type="button"
-                disabled={!fotoArchivo || fotoSubiendoId !== null}
+                disabled={!fotoArchivo || !tipoDocumentoFoto || fotoSubiendoId !== null}
                 onClick={() => cargarFotoFactura(fotoFactura.id, fotoArchivo)}
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-teal-700 px-3 text-xs font-semibold text-white disabled:opacity-50"
               >
                 {fotoSubiendoId !== null ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
-                {fotoSubiendoId !== null ? "Optimizando..." : "Guardar foto"}
+                {fotoSubiendoId !== null ? "Optimizando..." : tipoDocumentoFoto ? "Guardar foto" : "Selecciona el tipo"}
               </button>
             </div>
           </div>
@@ -1037,31 +1239,50 @@ export default function Facturas() {
           role="dialog"
           aria-modal="true"
           aria-label={fotoVista.titulo}
-          onClick={() => setFotoVista(null)}
+          onClick={cerrarVistaFoto}
         >
           <div
             className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
                 <h2 className="text-sm font-bold text-slate-900">{fotoVista.titulo}</h2>
-                <p className="mt-0.5 text-[11px] text-slate-500">Foto de factura o nota de venta</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">Gira y guarda la orientación, o usa el zoom para revisar detalles.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setFotoVista(null)}
-                aria-label="Cerrar imagen"
-                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              >
-                <X size={19} />
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                <button type="button" disabled={guardandoRotacion} onClick={() => setRotacionFoto((actual) => actual - 90)} aria-label="Girar foto a la izquierda" title="Girar a la izquierda" className="rounded-md border border-slate-300 p-1.5 text-slate-600 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-40">
+                  <RotateCcw size={18} />
+                </button>
+                <button type="button" disabled={guardandoRotacion} onClick={() => setRotacionFoto((actual) => actual + 90)} aria-label="Girar foto a la derecha" title="Girar a la derecha" className="rounded-md border border-slate-300 p-1.5 text-slate-600 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-40">
+                  <RotateCw size={18} />
+                </button>
+                <button type="button" disabled={((rotacionFoto % 360) + 360) % 360 === 0 || guardandoRotacion} onClick={guardarRotacionFoto} title="Guardar orientación" className="inline-flex h-[34px] items-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-40">
+                  {guardandoRotacion ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  {guardandoRotacion ? "Guardando..." : "Guardar giro"}
+                </button>
+                <span className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+                <button type="button" disabled={zoomFoto <= 0.5 || guardandoRotacion} onClick={() => cambiarZoomFoto(-0.25)} aria-label="Alejar foto" title="Alejar" className="rounded-md border border-slate-300 p-1.5 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                  <ZoomOut size={18} />
+                </button>
+                <button type="button" disabled={guardandoRotacion} onClick={() => setZoomFoto(1)} title="Restablecer zoom" className="min-w-14 rounded-md border border-slate-300 px-2 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40">
+                  {Math.round(zoomFoto * 100)}%
+                </button>
+                <button type="button" disabled={zoomFoto >= 3 || guardandoRotacion} onClick={() => cambiarZoomFoto(0.25)} aria-label="Acercar foto" title="Acercar" className="rounded-md border border-slate-300 p-1.5 text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">
+                  <ZoomIn size={18} />
+                </button>
+                <button type="button" disabled={guardandoRotacion} onClick={cerrarVistaFoto} aria-label="Cerrar imagen" className="ml-1 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40">
+                  <X size={19} />
+                </button>
+              </div>
             </div>
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-slate-100 p-3 sm:p-5">
+            <div className={`flex min-h-0 flex-1 overflow-auto bg-slate-100 p-3 sm:p-5 ${zoomFoto > 1 ? "items-start justify-start" : "items-center justify-center"}`}>
               <img
                 src={fotoVista.url}
                 alt={fotoVista.titulo}
-                className="max-h-[calc(94vh-86px)] max-w-full rounded-md object-contain shadow-sm"
+                onDoubleClick={() => setZoomFoto((actual) => actual === 1 ? 2 : 1)}
+                style={{ zoom: zoomFoto, transform: `rotate(${rotacionFoto}deg)` }}
+                className={`max-h-[calc(94vh-100px)] max-w-full rounded-md object-contain shadow-sm ${zoomFoto === 1 ? "cursor-zoom-in" : "cursor-zoom-out"}`}
               />
             </div>
           </div>

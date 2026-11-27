@@ -2329,6 +2329,11 @@ const ensureFacturasPreSyncSchema = async (queryInterface) => {
     CREATE INDEX IF NOT EXISTS facturas_departamento_idx
       ON public.facturas (departamento);
 
+    DROP INDEX IF EXISTS public.facturas_numero_factura_unique;
+
+    CREATE INDEX IF NOT EXISTS facturas_numero_factura_idx
+      ON public.facturas ("numeroFactura");
+
     CREATE INDEX IF NOT EXISTS facturas_cargado_por_idx
       ON public.facturas ("cargadoPorId");
 

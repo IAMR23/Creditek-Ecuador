@@ -15,6 +15,11 @@ const MAX_FACTURAS_POR_ARCHIVO = 1000;
 const MAX_LIMIT = 100;
 const CAMPOS_MONETARIOS = ["subtotal", "iva", "total"];
 const DEPARTAMENTOS = ["LOGISTICA", "COMERCIAL", "SISTEMAS"];
+const TIPOS_DOCUMENTO_REPARTIDOR = {
+  factura: "Factura",
+  "nota de venta": "Nota de Venta",
+  otros: "Otros",
+};
 const FACTURAS_UPLOAD_DIR = path.resolve(__dirname, "..", "uploads", "facturas");
 const FACTURA_IMAGE_EXTENSIONS = {
   "image/webp": ".webp",
@@ -67,6 +72,18 @@ const normalizarDepartamento = (value, valorPorDefecto = null) => {
     throw crearError(`Departamento no valido. Usa: ${DEPARTAMENTOS.join(", ")}`);
   }
   return departamento;
+};
+
+const normalizarTipoDocumentoFoto = (value) => {
+  const tipo = normalizarTexto(value, 100)
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const tipoNormalizado = TIPOS_DOCUMENTO_REPARTIDOR[tipo];
+  if (!tipoNormalizado) {
+    throw crearError("Selecciona el tipo de documento: Factura, Nota de Venta u Otros");
+  }
+  return tipoNormalizado;
 };
 
 const normalizarId = (value) => {
@@ -313,65 +330,21 @@ const serializar = (value) => {
   return { ...result, fechaCarga: result.createdAt };
 };
 
-const validarNumerosFacturaDisponibles = async (facturas) => {
-  const numbers = facturas
-    .map((factura) => factura.numeroFactura)
-    .filter(Boolean);
-  const duplicatesInFile = [
-    ...new Set(numbers.filter((number, index) => numbers.indexOf(number) !== index)),
-  ];
-  if (duplicatesInFile.length) {
-    throw crearError(
-      `El JSON contiene numeros de factura repetidos: ${duplicatesInFile.join(", ")}`,
-      409,
-      { duplicados: duplicatesInFile },
-    );
-  }
-
-  if (!numbers.length) return;
-
-  const existing = await FacturaRegistro.findAll({
-    where: { numeroFactura: { [Op.in]: numbers } },
-    attributes: ["numeroFactura"],
-    raw: true,
-  });
-  const existingNumbers = [...new Set(existing.map((row) => row.numeroFactura))];
-  if (existingNumbers.length) {
-    throw crearError(
-      `No se realizó la carga. El número de factura ya existe: ${existingNumbers.join(", ")}`,
-      409,
-      { duplicados: existingNumbers },
-    );
-  }
-};
-
 const guardarPayload = async ({ payload, nombreArchivoJson }) => {
   const invoices = extraerFacturas(payload);
   const normalized = invoices.map((invoice, index) => normalizarFactura(invoice, index));
-  await validarNumerosFacturaDisponibles(normalized);
   const filename = path.basename(nombreArchivoJson || "facturas.json").slice(0, 255);
 
-  let created;
-  try {
-    created = await sequelize.transaction(async (transaction) =>
-      FacturaRegistro.bulkCreate(
-        normalized.map((invoice, index) => ({
-          ...invoice,
-          nombreArchivoJson: filename,
-          payloadOriginal: invoices[index],
-        })),
-        { transaction, validate: true, returning: true },
-      ),
-    );
-  } catch (error) {
-    if (error.name === "SequelizeUniqueConstraintError") {
-      throw crearError(
-        "No se realizó la carga porque uno de los números de factura ya existe.",
-        409,
-      );
-    }
-    throw error;
-  }
+  const created = await sequelize.transaction(async (transaction) =>
+    FacturaRegistro.bulkCreate(
+      normalized.map((invoice, index) => ({
+        ...invoice,
+        nombreArchivoJson: filename,
+        payloadOriginal: invoices[index],
+      })),
+      { transaction, validate: true, returning: true },
+    ),
+  );
   return created.map(serializar);
 };
 
@@ -485,8 +458,9 @@ const eliminarFotoLocal = async (enlaceFoto) => {
   }
 };
 
-const guardarFotoFactura = async ({ id, file, userId = null }) => {
+const guardarFotoFactura = async ({ id, file, userId = null, tipo }) => {
   const facturaId = normalizarId(id);
+  const tipoDocumento = normalizarTipoDocumentoFoto(tipo);
   const extension = validarFotoFactura(file);
   const factura = await FacturaRegistro.findByPk(facturaId);
   if (!factura) throw crearError("Factura no encontrada", 404);
@@ -501,6 +475,7 @@ const guardarFotoFactura = async ({ id, file, userId = null }) => {
     await fs.writeFile(filePath, file.buffer, { flag: "wx" });
     await factura.update({
       enlaceFoto,
+      tipo: tipoDocumento,
       ...(userId ? { cargadoPorId: userId } : {}),
       revisada: false,
       revisadaAt: null,
@@ -515,11 +490,24 @@ const guardarFotoFactura = async ({ id, file, userId = null }) => {
   return serializar(factura);
 };
 
-const crearFacturaDesdeFoto = async ({ file, userId }) => {
+const eliminarFactura = async ({ id }) => {
+  const facturaId = normalizarId(id);
+  const factura = await FacturaRegistro.findByPk(facturaId);
+  if (!factura) throw crearError("Factura no encontrada", 404);
+
+  const enlaceFoto = factura.enlaceFoto;
+  await factura.destroy();
+  await eliminarFotoLocal(enlaceFoto).catch(() => undefined);
+
+  return { id: facturaId };
+};
+
+const crearFacturaDesdeFoto = async ({ file, userId, tipo }) => {
   const cargadoPorId = Number(userId);
   if (!Number.isInteger(cargadoPorId) || cargadoPorId < 1) {
     throw crearError("El usuario que carga la foto no es valido", 400);
   }
+  const tipoDocumento = normalizarTipoDocumentoFoto(tipo);
   const extension = validarFotoFactura(file);
   await fs.mkdir(FACTURAS_UPLOAD_DIR, { recursive: true });
   const filename = `${crypto.randomUUID()}${extension}`;
@@ -531,6 +519,7 @@ const crearFacturaDesdeFoto = async ({ file, userId }) => {
     const factura = await FacturaRegistro.create({
       enlaceFoto,
       cargadoPorId,
+      tipo: tipoDocumento,
       departamento: "LOGISTICA",
       revisada: false,
     });
@@ -607,31 +596,7 @@ const actualizarFactura = async ({ id, payload }) => {
   const factura = await FacturaRegistro.findByPk(facturaId);
   if (!factura) throw crearError("Factura no encontrada", 404);
 
-  if (datos.numeroFactura && datos.numeroFactura !== factura.numeroFactura) {
-    const existente = await FacturaRegistro.findOne({
-      where: {
-        numeroFactura: datos.numeroFactura,
-        id: { [Op.ne]: facturaId },
-      },
-      attributes: ["id"],
-    });
-    if (existente) {
-      throw crearError("El numero de factura ya existe", 409, {
-        duplicados: [datos.numeroFactura],
-      });
-    }
-  }
-
-  try {
-    await factura.update(datos);
-  } catch (error) {
-    if (error.name === "SequelizeUniqueConstraintError") {
-      throw crearError("El numero de factura ya existe", 409, {
-        duplicados: datos.numeroFactura ? [datos.numeroFactura] : [],
-      });
-    }
-    throw error;
-  }
+  await factura.update(datos);
   return serializar(factura);
 };
 
@@ -759,6 +724,7 @@ module.exports = {
   cargarJson,
   cargarJsonTexto,
   crearFacturaDesdeFoto,
+  eliminarFactura,
   extraerFacturas,
   guardarFotoFactura,
   listar,
@@ -768,7 +734,7 @@ module.exports = {
   normalizarDepartamento,
   normalizarFiltros,
   normalizarMonto,
+  normalizarTipoDocumentoFoto,
   parsearExcel,
   validarFotoFactura,
-  validarNumerosFacturaDisponibles,
 };

@@ -103,8 +103,7 @@ const FacturaRegistro = sequelize.define(
         fields: ["identificacionProveedor", "numeroFactura"],
       },
       {
-        name: "facturas_numero_factura_unique",
-        unique: true,
+        name: "facturas_numero_factura_idx",
         fields: ["numeroFactura"],
       },
       { name: "facturas_estado_idx", fields: ["estado"] },

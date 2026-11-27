@@ -60,6 +60,7 @@ const cargarFoto = async (req, res) => {
       id: req.params.id,
       file: req.file,
       userId: req.user.id,
+      tipo: req.body?.tipo,
     });
     return res.json({
       ok: true,
@@ -107,4 +108,16 @@ const actualizar = async (req, res) => {
   }
 };
 
-module.exports = { actualizar, cargarExcel, cargarFoto, cargarJson, cargarJsonTexto, listar, marcarRevisada };
+const eliminar = async (req, res) => {
+  try {
+    await facturasService.eliminarFactura({ id: req.params.id });
+    return res.json({
+      ok: true,
+      message: "Registro de factura eliminado definitivamente.",
+    });
+  } catch (error) {
+    return responderError(res, error);
+  }
+};
+
+module.exports = { actualizar, cargarExcel, cargarFoto, cargarJson, cargarJsonTexto, eliminar, listar, marcarRevisada };
